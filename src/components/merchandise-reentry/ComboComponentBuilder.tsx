@@ -82,7 +82,10 @@ export function ComboComponentBuilder({
                 type="number"
                 min={1}
                 className="w-16 rounded border border-rule bg-cloud px-2 py-1 text-[12px] font-bold"
-                value={c.quantity}
+                // Vacío en vez de "0" y número seleccionado al tocarlo: se
+                // escribe directo sin borrar nada (pedido del usuario 2026-09-25).
+                value={c.quantity || ""}
+                onFocus={(e) => e.target.select()}
                 onChange={(e) => updateQty(c.catalogItem.id, Number(e.target.value) || 0)}
               />
               <span className="text-[11px] text-steel shrink-0">un.</span>
