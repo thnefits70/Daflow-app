@@ -96,7 +96,11 @@ export function WeeklyMetricPanel({
   // en el mismo registro, no después. Solo aplica a quien de verdad puede
   // escribir esa explicación (canJustify) — si no, el registro se guarda
   // igual y queda pendiente como antes.
-  const hasBreakdownDraft = prepared !== "" || generated !== "" || outOfStock !== "";
+  // Confirmado 2026-09-25: desde la semana 40 las guías, la falta de stock y
+  // las despachadas se calculan solas con los cortes (ver autoFillRate.ts);
+  // Yair solo escribe Preparadas y Generadas de la semana.
+  const autoWeek = week >= "2026-W40";
+  const hasBreakdownDraft = !autoWeek && (prepared !== "" || generated !== "" || outOfStock !== "");
   const draftTotal = hasBreakdownDraft
     ? Number(value || 0) + Number(prepared || 0) + Number(generated || 0) + Number(outOfStock || 0)
     : 0;
@@ -150,8 +154,12 @@ export function WeeklyMetricPanel({
   };
 
   const save = async () => {
-    if (!week || value === "") {
+    if (!week || (!autoWeek && value === "")) {
       setErr("Completa la semana y el valor.");
+      return;
+    }
+    if (autoWeek && (prepared === "" || generated === "")) {
+      setErr("Escribe cuántas guías quedaron preparadas y cuántas generadas esta semana (0 si no hubo).");
       return;
     }
     if (needsJustificationDraft && justification.trim().length < 10) {
@@ -161,7 +169,7 @@ export function WeeklyMetricPanel({
     setErr("");
     setBusy(true);
     const payload = {
-      value: Number(value),
+      value: autoWeek ? 0 : Number(value),
       prepared: prepared === "" ? null : Number(prepared),
       generated: generated === "" ? null : Number(generated),
       outOfStock: outOfStock === "" ? null : Number(outOfStock),
@@ -242,14 +250,15 @@ export function WeeklyMetricPanel({
               onChange={(e) => setWeek(e.target.value)}
             />
             {/* Confirmado 2026-09-25: desde la semana 40 se llena solo (ver autoFillRate.ts). */}
-            {week >= "2026-W40" && !editingId && (
+            {autoWeek && (
               <div className="mt-1.5 text-[11.5px] text-teal font-semibold">
-                Desde la semana 40 el Fill Rate se llena solo con los cortes de despacho — no hace falta registrarlo.
+                Desde la semana 40 las guías despachadas y la falta de stock se calculan solas con los cortes de despacho. Solo escribe cuántas guías quedaron
+                preparadas y cuántas generadas en toda la semana (0 si no hubo).
               </div>
             )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-            <div>
+            <div className={autoWeek ? "hidden" : ""}>
               <label className="flex items-center gap-1.5 mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
                 <span className="w-2 h-2 rounded-sm bg-teal shrink-0" />
                 {label} (despachadas)
@@ -297,7 +306,7 @@ export function WeeklyMetricPanel({
               />
               <div className="text-[10.5px] text-steel mt-1">Ya existe la guía/etiqueta, pero el producto no se empacó — no alcanzó el tiempo.</div>
             </div>
-            <div>
+            <div className={autoWeek ? "hidden" : ""}>
               <label className="flex items-center gap-1.5 mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
                 <span className="w-2 h-2 rounded-sm bg-red shrink-0" />
                 Por falta de stock
@@ -317,6 +326,19 @@ export function WeeklyMetricPanel({
           <div className="text-[11.5px] text-steel mb-3">
             Las 3 de la derecha son opcionales — con ellas calculamos el Fill Rate y el desglose que se ve en Inicio: despachadas ÷ (despachadas + preparadas + generadas + falta de stock).
           </div>
+          {autoWeek && canJustify && (
+            // En semanas automáticas el % final se conoce recién en el
+            // servidor — si queda bajo 95%, pide la explicación al guardar.
+            <div className="mb-3">
+              <label className="block mb-1 text-[11.5px] text-steel">Si esta semana baja de 95%, explícale al equipo qué pasó (el sistema te lo pedirá al guardar):</label>
+              <textarea
+                className="w-full rounded border border-rule px-2.5 py-2 text-[13px] min-h-[60px]"
+                value={justification}
+                onChange={(e) => setJustification(e.target.value)}
+                disabled={busy}
+              />
+            </div>
+          )}
           {needsJustificationDraft && (
             <div className="rounded-md border border-red bg-red/10 px-3.5 py-3 mb-3">
               <label className="block mb-1.5 text-[12.5px] font-semibold text-red">

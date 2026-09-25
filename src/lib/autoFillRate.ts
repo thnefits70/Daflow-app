@@ -3,15 +3,15 @@ import { getCompiledLot } from "@/lib/fulfillmentGuides";
 
 // Confirmado 2026-09-25 con el usuario (punto por punto):
 //   1. Desde la semana 2026-W40 (lunes 28 sept) el Fill Rate de Fulfillment
-//      se llena SOLO con los cortes; las semanas anteriores quedan como Yair
-//      las cargó a mano.
-//   2. Desde esa semana Yair ya no lo llena a mano (la API lo rechaza) —
-//      solo escribe la justificación cuando baja de 95%, como siempre.
-//   3. Guías totales = las guías de los PDF de los cortes enviados a
+//      se llena con los cortes; las semanas anteriores quedan como Yair las
+//      cargó a mano.
+//   2. Guías totales = las guías de los PDF de los cortes enviados a
 //      Inventario. Falta de stock = 1 guía por cada unidad que Daniel
 //      confirmó que NO salió (la mayoría de pedidos lleva 1 unidad).
-//      Preparadas y Generadas quedan en 0 hasta tener el reporte de estados
-//      de Dropi (DAFLOW no ve cuándo el courier se lleva el paquete).
+//   3. Preparadas y Generadas las escribe Yair UNA vez por semana (el total
+//      de la semana de cada una) — DAFLOW no ve cuándo el courier se lleva
+//      el paquete, y el usuario prefirió esto a que Yair suba reportes.
+//   Despachadas = guías − falta de stock − preparadas − generadas.
 export const AUTO_FILL_RATE_FROM_WEEK = "2026-W40";
 
 export function isoWeekOf(day: string): string {
@@ -34,14 +34,8 @@ export function isAutoFillRateWeek(week: string): boolean {
   return week >= AUTO_FILL_RATE_FROM_WEEK;
 }
 
-// Recalcula la semana del día dado. Se llama cada vez que un corte se envía
-// a Inventario o Daniel confirma algo — nunca rompe el flujo si falla.
-export async function recomputeAutoFillRate(day: string): Promise<void> {
-  const week = isoWeekOf(day);
-  if (!isAutoFillRateWeek(week)) return;
-  const dept = await prisma.department.findFirst({ where: { code: "FUL" }, select: { id: true } });
-  if (!dept) return;
-
+// Lo que DAFLOW sabe solo de la semana: guías totales y falta de stock.
+export async function computeAutoCounts(week: string): Promise<{ guides: number; outOfStock: number }> {
   const lots = await prisma.fulfillmentLot.findMany({
     where: { day: { in: daysOfIsoWeek(week) }, status: { in: ["SENT", "CLOSED"] } },
     select: { id: true },
@@ -56,13 +50,33 @@ export async function recomputeAutoFillRate(day: string): Promise<void> {
       if (p.confirmedAt && p.confirmedQty !== null && p.confirmedQty < p.needed) outOfStock += p.needed - p.confirmedQty;
     }
   }
-  outOfStock = Math.min(outOfStock, guides);
-  const value = guides - outOfStock;
+  return { guides, outOfStock: Math.min(outOfStock, guides) };
+}
 
-  // Solo los números — la justificación que haya escrito Yair se conserva.
+// Despachadas y no despachadas a partir de lo automático + lo que escribió Yair.
+export function fillRateNumbers(counts: { guides: number; outOfStock: number }, prepared: number, generated: number) {
+  const value = Math.max(0, counts.guides - counts.outOfStock - prepared - generated);
+  return { value, outOfStock: counts.outOfStock, notDispatched: counts.outOfStock + prepared + generated };
+}
+
+// Recalcula la semana del día dado conservando lo que Yair escribió
+// (preparadas/generadas) y la justificación. Se llama cada vez que un corte
+// se envía a Inventario o Daniel confirma algo — nunca rompe el flujo si falla.
+export async function recomputeAutoFillRate(day: string): Promise<void> {
+  const week = isoWeekOf(day);
+  if (!isAutoFillRateWeek(week)) return;
+  const dept = await prisma.department.findFirst({ where: { code: "FUL" }, select: { id: true } });
+  if (!dept) return;
+  const existing = await prisma.weeklyMetricRecord.findUnique({
+    where: { deptId_week: { deptId: dept.id, week } },
+    select: { prepared: true, generated: true },
+  });
+  const prepared = existing?.prepared ?? 0;
+  const generated = existing?.generated ?? 0;
+  const nums = fillRateNumbers(await computeAutoCounts(week), prepared, generated);
   await prisma.weeklyMetricRecord.upsert({
     where: { deptId_week: { deptId: dept.id, week } },
-    update: { value, prepared: 0, generated: 0, outOfStock, notDispatched: outOfStock },
-    create: { deptId: dept.id, week, value, prepared: 0, generated: 0, outOfStock, notDispatched: outOfStock },
+    update: { ...nums, prepared, generated },
+    create: { deptId: dept.id, week, ...nums, prepared, generated },
   });
 }

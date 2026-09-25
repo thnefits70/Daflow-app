@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canEditDeptKpis, canJustifyFillRate } from "@/lib/guards";
 import { getOldestUnjustifiedFillRateWeek, fillRateJustificationRuleAppliesTo } from "@/lib/dashboard";
-import { isAutoFillRateWeek } from "@/lib/autoFillRate";
+import { computeAutoCounts, fillRateNumbers, isAutoFillRateWeek } from "@/lib/autoFillRate";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -39,18 +39,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
 
-  const { deptId, week, value, prepared, generated, outOfStock, justification } = parsed.data;
+  const { deptId, week, justification } = parsed.data;
+  let { value, prepared, generated, outOfStock } = parsed.data;
   if (!(await canEditDeptKpis(deptId))) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
   // Confirmado 2026-09-25 con el usuario: desde la semana 40 el Fill Rate de
-  // Fulfillment se llena solo con los cortes (ver autoFillRate.ts) — ya no
-  // se carga a mano. La justificación sigue por su propia ruta.
+  // Fulfillment calcula solo las guías, la falta de stock y las
+  // despachadas (ver autoFillRate.ts) — Yair solo escribe Preparadas y
+  // Generadas de la semana. Lo que mande para lo demás se ignora.
   if (isAutoFillRateWeek(week)) {
     const dept = await prisma.department.findUnique({ where: { id: deptId }, select: { code: true } });
     if (dept?.code === "FUL") {
-      return NextResponse.json({ error: "Desde la semana 40 el Fill Rate se llena solo con los cortes de despacho — ya no hace falta registrarlo a mano." }, { status: 400 });
+      prepared = prepared ?? 0;
+      generated = generated ?? 0;
+      const nums = fillRateNumbers(await computeAutoCounts(week), prepared, generated);
+      value = nums.value;
+      outOfStock = nums.outOfStock;
     }
   }
 
