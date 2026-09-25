@@ -520,9 +520,12 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
   };
 
   // Garantía en Dropi (confirmado con Yair 2026-09-25):
-  //   - Servientrega: el número de guía empieza con 7.
   //   - Veloces: la etiqueta dice "orden de garantía … guía original".
   //   - "SIN RECAUDO" sin esas señales = PAGO ANTICIPADO → pedido normal.
+  //   - Servientrega: la guía que empieza con 7 es SIN RECAUDO, pero NO
+  //     siempre garantía (corregido 2026-09-25 con ejemplo real: de
+  //     745669899/900/903/905 solo 903 era garantía, las otras pago
+  //     anticipado, y la etiqueta no las diferencia) → POSIBLE garantía.
   //   - Gintracom/Laar/Urbano: todavía sin ejemplo — "SIN RECAUDO" queda
   //     como POSIBLE garantía y Yair confirma o la pasa a pago anticipado.
   const garantiaGuides = new Set<string>();
@@ -532,8 +535,10 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
   }
   const uncertainWarrantyGuides: string[] = [];
   for (const [n, g] of guides) {
-    if (g.carrier === "SERVIENTREGA") g.warranty = n.startsWith("7");
-    else if (garantiaGuides.has(n)) g.warranty = true;
+    if (g.carrier === "SERVIENTREGA") {
+      g.warranty = n.startsWith("7");
+      if (g.warranty) uncertainWarrantyGuides.push(n);
+    } else if (garantiaGuides.has(n)) g.warranty = true;
     else if (g.carrier !== "VELOCES" && g.sinRecaudo) {
       g.warranty = true;
       uncertainWarrantyGuides.push(n);

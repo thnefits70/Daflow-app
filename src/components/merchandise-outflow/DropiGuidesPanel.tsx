@@ -320,7 +320,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
         {data?.uncertainWarrantyGuides.includes(w.guide) && (
           <div className="mt-1 text-[11px] flex items-center gap-2 flex-wrap" style={{ color: "#D9A441" }}>
             <span>
-              Dice &quot;SIN RECAUDO&quot;, pero todavía no conozco cómo vienen las garantías de {carrierLabel(w.carrier)} — puede ser un pago anticipado.
+              No se cobra al entregar (&quot;SIN RECAUDO&quot;) — puede ser garantía o un pedido ya pagado por adelantado. Revísala: si no es garantía, márcala.
             </span>
             <button type="button" className="font-semibold text-teal cursor-pointer" onClick={() => toPrepaid(i)}>
               Es pago anticipado (no garantía)
