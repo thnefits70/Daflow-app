@@ -117,8 +117,10 @@ const VARIANT_KEY = /\b(COLOR(?:ES)?|TALLAS?|UNIDAD(?:ES)?|TAMA\S*O|MODELO|SABOR
 // "2 Unidades", "4 Unidades"… y la tabla resumen cuenta PEDIDOS, no
 // unidades (ej. real 2026-09-25: Papel Adhesivo 166387, resumen "1",
 // etiqueta "4 unidades" = 4 rollos). Devuelve cuántas unidades trae 1 pedido.
+// "2UNID" (Gintracom, Almohada ergonómica 127053, 2026-09-25) no se
+// reconocía y cada pedido contaba 1 en vez de 2.
 export function packSize(variant: string | null | undefined): number | null {
-  const m = variant?.trim().match(/^(\d{1,3})\s*(?:unidad(?:es)?|unds?|uds?|u|rollos?|piezas?|pzs?)\.?$/i);
+  const m = variant?.trim().match(/^(\d{1,3})\s*(?:unid(?:ad(?:es)?|s)?|unds?|uds?|u|rollos?|piezas?|pzs?)\.?$/i);
   const n = m ? Number(m[1]) : 0;
   return n >= 1 ? n : null;
 }
