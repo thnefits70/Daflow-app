@@ -313,7 +313,9 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
           <RowCode code={w.code} />
           <ExpandableName text={w.name} className="font-semibold flex-1 min-w-0" />
           {w.variant && <span className="font-mono text-[10px] bg-teal/10 border border-teal/30 rounded-full px-2 py-0.5">{w.variant}</span>}
-          <span className="font-mono text-[13px] font-bold text-teal shrink-0">{w.quantity}</span>
+          <span className="font-mono text-[13px] font-bold text-teal shrink-0" title="Unidades de esta guía de garantía">
+            {w.quantity} unid.
+          </span>
         </div>
         {data?.uncertainWarrantyGuides.includes(w.guide) && (
           <div className="mt-1 text-[11px] flex items-center gap-2 flex-wrap" style={{ color: "#D9A441" }}>
@@ -403,7 +405,9 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
         <div className="flex items-center gap-1.5 flex-wrap text-[12px]">
           <RowCode code={r.code} />
           <ExpandableName text={r.name} className="font-semibold flex-1 min-w-0" />
-          <span className="font-mono text-[13px] font-bold text-teal shrink-0">{r.quantity}</span>
+          <span className="font-mono text-[13px] font-bold text-teal shrink-0" title="Total de unidades de este ID en el corte de hoy">
+            {r.quantity} unid.
+          </span>
         </div>
         {r.quantity > 0 ? (
           <div className="mt-0.5 text-[10.5px] text-steel">
