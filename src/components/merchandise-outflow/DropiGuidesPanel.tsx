@@ -8,6 +8,7 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 import { RegisterComboForm } from "./RegisterComboForm";
 import { carrierLabel, sortCarriers } from "@/lib/carriers";
+import { useFormDraft } from "@/lib/useFormDraft";
 
 type ItemLite = MatchCatalogItem;
 type Resolution =
@@ -94,6 +95,24 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
   const [registering, setRegistering] = useState<string | null>(null);
   const [warrantyDecisions, setWarrantyDecisions] = useState<Record<number, WarrantyDecision>>({});
   const [err, setErr] = useState("");
+
+  // Pedido del usuario 2026-09-25: al recargar la página se perdía todo lo
+  // que Yair ya había elegido (productos, combos vinculados, garantías)
+  // porque solo se guarda al final con "Guardar". Ahora se respalda solo y
+  // vuelve tal cual al recargar.
+  type GuidesDraft = { files: typeof files; data: ParseResult | null; decisions: typeof decisions; warrantyDecisions: typeof warrantyDecisions };
+  const { clearDraft } = useFormDraft<GuidesDraft>(
+    "dropi-guides-panel",
+    { files, data, decisions, warrantyDecisions },
+    (d) => {
+      setFiles(d.files ?? []);
+      setData(d.data ?? null);
+      setDecisions(d.decisions ?? {});
+      setWarrantyDecisions(d.warrantyDecisions ?? {});
+      setPhase(d.data ? "preview" : "idle");
+    },
+    (d) => d.files.length === 0
+  );
 
   async function handleFiles(list: FileList) {
     setErr("");
@@ -272,6 +291,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
       return;
     }
     reset();
+    clearDraft();
     onApplied(json.lotId);
   }
 
