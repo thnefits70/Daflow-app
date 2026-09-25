@@ -57,6 +57,11 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = 
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [previewSource, setPreviewSource] = useState<"camera" | "upload">("camera");
+  // 2026-09-25: EG-0075 guardó una foto 100% negra — se tocó "Tomar foto"
+  // antes de que la cámara del celular mostrara imagen. El botón espera a
+  // que el video esté corriendo, y una captura casi negra no se sube.
+  const [cameraReady, setCameraReady] = useState(false);
+  const [blackWarning, setBlackWarning] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,6 +131,11 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    if (isAlmostBlack(canvas)) {
+      setBlackWarning(true);
+      return;
+    }
+    setBlackWarning(false);
 
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
     if (!blob) return;
@@ -146,6 +156,7 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = 
   }
 
   function retake() {
+    setCameraReady(false);
     setPreviewUrl(null);
     setUploadError("");
     if (previewSource === "upload") {
@@ -193,14 +204,27 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = 
         </div>
       ) : (
         <div>
-          <video ref={videoRef} autoPlay playsInline muted className="w-full max-w-xs aspect-[4/3] object-cover rounded-md bg-black" />
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full max-w-xs aspect-[4/3] object-cover rounded-md bg-black"
+            // Medio segundo extra: los primeros cuadros del celular suelen
+            // salir negros mientras la cámara ajusta la luz.
+            onPlaying={() => setTimeout(() => setCameraReady(true), 500)}
+          />
+          {blackWarning && (
+            <div className="text-red text-[12px] mt-2">La foto salió negra. Espera a ver la imagen en la pantalla, apunta al producto con buena luz y vuelve a tocar &quot;Tomar foto&quot;.</div>
+          )}
           <div className="flex items-center gap-2 mt-2.5">
             <button
               type="button"
-              className="flex items-center gap-1.5 text-[12.5px] font-bold bg-blue text-white rounded-md px-3.5 py-2 cursor-pointer"
+              className="flex items-center gap-1.5 text-[12.5px] font-bold bg-blue text-white rounded-md px-3.5 py-2 cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+              disabled={!cameraReady}
               onClick={takePhoto}
             >
-              <Camera size={14} /> Tomar foto
+              <Camera size={14} /> {cameraReady ? "Tomar foto" : "Abriendo cámara…"}
             </button>
             {allowUpload && (
               <button
@@ -221,4 +245,19 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = 
       )}
     </div>
   );
+}
+
+// Promedio de brillo de una muestra chica de la captura (0-255). Menos de
+// 10 = cuadro prácticamente negro (cámara sin imagen todavía o tapada).
+function isAlmostBlack(source: HTMLCanvasElement): boolean {
+  const sample = document.createElement("canvas");
+  sample.width = 32;
+  sample.height = 32;
+  const ctx = sample.getContext("2d");
+  if (!ctx) return false;
+  ctx.drawImage(source, 0, 0, 32, 32);
+  const { data } = ctx.getImageData(0, 0, 32, 32);
+  let sum = 0;
+  for (let i = 0; i < data.length; i += 4) sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+  return sum / (data.length / 4) < 10;
 }
