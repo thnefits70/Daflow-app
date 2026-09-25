@@ -262,7 +262,7 @@ export function PurchaseControlPanel({
               <DeteriorTraceList defaultFilter="all" refreshKey={deteriorRefreshKey} />
             </details>
           )}
-          <PurchaseUrgentReportsPanel isAdmin={isAdmin} canAct={canSubmit || canReview} canManageGestion={canManageGestion} canConfirmExcess={canActOnApproval} />
+          <PurchaseUrgentReportsPanel isAdmin={isAdmin} canAct={canSubmit} canManageGestion={canManageGestion} canConfirmExcess={canActOnApproval} />
         </>
       )}
       {tab === "creditos" && (

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving } from "@/lib/guards";
+import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canApprovePurchaseRequests, canManageOutflowPurchaseGestion } from "@/lib/guards";
 import { isWithinCreditClaimWindow, creditClaimDeadline } from "@/lib/purchaseUrgent";
 import { autoWriteOffApprovedLateClaims } from "@/lib/inventoryAutoFlows";
 
@@ -16,7 +16,18 @@ import { autoWriteOffApprovedLateClaims } from "@/lib/inventoryAutoFlows";
 export async function GET(_req: NextRequest) {
   const session = await auth();
   const isAdmin = session?.user.role === "admin";
-  if (!session || (!isAdmin && !(await canSubmitPurchaseRequests()) && !(await canConfirmPurchaseReceiving()))) {
+  // Fix 2026-09-25: Bryan (canApprovePurchaseRequests) ya no cumple
+  // canSubmitPurchaseRequests desde que pasó a Marketing — veía la pestaña
+  // vacía y no podía confirmar excedentes (excess-confirm es suyo). Mismo
+  // criterio de visibilidad que la pestaña en PurchaseControlPanel.
+  if (
+    !session ||
+    (!isAdmin &&
+      !(await canSubmitPurchaseRequests()) &&
+      !(await canConfirmPurchaseReceiving()) &&
+      !(await canApprovePurchaseRequests()) &&
+      !(await canManageOutflowPurchaseGestion()))
+  ) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
