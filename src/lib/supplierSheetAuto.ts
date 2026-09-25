@@ -252,7 +252,9 @@ function summarize(r: RequestRow): OrderSummary {
     // aprobación antes de pasar a "Bien" — y sin poder pagarse (supplierDebt).
     const goodFrom = approvedAt ? supplierReviewEndsAt(approvedAt) : null;
     const inReview = !goodFrom || goodFrom.getTime() > Date.now();
-    const parts = [inReview ? (goodFrom ? `En revisión — pasa a Bien el ${fmtDate(goodFrom)}` : "Recibido — en revisión en bodega") : "Bien"];
+    // Solo "En revisión", sin fecha: pedido del usuario 2026-09-25 — CHEN no
+    // debe ver cuándo termina la revisión.
+    const parts = [inReview ? "En revisión" : "Bien"];
     if (replacementsDone.length) {
       const lastDone = replacementsDone.map((res) => res.replacementArrivedAt).filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0];
       parts.push(`${replacedQty} repuestas${lastDone ? ` el ${fmtDate(lastDone)}` : ""} ✓`);
