@@ -86,7 +86,8 @@ function PhotoThumb({ url }: { url: string | undefined }) {
 // vez: un código nuevo (¿qué producto es? / ¿es combo? / ¿no es producto?)
 // y desde ahí queda aprendido para siempre.
 export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => void }) {
-  const [files, setFiles] = useState<{ url: string; name: string }[]>([]);
+  // warranty: PDF de la sección Garantías de Dropi (lo marca Yair).
+  const [files, setFiles] = useState<{ url: string; name: string; warranty?: boolean }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [phase, setPhase] = useState<"idle" | "reading" | "preview" | "applying">("idle");
   const [data, setData] = useState<ParseResult | null>(null);
@@ -141,7 +142,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     const res = await fetch("/api/fulfillment-requests/dropi/guides/parse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fileUrls: files.map((f) => f.url) }),
+      body: JSON.stringify({ fileUrls: files.map((f) => f.url), warrantyFileUrls: files.filter((f) => f.warranty).map((f) => f.url) }),
     });
     const json = await res.json().catch(() => null);
     if (!res.ok) {
@@ -620,11 +621,27 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                 <div key={f.url} className="flex items-center gap-2 text-[12px] bg-cloud rounded px-2.5 py-1.5">
                   <FileText size={14} className="text-steel shrink-0" />
                   <span className="flex-1 min-w-0 truncate">{f.name}</span>
+                  <div className="flex rounded border border-rule overflow-hidden text-[11px] font-semibold shrink-0">
+                    {[false, true].map((w) => (
+                      <button
+                        key={String(w)}
+                        type="button"
+                        className={`px-2 py-0.5 cursor-pointer ${!!f.warranty === w ? (w ? "bg-red/15 text-red" : "bg-teal/15 text-teal") : "text-steel"}`}
+                        onClick={() => setFiles((p) => p.map((x, idx) => (idx === i ? { ...x, warranty: w } : x)))}
+                      >
+                        {w ? "Garantías" : "Pedidos"}
+                      </button>
+                    ))}
+                  </div>
                   <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setFiles((p) => p.filter((_, idx) => idx !== i))}>
                     <X size={13} />
                   </button>
                 </div>
               ))}
+              <div className="text-[11px] text-steel">
+                Marca <b className="text-red">Garantías</b> en el PDF que descargaste de la sección Garantías de Dropi — todas sus guías salen como garantía. En los de{" "}
+                <b className="text-teal">Pedidos</b> nada es garantía (&quot;SIN RECAUDO&quot; = pagado por adelantado).
+              </div>
             </div>
           )}
           <label className="flex flex-col items-center justify-center gap-1.5 border-[1.5px] border-dashed border-rule hover:border-teal rounded-md py-6 cursor-pointer transition-colors mb-3">

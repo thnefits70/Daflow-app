@@ -9,7 +9,9 @@ import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 export const maxDuration = 60;
 
 const MAX_FILES = 10;
-const schema = z.object({ fileUrls: z.array(z.string().url()).min(1).max(MAX_FILES) });
+// warrantyFileUrls: los PDFs que Yair marcó como "Garantías" (Dropi los
+// descarga en su propia sección, mismo formato — confirmado 2026-09-25).
+const schema = z.object({ fileUrls: z.array(z.string().url()).min(1).max(MAX_FILES), warrantyFileUrls: z.array(z.string().url()).max(MAX_FILES).optional() });
 
 // Confirmado 2026-09-23: lectura del PDF de guías de Dropi SIN IA — ver
 // src/lib/dropiGuidesPdf.ts. Solo lee y propone; no guarda nada (eso es
@@ -44,7 +46,7 @@ export async function POST(req: NextRequest) {
     try {
       // Dropi o Rocket — se reconoce solo (confirmado 2026-09-25: Yair sube
       // solo PDFs, también las etiquetas de Rocket en vez del Excel).
-      result = await parseGuidesPdf(new Uint8Array(await res.arrayBuffer()));
+      result = await parseGuidesPdf(new Uint8Array(await res.arrayBuffer()), { warrantyFile: parsed.data.warrantyFileUrls?.includes(url) ?? false });
     } catch {
       return NextResponse.json({ error: `El archivo #${idx + 1} no parece un PDF válido.` }, { status: 400 });
     }

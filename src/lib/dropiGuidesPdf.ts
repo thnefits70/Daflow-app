@@ -261,7 +261,7 @@ function gintracomRocketLabel(lines: PdfLine[]): { guide: string; products: { na
   return { guide: g[1].toUpperCase(), products };
 }
 
-function parseRocketPages(pages: PdfLine[][]): ParsedGuidesPdf {
+function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuidesPdf {
   const guides = new Map<string, { carrier: string; warranty: boolean }>();
   const normal = new Map<string, { name: string; byCarrier: Map<string, number>; variants: Map<string, number>; labeled: number }>();
   const warranty: ParsedWarrantyLine[] = [];
@@ -307,11 +307,12 @@ function parseRocketPages(pages: PdfLine[][]): ParsedGuidesPdf {
 
   for (const [pageIdx, lines] of pages.entries()) {
     const text = lines.map((l) => l.text).join("\n");
-    const isWarranty = /SIN\s+RECAUDO/i.test(text);
+    // PDF marcado "Garantías" por Yair → todo es garantía segura.
+    const isWarranty = warrantyFile || /SIN\s+RECAUDO/i.test(text);
 
     const gin = gintracomRocketLabel(lines);
     if (gin) {
-      if (isWarranty) uncertain.add(gin.guide);
+      if (isWarranty && !warrantyFile) uncertain.add(gin.guide);
       if (gin.products.length === 0) guidesWithoutProducts.push(gin.guide);
       guides.set(gin.guide, { carrier: carrierFromGuide(gin.guide), warranty: isWarranty });
       for (const p of gin.products) {
@@ -329,7 +330,7 @@ function parseRocketPages(pages: PdfLine[][]): ParsedGuidesPdf {
     const guide = g[1].toUpperCase();
     const carrier = carrierFromGuide(guide);
     guides.set(guide, { carrier, warranty: isWarranty });
-    if (isWarranty) uncertain.add(guide);
+    if (isWarranty && !warrantyFile) uncertain.add(guide);
     let productsHere = 0;
     const d = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*\|/);
     if (d && !manifestDate) manifestDate = `${d[3]}-${d[1].padStart(2, "0")}-${d[2].padStart(2, "0")}`;
@@ -382,23 +383,27 @@ function parseRocketPages(pages: PdfLine[][]): ParsedGuidesPdf {
 // Punto de entrada único: reconoce solo si el PDF es de Dropi (trae la
 // tabla resumen "(ID: …) - (SKU: …)") o de Rocket (etiquetas "ROC." /
 // "ROCKET ECOMFULLFILMENT"), y lo lee con el formato que corresponde.
-export async function parseGuidesPdf(bytes: Uint8Array): Promise<ParsedGuidesPdf & { source: "DROPI" | "ROCKET" }> {
+// `warrantyFile`: Yair marcó este PDF como el de la sección Garantías de Dropi.
+export async function parseGuidesPdf(bytes: Uint8Array, { warrantyFile = false }: { warrantyFile?: boolean } = {}): Promise<ParsedGuidesPdf & { source: "DROPI" | "ROCKET" }> {
   const pages = await extractPages(bytes);
   const hasDropiSummary = pages.some((lines) => lines.some((l) => SUMMARY_RE.test(l.text)));
   const looksRocket = pages.some((lines) => lines.some((l) => /ROCKET ECOMFULLFILMENT|\bROC\.[a-z]/i.test(l.text)));
-  if (!hasDropiSummary && looksRocket) return { ...parseRocketPages(pages), source: "ROCKET" };
-  return { ...parseDropiPages(pages), source: "DROPI" };
+  if (!hasDropiSummary && looksRocket) return { ...parseRocketPages(pages, warrantyFile), source: "ROCKET" };
+  return { ...parseDropiPages(pages, warrantyFile), source: "DROPI" };
 }
 
 export async function parseDropiGuidesPdf(bytes: Uint8Array): Promise<ParsedGuidesPdf> {
   return parseDropiPages(await extractPages(bytes));
 }
 
-function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
+function parseDropiPages(pages: PdfLine[][], warrantyFile = false): ParsedGuidesPdf {
 
   let manifestDate: string | null = null;
   let carrier = "";
-  const guides = new Map<string, { carrier: string; warranty: boolean; sinRecaudo: boolean }>();
+  const guides = new Map<string, { carrier: string; warranty: boolean }>();
+  // Las garantías nunca se cobran (confirmado por Yair): una guía CON
+  // RECAUDO en un PDF marcado "Garantías" = lo marcó por error.
+  const conRecaudo: string[] = [];
   // code → transportadora → unidades (tal como la tabla resumen, garantías incluidas)
   const summary = new Map<string, { name: string; byCarrier: Map<string, number> }>();
 
@@ -411,7 +416,10 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
       const d = l.text.match(DATE_RE);
       if (d && !manifestDate) manifestDate = `${d[3]}-${d[2]}-${d[1]}`;
       const g = l.text.match(GUIDE_RE);
-      if (g) guides.set(g[1].toUpperCase(), { carrier, warranty: false, sinRecaudo: /SIN\s+RECAUDO/i.test(l.text) });
+      if (g) {
+        guides.set(g[1].toUpperCase(), { carrier, warranty: false });
+        if (/CON\s+RECAUDO/i.test(l.text)) conRecaudo.push(g[1].toUpperCase());
+      }
       const s = l.text.match(SUMMARY_RE);
       if (s) {
         let row = summary.get(s[1]);
@@ -519,31 +527,20 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
     return best?.guide ?? null;
   };
 
-  // Garantía en Dropi (confirmado con Yair 2026-09-25):
-  //   - Veloces: la etiqueta dice "orden de garantía … guía original".
-  //   - "SIN RECAUDO" sin esas señales = PAGO ANTICIPADO → pedido normal.
-  //   - Servientrega: la guía que empieza con 7 es SIN RECAUDO, pero NO
-  //     siempre garantía (corregido 2026-09-25 con ejemplo real: de
-  //     745669899/900/903/905 solo 903 era garantía, las otras pago
-  //     anticipado, y la etiqueta no las diferencia) → POSIBLE garantía.
-  //   - Gintracom/Laar/Urbano: todavía sin ejemplo — "SIN RECAUDO" queda
-  //     como POSIBLE garantía y Yair confirma o la pasa a pago anticipado.
+  // Garantía en Dropi (confirmado con Yair 2026-09-25): Dropi descarga las
+  // garantías en su PROPIA sección → un PDF aparte, con el mismo formato y
+  // sin ninguna palabra "garantía" (ej. real documento-25-09-2026_1525.pdf).
+  // Yair marca ese PDF como "Garantías" al subirlo (`warrantyFile`) y TODAS
+  // sus guías son garantía. En el PDF normal nada es garantía: "SIN
+  // RECAUDO" (ej. Servientrega 7…) = pago anticipado → pedido normal.
+  // Única señal escrita que se mantiene: Veloces "orden de garantía".
   const garantiaGuides = new Set<string>();
   for (const spot of garantiaSpots) {
     const g = guideOf({ code: "", variant: null, qty: 0, page: spot.page, line: spot.line });
     if (g) garantiaGuides.add(g);
   }
   const uncertainWarrantyGuides: string[] = [];
-  for (const [n, g] of guides) {
-    if (g.carrier === "SERVIENTREGA") {
-      g.warranty = n.startsWith("7");
-      if (g.warranty) uncertainWarrantyGuides.push(n);
-    } else if (garantiaGuides.has(n)) g.warranty = true;
-    else if (g.carrier !== "VELOCES" && g.sinRecaudo) {
-      g.warranty = true;
-      uncertainWarrantyGuides.push(n);
-    }
-  }
+  for (const [n, g] of guides) g.warranty = warrantyFile || garantiaGuides.has(n);
   const warrantyGuides = new Set([...guides.entries()].filter(([, g]) => g.warranty).map(([n]) => n));
   const warranty: ParsedWarrantyLine[] = [];
   const byLabel = new Map<string, Map<string, number>>(); // code → variante ("" = sin variante) → unidades
@@ -551,10 +548,10 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
   const packExtra = new Map<string, Map<string, number>>(); // code → transportadora → unidades extra por paquetes
   for (const h of hits) {
     const g = warrantyGuides.size > 0 ? guideOf(h) : null;
-    if (g && warrantyGuides.has(g)) {
+    if (warrantyFile || (g && warrantyGuides.has(g))) {
       warranty.push({
-        guide: g,
-        carrier: guides.get(g)!.carrier,
+        guide: g ?? "SIN GUÍA",
+        carrier: (g && guides.get(g)?.carrier) || [...guides.values()][0]?.carrier || "SIN TRANSPORTADORA",
         code: h.code,
         name: summary.get(h.code)?.name ?? h.code,
         quantity: h.qty,
@@ -618,6 +615,11 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
   const readWarranty = new Set(warranty.map((w) => w.guide));
 
   const warnings: string[] = [];
+  if (warrantyFile && conRecaudo.length > 0) {
+    warnings.push(
+      `⚠ Marcaste este PDF como Garantías, pero ${conRecaudo.length} guía(s) se cobran al entregar (ej. ${conRecaudo.slice(0, 3).join(", ")}) — las garantías nunca se cobran. ¿Es el PDF de pedidos? Si es así, cámbialo a "Pedidos" y vuelve a leer.`
+    );
+  }
   for (const p of packUnread) {
     warnings.push(
       `⚠ ${p.name}: se vende en paquetes (1, 2, 4 unidades…) y no pude leer ${p.orders} etiqueta(s) — cada una se contó como 1 unidad, puede faltar. Revisa esas etiquetas al preparar.`
