@@ -455,7 +455,12 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
       const idm = text.match(ID_LABEL_RE);
       if (idm) {
         const { variant } = splitVariant(idm[2]);
-        hits.push({ code: idm[1], variant, qty: Number(idm[3]), page: p, line: i });
+        // La etiqueta a veces trae el ID de la VARIANTE y el resumen el del
+        // producto madre (ej. real 2026-09-25: resumen 127946, etiqueta
+        // "(143623) Reloj Smartwatch T500 Color: Hombre"). Si el ID no está
+        // en el resumen, se reconoce por nombre para no perder la variante.
+        const code = summary.has(idm[1]) ? idm[1] : (matchByName(idm[2])?.code ?? idm[1]);
+        hits.push({ code, variant, qty: Number(idm[3]), page: p, line: i });
         continue;
       }
 
