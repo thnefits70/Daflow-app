@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PackagePlus, Search } from "lucide-react";
+import { PackagePlus, Search, Trash2 } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { formatDateTime } from "@/lib/formatDateTime";
 
@@ -105,9 +105,30 @@ function Step({ done, title, when, children }: { done: boolean; title: string; w
 const DECISION_LABEL = { SOLVED_ONSITE: "Solucionado ahí mismo", WRITE_OFF: "Dar de baja", ESCALATED_TO_PURCHASES: "Escalado a Compras (Jariel)" } as const;
 const EXCEPTION_LABEL = { DATA_CORRECTED: "corrigió el dato — Jariel vuelve a intentar", AUTHORIZED: "autorizó seguir sin compra registrada", REJECTED: "rechazó el reclamo" } as const;
 
-function Timeline({ i, canAct, onPack }: { i: TraceItem; canAct: boolean; onPack: () => void }) {
+function Timeline({ i, canAct, onPack, canAdminDelete, onDeleted }: { i: TraceItem; canAct: boolean; onPack: () => void; canAdminDelete: boolean; onDeleted: () => void }) {
   const [packing, setPacking] = useState(false);
   const [packError, setPackError] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  // Solo admin, 2026-09-25 (pedido de Daniel, EG-0042 fue prueba) — ver
+  // items/[id]/admin-delete/route.ts: devuelve al stock lo que se restó.
+  const deletable = (i.resolution === "WRITE_OFF" || i.resolution === "SOLVED_ONSITE") && !i.exchangeItem && !i.sourceReentryItem && !i.credit && !i.groupedSupplierCredit;
+  async function adminDelete() {
+    const name = i.catalogItem?.name ?? i.declaredName;
+    if (!confirm(`¿Eliminar "${name}" de ${i.batch.code}? Las ${i.quantity} un. vuelven al stock. No se puede deshacer.`)) return;
+    setDeleting(true);
+    setPackError("");
+    try {
+      const res = await fetch(`/api/merchandise-outflow/items/${i.id}/admin-delete`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo eliminar.");
+      if (data?.warning) alert(data.warning);
+      onDeleted();
+    } catch (e) {
+      setPackError(e instanceof Error ? e.message : "No se pudo eliminar.");
+      setDeleting(false);
+    }
+  }
 
   async function pack() {
     setPacking(true);
@@ -236,6 +257,14 @@ function Timeline({ i, canAct, onPack }: { i: TraceItem; canAct: boolean; onPack
           )}
         </>
       )}
+      {canAdminDelete && deletable && (
+        <div className="mt-1">
+          <button type="button" disabled={deleting} className="inline-flex items-center gap-1 text-[11.5px] font-bold text-red cursor-pointer disabled:opacity-60" onClick={adminDelete}>
+            <Trash2 size={12} /> {deleting ? "Eliminando…" : "Eliminar (fue prueba)"}
+          </button>
+          {packError && <div className="text-red text-[11px] mt-1">{packError}</div>}
+        </div>
+      )}
     </div>
   );
 }
@@ -264,7 +293,8 @@ export function DeteriorTraceList({
   onGoToExchange,
   defaultFilter = "open",
   refreshKey = 0,
-}: { canAct?: boolean; onGoToExchange?: () => void; defaultFilter?: "open" | "closed" | "all"; refreshKey?: number } = {}) {
+  canAdminDelete = false,
+}: { canAct?: boolean; onGoToExchange?: () => void; defaultFilter?: "open" | "closed" | "all"; refreshKey?: number; canAdminDelete?: boolean } = {}) {
   const [items, setItems] = useState<TraceItem[] | null>(null);
   const [filter, setFilter] = useState<"open" | "closed" | "all">(defaultFilter);
   const [query, setQuery] = useState("");
@@ -337,7 +367,15 @@ export function DeteriorTraceList({
                     <span className={`inline-block mt-1.5 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${TONE_CLASS[s.tone]}`}>{s.label}</span>
                   </div>
                 </button>
-                {isOpen && <Timeline i={i} canAct={canAct && !!onGoToExchange} onPack={() => onGoToExchange?.()} />}
+                {isOpen && (
+                  <Timeline
+                    i={i}
+                    canAct={canAct && !!onGoToExchange}
+                    onPack={() => onGoToExchange?.()}
+                    canAdminDelete={canAdminDelete}
+                    onDeleted={() => setItems((prev) => prev?.filter((x) => x.id !== i.id) ?? prev)}
+                  />
+                )}
               </div>
             );
           })}

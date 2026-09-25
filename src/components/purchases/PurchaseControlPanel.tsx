@@ -259,7 +259,7 @@ export function PurchaseControlPanel({
           {canManageGestion && (
             <details className="mb-6">
               <summary className="font-display font-bold text-[14px] mb-2.5 cursor-pointer">Historial de mercadería en mal estado</summary>
-              <DeteriorTraceList defaultFilter="all" refreshKey={deteriorRefreshKey} />
+              <DeteriorTraceList defaultFilter="all" refreshKey={deteriorRefreshKey} canAdminDelete={isAdmin} />
             </details>
           )}
           <PurchaseUrgentReportsPanel isAdmin={isAdmin} canAct={canSubmit} canManageGestion={canManageGestion} canConfirmExcess={canActOnApproval} />
