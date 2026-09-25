@@ -4,6 +4,7 @@ import { notifyOwner } from "@/lib/notifications";
 import { getFulfilmentLeadId } from "@/lib/guards";
 import { formatMerchandiseOutflowCode, nextMerchandiseOutflowNumber } from "@/lib/merchandiseOutflow";
 import { getCompiledLot, manifestCode } from "@/lib/fulfillmentGuides";
+import { recomputeAutoFillRate } from "@/lib/autoFillRate";
 
 // Parte 3 del plan acordado con el usuario 2026-09-23:
 //   - Joel y Scott escanean UNA vez el QR de la percha y escriben cuántos
@@ -170,6 +171,9 @@ export async function confirmWarrantyPiece(params: { lotId: string; itemId: stri
 async function maybeCloseLot(lotId: string) {
   const lot = await getCompiledLot(lotId);
   if (!lot || lot.status !== "SENT") return;
+  // Fill Rate automático (desde 2026-W40): cada confirmación actualiza la
+  // falta de stock de la semana. Nunca frena la confirmación si falla.
+  await recomputeAutoFillRate(lot.day).catch((e) => console.error("[fill rate auto]", e));
   const pending = lot.picking.some((p) => !p.confirmedAt) || lot.warranty.some((w) => w.mode === "PIECE" && !w.pieceConfirmedAt);
   if (pending) return;
   const closed = await prisma.fulfillmentLot.updateMany({ where: { id: lotId, status: "SENT" }, data: { status: "CLOSED", closedAt: new Date() } });

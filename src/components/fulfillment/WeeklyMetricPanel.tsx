@@ -241,6 +241,12 @@ export function WeeklyMetricPanel({
               value={week}
               onChange={(e) => setWeek(e.target.value)}
             />
+            {/* Confirmado 2026-09-25: desde la semana 40 se llena solo (ver autoFillRate.ts). */}
+            {week >= "2026-W40" && !editingId && (
+              <div className="mt-1.5 text-[11.5px] text-teal font-semibold">
+                Desde la semana 40 el Fill Rate se llena solo con los cortes de despacho — no hace falta registrarlo.
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
             <div>
