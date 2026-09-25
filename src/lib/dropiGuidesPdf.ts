@@ -113,6 +113,17 @@ export function tidyVariantLabel(s: string): string {
 
 const VARIANT_KEY = /\b(COLOR(?:ES)?|TALLAS?|UNIDAD(?:ES)?|TAMA\S*O|MODELO|SABOR|DISE\S*O|VARIANTE|TONO|CAPACIDAD|MEDIDA)\s*:\s*/i;
 
+// Variantes de "paquete": Dropi vende un mismo ID madre como "1 Unidad",
+// "2 Unidades", "4 Unidades"… y la tabla resumen cuenta PEDIDOS, no
+// unidades (ej. real 2026-09-25: Papel Adhesivo 166387, resumen "1",
+// etiqueta "4 unidades" = 4 rollos). Devuelve cuántas unidades trae 1 pedido.
+export function packSize(variant: string | null | undefined): number | null {
+  const m = variant?.trim().match(/^(\d{1,3})\s*(?:unidad(?:es)?|unds?|uds?|u|rollos?|piezas?|pzs?)\.?$/i);
+  const n = m ? Number(m[1]) : 0;
+  return n >= 1 ? n : null;
+}
+const packLabel = (n: number) => `Paquete de ${n}`;
+
 function splitVariant(nameWithVariant: string): { name: string; variant: string | null } {
   const m = nameWithVariant.match(VARIANT_KEY);
   if (!m || m.index === undefined) return { name: nameWithVariant.trim(), variant: null };
@@ -266,8 +277,11 @@ function parseRocketPages(pages: PdfLine[][]): ParsedGuidesPdf {
     }
   }
 
-  const add = (code: string, rawName: string, qty: number, guide: string, carrier: string, isWarranty: boolean) => {
-    const { name, variant } = splitVariant(rawName);
+  const add = (code: string, rawName: string, orders: number, guide: string, carrier: string, isWarranty: boolean) => {
+    const { name, variant: rawVariant } = splitVariant(rawName);
+    const n = packSize(rawVariant ? tidyVariantLabel(rawVariant) : null);
+    const qty = orders * (n ?? 1);
+    const variant = n ? packLabel(n) : rawVariant;
     if (isWarranty) {
       warranty.push({ guide, carrier, code, name, quantity: qty, variant: variant ? tidyVariantLabel(variant) : null });
       return;
@@ -528,6 +542,8 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
   const warrantyGuides = new Set([...guides.entries()].filter(([, g]) => g.warranty).map(([n]) => n));
   const warranty: ParsedWarrantyLine[] = [];
   const byLabel = new Map<string, Map<string, number>>(); // code → variante ("" = sin variante) → unidades
+  const ordersRead = new Map<string, number>(); // code → pedidos leídos en etiquetas
+  const packExtra = new Map<string, Map<string, number>>(); // code → transportadora → unidades extra por paquetes
   for (const h of hits) {
     const g = warrantyGuides.size > 0 ? guideOf(h) : null;
     if (g && warrantyGuides.has(g)) {
@@ -543,11 +559,23 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
     }
     let m = byLabel.get(h.code);
     if (!m) byLabel.set(h.code, (m = new Map()));
-    const key = h.variant ? tidyVariantLabel(h.variant) : "";
-    m.set(key, (m.get(key) ?? 0) + h.qty);
+    let key = h.variant ? tidyVariantLabel(h.variant) : "";
+    ordersRead.set(h.code, (ordersRead.get(h.code) ?? 0) + h.qty);
+    const n = packSize(key);
+    if (n) {
+      key = packLabel(n);
+      // Unidades de más sobre el pedido, en la transportadora de su guía.
+      const g = guideOf(h);
+      const c = (g && guides.get(g)?.carrier) || "";
+      let e = packExtra.get(h.code);
+      if (!e) packExtra.set(h.code, (e = new Map()));
+      e.set(c, (e.get(c) ?? 0) + h.qty * (n - 1));
+    }
+    m.set(key, (m.get(key) ?? 0) + h.qty * (n ?? 1));
   }
 
   const lines: ParsedGuidesLine[] = [];
+  const packUnread: { name: string; orders: number }[] = [];
   for (const [code, s] of summary) {
     const byCarrier: Record<string, number> = {};
     for (const [c, q] of s.byCarrier) {
@@ -555,17 +583,41 @@ function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
       const w = warranty.filter((x) => x.code === code && x.carrier === c).reduce((a, x) => a + x.quantity, 0);
       if (q - w > 0) byCarrier[c] = q - w;
     }
+    const orders = Object.values(byCarrier).reduce((a, b) => a + b, 0);
+    if (orders === 0) continue;
+    const extra = packExtra.get(code);
+    if (extra) {
+      for (const [c, e] of extra) {
+        const target = c in byCarrier ? c : Object.entries(byCarrier).sort((a, b) => b[1] - a[1])[0][0];
+        byCarrier[target] += e;
+      }
+      const unreadOrders = orders - (ordersRead.get(code) ?? 0);
+      if (unreadOrders > 0) packUnread.push({ name: s.name, orders: unreadOrders });
+    }
     const quantity = Object.values(byCarrier).reduce((a, b) => a + b, 0);
-    if (quantity === 0) continue;
     const labels = byLabel.get(code);
     const labelUnits = labels ? [...labels.values()].reduce((a, b) => a + b, 0) : 0;
     const variants = labels ? [...labels.entries()].filter(([k]) => k).map(([label, q]) => ({ label, quantity: q })) : [];
     lines.push({ code, name: s.name, quantity, byCarrier, variants: variants.sort((a, b) => b.quantity - a.quantity), labelUnits });
   }
 
+  // Garantías en paquete: se multiplica DESPUÉS de restarlas del resumen
+  // (arriba), porque el resumen cuenta pedidos.
+  for (const w of warranty) {
+    const n = packSize(w.variant);
+    if (!n) continue;
+    w.quantity *= n;
+    w.variant = packLabel(n);
+  }
+
   const readWarranty = new Set(warranty.map((w) => w.guide));
 
   const warnings: string[] = [];
+  for (const p of packUnread) {
+    warnings.push(
+      `⚠ ${p.name}: se vende en paquetes (1, 2, 4 unidades…) y no pude leer ${p.orders} etiqueta(s) — cada una se contó como 1 unidad, puede faltar. Revisa esas etiquetas al preparar.`
+    );
+  }
   const incomplete = lines.filter((l) => l.labelUnits < l.quantity);
   if (incomplete.length > 0) {
     const units = incomplete.reduce((a, l) => a + (l.quantity - l.labelUnits), 0);
