@@ -178,6 +178,8 @@ type LabelHit = { code: string; variant: string | null; qty: number; page: numbe
 export function carrierFromGuide(guide: string): string {
   const g = guide.toUpperCase();
   if (/^D\d{6,}$/.test(g)) return "GINTRACOM";
+  // Gintracom de Rocket (confirmado 2026-09-25 con etiqueta real: RKT000032606).
+  if (/^RKT\d+$/.test(g)) return "GINTRACOM";
   if (/^LC\d+$/.test(g)) return "LAAR";
   if (/^WYB\d+$/.test(g)) return "URBANO";
   if (/^V\d{6,}$/.test(g)) return "VELOCES";
@@ -193,19 +195,89 @@ export const isRocketCode = (code: string) => code.startsWith(ROCKET_PREFIX);
 const ROCKET_PRODUCT_RE = /^\s*\((\d{2,})\)\s*(.+?)\s+x\s*(\d+)\s*$/i;
 const BARCODE_GUIDE_RE = /\*([A-Z]{0,3}\d{6,})\*/;
 
+// Etiqueta de Gintracom de Rocket (guía RKT…): NO trae el ID del producto,
+// solo "1 * Smartwatch Ultramax T1000" en la columna CONTENIDO. Se reconoce
+// por nombre contra los productos de Rocket que sí traen ID (en el mismo PDF
+// o ya vinculados antes); si no, queda como código "RN:<nombre>" y Yair lo
+// vincula una vez, igual que cualquier código nuevo.
+export const ROCKET_NAME_PREFIX = `${ROCKET_PREFIX}N:`;
+export function rocketNameCode(name: string): string {
+  return `${ROCKET_NAME_PREFIX}${normalizeName(name).slice(0, 60)}`;
+}
+
+function gintracomRocketLabel(lines: PdfLine[]): { guide: string; products: { name: string; qty: number }[] } | null {
+  const text = lines.map((l) => l.text).join("\n");
+  const g = text.match(/GUIA\s+GINTRACOM\s*#?\s*\n?\s*([A-Z]{0,3}\d{6,})/i);
+  if (!g) return null;
+  const products: { name: string; qty: number }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const contItem = lines[i].items.find((it) => it.str.trim() === "CONTENIDO:");
+    if (!contItem) continue;
+    const x0 = contItem.x - 1;
+    let buf = "";
+    for (let j = i + 1; j < lines.length && j < i + 25; j++) {
+      if (/RECAUDO:/i.test(lines[j].text)) break;
+      buf += " " + joinItems(lines[j].items.filter((it) => it.x >= x0));
+    }
+    for (const part of buf.split("|")) {
+      const pm = part.trim().match(GINTRA_PART_RE);
+      if (pm) products.push({ name: pm[2].trim(), qty: Number(pm[1]) });
+    }
+    break;
+  }
+  return { guide: g[1].toUpperCase(), products };
+}
+
 function parseRocketPages(pages: PdfLine[][]): ParsedGuidesPdf {
   const guides = new Map<string, { carrier: string; warranty: boolean }>();
   const normal = new Map<string, { name: string; byCarrier: Map<string, number>; variants: Map<string, number>; labeled: number }>();
   const warranty: ParsedWarrantyLine[] = [];
   let manifestDate: string | null = null;
 
+  // Nombres de Rocket que sí traen ID en este PDF — para reconocer las
+  // etiquetas de Gintracom (que no traen ID).
+  const idByName = new Map<string, string>();
+  for (const lines of pages) {
+    for (const l of lines) {
+      const m = l.text.match(ROCKET_PRODUCT_RE);
+      if (m) idByName.set(normalizeName(splitVariant(m[2]).name), `${ROCKET_PREFIX}${m[1]}`);
+    }
+  }
+
+  const add = (code: string, rawName: string, qty: number, guide: string, carrier: string, isWarranty: boolean) => {
+    const { name, variant } = splitVariant(rawName);
+    if (isWarranty) {
+      warranty.push({ guide, carrier, code, name, quantity: qty, variant: variant ? tidyVariantLabel(variant) : null });
+      return;
+    }
+    let row = normal.get(code);
+    if (!row) normal.set(code, (row = { name, byCarrier: new Map(), variants: new Map(), labeled: 0 }));
+    row.byCarrier.set(carrier, (row.byCarrier.get(carrier) ?? 0) + qty);
+    row.labeled += qty;
+    if (variant) {
+      const key = tidyVariantLabel(variant);
+      row.variants.set(key, (row.variants.get(key) ?? 0) + qty);
+    }
+  };
+
   for (const lines of pages) {
     const text = lines.map((l) => l.text).join("\n");
+    const isWarranty = /SIN\s+RECAUDO/i.test(text);
+
+    const gin = gintracomRocketLabel(lines);
+    if (gin) {
+      guides.set(gin.guide, { carrier: carrierFromGuide(gin.guide), warranty: isWarranty });
+      for (const p of gin.products) {
+        const known = idByName.get(normalizeName(splitVariant(p.name).name));
+        add(known ?? rocketNameCode(splitVariant(p.name).name), p.name, p.qty, gin.guide, carrierFromGuide(gin.guide), isWarranty);
+      }
+      continue;
+    }
+
     const g = text.match(BARCODE_GUIDE_RE);
     if (!g) continue;
     const guide = g[1].toUpperCase();
     const carrier = carrierFromGuide(guide);
-    const isWarranty = /SIN\s+RECAUDO/i.test(text);
     guides.set(guide, { carrier, warranty: isWarranty });
     const d = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*\|/);
     if (d && !manifestDate) manifestDate = `${d[3]}-${d[1].padStart(2, "0")}-${d[2].padStart(2, "0")}`;
@@ -219,21 +291,7 @@ function parseRocketPages(pages: PdfLine[][]): ParsedGuidesPdf {
       if (!inProducts) continue;
       const m = l.text.match(ROCKET_PRODUCT_RE);
       if (!m) continue;
-      const code = `${ROCKET_PREFIX}${m[1]}`;
-      const { name, variant } = splitVariant(m[2]);
-      const qty = Number(m[3]);
-      if (isWarranty) {
-        warranty.push({ guide, carrier, code, name, quantity: qty, variant: variant ? tidyVariantLabel(variant) : null });
-        continue;
-      }
-      let row = normal.get(code);
-      if (!row) normal.set(code, (row = { name, byCarrier: new Map(), variants: new Map(), labeled: 0 }));
-      row.byCarrier.set(carrier, (row.byCarrier.get(carrier) ?? 0) + qty);
-      row.labeled += qty;
-      if (variant) {
-        const key = tidyVariantLabel(variant);
-        row.variants.set(key, (row.variants.get(key) ?? 0) + qty);
-      }
+      add(`${ROCKET_PREFIX}${m[1]}`, m[2], Number(m[3]), guide, carrier, isWarranty);
     }
   }
 

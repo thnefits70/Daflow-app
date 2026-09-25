@@ -43,9 +43,11 @@ type Decision = { kind: "product"; item: ItemLite } | { kind: "combo"; comboCode
 // Confirmado 2026-09-25: los códigos de Rocket vienen como "R14599" (ver
 // dropiGuidesPdf) — se muestran como "Rocket 14599", nunca como ID de Dropi.
 const isRocket = (code: string) => code.startsWith("R");
+// "RN:…" = etiqueta de Gintracom de Rocket, que no trae ID (se reconoce por nombre).
+const rocketLabel = (code: string) => (code.startsWith("RN:") ? "Rocket (sin ID)" : `Rocket ${code.slice(1)}`);
 function RowCode({ code }: { code: string }) {
   if (!isRocket(code)) return <CatalogCode code={code} />;
-  return <span className="font-mono text-[10.5px] font-bold rounded bg-navy/5 border border-rule px-1.5 py-0.5">Rocket {code.slice(1)}</span>;
+  return <span className="font-mono text-[10.5px] font-bold rounded bg-navy/5 border border-rule px-1.5 py-0.5">{rocketLabel(code)}</span>;
 }
 // Garantía: qué sale de verdad (lo marca Yair, confirmado por el usuario).
 type WarrantyDecision = { mode: "COMPLETE" } | { mode: "PARTIAL"; catalogItemIds: string[] } | { mode: "PIECE"; catalogItemId: string; piece: string } | null;
@@ -372,7 +374,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
               {isRocket(r.code)
                 ? res.kind !== "product" && (
                     <span className="text-[10.5px]" style={{ color: "#D9A441" }}>
-                      (Rocket {r.code.slice(1)} quedará vinculado a este producto)
+                      ({rocketLabel(r.code)} quedará vinculado a este producto)
                     </span>
                   )
                 : d.item.justCode !== r.code && (

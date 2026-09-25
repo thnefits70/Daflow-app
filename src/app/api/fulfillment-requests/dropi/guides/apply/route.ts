@@ -12,7 +12,7 @@ const schema = z.object({
   rows: z
     .array(
       z.object({
-        code: z.string().trim().min(1).max(30),
+        code: z.string().trim().min(1).max(80),
         name: z.string().max(200),
         quantity: z.number().int().nonnegative(),
         byCarrier: z.record(z.string().max(40), z.number().int().nonnegative()),
@@ -32,7 +32,7 @@ const schema = z.object({
       z.object({
         guide: z.string().trim().min(1).max(40),
         carrier: z.string().max(40),
-        code: z.string().trim().min(1).max(30),
+        code: z.string().trim().min(1).max(80),
         quantity: z.number().int().positive(),
         variant: z.string().max(120).nullable(),
         decision: z.discriminatedUnion("mode", [
