@@ -151,6 +151,11 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
       return;
     }
     const d = json as ParseResult;
+    // Lo marcado en garantías va por posición: si la lista cambió (ej. Yair
+    // cambió un PDF a Pedidos/Garantías), se empieza de cero para no dejar
+    // una decisión en la garantía equivocada.
+    const sig = (x: ParseResult | null) => (x?.warranty ?? []).map((w) => `${w.guide}|${w.code}`).join(",");
+    if (sig(d) !== sig(data)) setWarrantyDecisions({});
     setData(d);
     setDecisions((prev) => {
       const next: Record<string, Decision> = {};
@@ -294,6 +299,25 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     reset();
     clearDraft();
     onApplied(json.lotId);
+  }
+
+  function fileKindToggle(i: number) {
+    const f = files[i];
+    return (
+      <div className="flex rounded border border-rule overflow-hidden text-[11px] font-semibold shrink-0">
+        {[false, true].map((w) => (
+          <button
+            key={String(w)}
+            type="button"
+            disabled={phase === "applying"}
+            className={`px-2 py-0.5 cursor-pointer ${!!f.warranty === w ? (w ? "bg-red/15 text-red" : "bg-teal/15 text-teal") : "text-steel"}`}
+            onClick={() => setFiles((p) => p.map((x, idx) => (idx === i ? { ...x, warranty: w } : x)))}
+          >
+            {w ? "Garantías" : "Pedidos"}
+          </button>
+        ))}
+      </div>
+    );
   }
 
   function renderWarranty(w: WarrantyLine, i: number) {
@@ -621,18 +645,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                 <div key={f.url} className="flex items-center gap-2 text-[12px] bg-cloud rounded px-2.5 py-1.5">
                   <FileText size={14} className="text-steel shrink-0" />
                   <span className="flex-1 min-w-0 truncate">{f.name}</span>
-                  <div className="flex rounded border border-rule overflow-hidden text-[11px] font-semibold shrink-0">
-                    {[false, true].map((w) => (
-                      <button
-                        key={String(w)}
-                        type="button"
-                        className={`px-2 py-0.5 cursor-pointer ${!!f.warranty === w ? (w ? "bg-red/15 text-red" : "bg-teal/15 text-teal") : "text-steel"}`}
-                        onClick={() => setFiles((p) => p.map((x, idx) => (idx === i ? { ...x, warranty: w } : x)))}
-                      >
-                        {w ? "Garantías" : "Pedidos"}
-                      </button>
-                    ))}
-                  </div>
+                  {fileKindToggle(i)}
                   <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setFiles((p) => p.filter((_, idx) => idx !== i))}>
                     <X size={13} />
                   </button>
@@ -729,6 +742,19 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
               <div className="flex flex-col gap-1.5 mb-3">{warranty.map(renderWarranty)}</div>
             </>
           )}
+
+          {/* Cambiar Pedidos/Garantías sin perder lo ya elegido: se marca y
+              se da "Volver a leer" (que conserva las decisiones). */}
+          <div className="flex flex-col gap-1 mb-3">
+            <div className="text-[11px] text-steel">¿Algún PDF es de la sección Garantías de Dropi? Márcalo y dale a &quot;Volver a leer&quot;:</div>
+            {files.map((f, i) => (
+              <div key={f.url} className="flex items-center gap-2 text-[12px] bg-cloud rounded px-2.5 py-1.5">
+                <FileText size={14} className="text-steel shrink-0" />
+                <span className="flex-1 min-w-0 truncate">{f.name}</span>
+                {fileKindToggle(i)}
+              </div>
+            ))}
+          </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
