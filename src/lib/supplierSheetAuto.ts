@@ -11,8 +11,8 @@ import { SUPPLIER_PUBLIC_LINK_START, isReportBlockingDebtPayment } from "@/lib/s
 // carga (siempre al día), nunca se guarda como celda:
 //   Arriba — un pedido por fila (solo aprobados por Bryan):
 //     Imagen · Producto · Unidades pedidas · Precio (el acordado en la
-//     solicitud de Jariel) · Fecha del pedido · Estado (bien / dañadas /
-//     faltantes / por reponer / repuestas / de más / en camino) · Llegó a
+//     solicitud de Jariel) · Fecha del pedido · Estado (en revisión 7 días
+//     tras la aprobación de Daniel / bien / dañadas / faltantes / por reponer / repuestas / de más / en camino) · Llegó a
 //     bodega (cuando los chicos la recibieron y revisaron, NO la aprobación
 //     de Daniel) · ¿Completo? · Unidades buenas · Total (buenas × precio,
 //     incluye las de más) · Pago (Pagado — Pago N / en proceso / Pendiente).
@@ -33,6 +33,10 @@ export const AUTO_ORDERS_COLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const IMAGE_ROW_H = 46;
 const PROOF_ROW_H = 60;
 const GYE_OFFSET_HOURS = 5; // Guayaquil = UTC-5, sin horario de verano
+// Confirmado 2026-09-25, pedido de Daniel: después de que él aprueba la
+// llegada, el pedido sigue "En revisión" 7 días para revisar la mercadería a
+// fondo; recién entonces pasa a "Bien".
+const REVIEW_DAYS = 7;
 const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const FIRST_MONTH = { y: 2026, m: 8 };
 
@@ -128,7 +132,7 @@ export async function ensureAutoOrdersTabs(supplierId: string, existing: { id: s
 
 const requestInclude = {
   catalogItem: { select: { name: true, photos: true } },
-  receipt: { select: { receivedQuantity: true, confirmedAt: true } },
+  receipt: { select: { receivedQuantity: true, confirmedAt: true, approvedAt: true } },
   debtPayment: { select: { id: true, code: true, closedAt: true } },
   urgentReports: {
     include: {
@@ -162,7 +166,7 @@ async function loadRequests(where: { supplierId: string; requestedAt?: { gte: Da
 }
 
 // En qué etapa está un pedido — la usa también el aviso de notas de CHEN.
-export type OrderStage = "en_camino" | "reposicion" | "por_pagar" | "pago_en_proceso" | "pagado";
+export type OrderStage = "en_camino" | "reposicion" | "en_revision" | "por_pagar" | "pago_en_proceso" | "pagado";
 
 export type OrderSummary = {
   requestId: string;
@@ -247,16 +251,19 @@ function summarize(r: RequestRow): OrderSummary {
     stage = "reposicion";
     complete = "No";
   } else {
-    const parts = ["Bien"];
+    const approvedAt = r.receipt?.approvedAt ?? null;
+    const goodFrom = approvedAt ? new Date(approvedAt.getTime() + REVIEW_DAYS * 24 * 60 * 60 * 1000) : null;
+    const inReview = !goodFrom || goodFrom.getTime() > Date.now();
+    const parts = [inReview ? (goodFrom ? `En revisión — pasa a Bien el ${fmtDate(goodFrom)}` : "Recibido — en revisión en bodega") : "Bien"];
     if (replacementsDone.length) {
       const lastDone = replacementsDone.map((res) => res.replacementArrivedAt).filter((d): d is Date => !!d).sort((a, b) => b.getTime() - a.getTime())[0];
       parts.push(`${replacedQty} repuestas${lastDone ? ` el ${fmtDate(lastDone)}` : ""} ✓`);
     }
     if (excessQty) parts.push(`llegaron ${excessQty} de más`);
     statusText = parts.join(" — ");
-    statusTone = "green";
+    statusTone = inReview ? "gray" : "green";
     complete = "Sí";
-    stage = !r.debtPayment ? "por_pagar" : r.debtPayment.closedAt ? "pagado" : "pago_en_proceso";
+    stage = inReview ? "en_revision" : !r.debtPayment ? "por_pagar" : r.debtPayment.closedAt ? "pagado" : "pago_en_proceso";
   }
 
   return {
