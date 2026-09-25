@@ -480,7 +480,43 @@ export type LotWarrantyLine = ItemView & {
   fromComboCode: string | null;
   pieceConfirmedAt: Date | null;
 };
-export type LotShortage = ItemView & { needed: number; stock: number };
+// pendingReturns: unidades buenas de ese producto que YA llegaron a bodega
+// (devoluciones / guías canceladas) pero todavía no entraron a INVESTOCK —
+// Daniel puede ingresarlas antes de sacar la mercadería (pedido del usuario
+// 2026-09-25). realShortage = lo que falta aun contando esas devoluciones.
+export type LotShortage = ItemView & { needed: number; stock: number; pendingReturns: { label: string; qty: number }[]; realShortage: number };
+
+// Devoluciones que ya llegaron pero todavía no suman en INVESTOCK:
+//   - Reingresos (RM-…) enviados que esperan la aprobación de Daniel, o
+//     que el equipo todavía está capturando.
+//   - Guías canceladas (GC-…) que siguen sin reingresar.
+export async function pendingReturnsByItem(catalogItemIds: string[]): Promise<Map<string, { label: string; qty: number }[]>> {
+  const out = new Map<string, { label: string; qty: number }[]>();
+  if (catalogItemIds.length === 0) return out;
+  const push = (id: string, label: string, qty: number) => {
+    if (qty <= 0) return;
+    const list = out.get(id) ?? [];
+    const same = list.find((x) => x.label === label);
+    if (same) same.qty += qty;
+    else list.push({ label, qty });
+    out.set(id, list);
+  };
+  const [reentry, cancelled] = await Promise.all([
+    prisma.merchandiseReentryItem.findMany({
+      where: { catalogItemId: { in: catalogItemIds }, goodQty: { gt: 0 }, batch: { danielApprovedAt: null, closedAt: null } },
+      select: { catalogItemId: true, goodQty: true, batch: { select: { code: true, submittedAt: true } } },
+    }),
+    prisma.cancelledGuideItem.findMany({
+      where: { catalogItemId: { in: catalogItemIds }, report: { reingresadoAt: null, NOT: { reallyCancelled: false } } },
+      select: { catalogItemId: true, quantity: true, report: { select: { code: true } } },
+    }),
+  ]);
+  for (const r of reentry) {
+    push(r.catalogItemId!, r.batch.submittedAt ? `reingreso ${r.batch.code} esperando tu aprobación` : `reingreso ${r.batch.code} que el equipo aún está registrando`, r.goodQty);
+  }
+  for (const c of cancelled) push(c.catalogItemId!, `guía cancelada ${c.report.code} sin reingresar`, c.quantity);
+  return out;
+}
 // Parte 3: por cada producto real del corte, lo pedido (normal + garantías
 // que no son pieza) vs lo que el equipo registró al escanear y lo que
 // Daniel confirmó.
@@ -588,9 +624,24 @@ export async function getCompiledLot(lotId: string) {
     };
   });
   const stock = await getCurrentStockByItemIds([...needed.keys()]);
-  const shortages: LotShortage[] = [...needed.values()]
-    .map(({ view, qty }) => ({ catalogItemId: view.catalogItemId, name: view.name, photos: view.photos, justCode: view.justCode, needed: qty, stock: stock.get(view.catalogItemId)?.balance ?? 0 }))
-    .filter((s) => s.stock < s.needed)
+  const short = [...needed.values()].filter(({ view, qty }) => (stock.get(view.catalogItemId)?.balance ?? 0) < qty);
+  const pending = await pendingReturnsByItem(short.map(({ view }) => view.catalogItemId));
+  const shortages: LotShortage[] = short
+    .map(({ view, qty }) => {
+      const st = stock.get(view.catalogItemId)?.balance ?? 0;
+      const pendingReturns = pending.get(view.catalogItemId) ?? [];
+      const pendingQty = pendingReturns.reduce((a, p) => a + p.qty, 0);
+      return {
+        catalogItemId: view.catalogItemId,
+        name: view.name,
+        photos: view.photos,
+        justCode: view.justCode,
+        needed: qty,
+        stock: st,
+        pendingReturns,
+        realShortage: Math.max(0, qty - Math.max(0, st) - pendingQty),
+      };
+    })
     .sort((a, b) => b.needed - b.stock - (a.needed - a.stock));
 
   return {
@@ -669,19 +720,36 @@ export async function sendLotToInventory(lotId: string, userId: string | null): 
   const units = lot.lines.reduce((s, l) => s + l.quantity, 0);
   const label = `Corte ${lot.corte} del ${lot.day.split("-").reverse().join("/")}`;
   const danielId = await getInventoryLeadId();
+  // Pedido del usuario 2026-09-25: Daniel se entera DESDE EL AVISO de lo que
+  // no alcanza según INVESTOCK — y si hay devoluciones que ya llegaron pero
+  // no están ingresadas, para que las ingrese antes de sacar la mercadería.
   if (danielId) {
+    const shortText =
+      lot.shortages.length > 0
+        ? ` ⚠️ ${lot.shortages.length} producto(s) no alcanzan en INVESTOCK: ${lot.shortages
+            .slice(0, 4)
+            .map((s) => {
+              const pend = s.pendingReturns.reduce((a, p) => a + p.qty, 0);
+              return `${s.name} (piden ${s.needed}, hay ${s.stock}${pend > 0 ? `; ${pend} en devoluciones sin ingresar: ${s.pendingReturns.map((p) => p.label).join(", ")}` : ""})`;
+            })
+            .join("; ")}${lot.shortages.length > 4 ? ` y ${lot.shortages.length - 4} más` : ""}.`
+        : "";
     await notifyOwner(danielId, {
       title: "Nuevo corte de Fulfillment",
-      body: `${label}: ${lot.lines.length} productos, ${units} unidades${lot.warranty.length ? `, ${lot.warranty.length} garantía(s)` : ""}. Revisa e imprime el manifiesto.`,
+      body: `${label}: ${lot.lines.length} productos, ${units} unidades${lot.warranty.length ? `, ${lot.warranty.length} garantía(s)` : ""}. Revisa e imprime el manifiesto.${shortText}`,
       url: LOT_URL,
     });
   }
-  if (lot.shortages.length > 0) {
-    const list = lot.shortages
+  // A Bryan Ríos y Jariel solo lo que falta DE VERDAD (descontando las
+  // devoluciones que ya están en bodega esperando ingreso) — así no compran
+  // algo que ya llegó.
+  const realShort = lot.shortages.filter((s) => s.realShortage > 0);
+  if (realShort.length > 0) {
+    const list = realShort
       .slice(0, 6)
-      .map((s) => `${s.name} (piden ${s.needed}, hay ${s.stock})`)
+      .map((s) => `${s.name} (faltan ${s.realShortage}: piden ${s.needed}, hay ${s.stock})`)
       .join("; ");
-    const more = lot.shortages.length > 6 ? ` y ${lot.shortages.length - 6} más` : "";
+    const more = realShort.length > 6 ? ` y ${realShort.length - 6} más` : "";
     for (const id of await purchaseDeciderIds()) {
       await notifyOwner(id, { title: "Stock insuficiente para despachar", body: `${label}: ${list}${more}.`, url: LOT_URL });
     }

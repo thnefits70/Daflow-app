@@ -30,7 +30,7 @@ export type LotPickLine = ItemView & {
   confirmedAt: string | null;
   confirmedByName: string | null;
 };
-export type LotShortage = ItemView & { needed: number; stock: number };
+export type LotShortage = ItemView & { needed: number; stock: number; pendingReturns: { label: string; qty: number }[]; realShortage: number };
 export type LotBatch = { id: string; source: string; requestedAt: string; requestedByName: string; guideCount: number; fileCount: number };
 export type LotStatus = "DRAFT" | "SENT" | "CLOSED";
 export type CompiledLot = {
@@ -197,16 +197,25 @@ export function LotView({
         <div className="text-[11.5px] bg-red/10 border border-red/30 rounded-md p-2.5 mb-3">
           <div className="font-semibold text-red mb-1">Stock insuficiente en INVESTOCK ({lot.shortages.length})</div>
           {lot.shortages.map((s) => (
-            <div key={s.catalogItemId} className="flex items-center gap-1.5">
-              <CatalogCode code={s.justCode} />
-              <span className="flex-1 min-w-0">{s.name}</span>
-              <span className="font-mono">
-                piden {s.needed} · hay {s.stock}
-              </span>
+            <div key={s.catalogItemId} className="mb-1">
+              <div className="flex items-center gap-1.5">
+                <CatalogCode code={s.justCode} />
+                <span className="flex-1 min-w-0">{s.name}</span>
+                <span className="font-mono">
+                  piden {s.needed} · hay {s.stock}
+                </span>
+              </div>
+              {s.pendingReturns.map((p) => (
+                <div key={p.label} className="text-[11px] pl-2" style={{ color: "#D9A441" }}>
+                  ↳ {p.qty} en {p.label} — ingrésalas para que cuenten en el stock
+                </div>
+              ))}
             </div>
           ))}
           <div className="text-[10.5px] text-steel mt-1">
-            {lot.status === "DRAFT" ? "Al enviar el corte, Bryan Ríos y Jariel reciben este aviso." : "Bryan Ríos y Jariel ya recibieron este aviso."}
+            {lot.status === "DRAFT"
+              ? "Al enviar el corte, Daniel recibe este aviso; a Bryan Ríos y Jariel solo les llega lo que falta aun contando las devoluciones sin ingresar."
+              : "Daniel ya recibió este aviso; a Bryan Ríos y Jariel les llegó solo lo que falta de verdad."}
           </div>
         </div>
       )}
