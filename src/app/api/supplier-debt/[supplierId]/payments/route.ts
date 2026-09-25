@@ -49,13 +49,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sup
   const requests = parsed.data.requestIds.map((id) => payableById.get(id));
   if (requests.some((r) => !r)) {
     return NextResponse.json(
-      { error: "Uno o más ítems ya no se pueden pagar (tienen un reporte abierto de mercadería dañada/incompleta, o ya están en otra tanda)." },
+      { error: "Uno o más ítems ya no se pueden pagar (siguen en los 7 días de revisión de bodega, tienen un reporte abierto de mercadería dañada/incompleta, o ya están en otra tanda)." },
       { status: 409 }
     );
   }
   const excessReports = parsed.data.excessReportIds.map((id) => excessById.get(id));
   if (excessReports.some((r) => !r)) {
-    return NextResponse.json({ error: "Uno o más excedentes ya no están disponibles para pagar (ya incluidos en otra tanda)." }, { status: 409 });
+    return NextResponse.json({ error: "Uno o más excedentes ya no están disponibles para pagar (siguen en los 7 días de revisión de bodega, o ya están en otra tanda)." }, { status: 409 });
   }
   const okRequests = requests.filter((r): r is NonNullable<typeof r> => !!r);
   const okExcess = excessReports.filter((r): r is NonNullable<typeof r> => !!r);

@@ -199,9 +199,28 @@ export const supplierDebtReportsInclude = { urgentReports: { include: reportDebt
 // Confirmado 2026-09-22: y sin ningún reporte abierto
 // (isReportBlockingDebtPayment); totalCost ya viene NETO de descuentos
 // (creditDeduction), grossCost es el valor original del pedido.
+// Confirmado 2026-09-25, pedido de Daniel + usuario: después de que Daniel
+// aprueba la llegada (receipt.approvedAt) hay 7 días de revisión a fondo; en
+// ese tiempo el pedido NO se puede pagar (ni su excedente). La hoja de CHEN
+// muestra lo mismo ("En revisión — pasa a Bien el …").
+export const SUPPLIER_REVIEW_DAYS = 7;
+export function supplierReviewEndsAt(approvedAt: Date) {
+  return new Date(approvedAt.getTime() + SUPPLIER_REVIEW_DAYS * 24 * 60 * 60 * 1000);
+}
+function reviewCutoff() {
+  return new Date(Date.now() - SUPPLIER_REVIEW_DAYS * 24 * 60 * 60 * 1000);
+}
+
 export async function getSupplierDebtPendingItems(supplierId: string): Promise<SupplierDebtPendingItem[]> {
   const rows = await prisma.purchaseRequest.findMany({
-    where: { supplierId, status: "RECEIVED", debtPaymentId: null, buyerDebtConfirmedAt: { not: null }, requestedAt: sinceTrackingStart },
+    where: {
+      supplierId,
+      status: "RECEIVED",
+      debtPaymentId: null,
+      buyerDebtConfirmedAt: { not: null },
+      requestedAt: sinceTrackingStart,
+      receipt: { approvedAt: { lte: reviewCutoff() } },
+    },
     include: {
       catalogItem: { select: { name: true, photos: true } },
       reviewedBy: { select: { name: true } },
@@ -263,7 +282,7 @@ export async function getSupplierDebtPendingExcessItems(supplierId: string): Pro
       excessQty: { gt: 0 },
       excessConfirmedAt: { not: null },
       excessDebtPaymentId: null,
-      request: { supplierId, requestedAt: sinceTrackingStart },
+      request: { supplierId, requestedAt: sinceTrackingStart, receipt: { approvedAt: { lte: reviewCutoff() } } },
     },
     include: {
       excessConfirmedBy: { select: { name: true } },
@@ -581,12 +600,21 @@ export async function getSupplierDebtInTransitItems(supplierId: string): Promise
         { status: "RECEIVED_PENDING_REVIEW", urgentReports: { none: openUrgentReport } },
         { status: "RECEIVED", buyerDebtConfirmedAt: null, buyerDebtRejectedAt: null, debtPaymentId: null },
         { status: "RECEIVED", buyerDebtRejectedAt: { not: null } },
+        // En los 7 días de revisión de Daniel (ver SUPPLIER_REVIEW_DAYS).
+        { status: "RECEIVED", buyerDebtConfirmedAt: { not: null }, buyerDebtRejectedAt: null, debtPaymentId: null, receipt: { approvedAt: { gt: reviewCutoff() } } },
       ],
     },
-    include: { catalogItem: { select: { name: true } } },
+    include: {
+      catalogItem: { select: { name: true } },
+      receipt: { select: { approvedAt: true } },
+      urgentReports: { include: reportDebtInclude },
+    },
     orderBy: { requestedAt: "asc" },
   });
-  return rows.map((r) => ({
+  const inReview = (r: (typeof rows)[number]) =>
+    r.status === "RECEIVED" && !!r.buyerDebtConfirmedAt && !r.buyerDebtRejectedAt && !r.debtPaymentId && !!r.receipt?.approvedAt && r.receipt.approvedAt > reviewCutoff();
+  // Si además tiene un reporte abierto ya sale en "en disputa" — no duplicar.
+  return rows.filter((r) => !(inReview(r) && r.urgentReports.some(isReportBlockingDebtPayment))).map((r) => ({
     id: r.id,
     requestNumber: r.requestNumber,
     productName: r.catalogItem.name,
@@ -602,7 +630,9 @@ export async function getSupplierDebtInTransitItems(supplierId: string): Promise
             ? "Recibido — esperando aprobación final de Daniel"
             : r.buyerDebtRejectedAt
               ? "Bryan dijo que no autorizó esto — revisar con CHEN"
-              : "Recibido y aprobado — esperando confirmación de Bryan",
+              : inReview(r)
+                ? `En revisión 7 días en bodega — se puede pagar desde el ${supplierReviewEndsAt(r.receipt!.approvedAt!).toLocaleDateString("es-EC", { timeZone: "America/Guayaquil" })}`
+                : "Recibido y aprobado — esperando confirmación de Bryan",
   }));
 }
 

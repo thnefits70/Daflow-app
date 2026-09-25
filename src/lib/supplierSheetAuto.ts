@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { SUPPLIER_PUBLIC_LINK_START, isReportBlockingDebtPayment } from "@/lib/supplierDebt";
+import { SUPPLIER_PUBLIC_LINK_START, isReportBlockingDebtPayment, supplierReviewEndsAt } from "@/lib/supplierDebt";
 
 // Confirmado 2026-09-24, pedido explícito del usuario: pestañas "Pedidos
 // <mes> <año>" de la hoja de CHEN — una por mes, desde septiembre 2026 (a
@@ -33,10 +33,6 @@ export const AUTO_ORDERS_COLS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 const IMAGE_ROW_H = 46;
 const PROOF_ROW_H = 60;
 const GYE_OFFSET_HOURS = 5; // Guayaquil = UTC-5, sin horario de verano
-// Confirmado 2026-09-25, pedido de Daniel: después de que él aprueba la
-// llegada, el pedido sigue "En revisión" 7 días para revisar la mercadería a
-// fondo; recién entonces pasa a "Bien".
-const REVIEW_DAYS = 7;
 const MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 const FIRST_MONTH = { y: 2026, m: 8 };
 
@@ -252,7 +248,9 @@ function summarize(r: RequestRow): OrderSummary {
     complete = "No";
   } else {
     const approvedAt = r.receipt?.approvedAt ?? null;
-    const goodFrom = approvedAt ? new Date(approvedAt.getTime() + REVIEW_DAYS * 24 * 60 * 60 * 1000) : null;
+    // Confirmado 2026-09-25, pedido de Daniel: 7 días "En revisión" tras su
+    // aprobación antes de pasar a "Bien" — y sin poder pagarse (supplierDebt).
+    const goodFrom = approvedAt ? supplierReviewEndsAt(approvedAt) : null;
     const inReview = !goodFrom || goodFrom.getTime() > Date.now();
     const parts = [inReview ? (goodFrom ? `En revisión — pasa a Bien el ${fmtDate(goodFrom)}` : "Recibido — en revisión en bodega") : "Bien"];
     if (replacementsDone.length) {
