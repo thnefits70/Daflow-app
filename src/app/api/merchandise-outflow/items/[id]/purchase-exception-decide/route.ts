@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canDecidePurchaseException, dbUserId, getPurchaseGestionManagerId } from "@/lib/guards";
+import { canDecidePurchaseException, dbUserId, getPurchaseGestionManagerIds } from "@/lib/guards";
 import { notifyInventoryLeadDeteriorPurchaseResolved, notifyPurchaseExceptionDecided, outflowItemDisplayName } from "@/lib/merchandiseOutflow";
 
 const schema = z.object({
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const now = new Date();
-  const notifyTargetId = item.purchaseNoMatchReportedById ?? (await getPurchaseGestionManagerId());
+  const notifyTargetId = item.purchaseNoMatchReportedById ?? (await getPurchaseGestionManagerIds())[0] ?? null;
 
   await prisma.merchandiseOutflowItem.update({
     where: { id },

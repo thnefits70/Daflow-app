@@ -720,9 +720,12 @@ export async function canManageOutflowPurchaseGestion() {
 
 // Mismo patrón que getMarketingLeadId/getInventoryLeadId — a quién avisarle
 // que tiene un reclamo de deterioro nuevo para gestionar.
-export async function getPurchaseGestionManagerId(): Promise<string | null> {
-  const user = await prisma.user.findFirst({ where: { isActive: true, canManagePurchases: true }, select: { id: true } });
-  return user?.id ?? null;
+// Confirmado 2026-09-25, bug real: Jariel Y Nairoby tienen canManagePurchases,
+// y findFirst devolvía siempre a Nairoby — Jariel nunca recibía los avisos de
+// mal estado que Daniel escalaba. Ahora se avisa a todos los que lo tengan.
+export async function getPurchaseGestionManagerIds(): Promise<string[]> {
+  const users = await prisma.user.findMany({ where: { isActive: true, canManagePurchases: true }, select: { id: true } });
+  return users.map((u) => u.id);
 }
 
 // Confirmado 2026-09-17, pedido explícito del usuario: si Jariel no
@@ -1504,7 +1507,7 @@ export async function canDecideMarketProductPurchase() {
 // Confirmado 2026-09-23, pedido de Jariel (vía el usuario): reportar que un
 // producto ya no se consigue con ningún proveedor (ver SupplierStockoutReport)
 // es de quien gestiona Compras — hoy Jariel, mismo flag que
-// getPurchaseGestionManagerId. Admin puede reportar también, como respaldo
+// getPurchaseGestionManagerIds. Admin puede reportar también, como respaldo
 // (a diferencia de la resolución, que sí es exclusiva — ver abajo).
 export async function canReportSupplierStockout() {
   const session = await auth();

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canActOnMerchandiseOutflow, getFinanceLeadId, getPurchaseGestionManagerId } from "@/lib/guards";
+import { canActOnMerchandiseOutflow, getFinanceLeadId, getPurchaseGestionManagerIds } from "@/lib/guards";
 import { outflowItemDisplayName } from "@/lib/merchandiseOutflow";
 import { notifyOwner } from "@/lib/notifications";
 import { recordKardexEntry } from "@/lib/stockKardex";
@@ -75,9 +75,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   if (stillMissing > 0) {
-    const [financeLeadId, gestionId] = await Promise.all([getFinanceLeadId(), getPurchaseGestionManagerId()]);
+    const [financeLeadId, gestionIds] = await Promise.all([getFinanceLeadId(), getPurchaseGestionManagerIds()]);
     const body = `${outflowItemDisplayName(item)} (${item.batch.code}, ${item.batch.supplier?.name ?? "proveedor"}) — llegaron ${parsed.data.quantity} de ${missing}, faltan ${stillMissing}. ${note}`;
-    for (const uid of new Set([financeLeadId, gestionId].filter(Boolean) as string[])) {
+    for (const uid of new Set([financeLeadId, ...gestionIds].filter(Boolean) as string[])) {
       await notifyOwner(uid, { title: "⚠️ El reemplazo llegó incompleto", body, url: "/area/workspace?tab=egresos&otab=proveedor" }).catch(() => null);
     }
   }

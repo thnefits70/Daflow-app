@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
-import { getInventoryLeadId, getPurchaseGestionManagerId } from "@/lib/guards";
+import { getInventoryLeadId, getPurchaseGestionManagerIds } from "@/lib/guards";
 import { getAnthropicClient } from "@/lib/nancy";
 import { logAiUsage } from "@/lib/aiUsage";
 import { getOrderSummary, type OrderStage } from "@/lib/supplierSheetAuto";
@@ -39,8 +39,8 @@ async function inventoryTeamIds() {
 async function idsForRoles(roles: Role[], requesterId: string | null) {
   const ids = new Set<string>();
   if (roles.includes("compras")) {
-    const buyer = requesterId ?? (await getPurchaseGestionManagerId());
-    if (buyer) ids.add(buyer);
+    if (requesterId) ids.add(requesterId);
+    else for (const id of await getPurchaseGestionManagerIds()) ids.add(id);
   }
   if (roles.includes("inventario")) for (const id of await inventoryTeamIds()) ids.add(id);
   if (roles.includes("inventario_lider")) {

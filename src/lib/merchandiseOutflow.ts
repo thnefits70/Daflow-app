@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
-import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId, getPurchaseGestionManagerId } from "@/lib/guards";
+import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId, getPurchaseGestionManagerIds } from "@/lib/guards";
 import { OUTFLOW_REASON_LABELS } from "@/lib/merchandiseOutflowLabels";
 import { PRICED_STATUSES, effectiveUnitCost } from "@/lib/purchases";
 import { recordKardexEntry } from "@/lib/stockKardex";
@@ -203,22 +203,22 @@ export async function notifySupplierExchangeRejected(item: {
 // entera pero NO gestiona — es informativo. Quien de verdad tiene que
 // gestionar el reclamo con el proveedor (elegir a cuál, anclar la compra
 // real y registrar el resultado, ver purchase-link/purchase-resolve) es
-// quien tenga canManagePurchases (hoy Jariel, ver getPurchaseGestionManagerId
+// quien tenga canManagePurchases (hoy Jariel, ver getPurchaseGestionManagerIds
 // en guards.ts). Si algún día nadie tiene ese flag, Bryan sigue siendo el
 // único aviso — nunca se pierde el caso.
 export async function notifyMarketingLeadOutflowEscalated(item: { declaredName: string; quantity: number }): Promise<void> {
-  const [leadId, gestionManagerId] = await Promise.all([getMarketingLeadId(), getPurchaseGestionManagerId()]);
+  const [leadId, gestionManagerIds] = await Promise.all([getMarketingLeadId(), getPurchaseGestionManagerIds()]);
   const detail = `${item.declaredName} — ${item.quantity} un. recién llegadas, dañadas.`;
   if (leadId) {
     await notifyOwner(leadId, {
       title: "Deterioro escalado desde Inventario",
-      body: gestionManagerId
+      body: gestionManagerIds.length
         ? `${detail} Jariel se va a encargar de gestionar el crédito o cambio con el proveedor.`
         : `${detail} Daniel pide gestionar crédito o cambio con el proveedor.`,
       url: "/area/workspace?tab=compras&ptab=urgentes",
     }).catch(() => null);
   }
-  if (gestionManagerId) {
+  for (const gestionManagerId of gestionManagerIds) {
     await notifyOwner(gestionManagerId, {
       title: "Reclamo de deterioro pendiente de gestionar",
       body: `${detail} Elige el proveedor para anclarlo a la compra real y reclamar crédito o cambio.`,
