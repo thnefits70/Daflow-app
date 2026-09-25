@@ -424,6 +424,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
               <PhotoThumb url={d.item.photos[0]} />
               <span className="text-steel">→</span>
               <span>{d.item.name}</span>
+              {d.item.justCode ? <CatalogCode code={d.item.justCode} /> : <span className="font-mono text-[10.5px] text-steel">sin ID en INVESTOCK</span>}
               {isRocket(r.code)
                 ? res.kind !== "product" && (
                     <span className="text-[10.5px]" style={{ color: "#D9A441" }}>
@@ -552,6 +553,10 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                       onClick={() => setDecisions((p) => ({ ...p, [r.code]: { kind: "product", item: (res as { suggestion: ItemLite }).suggestion } }))}
                     >
                       <PhotoThumb url={res.suggestion.photos[0]} /> Es «{res.suggestion.name}»
+                      {/* ID de INVESTOCK a la vista para confirmar que es el producto correcto (pedido del usuario 2026-09-25). */}
+                      <span className="font-mono text-[10.5px] font-normal text-steel">
+                        {res.suggestion.justCode ? `ID ${res.suggestion.justCode}` : "sin ID en INVESTOCK"}
+                      </span>
                     </button>
                   )}
                   {res.kind === "unknown" && (
