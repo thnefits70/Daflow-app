@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { canSubmitFulfillmentRequest } from "@/lib/guards";
-import { parseDropiGuidesPdf, type ParsedGuidesLine, type ParsedWarrantyLine } from "@/lib/dropiGuidesPdf";
+import { parseGuidesPdf, type ParsedGuidesLine, type ParsedWarrantyLine } from "@/lib/dropiGuidesPdf";
 import { findAlreadyUploadedGuides, resolveGuideLines } from "@/lib/fulfillmentGuides";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 
@@ -40,7 +40,9 @@ export async function POST(req: NextRequest) {
     if (!res.ok) return NextResponse.json({ error: `No se pudo abrir el PDF #${idx + 1}.` }, { status: 400 });
     let result;
     try {
-      result = await parseDropiGuidesPdf(new Uint8Array(await res.arrayBuffer()));
+      // Dropi o Rocket — se reconoce solo (confirmado 2026-09-25: Yair sube
+      // solo PDFs, también las etiquetas de Rocket en vez del Excel).
+      result = await parseGuidesPdf(new Uint8Array(await res.arrayBuffer()));
     } catch {
       return NextResponse.json({ error: `El archivo #${idx + 1} no parece un PDF válido.` }, { status: 400 });
     }
@@ -71,7 +73,7 @@ export async function POST(req: NextRequest) {
 
   if (emptyFiles.length > 0) {
     return NextResponse.json(
-      { error: `No encontré la lista de productos en el PDF #${emptyFiles.join(", #")}. ¿Es el PDF de guías que descargas de Dropi (con la tabla "PRODUCTOS")?` },
+      { error: `No encontré la lista de productos en el PDF #${emptyFiles.join(", #")}. ¿Es el PDF de guías de Dropi o el de etiquetas de Rocket?` },
       { status: 400 }
     );
   }

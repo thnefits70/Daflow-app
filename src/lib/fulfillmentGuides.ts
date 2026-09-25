@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { normalizeName, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
+import { isRocketCode, normalizeName, ROCKET_PREFIX, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
 import { findSimilarUnlinkedItem, significantWords } from "@/lib/justCatalog";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
@@ -45,15 +45,41 @@ export type GuideResolution =
 
 export type ResolvedGuideLine = ParsedGuidesLine & { resolution: GuideResolution };
 
+const COMBO_SELECT = { code: true, label: true, components: { select: { quantity: true, catalogItem: { select: ITEM_SELECT } } } } as const;
+type ComboLite = { code: string; label: string | null; components: { quantity: number; catalogItem: ItemLite }[] };
+
+function comboResolution(combo: ComboLite): GuideResolution {
+  if (combo.components.length === 0) return { kind: "comboNoRecipe", comboCode: combo.code };
+  return {
+    kind: "combo",
+    comboCode: combo.code,
+    label: combo.label,
+    components: combo.components.map((c) => ({ catalogItem: c.catalogItem, quantity: c.quantity })),
+    missingIds: combo.components.filter((c) => !c.catalogItem.justCode?.trim()).map((c) => c.catalogItem.name),
+  };
+}
+
+// Combo de Dropi por su código — para que Yair vincule un ID de Rocket a un
+// combo que ya existe (confirmado 2026-09-25: Rocket usa sus propios IDs).
+export async function findComboByCode(code: string) {
+  const combo = await prisma.dropiCombo.findUnique({ where: { code }, select: COMBO_SELECT });
+  return combo ? { ...comboResolution(combo), label: combo.label } : null;
+}
+
 export async function resolveGuideLines(lines: ParsedGuidesLine[]): Promise<ResolvedGuideLine[]> {
-  const codes = lines.map((l) => l.code);
+  // Los códigos de Rocket ("R14599") no son IDs de Dropi: se reconocen por
+  // lo que Yair ya vinculó antes (RocketCodeMapping), nunca por justCode.
+  const codes = lines.map((l) => l.code).filter((c) => !isRocketCode(c));
+  const rocketCodes = lines.map((l) => l.code).filter(isRocketCode).map((c) => c.slice(ROCKET_PREFIX.length));
+  const rocketMappings = await prisma.rocketCodeMapping.findMany({
+    where: { rocketCode: { in: rocketCodes } },
+    select: { rocketCode: true, catalogItem: { select: ITEM_SELECT }, dropiCombo: { select: COMBO_SELECT } },
+  });
+  const rocketByCode = new Map(rocketMappings.map((m) => [`${ROCKET_PREFIX}${m.rocketCode}`, m]));
   const [items, combos, ignored, allItems] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({ where: { justCode: { in: codes } }, select: ITEM_SELECT }),
-    prisma.dropiCombo.findMany({
-      where: { code: { in: codes } },
-      select: { code: true, label: true, components: { select: { quantity: true, catalogItem: { select: ITEM_SELECT } } } },
-    }),
-    prisma.dropiIgnoredCode.findMany({ where: { code: { in: codes } }, select: { code: true, label: true } }),
+    prisma.dropiCombo.findMany({ where: { code: { in: codes } }, select: COMBO_SELECT }),
+    prisma.dropiIgnoredCode.findMany({ where: { code: { in: lines.map((l) => l.code) } }, select: { code: true, label: true } }),
     // Candidatos para sugerir cuando el código es nuevo. Confirmado con
     // datos reales 2026-09-23: Dropi tiene VARIOS IDs para el mismo
     // producto físico (ej. Pistola de Soldar 118388 y 112139, Licuadora
@@ -70,22 +96,13 @@ export async function resolveGuideLines(lines: ParsedGuidesLine[]): Promise<Reso
   const allWords = allItems.map((u) => ({ id: u.id, name: u.name, words: significantWords(u.name) }));
 
   return lines.map((l) => {
-    const item = itemByCode.get(l.code);
+    const rocket = rocketByCode.get(l.code);
+    if (rocket?.catalogItem) return { ...l, resolution: { kind: "product", catalogItem: rocket.catalogItem } };
+    if (rocket?.dropiCombo) return { ...l, resolution: comboResolution(rocket.dropiCombo) };
+    const item = isRocketCode(l.code) ? undefined : itemByCode.get(l.code);
     if (item) return { ...l, resolution: { kind: "product", catalogItem: item } };
-    const combo = comboByCode.get(l.code);
-    if (combo) {
-      if (combo.components.length === 0) return { ...l, resolution: { kind: "comboNoRecipe", comboCode: combo.code } };
-      return {
-        ...l,
-        resolution: {
-          kind: "combo",
-          comboCode: combo.code,
-          label: combo.label,
-          components: combo.components.map((c) => ({ catalogItem: c.catalogItem, quantity: c.quantity })),
-          missingIds: combo.components.filter((c) => !c.catalogItem.justCode?.trim()).map((c) => c.catalogItem.name),
-        },
-      };
-    }
+    const combo = isRocketCode(l.code) ? undefined : comboByCode.get(l.code);
+    if (combo) return { ...l, resolution: comboResolution(combo) };
     const ignoredLabel = ignoredByCode.get(l.code);
     if (ignoredLabel !== undefined) return { ...l, resolution: { kind: "ignored", label: ignoredLabel } };
 
@@ -142,7 +159,9 @@ export async function getOrCreateOpenLot(): Promise<{ id: string; corte: number 
 
 // ---- Guardar la lectura del PDF -----------------------------------------
 
-type Decision = { kind: "product"; catalogItemId: string } | { kind: "combo" } | { kind: "ignore" };
+// comboCode: el combo de Dropi que corresponde. Para un código de Dropi es
+// el mismo código; para uno de Rocket, el combo de Dropi al que Yair lo vinculó.
+type Decision = { kind: "product"; catalogItemId: string } | { kind: "combo"; comboCode?: string } | { kind: "ignore" };
 
 export type GuidesApplyRow = {
   code: string;
@@ -212,16 +231,23 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
   }
 
   const decisionByCode = new Map(input.rows.map((r) => [r.code, r.decision]));
-  const productRows = input.rows.filter((r) => r.decision.kind === "product");
-  const comboCodes = input.rows.filter((r) => r.decision.kind === "combo").map((r) => r.code);
+  const comboCodeOf = (r: GuidesApplyRow) => (r.decision.kind === "combo" ? r.decision.comboCode ?? r.code : null);
+  // Rocket: lo que Yair confirma se guarda como vínculo ID de Rocket → producto/combo
+  // (RocketCodeMapping) — nunca toca el ID de Dropi del catálogo.
+  const rocketRows = input.rows.filter((r) => isRocketCode(r.code) && r.decision.kind !== "ignore");
+  const productRows = input.rows.filter((r) => r.decision.kind === "product" && !isRocketCode(r.code));
+  const comboCodes = [...new Set(input.rows.map(comboCodeOf).filter((c): c is string => !!c && !isRocketCode(c)))];
   const ignoreRows = input.rows.filter((r) => r.decision.kind === "ignore");
 
   const pickedIds = [...new Set(productRows.map((r) => (r.decision as { catalogItemId: string }).catalogItemId))];
   const [pickedItems, combos, codeOwners] = await Promise.all([
-    prisma.purchaseCatalogItem.findMany({ where: { id: { in: pickedIds } }, select: { id: true, name: true, justCode: true } }),
+    prisma.purchaseCatalogItem.findMany({
+      where: { id: { in: [...new Set([...pickedIds, ...rocketRows.flatMap((r) => (r.decision.kind === "product" ? [r.decision.catalogItemId] : []))])] } },
+      select: { id: true, name: true, justCode: true },
+    }),
     prisma.dropiCombo.findMany({
       where: { code: { in: comboCodes } },
-      select: { code: true, components: { select: { catalogItemId: true, quantity: true, catalogItem: { select: { name: true, justCode: true } } } } },
+      select: { id: true, code: true, components: { select: { catalogItemId: true, quantity: true, catalogItem: { select: { name: true, justCode: true } } } } },
     }),
     prisma.purchaseCatalogItem.findMany({ where: { justCode: { in: productRows.map((r) => r.code) } }, select: { id: true, name: true, justCode: true } }),
   ]);
@@ -255,6 +281,10 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
     return { ok: false, error: "Elegiste el mismo producto para dos códigos distintos de Dropi — revisa las filas." };
   }
 
+  for (const r of rocketRows) {
+    if (r.decision.kind === "product" && !itemById.has(r.decision.catalogItemId)) return { ok: false, error: `No se encontró el producto elegido para ${r.name}.` };
+  }
+
   for (const code of comboCodes) {
     const combo = comboByCode.get(code);
     if (!combo || combo.components.length === 0) return { ok: false, error: `El combo ${code} todavía no tiene receta registrada.` };
@@ -267,7 +297,8 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
     const d = decisionByCode.get(code);
     if (!d || d.kind === "ignore") return null;
     if (d.kind === "product") return [{ catalogItemId: d.catalogItemId, perUnit: 1, fromCombo: null }];
-    return comboByCode.get(code)!.components.map((c) => ({ catalogItemId: c.catalogItemId, perUnit: c.quantity, fromCombo: code }));
+    const comboCode = d.comboCode ?? code;
+    return comboByCode.get(comboCode)!.components.map((c) => ({ catalogItemId: c.catalogItemId, perUnit: c.quantity, fromCombo: comboCode }));
   };
 
   const itemRows: ItemRow[] = [];
@@ -371,12 +402,24 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
           data: { code: a.code, label: `${a.label} (ID alterno)`, createdById: userId, components: { create: [{ catalogItemId: a.itemId, quantity: 1 }] } },
         });
       }
+      for (const r of rocketRows) {
+        const rocketCode = r.code.slice(ROCKET_PREFIX.length);
+        const target =
+          r.decision.kind === "product"
+            ? { catalogItemId: r.decision.catalogItemId, dropiComboId: null }
+            : { catalogItemId: null, dropiComboId: comboByCode.get(comboCodeOf(r)!)!.id };
+        await tx.rocketCodeMapping.upsert({
+          where: { rocketCode },
+          create: { rocketCode, rocketName: r.name, createdById: userId, ...target },
+          update: { rocketName: r.name, ...target },
+        });
+      }
       for (const r of ignoreRows) {
         await tx.dropiIgnoredCode.upsert({ where: { code: r.code }, create: { code: r.code, label: r.name, createdById: userId }, update: { label: r.name } });
       }
       return tx.fulfillmentRequestBatch.create({
         data: {
-          source: "DROPI",
+          source: input.rows.every((r) => isRocketCode(r.code)) ? "ROCKET" : "DROPI",
           requestedById: userId,
           lotId: lot.id,
           totalRows: input.rows.length,

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RocketRequestPanel } from "./RocketRequestPanel";
 import { DropiGuidesPanel } from "./DropiGuidesPanel";
 import { CompiledResult, type CompiledBatch } from "./fulfillmentRequestShared";
 import { LotHistoryList, LotView, type CompiledLot, type LotListItem } from "./LotView";
@@ -99,7 +98,6 @@ export function FulfillmentRequestPanel({ canSubmit }: { canSubmit: boolean }) {
       {canSubmit && (
         <div className="flex flex-col gap-6 mb-5">
           <DropiGuidesPanel onApplied={(lotId) => loadLots(lotId)} />
-          <RocketRequestPanel onApplied={() => loadLots(null)} />
         </div>
       )}
 

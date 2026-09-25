@@ -20,7 +20,7 @@ const schema = z.object({
         variants: z.array(variantSchema).max(50),
         decision: z.discriminatedUnion("kind", [
           z.object({ kind: z.literal("product"), catalogItemId: z.string().min(1) }),
-          z.object({ kind: z.literal("combo") }),
+          z.object({ kind: z.literal("combo"), comboCode: z.string().trim().min(1).max(30).optional() }),
           z.object({ kind: z.literal("ignore") }),
         ]),
       })

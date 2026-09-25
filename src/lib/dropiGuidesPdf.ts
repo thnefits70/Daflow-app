@@ -166,8 +166,110 @@ const SUMMARY_NAME_CUT = 38;
 
 type LabelHit = { code: string; variant: string | null; qty: number; page: number; line: number };
 
-export async function parseDropiGuidesPdf(bytes: Uint8Array): Promise<ParsedGuidesPdf> {
+// ---- Rocket ---------------------------------------------------------------
+
+// Confirmado 2026-09-25 con el PDF real de Yair (etiquetas_*.pdf): Rocket
+// entrega sus etiquetas con el mismo formato de Servientrega/Gintracom, pero
+// SIN la tabla resumen de Dropi — cada etiqueta trae su guía y
+// "PRODUCTOS: (14599) Spray Dispensador De Aceite x 1" con el ID de ROCKET
+// (no el de Dropi). La transportadora no viene escrita: se reconoce por el
+// formato del número de guía. El usuario decidió que Yair solo suba este PDF
+// (ya no el Excel de picking).
+export function carrierFromGuide(guide: string): string {
+  const g = guide.toUpperCase();
+  if (/^D\d{6,}$/.test(g)) return "GINTRACOM";
+  if (/^LC\d+$/.test(g)) return "LAAR";
+  if (/^WYB\d+$/.test(g)) return "URBANO";
+  if (/^V\d{6,}$/.test(g)) return "VELOCES";
+  if (/^\d{9}$/.test(g)) return "SERVIENTREGA";
+  return "SIN TRANSPORTADORA";
+}
+
+// Los códigos de Rocket se guardan con prefijo "R" para que nunca choquen
+// con un ID de Dropi que tenga los mismos números.
+export const ROCKET_PREFIX = "R";
+export const isRocketCode = (code: string) => code.startsWith(ROCKET_PREFIX);
+
+const ROCKET_PRODUCT_RE = /^\s*\((\d{2,})\)\s*(.+?)\s+x\s*(\d+)\s*$/i;
+const BARCODE_GUIDE_RE = /\*([A-Z]{0,3}\d{6,})\*/;
+
+function parseRocketPages(pages: PdfLine[][]): ParsedGuidesPdf {
+  const guides = new Map<string, { carrier: string; warranty: boolean }>();
+  const normal = new Map<string, { name: string; byCarrier: Map<string, number>; variants: Map<string, number>; labeled: number }>();
+  const warranty: ParsedWarrantyLine[] = [];
+  let manifestDate: string | null = null;
+
+  for (const lines of pages) {
+    const text = lines.map((l) => l.text).join("\n");
+    const g = text.match(BARCODE_GUIDE_RE);
+    if (!g) continue;
+    const guide = g[1].toUpperCase();
+    const carrier = carrierFromGuide(guide);
+    const isWarranty = /SIN\s+RECAUDO/i.test(text);
+    guides.set(guide, { carrier, warranty: isWarranty });
+    const d = text.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*\|/);
+    if (d && !manifestDate) manifestDate = `${d[3]}-${d[1].padStart(2, "0")}-${d[2].padStart(2, "0")}`;
+
+    let inProducts = false;
+    for (const l of lines) {
+      if (/PRODUCTOS:/i.test(l.text)) {
+        inProducts = true;
+        continue;
+      }
+      if (!inProducts) continue;
+      const m = l.text.match(ROCKET_PRODUCT_RE);
+      if (!m) continue;
+      const code = `${ROCKET_PREFIX}${m[1]}`;
+      const { name, variant } = splitVariant(m[2]);
+      const qty = Number(m[3]);
+      if (isWarranty) {
+        warranty.push({ guide, carrier, code, name, quantity: qty, variant: variant ? tidyVariantLabel(variant) : null });
+        continue;
+      }
+      let row = normal.get(code);
+      if (!row) normal.set(code, (row = { name, byCarrier: new Map(), variants: new Map(), labeled: 0 }));
+      row.byCarrier.set(carrier, (row.byCarrier.get(carrier) ?? 0) + qty);
+      row.labeled += qty;
+      if (variant) {
+        const key = tidyVariantLabel(variant);
+        row.variants.set(key, (row.variants.get(key) ?? 0) + qty);
+      }
+    }
+  }
+
+  const lines: ParsedGuidesLine[] = [...normal.entries()].map(([code, r]) => ({
+    code,
+    name: r.name,
+    quantity: r.labeled,
+    byCarrier: Object.fromEntries(r.byCarrier),
+    variants: [...r.variants.entries()].map(([label, quantity]) => ({ label, quantity })).sort((a, b) => b.quantity - a.quantity),
+    labelUnits: r.labeled,
+  }));
+  return {
+    manifestDate,
+    guides: [...guides.entries()].map(([number, v]) => ({ number, carrier: v.carrier, warranty: v.warranty })),
+    lines,
+    warranty,
+    unreadWarrantyGuides: [...guides.entries()].filter(([n, v]) => v.warranty && !warranty.some((w) => w.guide === n)).map(([n]) => n),
+  };
+}
+
+// Punto de entrada único: reconoce solo si el PDF es de Dropi (trae la
+// tabla resumen "(ID: …) - (SKU: …)") o de Rocket (etiquetas "ROC." /
+// "ROCKET ECOMFULLFILMENT"), y lo lee con el formato que corresponde.
+export async function parseGuidesPdf(bytes: Uint8Array): Promise<ParsedGuidesPdf & { source: "DROPI" | "ROCKET" }> {
   const pages = await extractPages(bytes);
+  const hasDropiSummary = pages.some((lines) => lines.some((l) => SUMMARY_RE.test(l.text)));
+  const looksRocket = pages.some((lines) => lines.some((l) => /ROCKET ECOMFULLFILMENT|\bROC\.[a-z]/i.test(l.text)));
+  if (!hasDropiSummary && looksRocket) return { ...parseRocketPages(pages), source: "ROCKET" };
+  return { ...parseDropiPages(pages), source: "DROPI" };
+}
+
+export async function parseDropiGuidesPdf(bytes: Uint8Array): Promise<ParsedGuidesPdf> {
+  return parseDropiPages(await extractPages(bytes));
+}
+
+function parseDropiPages(pages: PdfLine[][]): ParsedGuidesPdf {
 
   let manifestDate: string | null = null;
   let carrier = "";

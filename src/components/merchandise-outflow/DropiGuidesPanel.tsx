@@ -35,7 +35,18 @@ type ParseResult = {
   unreadWarrantyGuides: string[];
   stockByItem: Record<string, number>;
 };
-type Decision = { kind: "product"; item: ItemLite } | { kind: "combo" } | { kind: "ignore" } | null;
+type ComboPart = { catalogItem: ItemLite; quantity: number };
+// comboCode = el combo de Dropi que corresponde (para un código de Rocket,
+// el combo al que Yair lo vinculó).
+type Decision = { kind: "product"; item: ItemLite } | { kind: "combo"; comboCode: string; components: ComboPart[] } | { kind: "ignore" } | null;
+
+// Confirmado 2026-09-25: los códigos de Rocket vienen como "R14599" (ver
+// dropiGuidesPdf) — se muestran como "Rocket 14599", nunca como ID de Dropi.
+const isRocket = (code: string) => code.startsWith("R");
+function RowCode({ code }: { code: string }) {
+  if (!isRocket(code)) return <CatalogCode code={code} />;
+  return <span className="font-mono text-[10.5px] font-bold rounded bg-navy/5 border border-rule px-1.5 py-0.5">Rocket {code.slice(1)}</span>;
+}
 // Garantía: qué sale de verdad (lo marca Yair, confirmado por el usuario).
 type WarrantyDecision = { mode: "COMPLETE" } | { mode: "PARTIAL"; catalogItemIds: string[] } | { mode: "PIECE"; catalogItemId: string; piece: string } | null;
 
@@ -44,7 +55,7 @@ function initialDecision(r: Row): Decision {
     case "product":
       return { kind: "product", item: r.resolution.catalogItem };
     case "combo":
-      return r.resolution.missingIds.length === 0 ? { kind: "combo" } : null;
+      return r.resolution.missingIds.length === 0 ? { kind: "combo", comboCode: r.resolution.comboCode, components: r.resolution.components } : null;
     case "ignored":
       return { kind: "ignore" };
     default:
@@ -123,7 +134,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
         const fresh = initialDecision(r);
         // Al volver a leer (ej. tras registrar un combo), lo que Yair ya
         // eligió a mano en otras filas se conserva.
-        next[r.code] = fresh ?? (keepDecisions && prev[r.code]?.kind === "product" ? prev[r.code] : null);
+        next[r.code] = fresh ?? (keepDecisions ? prev[r.code] ?? null : null);
       }
       return next;
     });
@@ -167,7 +178,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     const d = decisions[code];
     if (!r || !d || d.kind === "ignore") return [];
     if (d.kind === "product") return [{ item: d.item, perUnit: 1 }];
-    return r.resolution.kind === "combo" ? r.resolution.components.map((c) => ({ item: c.catalogItem, perUnit: c.quantity })) : [];
+    return d.components.map((c) => ({ item: c.catalogItem, perUnit: c.quantity }));
   }
 
   function warrantyReady(i: number, w: WarrantyLine): boolean {
@@ -200,7 +211,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             byCarrier: r.byCarrier,
             labelUnits: r.labelUnits,
             variants: r.variants,
-            decision: d.kind === "product" ? { kind: "product", catalogItemId: d.item.id } : { kind: d.kind },
+            decision: d.kind === "product" ? { kind: "product", catalogItemId: d.item.id } : d.kind === "combo" ? { kind: "combo", comboCode: d.comboCode } : { kind: "ignore" },
           };
         }),
         warranty: warranty
@@ -234,7 +245,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
           </span>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap text-[12px] mt-1">
-          <CatalogCode code={w.code} />
+          <RowCode code={w.code} />
           <ExpandableName text={w.name} className="font-semibold flex-1 min-w-0" />
           {w.variant && <span className="font-mono text-[10px] bg-teal/10 border border-teal/30 rounded-full px-2 py-0.5">{w.variant}</span>}
           <span className="font-mono text-[13px] font-bold text-teal shrink-0">{w.quantity}</span>
@@ -315,7 +326,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     return (
       <div key={r.code} className={`rounded-md p-2.5 ${d ? "bg-cloud" : "bg-gold/10 border border-gold/30"}`}>
         <div className="flex items-center gap-1.5 flex-wrap text-[12px]">
-          <CatalogCode code={r.code} />
+          <RowCode code={r.code} />
           <ExpandableName text={r.name} className="font-semibold flex-1 min-w-0" />
           <span className="font-mono text-[13px] font-bold text-teal shrink-0">{r.quantity}</span>
         </div>
@@ -358,11 +369,17 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
               <PhotoThumb url={d.item.photos[0]} />
               <span className="text-steel">→</span>
               <span>{d.item.name}</span>
-              {d.item.justCode !== r.code && (
-                <span className="text-[10.5px]" style={{ color: "#D9A441" }}>
-                  {d.item.justCode ? `(${r.code} quedará como ID alterno de ${d.item.justCode}, el principal en INVESTOCK)` : `(se le pondrá el ID ${r.code})`}
-                </span>
-              )}
+              {isRocket(r.code)
+                ? res.kind !== "product" && (
+                    <span className="text-[10.5px]" style={{ color: "#D9A441" }}>
+                      (Rocket {r.code.slice(1)} quedará vinculado a este producto)
+                    </span>
+                  )
+                : d.item.justCode !== r.code && (
+                    <span className="text-[10.5px]" style={{ color: "#D9A441" }}>
+                      {d.item.justCode ? `(${r.code} quedará como ID alterno de ${d.item.justCode}, el principal en INVESTOCK)` : `(se le pondrá el ID ${r.code})`}
+                    </span>
+                  )}
               {(res.kind !== "product" || d.item.id !== res.catalogItem.id) && (
                 <button type="button" className="text-steel hover:text-teal cursor-pointer" onClick={() => setDecisions((p) => ({ ...p, [r.code]: null }))}>
                   Cambiar
@@ -408,6 +425,26 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             </div>
           )}
 
+          {d?.kind === "combo" && res.kind !== "combo" && (
+            // Código de Rocket recién vinculado a un combo de Dropi.
+            <div className="flex flex-col gap-0.5">
+              <span className="font-mono text-[9.5px] font-bold uppercase" style={{ color: "#D9A441" }}>
+                Combo {d.comboCode} — se abre en:
+              </span>
+              {d.components.map((c) => (
+                <div key={c.catalogItem.id} className="flex items-center gap-1.5 pl-2">
+                  <PhotoThumb url={c.catalogItem.photos[0]} />
+                  <CatalogCode code={c.catalogItem.justCode} />
+                  <span className="flex-1 min-w-0">{c.catalogItem.name}</span>
+                  <span className="font-mono font-bold text-teal">{c.quantity * r.quantity}</span>
+                </div>
+              ))}
+              <button type="button" className="text-steel hover:text-teal cursor-pointer text-left text-[11px]" onClick={() => setDecisions((p) => ({ ...p, [r.code]: null }))}>
+                Cambiar
+              </button>
+            </div>
+          )}
+
           {d?.kind === "ignore" && (
             <div className="flex items-center gap-2 text-steel">
               <span>No es un producto — no se incluye{res.kind === "ignored" ? " (recordado)" : ""}.</span>
@@ -439,8 +476,18 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                   }}
                   onCancel={() => setPicking(null)}
                 />
+              ) : registering === r.code && isRocket(r.code) ? (
+                <RocketComboLink
+                  initialCode={res.kind === "comboNoRecipe" ? res.comboCode : ""}
+                  label={r.name}
+                  onLinked={(comboCode, components) => {
+                    setDecisions((p) => ({ ...p, [r.code]: { kind: "combo", comboCode, components } }));
+                    setRegistering(null);
+                  }}
+                  onCancel={() => setRegistering(null)}
+                />
               ) : registering === r.code ? (
-                <RegisterComboForm initialCode={r.code} initialLabel={r.name} onRegistered={() => read(true)} onCancel={() => setRegistering(null)} />
+                <RegisterComboForm initialCode={res.kind === "comboNoRecipe" ? res.comboCode : r.code} initialLabel={r.name} onRegistered={() => read(true)} onCancel={() => setRegistering(null)} />
               ) : (
                 <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
                   {res.kind === "unknown" && res.suggestion && (
@@ -458,7 +505,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                     </button>
                   )}
                   <button type="button" className="font-semibold text-teal cursor-pointer" onClick={() => setRegistering(r.code)}>
-                    Es un combo — registrar receta
+                    {isRocket(r.code) ? "Es un combo" : "Es un combo — registrar receta"}
                   </button>
                   {res.kind === "unknown" && (
                     <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setDecisions((p) => ({ ...p, [r.code]: { kind: "ignore" } }))}>
@@ -589,6 +636,79 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Un ID de Rocket que es un combo: Yair escribe el código del combo en Dropi.
+// Si ya existe con su receta, se vincula; si no, registra la receta ahí mismo
+// (una sola vez) y queda vinculado.
+function RocketComboLink({
+  initialCode,
+  label,
+  onLinked,
+  onCancel,
+}: {
+  initialCode: string;
+  label: string;
+  onLinked: (comboCode: string, components: ComboPart[]) => void;
+  onCancel: () => void;
+}) {
+  const [code, setCode] = useState(initialCode);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [register, setRegister] = useState(false);
+
+  async function lookup(c: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/fulfillment-requests/combo?code=${encodeURIComponent(c.trim())}`);
+    const json = await res.json().catch(() => null);
+    setBusy(false);
+    if (res.status === 404 || json?.kind === "comboNoRecipe") {
+      setRegister(true);
+      return;
+    }
+    if (!res.ok) {
+      setErr(json?.error ?? "No se pudo buscar el combo.");
+      return;
+    }
+    if (json.missingIds?.length > 0) {
+      setErr(`Ese combo tiene productos sin ID de Dropi: ${json.missingIds.join(", ")}. Pide que se lo pongan y vuelve a intentar.`);
+      return;
+    }
+    onLinked(json.comboCode, json.components);
+  }
+
+  if (register) {
+    return (
+      <div>
+        <div className="text-[11px] mb-1.5" style={{ color: "#D9A441" }}>
+          El combo {code} todavía no tiene receta — regístrala una sola vez:
+        </div>
+        <RegisterComboForm initialCode={code.trim()} initialLabel={label} onRegistered={(c) => lookup(c.code)} onCancel={onCancel} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-cloud rounded-md p-2.5 flex items-center gap-2 flex-wrap text-[11.5px]">
+      <span>Código de este combo en Dropi:</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        className="w-28 rounded border border-rule bg-surface px-2 py-1 font-mono"
+        value={code}
+        onChange={(e) => setCode(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && code.trim() && lookup(code)}
+      />
+      <button type="button" disabled={busy || !code.trim()} className="font-semibold text-teal cursor-pointer disabled:opacity-40" onClick={() => lookup(code)}>
+        {busy ? "Buscando…" : "Vincular"}
+      </button>
+      <button type="button" className="text-steel cursor-pointer" onClick={onCancel}>
+        Cancelar
+      </button>
+      {err && <div className="w-full text-red text-[11px]">{err}</div>}
     </div>
   );
 }
