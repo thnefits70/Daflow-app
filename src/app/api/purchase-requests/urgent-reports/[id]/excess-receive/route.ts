@@ -29,7 +29,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
           quantity: true,
           shippingIncluded: true,
           shippingCostTotal: true,
-          catalogItem: { select: { name: true } },
+          catalogItem: { select: { name: true, hasExpiration: true } },
         },
       },
     },
@@ -56,7 +56,23 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       shippingCostTotal: existing.request.shippingCostTotal,
     }),
     occurredAt: new Date(),
+    // Confirmado 2026-09-25, pedido explícito del usuario: el excedente vino
+    // en el mismo lote — usa la caducidad que Inventario declaró en el
+    // reporte, sin volver a preguntarla.
+    newExpirationLot:
+      existing.expirationDeclared && existing.lotExpirationDate
+        ? {
+            manufactureDate: existing.lotManufactureDate,
+            expirationDate: existing.lotExpirationDate,
+            quantity: existing.excessQty,
+            declaredById: existing.lotDeclaredById,
+          }
+        : undefined,
   }).catch((err) => console.error("[excess-receive] No se pudo registrar la entrada de Kardex:", err));
+
+  if (existing.expirationDeclared && existing.lotExpirationDate && !existing.request.catalogItem.hasExpiration) {
+    await prisma.purchaseCatalogItem.update({ where: { id: existing.request.catalogItemId }, data: { hasExpiration: true } }).catch(() => null);
+  }
 
   return NextResponse.json(updated);
 }

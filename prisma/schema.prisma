@@ -3351,6 +3351,17 @@ model PurchaseRequestUrgentReport {
   description   String
   mediaUrls     String[]
 
+  // Confirmado 2026-09-25, pedido explícito del usuario: el lote de caducidad
+  // se declara UNA sola vez — en el mismo "Informar urgente" (o con el botón
+  // "Declarar caducidad" en reportes ya enviados) — y sirve para la parte
+  // buena (purchaseReceiptFromReport.ts la copia a la recepción) y para el
+  // excedente (excess-receive/route.ts). null = no se preguntó todavía.
+  expirationDeclared Boolean?
+  lotManufactureDate DateTime?
+  lotExpirationDate  DateTime?
+  lotDeclaredById    String?
+  lotDeclaredAt      DateTime?
+
   reportedById String?
   reportedBy   User?    @relation("PurchaseRequestUrgentReportedBy", fields: [reportedById], references: [id], onDelete: SetNull)
   reportedAt   DateTime @default(now())

@@ -24,6 +24,16 @@ const schema = z.object({
   countedQty: z.number().int().nonnegative().optional(),
   description: z.string().trim().min(1, "Describe brevemente qué pasó."),
   mediaUrls: z.array(z.string().url()).min(1, "Sube al menos una foto de evidencia.").max(4),
+  // Confirmado 2026-09-25, pedido explícito del usuario: el lote de
+  // caducidad se declara acá una sola vez y sirve para lo bueno y para el
+  // excedente (ver PurchaseRequestUrgentReport.expirationDeclared).
+  hasExpiration: z.boolean().optional(),
+  expirationLot: z
+    .object({
+      manufactureDate: z.string().trim().min(1).nullable().optional(),
+      expirationDate: z.string().trim().min(1),
+    })
+    .optional(),
 });
 
 // Confirmado 2026-08-06 (actualizado 2026-08-08, ampliado 2026-08-18):
@@ -47,8 +57,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const existing = await prisma.purchaseRequest.findUnique({ where: { id }, include: { catalogItem: { select: { name: true } } } });
+  const existing = await prisma.purchaseRequest.findUnique({ where: { id }, include: { catalogItem: { select: { name: true, hasExpiration: true, awaitingDropiId: true } } } });
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
+
+  // Un producto pendiente de ID Dropi declara su lote después, al liberarse
+  // al Kardex — acá no se pide (mismo criterio que receipt/route.ts).
+  // Una pantalla vieja abierta (sin la pregunta) no manda hasExpiration — no
+  // se bloquea: queda sin declarar y se puede declarar después con el botón.
+  const clientAsks = parsed.data.hasExpiration !== undefined || parsed.data.expirationLot !== undefined;
+  const asksExpiration = clientAsks && !existing.catalogItem.awaitingDropiId;
+  const hasExpiration = asksExpiration && (existing.catalogItem.hasExpiration || parsed.data.hasExpiration === true);
+  const lot = hasExpiration ? parsed.data.expirationLot : undefined;
+  if (asksExpiration && !existing.catalogItem.hasExpiration && parsed.data.hasExpiration === undefined) {
+    return NextResponse.json({ error: "Falta responder si el producto tiene fecha de caducidad." }, { status: 400 });
+  }
+  if (hasExpiration && !lot) {
+    return NextResponse.json({ error: "Este producto tiene caducidad — falta la fecha de vencimiento." }, { status: 400 });
+  }
 
   const flaggedQty = parsed.data.damagedQty + parsed.data.incompleteQty + parsed.data.differentQty;
   // Confirmado 2026-08-27: si mandan countedQty, lo faltante lo calcula el
@@ -91,6 +116,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       description: parsed.data.description,
       mediaUrls: parsed.data.mediaUrls,
       reportedById: isAdmin ? null : session.user.id,
+      expirationDeclared: asksExpiration ? hasExpiration : null,
+      lotManufactureDate: lot?.manufactureDate ? new Date(lot.manufactureDate) : null,
+      lotExpirationDate: lot ? new Date(lot.expirationDate) : null,
+      lotDeclaredById: asksExpiration && !isAdmin ? session.user.id : null,
+      lotDeclaredAt: asksExpiration ? new Date() : null,
     },
   });
 

@@ -86,6 +86,10 @@ export async function registerGoodUnitsFromUrgentReport(requestId: string, actor
   if (goodQty <= 0) return null;
 
   const media = existing.urgentReports.flatMap((r) => r.mediaUrls);
+  // Confirmado 2026-09-25, pedido explícito del usuario: el lote de caducidad
+  // que Inventario declaró en el reporte pasa tal cual a la recepción — no
+  // se vuelve a preguntar (Daniel lo ve y puede corregirlo al aprobar).
+  const lotReport = existing.urgentReports.find((r) => r.expirationDeclared !== null);
   const comment = `Registrado desde el reporte urgente — ${existing.urgentReports.map((r) => `"${r.description}"`).join(" · ")}`;
 
   const [receipt] = await prisma.$transaction([
@@ -98,6 +102,10 @@ export async function registerGoodUnitsFromUrgentReport(requestId: string, actor
         comment,
         // Quien de verdad contó y reportó es quien recibió físicamente.
         confirmedById: existing.urgentReports[0].reportedById ?? (actor.isAdmin ? null : actor.id),
+        expirationDeclared: lotReport?.expirationDeclared ?? null,
+        lotManufactureDate: lotReport?.expirationDeclared ? lotReport.lotManufactureDate : null,
+        lotExpirationDate: lotReport?.expirationDeclared ? lotReport.lotExpirationDate : null,
+        lotQuantity: lotReport?.expirationDeclared ? goodQty : null,
       },
     }),
     prisma.purchaseRequest.update({ where: { id: requestId }, data: { status: "RECEIVED_PENDING_REVIEW" } }),

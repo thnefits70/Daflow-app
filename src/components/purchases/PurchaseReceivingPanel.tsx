@@ -80,10 +80,14 @@ type Row = {
     incompleteQty: number;
     differentQty: number;
     missingQty: number;
+    excessQty: number;
     description: string;
     reportedAt: string;
     reportedBy: { name: string } | null;
     reviewedByLeadAt: string | null;
+    expirationDeclared: boolean | null;
+    lotManufactureDate: string | null;
+    lotExpirationDate: string | null;
     resolvedInternallyAt: string | null;
     resolvedInternallyNote: string | null;
     resolvedInternallyBy: { name: string } | null;
@@ -319,6 +323,8 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // caducidad — si dice que sí, o si ya estaba marcado, pide fecha de
   // elaboración (opcional) + vencimiento (obligatoria) + cantidad.
   const [expirationAnswer, setExpirationAnswer] = useState<Record<string, "yes" | "no">>({});
+  // Reporte urgente ya enviado sin caducidad al que se le está declarando.
+  const [declaringLotId, setDeclaringLotId] = useState<string | null>(null);
   // quantity queda sin definir hasta que la editan a mano — mientras tanto
   // se usa la cantidad recibida.
   const [expirationForm, setExpirationForm] = useState<Record<string, { manufactureDate: string; expirationDate: string; quantity?: string }>>({});
@@ -647,7 +653,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     return !(expirationForm[id]?.expirationDate && Number(expirationForm[id]?.quantity ?? defaultQty) > 0);
   }
 
-  function renderExpirationBlock(id: string, hasExpiration: boolean, defaultQty: string) {
+  function renderExpirationBlock(id: string, hasExpiration: boolean, defaultQty: string, showQty = true) {
     const setField = (field: "manufactureDate" | "expirationDate" | "quantity", value: string) =>
       setExpirationForm((m) => ({
         ...m,
@@ -669,7 +675,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
               </button>
             )}
           </div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className={`grid ${showQty ? "grid-cols-3" : "grid-cols-2"} gap-2`}>
             <div>
               <label className="block text-[10px] text-steel mb-0.5">Elaboración (opcional)</label>
               <input
@@ -688,7 +694,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                 onChange={(e) => setField("expirationDate", e.target.value)}
               />
             </div>
-            <div>
+            {showQty && (<div>
               <label className="block text-[10px] text-steel mb-0.5">Cantidad</label>
               <input
                 type="number"
@@ -697,7 +703,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                 value={expirationForm[id]?.quantity ?? defaultQty}
                 onChange={(e) => setField("quantity", e.target.value)}
               />
-            </div>
+            </div>)}
           </div>
         </div>
       );
@@ -840,8 +846,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     setUrgentDamagedQty("");
     setUrgentDifferentQty("");
     setUrgentIncompleteQty("");
-    setUrgentDesc("");
-    setUrgentMediaUrls([]);
+    // Confirmado 2026-09-25, pedido explícito del usuario: si venía de
+    // "Confirmar que llegó", las fotos/video/comentario ya tomados pasan al
+    // reporte (antes se borraban y tenía que volver a hacerlo). La caducidad
+    // pasa sola: usa el mismo estado por solicitud (expirationForm).
+    const fromReceipt = openId === id;
+    setUrgentDesc(fromReceipt ? comment : "");
+    setUrgentMediaUrls(fromReceipt ? [...receivedPhotoUrls, ...receivedVideoUrls].slice(0, 4) : []);
     setErr("");
   }
 
@@ -862,7 +873,36 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     setUrgentMediaUrls((m) => m.filter((_, i) => i !== idx));
   }
 
-  async function submitUrgent(id: string) {
+  async function declareReportExpiration(reportId: string, productHasExpiration: boolean) {
+    const hasExpiration = productHasExpiration || expirationAnswer[reportId] === "yes";
+    const lot = expirationForm[reportId];
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-reports/${reportId}/declare-expiration`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hasExpiration, manufactureDate: hasExpiration ? lot?.manufactureDate || null : null, expirationDate: hasExpiration ? lot?.expirationDate : undefined }),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo guardar la caducidad.");
+      return;
+    }
+    setDeclaringLotId(null);
+    setExpirationAnswer((m) => { const next = { ...m }; delete next[reportId]; return next; });
+    setExpirationForm((m) => { const next = { ...m }; delete next[reportId]; return next; });
+    load();
+  }
+
+  async function submitUrgent(id: string, item: { hasExpiration: boolean; awaitingDropiId: boolean }) {
+    const asksExpiration = !item.awaitingDropiId;
+    if (asksExpiration && expirationLotMissing(id, item.hasExpiration, "1")) {
+      setErr(item.hasExpiration || expirationAnswer[id] === "yes" ? "Falta la fecha de vencimiento." : "Responde si el producto tiene fecha de caducidad.");
+      return;
+    }
+    const hasExpiration = asksExpiration && (item.hasExpiration || expirationAnswer[id] === "yes");
+    const lot = expirationForm[id];
     const damaged = Number(urgentDamagedQty) || 0;
     const different = Number(urgentDifferentQty) || 0;
     const incomplete = Number(urgentIncompleteQty) || 0;
@@ -896,6 +936,8 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
         countedQty: Number(urgentCountedQty),
         description: urgentDesc.trim(),
         mediaUrls: urgentMediaUrls,
+        hasExpiration: asksExpiration ? hasExpiration : undefined,
+        expirationLot: hasExpiration ? { manufactureDate: lot?.manufactureDate || null, expirationDate: lot?.expirationDate ?? "" } : undefined,
       }),
     });
     setBusy(false);
@@ -904,6 +946,8 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       setErr(data?.error ?? "No se pudo enviar el reporte.");
       return;
     }
+    setExpirationAnswer((m) => { const next = { ...m }; delete next[id]; return next; });
+    setExpirationForm((m) => { const next = { ...m }; delete next[id]; return next; });
     clearUrgentReportDraft();
     setUrgentId(null);
     setUrgentCountedQty("");
@@ -1808,10 +1852,14 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                             )
                           )}
 
+                          {/* Confirmado 2026-09-25, pedido explícito del usuario: la
+                              caducidad se declara acá una sola vez — sirve para lo
+                              bueno y para lo que llegó de más (mismo lote). */}
+                          {!r.catalogItem.awaitingDropiId && renderExpirationBlock(r.id, r.catalogItem.hasExpiration, "1", false)}
                           <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2.5" rows={2} placeholder="Describe qué pasó" value={urgentDesc} onChange={(e) => setUrgentDesc(e.target.value)} />
                           {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                           <div className="flex items-center gap-2">
-                            <button type="button" disabled={busy} className="rounded border border-red bg-red px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => submitUrgent(r.id)}>
+                            <button type="button" disabled={busy} className="rounded border border-red bg-red px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => submitUrgent(r.id, r.catalogItem)}>
                               Enviar reporte
                             </button>
                             <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { clearUrgentReportDraft(); setUrgentId(null); }}>Cancelar</button>
@@ -1831,12 +1879,50 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                                   rep.differentQty > 0 && `${rep.differentQty} diferente`,
                                   rep.missingQty > 0 && `${rep.missingQty} faltante`,
                                 ].filter(Boolean) as string[];
+                                const declaring = declaringLotId === rep.id;
                                 return (
                                   <div key={rep.id} className="text-[11.5px] text-steel mb-1.5 last:mb-0">
                                     {parts.join(" · ")}{rep.description ? ` — "${rep.description}"` : ""}
                                     <div className="text-[10px] text-steel-dim">
                                       Reportado por {actorName(rep.reportedBy?.name)} · {formatDateTime(rep.reportedAt)}
                                     </div>
+                                    {/* Confirmado 2026-09-25, pedido explícito del usuario (caso
+                                        Evil Goods Crema): reportes enviados antes de que se
+                                        preguntara la caducidad — se declara acá una sola vez. */}
+                                    {rep.expirationDeclared === true && rep.lotExpirationDate && (
+                                      <div className="text-[11px] text-ink mt-1">
+                                        Caducidad del lote: vence <b>{dateOnly(rep.lotExpirationDate)}</b>
+                                        {rep.lotManufactureDate && <> · elaboración {dateOnly(rep.lotManufactureDate)}</>}
+                                      </div>
+                                    )}
+                                    {rep.expirationDeclared === false && <div className="text-[11px] text-steel mt-1">Sin fecha de caducidad.</div>}
+                                    {rep.expirationDeclared === null && !r.catalogItem.awaitingDropiId && canReceiveTeam && r.status !== "RECEIVED" && (
+                                      declaring ? (
+                                        <div className="mt-2">
+                                          {renderExpirationBlock(rep.id, r.catalogItem.hasExpiration, "1", false)}
+                                          {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+                                          <div className="flex items-center gap-2">
+                                            <button
+                                              type="button"
+                                              disabled={busy || expirationLotMissing(rep.id, r.catalogItem.hasExpiration, "1")}
+                                              className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40"
+                                              onClick={() => declareReportExpiration(rep.id, r.catalogItem.hasExpiration)}
+                                            >
+                                              Guardar caducidad
+                                            </button>
+                                            <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setDeclaringLotId(null)}>Cancelar</button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="mt-1.5 text-[11.5px] font-semibold border border-teal/50 text-teal rounded px-2.5 py-1 cursor-pointer"
+                                          onClick={() => { setDeclaringLotId(rep.id); setErr(""); }}
+                                        >
+                                          Declarar caducidad
+                                        </button>
+                                      )
+                                    )}
                                   </div>
                                 );
                               })}
