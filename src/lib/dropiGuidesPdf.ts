@@ -389,7 +389,9 @@ function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuide
 export async function parseGuidesPdf(bytes: Uint8Array, { warrantyFile = false }: { warrantyFile?: boolean } = {}): Promise<ParsedGuidesPdf & { source: "DROPI" | "ROCKET" }> {
   const pages = await extractPages(bytes);
   const hasDropiSummary = pages.some((lines) => lines.some((l) => SUMMARY_RE.test(l.text)));
-  const looksRocket = pages.some((lines) => lines.some((l) => /ROCKET ECOMFULLFILMENT|\bROC\.[a-z]/i.test(l.text)));
+  // RKT…: un PDF con solo etiquetas de Gintracom de Rocket no trae "ROC." ni
+  // "ROCKET" en ningún lado (caso real 2026-09-26: etiquetas_1790429953).
+  const looksRocket = pages.some((lines) => lines.some((l) => /ROCKET ECOMFULLFILMENT|\bROC\.[a-z]|\bRKT\d{6,}\b/i.test(l.text)));
   if (!hasDropiSummary && looksRocket) return { ...parseRocketPages(pages, warrantyFile), source: "ROCKET" };
   return { ...parseDropiPages(pages, warrantyFile), source: "DROPI" };
 }

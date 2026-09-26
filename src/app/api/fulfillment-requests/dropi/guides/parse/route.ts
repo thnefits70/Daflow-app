@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { canSubmitFulfillmentRequest } from "@/lib/guards";
-import { parseGuidesPdf, type ParsedGuidesLine, type ParsedWarrantyLine } from "@/lib/dropiGuidesPdf";
+import { parseGuidesPdf, rocketNameCode, ROCKET_NAME_PREFIX, type ParsedGuidesLine, type ParsedWarrantyLine } from "@/lib/dropiGuidesPdf";
 import { findAlreadyUploadedGuides, resolveGuideLines } from "@/lib/fulfillmentGuides";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 
@@ -77,6 +77,26 @@ export async function POST(req: NextRequest) {
       }
     }
   }
+
+  // Etiqueta de Gintracom de Rocket (sin ID, "RN:<nombre>") que vino en otro
+  // PDF que el producto con ID: se suma a ese producto por nombre (caso real
+  // 2026-09-26: el closet salía una vez con R14487 y otra "sin ID").
+  const rocketIdByNameCode = new Map<string, string>();
+  for (const l of merged.values()) if (/^R\d+$/.test(l.code)) rocketIdByNameCode.set(rocketNameCode(l.name), l.code);
+  for (const [code, l] of [...merged.entries()]) {
+    const target = code.startsWith(ROCKET_NAME_PREFIX) ? merged.get(rocketIdByNameCode.get(code) ?? "") : undefined;
+    if (!target) continue;
+    target.quantity += l.quantity;
+    target.labelUnits += l.labelUnits;
+    for (const [c, q] of Object.entries(l.byCarrier)) target.byCarrier[c] = (target.byCarrier[c] ?? 0) + q;
+    for (const v of l.variants) {
+      const same = target.variants.find((x) => x.label === v.label);
+      if (same) same.quantity += v.quantity;
+      else target.variants.push({ ...v });
+    }
+    merged.delete(code);
+  }
+  for (const w of warranty) if (w.code.startsWith(ROCKET_NAME_PREFIX)) w.code = rocketIdByNameCode.get(w.code) ?? w.code;
 
   if (emptyFiles.length > 0) {
     return NextResponse.json(
