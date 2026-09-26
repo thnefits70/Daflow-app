@@ -5,6 +5,7 @@ import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId } from "@/lib/guards";
 import { lineBlock, NO_CARRIER, sortCarriers } from "@/lib/carriers";
+import { areaRank } from "@/lib/warehouseAreas";
 
 // Confirmado 2026-09-23, diseño acordado con el usuario pregunta por
 // pregunta (ver memoria project_fulfillment_corte_manifest_plan):
@@ -463,7 +464,8 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
 
 // ---- Ver un corte --------------------------------------------------------
 
-type ItemView = { catalogItemId: string; name: string; photos: string[]; justCode: string | null };
+// area: área de la bodega (A…G) donde está el producto — ver warehouseAreas.ts.
+type ItemView = { catalogItemId: string; name: string; photos: string[]; justCode: string | null; area?: string | null };
 
 export type LotLine = ItemView & {
   quantity: number;
@@ -545,7 +547,7 @@ export async function getCompiledLot(lotId: string) {
         orderBy: { requestedAt: "asc" },
         include: {
           requestedBy: { select: { name: true } },
-          items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true } } } },
+          items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true, warehouseArea: true } } } },
           variantNotes: { select: { catalogItemId: true, label: true, quantity: true } },
           guides: { select: { carrier: true } },
         },
@@ -564,7 +566,7 @@ export async function getCompiledLot(lotId: string) {
   const carriers = new Set<string>();
   for (const b of lot.batches) {
     for (const it of b.items) {
-      const view: ItemView = { catalogItemId: it.catalogItemId, name: it.catalogItem.name, photos: it.catalogItem.photos, justCode: it.catalogItem.justCode };
+      const view: ItemView = { catalogItemId: it.catalogItemId, name: it.catalogItem.name, photos: it.catalogItem.photos, justCode: it.catalogItem.justCode, area: it.catalogItem.warehouseArea };
       if (it.warrantyGuide) {
         warranty.push({
           ...view,
@@ -636,6 +638,7 @@ export async function getCompiledLot(lotId: string) {
       name: view.name,
       photos: view.photos,
       justCode: view.justCode,
+      area: view.area ?? null,
       needed: qty,
       normalNeeded: normal,
       warrantyNeeded: w,
@@ -702,7 +705,9 @@ export async function getCompiledLot(lotId: string) {
     warranty,
     combos,
     shortages,
-    picking: picking.sort((a, b) => b.needed - a.needed),
+    // Dentro de cada bloque, por área de bodega (A…G, sin área al final) y
+    // luego de mayor a menor — así el equipo saca junto lo del mismo lugar.
+    picking: picking.sort((a, b) => areaRank(a.area) - areaRank(b.area) || b.needed - a.needed),
     blocks,
     stockByItem: Object.fromEntries([...needed.keys()].map((id) => [id, stock.get(id)?.balance ?? 0])),
   };

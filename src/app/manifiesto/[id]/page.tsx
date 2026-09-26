@@ -3,7 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { canPrintFulfillmentManifest, canViewFulfillmentRequests, dbUserId } from "@/lib/guards";
 import { getCompiledLot, manifestCode, markLotPrinted } from "@/lib/fulfillmentGuides";
-import { carrierLabel, lineBlock, sortByBlock } from "@/lib/carriers";
+import { areaGroupCount, carrierLabel, lineBlock, newAreaGroup, sortByBlock } from "@/lib/carriers";
+import { areaLabel } from "@/lib/warehouseAreas";
 import { PrintButton } from "./PrintButton";
 
 function fmtDay(day: string) {
@@ -122,6 +123,13 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
                     <tr style={{ breakAfter: "avoid" }}>
                       <td colSpan={lot.carriers.length + 4} className="pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider border-b border-black">
                         {groupTitle(lineBlock(l.byCarrier))}
+                      </td>
+                    </tr>
+                  )}
+                  {newAreaGroup(lines, i) && (
+                    <tr style={{ breakAfter: "avoid" }}>
+                      <td colSpan={lot.carriers.length + 4} className="pt-2 pb-0.5 text-[11px] font-bold">
+                        ▸ {areaLabel(l.area)} · {areaGroupCount(lines, i)} productos
                       </td>
                     </tr>
                   )}

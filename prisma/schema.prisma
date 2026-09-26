@@ -1863,6 +1863,13 @@ model PurchaseCatalogItem {
   // Daniel o admin), no desde "Base de datos de productos".
   bodega MarketProductBodega?
 
+  // Confirmado 2026-09-26, pedido del usuario: en qué área de la bodega
+  // está físicamente el producto ("A" … "G", ver src/lib/warehouseAreas.ts).
+  // Daniel/admin lo eligen o cambian desde "Stock Actual"; el corte de
+  // Fulfillment agrupa por área dentro de cada bloque de transportadora
+  // para que el equipo saque junto lo que está en el mismo lugar.
+  warehouseArea String?
+
   createdById String?
   createdBy   User?    @relation("PurchaseCatalogItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())

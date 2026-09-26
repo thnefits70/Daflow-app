@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Package, RefreshCw, ScanLine, UserRound } from "lucide-react";
 import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { carrierLabel, sortCarriers } from "@/lib/carriers";
+import { areaLabel } from "@/lib/warehouseAreas";
 import type { CompiledLot, LotPickLine } from "./LotView";
 import { BlockAssignee } from "./BlockAssignee";
 
@@ -253,6 +254,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                     <CatalogCode code={current.justCode} />
                   </div>
                   <div className="text-[13px] font-semibold">{current.name}</div>
+                  <div className={`text-[11.5px] font-bold ${current.area ? "text-gold" : "text-steel"}`}>{areaLabel(current.area)}</div>
                 </div>
               </div>
               <div className="text-[12px] mb-0.5">
@@ -370,11 +372,20 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                   </span>
                   <BlockAssignee lot={lot} carrier={b.carrier} onChanged={onChanged} />
                 </div>
-        {rows.map((p) => {
+        {rows.map((p, idx) => {
           const st = rowState(p);
           const qtyToConfirm = Math.min(p.picked ?? 0, p.needed);
+          // Pedido del usuario 2026-09-26: dentro del bloque, agrupado por
+          // área de la bodega para sacar junto lo del mismo lugar.
+          const areaStart = idx === 0 || (rows[idx - 1].area ?? null) !== (p.area ?? null);
           return (
-            <div key={p.catalogItemId} className={`rounded-md px-3 py-2 text-[12px] ${ROW_STYLE[st]}`}>
+            <Fragment key={p.catalogItemId}>
+            {areaStart && (
+              <div className="text-[11px] font-bold text-gold mt-1">
+                {areaLabel(p.area)} · {rows.filter((x) => (x.area ?? null) === (p.area ?? null)).length} productos
+              </div>
+            )}
+            <div className={`rounded-md px-3 py-2 text-[12px] ${ROW_STYLE[st]}`}>
               <div className="flex items-center gap-2 flex-wrap">
                 <Thumb url={p.photos[0]} small />
                 <CatalogCode code={p.justCode} />
@@ -437,6 +448,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                 </div>
               )}
             </div>
+            </Fragment>
           );
         })}
               </div>

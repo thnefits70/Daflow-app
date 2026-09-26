@@ -337,6 +337,8 @@ export type CurrentStockRow = {
   // (Provedix/Importadora Damián/Importadora Shanghai) de este producto —
   // ver PurchaseCatalogItem.bodega en el schema.
   bodega: MarketProductBodega | null;
+  // Área de bodega "A"…"G" (null = sin área todavía) — ver warehouseAreas.ts.
+  warehouseArea: string | null;
   // Confirmado 2026-09-21: true cuando el costo actual viene de
   // declareManualCost (admin lo escribió a mano, no de una compra real) —
   // para que Stock Actual lo marque distinto de un costo real de Kardex.
@@ -390,7 +392,7 @@ export async function getInvestockValueByMonthEnd(periods: string[]): Promise<Ma
 
 export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
   const [items, latestPerItem] = await Promise.all([
-    prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, justCode: true, photos: true, bodega: true }, orderBy: { name: "asc" } }),
+    prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, justCode: true, photos: true, bodega: true, warehouseArea: true }, orderBy: { name: "asc" } }),
     prisma.stockKardexEntry.findMany({
       distinct: ["catalogItemId"],
       orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
@@ -408,6 +410,7 @@ export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
       balance: latest?.balanceAfter ?? 0,
       avgCost: latest?.avgCostAfter ?? 0,
       bodega: i.bodega,
+      warehouseArea: i.warehouseArea,
       costDeclaredManually: latest?.type === "COST_DECLARATION",
     };
   });

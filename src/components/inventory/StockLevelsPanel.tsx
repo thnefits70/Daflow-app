@@ -6,6 +6,7 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { WAREHOUSE_AREAS, areaLabel, isWarehouseArea, type WarehouseArea } from "@/lib/warehouseAreas";
 
 type PendingAdjustmentRow = {
   id: string;
@@ -64,6 +65,7 @@ type StockRow = {
   balance: number;
   avgCost: number;
   bodega: Marca | null;
+  warehouseArea: string | null;
   costSource?: "proposal" | "kardex" | null;
   providerPrice?: number;
   bodegaPrice?: number;
@@ -405,6 +407,27 @@ function MarcaSelect({ value, onChange, readOnly = false }: { value: Marca | nul
   );
 }
 
+// Confirmado 2026-09-26, pedido del usuario: en qué área de la bodega (A…G)
+// está cada producto — Daniel/admin lo eligen o cambian acá; el corte de
+// Fulfillment agrupa por área para sacar junto lo del mismo lugar.
+function AreaSelect({ value, onChange, readOnly = false }: { value: string | null; onChange: (v: WarehouseArea | null) => void; readOnly?: boolean }) {
+  if (readOnly) return <span className={`text-[11px] truncate ${value ? "text-ink font-semibold" : "text-steel"}`}>{areaLabel(value)}</span>;
+  return (
+    <select
+      className={`w-full text-[11px] rounded border bg-transparent px-1 py-1 cursor-pointer ${value ? "border-rule text-ink font-semibold" : "border-gold/60 text-gold"}`}
+      value={value ?? ""}
+      onChange={(e) => onChange(isWarehouseArea(e.target.value) ? e.target.value : null)}
+    >
+      <option value="">Sin área</option>
+      {WAREHOUSE_AREAS.map((a) => (
+        <option key={a} value={a}>
+          {areaLabel(a)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 // Confirmado 2026-09-16, bug real reportado por el usuario: buscar "Máquina
 // Anti Ronquidos" (con tilde) no encontraba nada porque el nombre real en el
 // catálogo está sin tilde ("Maquina") — la búsqueda comparaba texto exacto,
@@ -503,6 +526,8 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   // el filtro de marca, independiente y combinable con él.
   const [sinPrecioFilter, setSinPrecioFilter] = useState(false);
   const [sinStockFilter, setSinStockFilter] = useState(false);
+  // 2026-09-26: ver de un clic lo que falta ubicar en un área de la bodega.
+  const [sinAreaFilter, setSinAreaFilter] = useState(false);
 
   // Confirmado 2026-09-22, pedido explícito del usuario (admin): bandeja
   // para aprobar/rechazar las solicitudes de ajuste de stock que Daniel
@@ -529,6 +554,17 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ bodega }),
+    });
+    if (!res.ok) setRows(prevRows);
+  }
+
+  async function updateProductArea(catalogItemId: string, area: WarehouseArea | null) {
+    const prevRows = rows;
+    setRows((r) => (r ? r.map((row) => (row.catalogItemId === catalogItemId ? { ...row, warehouseArea: area } : row)) : r));
+    const res = await fetch(`/api/merchandise-reentry/catalog-items/${catalogItemId}/area`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ area }),
     });
     if (!res.ok) setRows(prevRows);
   }
@@ -588,7 +624,8 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   const marcaFilteredRows = rows
     .filter((r) => !marcaFilter || r.bodega === marcaFilter)
     .filter((r) => !sinPrecioFilter || r.providerPrice === undefined)
-    .filter((r) => !sinStockFilter || r.balance === 0);
+    .filter((r) => !sinStockFilter || r.balance === 0)
+    .filter((r) => !sinAreaFilter || r.warehouseArea == null);
   const marcaFilteredCombosBase = marcaFilter ? combos.filter((c) => c.bodega === marcaFilter) : combos;
 
   const queryTrimmed = query.trim();
@@ -663,6 +700,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   // unmarkedCount de arriba.
   const sinPrecioCount = rows.filter((r) => r.providerPrice === undefined).length;
   const sinStockCount = rows.filter((r) => r.balance === 0).length;
+  const sinAreaCount = rows.filter((r) => r.warehouseArea == null).length;
 
   // Confirmado 2026-09-16, bug real reportado por el usuario: este
   // encabezado solo vivía en la sección de productos — al elegir "Solo
@@ -670,7 +708,8 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   // Se extrae acá para reusarlo también arriba de los combos.
   const columnsHeader = (
     <>
-      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1380px]">
+      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_80px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 pt-2 min-w-[1470px]">
+        <span></span>
         <span></span>
         <span></span>
         <span></span>
@@ -678,10 +717,11 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
         <span className="col-span-3 text-center text-[10px] font-bold uppercase tracking-wide text-steel border-b border-rule pb-1">Costo</span>
         <span className="col-span-4 text-center text-[10px] font-bold uppercase tracking-wide text-blue border-b border-rule pb-1">Precios de venta</span>
       </div>
-      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1380px]">
+      <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_80px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2 bg-cloud text-[11px] font-semibold uppercase tracking-wide text-steel min-w-[1470px]">
         <span></span>
         <span>Producto</span>
         <span>Marca</span>
+        <span>Área</span>
         <span className="flex items-center justify-end gap-1">
           Stock INVESTOCK <FormulaInfoButton open={openFormula === "stock"} onToggle={() => setOpenFormula((k) => (k === "stock" ? null : "stock"))} />
         </span>
@@ -708,7 +748,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
         </span>
       </div>
       {openFormula && (
-        <div className="flex items-start justify-between gap-3 bg-inset border-b border-rule px-3 py-2.5 min-w-[1380px]">
+        <div className="flex items-start justify-between gap-3 bg-inset border-b border-rule px-3 py-2.5 min-w-[1470px]">
           <div className="text-[12px]">
             <span className="font-bold text-ink">{FORMULA_EXPLANATIONS[openFormula].title}: </span>
             <span className="text-steel">{FORMULA_EXPLANATIONS[openFormula].text}</span>
@@ -845,8 +885,18 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
           registrado en INVESTOCK) se quedaron sin precio o sin stock —
           combinables entre sí y con marca/búsqueda, mismo patrón que los
           chips de marca de arriba. */}
-      {viewMode !== "combos" && (sinPrecioCount > 0 || sinStockCount > 0) && (
+      {viewMode !== "combos" && (sinPrecioCount > 0 || sinStockCount > 0 || sinAreaCount > 0) && (
         <div className="flex items-center gap-1.5 mb-3">
+          {sinAreaCount > 0 && (
+            <button
+              type="button"
+              className={`rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer border ${sinAreaFilter ? "bg-gold border-gold text-navy" : "border-rule text-gold hover:text-gold"}`}
+              onClick={() => setSinAreaFilter((v) => !v)}
+              title="Productos a los que todavía no se les eligió en qué área de la bodega están (A…G)."
+            >
+              Sin área · {sinAreaCount}
+            </button>
+          )}
           {sinPrecioCount > 0 && (
             <button
               type="button"
@@ -909,6 +959,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
             {unmarkedCount > 0 && (
               <span className="ml-2 text-gold font-semibold">· {unmarkedCount} sin marca todavía</span>
             )}
+            {sinAreaCount > 0 && <span className="ml-2 text-gold font-semibold">· {sinAreaCount} sin área todavía</span>}
           </div>
 
       {/* Confirmado 2026-09-15, pedido explícito del usuario: la primera
@@ -925,7 +976,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
           tiene un ancho fijo — se reparten parejo por toda la fila. */}
       <div className="border border-rule rounded-md overflow-x-auto">
         {columnsHeader}
-        <div className="max-h-[70vh] overflow-y-auto min-w-[1380px]">
+        <div className="max-h-[70vh] overflow-y-auto min-w-[1470px]">
           {sorted.length === 0 ? (
             <div className="px-3 py-4 text-[12.5px] text-steel">Sin resultados.</div>
           ) : (
@@ -937,7 +988,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
             sorted.map((r, i) => (
               <div
                 key={r.catalogItemId}
-                className={`grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
+                className={`grid grid-cols-[auto_minmax(200px,1fr)_110px_80px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center ${i % 2 === 1 ? "bg-cloud/40" : ""}`}
               >
                 {r.photos[0] ? (
                   // Confirmado 2026-09-15 (pedido de Daniel): foto real del
@@ -953,6 +1004,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                   <ExpandableName text={r.name} />
                 </span>
                 <MarcaSelect value={r.bodega} onChange={(v) => updateProductMarca(r.catalogItemId, v)} readOnly={!canEdit} />
+                <AreaSelect value={r.warehouseArea} onChange={(v) => updateProductArea(r.catalogItemId, v)} readOnly={!canEdit} />
                 <span className="flex flex-col items-end gap-0.5">
                   <span className={`text-right font-mono text-[12.5px] font-bold ${r.balance < 0 ? "text-red" : "text-ink"}`}>{r.balance}</span>
                   {canEdit && (
@@ -1022,12 +1074,12 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
           </div>
           <div className="border border-rule rounded-md overflow-x-auto">
             {columnsHeader}
-            <div className="min-w-[1380px]">
+            <div className="min-w-[1470px]">
               {[...filteredCombos]
                 .sort((a, b) => Number(a.bodega != null) - Number(b.bodega != null) || a.code.localeCompare(b.code))
                 .map((combo, i) => (
                   <div key={combo.id} className={`border-t first:border-t-0 border-rule ${i % 2 === 1 ? "bg-cloud/40" : ""}`}>
-                    <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 items-center">
+                    <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_80px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 items-center">
                       <div className="w-8 h-8 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel-dim">
                         <Wrench size={12} />
                       </div>
@@ -1036,6 +1088,8 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                         {combo.label && <ExpandableName text={combo.label} className="text-steel" />}
                       </span>
                       <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} readOnly={!canEdit} />
+                      {/* Un combo no está en ninguna área: cada producto que trae tiene la suya. */}
+                      <span className="text-[11px] text-steel-dim">—</span>
                       <span className="text-right font-mono text-[11px] italic text-steel-dim">combo</span>
                       <CopyableAmount
                         value={combo.providerPrice}

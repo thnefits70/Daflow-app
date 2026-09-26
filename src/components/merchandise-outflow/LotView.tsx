@@ -3,14 +3,15 @@
 import { Fragment, useState } from "react";
 import { ChevronDown, ChevronUp, Package, Printer, X } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
-import { carrierLabel, lineBlock, sortByBlock } from "@/lib/carriers";
+import { areaGroupCount, carrierLabel, lineBlock, newAreaGroup, sortByBlock } from "@/lib/carriers";
+import { areaLabel } from "@/lib/warehouseAreas";
 import { BlockAssignee } from "./BlockAssignee";
 import { sourceLabel, type VariantNote } from "./fulfillmentRequestShared";
 import { PickingPanel } from "./PickingPanel";
 import { GuideHoldsBox } from "./GuideHoldsBox";
 import { LotComboRecipe, type LotComboRecipe as ComboRecipe } from "./LotComboRecipe";
 
-type ItemView = { catalogItemId: string; name: string; photos: string[]; justCode: string | null };
+type ItemView = { catalogItemId: string; name: string; photos: string[]; justCode: string | null; area?: string | null };
 export type LotLine = ItemView & { quantity: number; byCarrier: Record<string, number>; fromCombos: { code: string; quantity: number }[]; variants: VariantNote[] };
 export type LotWarrantyLine = ItemView & {
   itemId: string;
@@ -297,6 +298,13 @@ export function LotView({
                           </span>
                           {lot.status !== "DRAFT" && <BlockAssignee lot={lot} carrier={lineBlock(l.byCarrier)} onChanged={onChanged} />}
                         </div>
+                      </td>
+                    </tr>
+                  )}
+                  {newAreaGroup(lines, i) && (
+                    <tr>
+                      <td colSpan={lot.carriers.length + 3} className="pt-2 pb-0.5 text-[10.5px] font-bold text-gold">
+                        {areaLabel(l.area)} · {areaGroupCount(lines, i)} productos
                       </td>
                     </tr>
                   )}
