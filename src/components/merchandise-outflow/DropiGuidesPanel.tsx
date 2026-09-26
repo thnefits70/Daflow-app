@@ -791,7 +791,17 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => read(true)} disabled={phase === "applying"}>
               Volver a leer
             </button>
-            <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={reset} disabled={phase === "applying"}>
+            {/* 2026-09-26: Yair canceló para releer y perdió lo ya elegido
+                (nada se guarda hasta "Guardar"). Se pregunta antes y se
+                recuerda que "Volver a leer" lo conserva. */}
+            <button
+              type="button"
+              className="text-steel text-[12.5px] cursor-pointer"
+              onClick={() => {
+                if (window.confirm("¿Borrar todo? Se pierden los PDF subidos y todo lo que ya elegiste (nada está guardado todavía).\n\nSi solo quieres que la app lea de nuevo los PDF, usa \"Volver a leer\": conserva lo que elegiste.")) reset();
+              }}
+              disabled={phase === "applying"}
+            >
               Cancelar
             </button>
             {(pending.length > 0 || pendingWarranty > 0) && (
