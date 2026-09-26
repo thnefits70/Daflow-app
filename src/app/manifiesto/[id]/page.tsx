@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { canViewFulfillmentRequests } from "@/lib/guards";
-import { getCompiledLot, manifestCode } from "@/lib/fulfillmentGuides";
+import { canPrintFulfillmentManifest, canViewFulfillmentRequests, dbUserId } from "@/lib/guards";
+import { getCompiledLot, manifestCode, markLotPrinted } from "@/lib/fulfillmentGuides";
 import { carrierLabel, CARRIER_ORDER } from "@/lib/carriers";
 import { PrintButton } from "./PrintButton";
 
@@ -31,8 +31,17 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
   if (!(await canViewFulfillmentRequests())) notFound();
 
   const { id } = await params;
-  const lot = await getCompiledLot(id);
+  let lot = await getCompiledLot(id);
   if (!lot) notFound();
+
+  // Pedido del usuario 2026-09-26: Daniel imprime con UN clic desde Inicio,
+  // que abre esta página directo. Si el corte aún no tiene número MF y quien
+  // entra puede imprimir, se le asigna acá (mismo markLotPrinted que el
+  // botón de la pestaña).
+  if (!lot.manifestNumber && lot.status !== "DRAFT" && (await canPrintFulfillmentManifest())) {
+    const marked = await markLotPrinted(id, dbUserId(session.user.id));
+    if (marked.ok) lot = (await getCompiledLot(id)) ?? lot;
+  }
 
   if (!lot.manifestNumber) {
     return (
@@ -55,6 +64,13 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
   return (
     <div className="min-h-screen bg-white text-black py-8 px-6 print:p-0">
       <PrintButton />
+      {/* Después de imprimir, volver al corte para escanear y confirmar lo que sale. */}
+      <a
+        href="/area/workspace?tab=egresos&otab=solicitud"
+        className="print:hidden fixed top-4 left-4 text-[13px] font-bold bg-white text-black border border-black/30 rounded-md px-4 py-2 shadow"
+      >
+        ← Ir al corte para despachar
+      </a>
       <div className="max-w-4xl mx-auto">
         <div className="flex items-start justify-between border-b-2 border-black pb-3 mb-4">
           <div>

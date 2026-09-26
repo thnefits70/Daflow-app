@@ -2139,28 +2139,29 @@ async function getMyBankAccountPendingItem(userId: string, href: string): Promis
 // (sendLotToInventory) Daniel solo recibía un aviso puntual; si no lo abría,
 // en Inicio no le quedaba nada. Sigue apareciendo mientras el corte esté
 // SENT (enviado y todavía no confirmado por Daniel).
-async function getFulfillmentLotSentPendingItem(href: string): Promise<PendingItem | null> {
+// 2026-09-26 (pedido del usuario): una fila POR CORTE. Si todavía no se
+// imprimió, el clic abre directo el manifiesto (se numera e imprime solo);
+// ya impreso, lleva al corte para escanear/confirmar lo despachado.
+async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingItem[]> {
   const rows = await prisma.fulfillmentLot.findMany({
     where: { status: "SENT" },
-    select: { day: true, corte: true, sentAt: true, printedAt: true },
+    select: { id: true, day: true, corte: true, sentAt: true, printedAt: true },
     orderBy: [{ day: "asc" }, { corte: "asc" }],
   });
-  if (rows.length === 0) return null;
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const overdue = rows.some((r) => (r.sentAt ?? new Date()) < cutoff);
-  const unprinted = rows.filter((r) => !r.printedAt).length;
-  const first = rows[0];
-  const [, m, d] = first.day.split("-");
-  const where = rows.length === 1 ? `Corte ${first.corte} del ${d}/${m}` : `${rows.length} cortes`;
-  const printNote = unprinted === 0 ? "" : unprinted === rows.length ? " · sin imprimir" : ` · ${unprinted} sin imprimir`;
-  return {
-    type: "fulfillment_corte_enviado",
-    icon: "🚚",
-    label: "Corte de Fulfillment por despachar",
-    meta: `${where}${printNote}${overdue ? " · atrasado" : ""}`,
-    overdue,
-    href,
-  };
+  return rows.map((r) => {
+    const [, m, d] = r.day.split("-");
+    const overdue = (r.sentAt ?? new Date()) < cutoff;
+    const where = `Corte ${r.corte} del ${d}/${m}`;
+    return {
+      type: "fulfillment_corte_enviado",
+      icon: r.printedAt ? "🚚" : "🖨️",
+      label: r.printedAt ? "Corte de Fulfillment por despachar" : "Imprimir manifiesto y despachar",
+      meta: `${where}${r.printedAt ? " · ya impreso, falta confirmar lo que salió" : " · enviado por Fulfillment"}${overdue ? " · atrasado" : ""}`,
+      overdue,
+      href: r.printedAt ? href : `/manifiesto/${r.id}`,
+    };
+  });
 }
 
 // Confirmado 2026-08-19: pedido explícito del usuario — acceso directo
@@ -3055,8 +3056,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (externalSaleDispatchItem) items.push(externalSaleDispatchItem);
     const excessKardexItem = await getPurchaseExcessPendingItem("kardex", "/area/workspace?tab=compras&ptab=inventario");
     if (excessKardexItem) items.push(excessKardexItem);
-    const fulfillmentLotItem = await getFulfillmentLotSentPendingItem("/area/workspace?tab=egresos&otab=solicitud");
-    if (fulfillmentLotItem) items.unshift(fulfillmentLotItem);
+    items.unshift(...(await getFulfillmentLotSentPendingItems("/area/workspace?tab=egresos&otab=solicitud")));
   }
 
   if (me.leadsDept.code === "MKT") {
