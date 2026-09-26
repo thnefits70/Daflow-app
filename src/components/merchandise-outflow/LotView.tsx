@@ -122,6 +122,7 @@ export function LotView({
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState("");
   const [openCombo, setOpenCombo] = useState<string | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
   const shownCombo = lot.combos.find((c) => c.code === openCombo) ?? null;
   const units = lot.lines.reduce((s, l) => s + l.quantity, 0);
   const perCarrier = lot.carriers.map((c) => ({ c, q: lot.lines.reduce((s, l) => s + (l.byCarrier[c] ?? 0), 0), g: lot.guidesByCarrier[c] ?? 0 }));
@@ -251,6 +252,20 @@ export function LotView({
       )}
 
       {lot.lines.length > 0 && (
+        // Pedido del usuario 2026-09-26: el detalle por producto viene
+        // cerrado — Inventario y Fulfillment trabajan con el escáner y solo
+        // lo abren con un clic cuando lo necesitan.
+        <button
+          type="button"
+          className="flex items-center gap-1.5 w-full rounded border border-rule px-3 py-2 mb-3 text-[12px] font-semibold text-steel hover:text-teal hover:border-teal cursor-pointer"
+          onClick={() => setShowDetail((s) => !s)}
+        >
+          {showDetail ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          {showDetail ? "Ocultar detalle del corte" : `Ver detalle del corte (${lot.lines.length} productos)`}
+        </button>
+      )}
+
+      {lot.lines.length > 0 && showDetail && (
         <div className="overflow-x-auto mb-3">
           <table className="w-full text-[11.5px] border-collapse">
             <thead>
