@@ -6,6 +6,7 @@ import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { carrierLabel, sortCarriers } from "@/lib/carriers";
 import type { CompiledLot, LotPickLine } from "./LotView";
+import { BlockAssignee } from "./BlockAssignee";
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" });
@@ -133,23 +134,6 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
     setConfirming(null);
     if (!res.ok) {
       setErr(json?.error ?? "No se pudo confirmar.");
-      return;
-    }
-    onChanged();
-  }
-
-  async function assign(carrier: string, assigneeId: string | null) {
-    setBusy(true);
-    setErr("");
-    const res = await fetch(`/api/fulfillment-lots/${lot.id}/blocks`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ carrier, assigneeId }),
-    });
-    const json = await res.json().catch(() => null);
-    setBusy(false);
-    if (!res.ok) {
-      setErr(json?.error ?? "No se pudo asignar.");
       return;
     }
     onChanged();
@@ -346,26 +330,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                     {n} productos · {rows.reduce((s, p) => s + p.needed, 0)} u · {reg}/{n} registrados
                     {bad > 0 && <span className="text-red font-semibold"> · {bad} no cuadran</span>}
                   </span>
-                  <span className="ml-auto flex items-center gap-1 text-[11.5px]">
-                    <UserRound size={12} className="text-steel" />
-                    {canConfirm && lot.status === "SENT" && lot.viewer?.team ? (
-                      <select
-                        disabled={busy}
-                        className="rounded border border-rule bg-surface px-1.5 py-0.5 text-[11.5px]"
-                        value={b.assigneeId ?? ""}
-                        onChange={(e) => assign(b.carrier, e.target.value || null)}
-                      >
-                        <option value="">Sin asignar</option>
-                        {lot.viewer.team.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className={mine ? "font-bold text-teal" : b.assigneeName ? "font-semibold" : "text-steel"}>{mine ? "Te toca a ti" : (b.assigneeName ?? "Sin asignar")}</span>
-                    )}
-                  </span>
+                  <BlockAssignee lot={lot} carrier={b.carrier} onChanged={onChanged} />
                 </div>
         {rows.map((p) => {
           const st = rowState(p);

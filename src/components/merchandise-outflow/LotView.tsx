@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { ChevronDown, ChevronUp, Package, Printer, X } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
-import { carrierLabel } from "@/lib/carriers";
+import { carrierLabel, lineBlock, sortByBlock } from "@/lib/carriers";
+import { BlockAssignee } from "./BlockAssignee";
 import { sourceLabel, type VariantNote } from "./fulfillmentRequestShared";
 import { PickingPanel } from "./PickingPanel";
 import { LotComboRecipe, type LotComboRecipe as ComboRecipe } from "./LotComboRecipe";
@@ -126,6 +127,10 @@ export function LotView({
   const perCarrier = lot.carriers.map((c) => ({ c, q: lot.lines.reduce((s, l) => s + (l.byCarrier[c] ?? 0), 0), g: lot.guidesByCarrier[c] ?? 0 }));
   const totalGuides = Object.values(lot.guidesByCarrier).reduce((s, n) => s + n, 0);
   const editable = lot.status === "DRAFT" && canSubmit;
+  // Mismo orden que el manifiesto impreso: por bloque (la transportadora que
+  // se va primero) y dentro de cada uno de mayor a menor.
+  const lines = sortByBlock(lot.lines);
+  const blockOrder = [...new Set(lines.map((l) => lineBlock(l.byCarrier)))];
 
   async function removeBatch(id: string) {
     if (!window.confirm("¿Quitar esta subida del corte? Sus guías quedan libres para volver a subirlas.")) return;
@@ -260,8 +265,25 @@ export function LotView({
               </tr>
             </thead>
             <tbody>
-              {lot.lines.map((l) => (
-                <tr key={l.catalogItemId} className="border-b border-rule/60 align-top">
+              {lines.map((l, i) => (
+                <Fragment key={l.catalogItemId}>
+                  {(i === 0 || lineBlock(lines[i - 1].byCarrier) !== lineBlock(l.byCarrier)) && (
+                    <tr>
+                      <td colSpan={lot.carriers.length + 3} className="pt-3 pb-1 border-b border-teal/50">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] font-bold uppercase tracking-wider">
+                            {blockOrder.indexOf(lineBlock(l.byCarrier)) + 1}° · Lleva {carrierLabel(lineBlock(l.byCarrier))}
+                          </span>
+                          <span className="text-[10.5px] text-steel">
+                            {lines.filter((x) => lineBlock(x.byCarrier) === lineBlock(l.byCarrier)).length} productos ·{" "}
+                            {lines.filter((x) => lineBlock(x.byCarrier) === lineBlock(l.byCarrier)).reduce((s, x) => s + x.quantity, 0)} u
+                          </span>
+                          {lot.status !== "DRAFT" && <BlockAssignee lot={lot} carrier={lineBlock(l.byCarrier)} onChanged={onChanged} />}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                <tr className="border-b border-rule/60 align-top">
                   <td className="py-1.5 pr-2 font-mono whitespace-nowrap">{l.justCode ?? "—"}</td>
                   <td className="py-1.5 pr-2">
                     <div className="flex items-start gap-2">
@@ -294,6 +316,7 @@ export function LotView({
                   ))}
                   <td className="py-1.5 pl-1.5 text-right font-mono font-bold text-teal">{l.quantity}</td>
                 </tr>
+                </Fragment>
               ))}
               <tr className="border-t-2 border-rule font-bold">
                 <td className="py-1.5 pr-2" colSpan={2}>
