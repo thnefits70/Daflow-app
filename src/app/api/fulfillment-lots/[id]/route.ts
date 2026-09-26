@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { listInventoryTeam } from "@/lib/fulfillmentPicking";
-import { dbUserId, canConfirmFulfillmentLot, canPickFulfillmentLot, canPrintFulfillmentManifest, canSubmitFulfillmentRequest, canViewFulfillmentRequests } from "@/lib/guards";
+import { dbUserId, fulfillmentPickScope, canConfirmFulfillmentLot, canPrintFulfillmentManifest, canSubmitFulfillmentRequest, canViewFulfillmentRequests } from "@/lib/guards";
 import { getCompiledLot } from "@/lib/fulfillmentGuides";
 import { prisma } from "@/lib/prisma";
 
@@ -14,11 +14,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // permisos nuevos desde arriba.
   const session = await auth();
   const canConfirm = await canConfirmFulfillmentLot();
+  const pickScope = await fulfillmentPickScope();
   return NextResponse.json({
     ...lot,
     viewer: {
       canPrint: await canPrintFulfillmentManifest(),
-      canPick: await canPickFulfillmentLot(),
+      pickScope,
+      canPick: pickScope !== null,
       canConfirm,
       userId: session ? dbUserId(session.user.id) : null,
       // Para que Daniel elija a quién asignarle cada bloque.

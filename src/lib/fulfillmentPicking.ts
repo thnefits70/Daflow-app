@@ -22,13 +22,16 @@ type Result = { ok: true } | { ok: false; error: string };
 
 const LOT_URL = "/area/workspace?tab=egresos&otab=solicitud";
 
-export async function recordPick(params: { lotId: string; catalogItemId: string; quantity: number; userId: string | null }): Promise<Result> {
+export async function recordPick(params: { lotId: string; catalogItemId: string; quantity: number; userId: string | null; onlyAssigned?: boolean }): Promise<Result> {
   const lot = await getCompiledLot(params.lotId);
   if (!lot) return { ok: false, error: "No encontrado." };
   if (lot.status !== "SENT") return { ok: false, error: lot.status === "DRAFT" ? "Yair todavía no envía este corte." : "Este corte ya se cerró." };
   const line = lot.picking.find((p) => p.catalogItemId === params.catalogItemId);
   if (!line) return { ok: false, error: "Este producto no está en el manifiesto de este corte." };
   if (line.confirmedAt) return { ok: false, error: "Daniel ya confirmó este producto — ya no se puede cambiar." };
+  if (params.onlyAssigned && lot.blocks.find((b) => b.carrier === line.block)?.assigneeId !== params.userId) {
+    return { ok: false, error: `Este producto es del bloque ${carrierLabel(line.block)}, que Daniel no te asignó — no lo registres.` };
+  }
   if (!Number.isInteger(params.quantity) || params.quantity < 0) return { ok: false, error: "Cantidad inválida." };
 
   await prisma.fulfillmentLotPick.upsert({
@@ -204,11 +207,16 @@ async function maybeCloseLot(lotId: string) {
 
 // ---- Bloques asignados (pedido de Daniel 2026-09-26) ----------------------
 
-// Quién se puede asignar: el equipo de Inventario activo (Daniel incluido).
-// Por departamento, no por nombre, para que alguien nuevo aparezca solo.
+// Quién se puede asignar: el equipo de Inventario activo (Daniel incluido)
+// y, desde el 2026-09-26 (pedido de Daniel), la gente de Fulfillment menos
+// su líder (quien sube y envía el corte). Por departamento, no por nombre,
+// para que alguien nuevo aparezca solo — mismo criterio que fulfillmentPickScope.
 export async function listInventoryTeam(): Promise<{ id: string; name: string }[]> {
   return prisma.user.findMany({
-    where: { isActive: true, OR: [{ department: { code: "INV" } }, { isLeader: true, leadsDept: { code: "INV" } }] },
+    where: {
+      isActive: true,
+      OR: [{ department: { code: "INV" } }, { isLeader: true, leadsDept: { code: "INV" } }, { department: { code: "FUL" }, isLeader: false }],
+    },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
@@ -227,7 +235,7 @@ export async function assignBlock(params: { lotId: string; carrier: string; assi
     return { ok: true };
   }
   const team = await listInventoryTeam();
-  if (!team.some((t) => t.id === params.assigneeId)) return { ok: false, error: "Esa persona no es del equipo de Inventario." };
+  if (!team.some((t) => t.id === params.assigneeId)) return { ok: false, error: "Esa persona no puede sacar mercadería de un corte." };
 
   const prev = lot.blocks.find((b) => b.carrier === params.carrier)?.assigneeId;
   await prisma.fulfillmentLotBlock.upsert({

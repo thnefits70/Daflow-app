@@ -1087,11 +1087,22 @@ export async function canViewFulfillmentRequests() {
 // por departamento Inventario, no por nombre, para que alguien nuevo en el
 // equipo pueda hacerlo sin tocar nada. Daniel (el líder) también puede.
 export async function canPickFulfillmentLot() {
+  return (await fulfillmentPickScope()) !== null;
+}
+
+// Pedido de Daniel 2026-09-26: también puede sacar la gente de Fulfillment,
+// pero SOLO los productos del bloque que Daniel le asignó ("ASSIGNED").
+// Inventario sigue pudiendo registrar cualquier producto ("ALL"). El líder
+// de Fulfillment (quien sube y envía el corte) queda fuera a propósito — el
+// que pide no debería ser el que saca.
+export async function fulfillmentPickScope(): Promise<"ALL" | "ASSIGNED" | null> {
   const session = await auth();
-  if (!session || session.user.role === "admin") return false;
+  if (!session || session.user.role === "admin") return null;
   const user = await purchasesUserContext(session.user.id);
-  if (!user) return false;
-  return isInventoryTeamMember(user);
+  if (!user) return null;
+  if (isInventoryTeamMember(user)) return "ALL";
+  if (user.department?.code === "FUL" && !user.isLeader) return "ASSIGNED";
+  return null;
 }
 
 // La confirmación final (la que descuenta el Kardex) es exclusiva de

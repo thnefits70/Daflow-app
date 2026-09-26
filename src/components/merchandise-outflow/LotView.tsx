@@ -58,7 +58,7 @@ export type CompiledLot = {
   picking: LotPickLine[];
   blocks: LotBlock[];
   // team: solo le llega a Daniel (para asignar bloques).
-  viewer?: { canPrint: boolean; canPick: boolean; canConfirm: boolean; userId: string | null; team?: { id: string; name: string }[] };
+  viewer?: { canPrint: boolean; canPick: boolean; pickScope?: "ALL" | "ASSIGNED" | null; canConfirm: boolean; userId: string | null; team?: { id: string; name: string }[] };
 };
 export type LotListItem = { id: string; day: string; corte: number; status: LotStatus; createdAt: string; sentAt: string | null; uploads: number; guides: number };
 

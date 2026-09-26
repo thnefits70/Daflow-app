@@ -41,7 +41,6 @@ const ROW_STYLE: Record<RowState, string> = {
 // pedido con lo sacado y confirma con doble clic — lo que cuadra de una
 // vez, lo que no uno por uno. Recién ahí se descuenta del Kardex.
 export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: () => void }) {
-  const canPick = !!lot.viewer?.canPick && lot.status === "SENT";
   const canConfirm = !!lot.viewer?.canConfirm && lot.status === "SENT";
   const [scanning, setScanning] = useState(false);
   const [manualCode, setManualCode] = useState("");
@@ -55,6 +54,9 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   // Bloques (pedido de Daniel 2026-09-26): cada uno ve primero lo suyo.
   const myId = lot.viewer?.userId ?? null;
   const myBlocks = lot.blocks.filter((b) => myId && b.assigneeId === myId).map((b) => b.carrier);
+  // Fulfillment ("ASSIGNED") solo saca lo que Daniel le asignó; Inventario, todo.
+  const onlyAssigned = lot.viewer?.pickScope === "ASSIGNED";
+  const canPick = !!lot.viewer?.canPick && lot.status === "SENT" && (!onlyAssigned || myBlocks.length > 0);
   const [onlyMine, setOnlyMine] = useState(true);
   const showOnlyMine = onlyMine && myBlocks.length > 0 && !canConfirm;
   const blockInfo = (carrier: string) => lot.blocks.find((b) => b.carrier === carrier);
@@ -175,6 +177,10 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
         </div>
       )}
 
+      {onlyAssigned && myBlocks.length === 0 && lot.status === "SENT" && (
+        <div className="text-[12px] text-steel bg-cloud rounded-md px-3 py-2 mb-2">Daniel todavía no te asignó ningún bloque de este corte.</div>
+      )}
+
       {canPick && (
         <div className="bg-cloud rounded-md p-3 mb-3">
           {scanning ? (
@@ -244,7 +250,8 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                 <div className="text-[11.5px] text-amber mb-1.5 flex items-start gap-1">
                   <AlertTriangle size={13} className="mt-0.5 shrink-0" />
                   Este producto es del bloque {carrierLabel(current.block)}
-                  {blockInfo(current.block)?.assigneeName ? `, le toca a ${blockInfo(current.block)?.assigneeName}` : ""}. Puedes registrarlo igual si lo sacaste tú.
+                  {blockInfo(current.block)?.assigneeName ? `, le toca a ${blockInfo(current.block)?.assigneeName}` : ""}.{" "}
+                  {onlyAssigned ? "No lo saques: no es de tu bloque." : "Puedes registrarlo igual si lo sacaste tú."}
                 </div>
               )}
               {current.picked !== null && (
@@ -255,6 +262,10 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
               )}
               {current.confirmedAt ? (
                 <div className="text-[12px] text-steel">Daniel ya confirmó este producto.</div>
+              ) : onlyAssigned && !myBlocks.includes(current.block) ? (
+                <button type="button" className="text-[12px] text-steel cursor-pointer" onClick={() => setCurrent(null)}>
+                  Cerrar
+                </button>
               ) : (
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[12px]">¿Cuántos sacaste de la percha?</span>
