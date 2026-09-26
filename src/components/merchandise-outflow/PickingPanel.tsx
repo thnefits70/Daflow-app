@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Package, RefreshCw, ScanLine, UserRound } from "lucide-react";
 import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { CatalogCode } from "@/components/shared/CatalogCode";
@@ -53,6 +53,19 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   const [err, setErr] = useState("");
   // Doble confirmación de Daniel: "all" = todo lo que cuadra; un id = ese producto.
   const [confirming, setConfirming] = useState<string | null>(null);
+  // Pedido del equipo que escanea (2026-09-26): botón flotante para abrir el
+  // escáner desde cualquier parte de la lista, y después de "Registrar" la
+  // cámara se vuelve a abrir sola para el siguiente producto.
+  const [autoScan, setAutoScan] = useState(false);
+  const scanBoxRef = useRef<HTMLDivElement>(null);
+
+  function startScan() {
+    setAutoScan(true);
+    setCurrent(null);
+    setNotFound("");
+    setScanning(true);
+    scanBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   // Bloques (pedido de Daniel 2026-09-26): cada uno ve primero lo suyo.
   const myId = lot.viewer?.userId ?? null;
   const myBlocks = lot.blocks.filter((b) => myId && b.assigneeId === myId).map((b) => b.carrier);
@@ -107,6 +120,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
     setCurrent(null);
     setQty("");
     setManualCode("");
+    if (autoScan) startScan();
     onChanged();
   }
 
@@ -187,25 +201,24 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
       )}
 
       {canPick && (
-        <div className="bg-cloud rounded-md p-3 mb-3">
+        <div ref={scanBoxRef} className="bg-cloud rounded-md p-3 mb-3 scroll-mt-20">
           {scanning ? (
             <LiveBarcodeScanner
               onScanned={(code) => {
                 setScanning(false);
                 openCode(code);
               }}
-              onCancel={() => setScanning(false)}
+              onCancel={() => {
+                setScanning(false);
+                setAutoScan(false);
+              }}
             />
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
                 className="flex items-center gap-1.5 rounded border border-teal bg-teal px-3.5 py-2 text-[13px] font-bold text-navy cursor-pointer"
-                onClick={() => {
-                  setCurrent(null);
-                  setNotFound("");
-                  setScanning(true);
-                }}
+                onClick={startScan}
               >
                 <ScanLine size={15} /> Escanear QR de la percha
               </button>
@@ -471,6 +484,17 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
             ))}
           </div>
         </div>
+      )}
+
+      {canPick && !scanning && !current && (
+        <button
+          type="button"
+          aria-label="Escanear QR de la percha"
+          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[140] flex items-center gap-2 rounded-full bg-teal text-navy px-5 py-3 text-[14px] font-bold shadow-2xl cursor-pointer hover:brightness-110"
+          onClick={startScan}
+        >
+          <ScanLine size={18} /> Escanear QR
+        </button>
       )}
     </div>
   );
