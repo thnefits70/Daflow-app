@@ -178,7 +178,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
       <div className="flex items-center gap-2 flex-wrap mb-2">
         <span className="font-display font-bold text-[13.5px]">Sacar y confirmar</span>
         <span className="text-[11px] text-steel">
-          {picked}/{lot.picking.length} registrados por el equipo · {done}/{lot.picking.length} confirmados por Daniel
+          El equipo ya sacó {picked} de {lot.picking.length} · Daniel ya dio el OK a {done} de {lot.picking.length}
         </span>
         {lot.status === "SENT" && (
           <button type="button" className="ml-auto flex items-center gap-1 text-[11px] text-steel hover:text-teal cursor-pointer" onClick={onChanged}>
@@ -352,8 +352,12 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
         <div className="mb-2">
           {confirming === "all" ? (
             <div className="bg-cloud border border-teal/40 rounded-md p-3">
-              <div className="text-[12.5px] font-bold mb-1">¿Confirmar los {matching.length} productos que cuadran?</div>
-              <div className="text-[11.5px] mb-2">Se descontarán del Kardex de INVESTOCK. Esto no se puede deshacer.</div>
+              <div className="text-[12.5px] font-bold mb-1">
+                El equipo sacó {matching.length} {matching.length === 1 ? "producto" : "productos"} y todo cuadra con lo pedido. ¿Das el OK?
+              </div>
+              <div className="text-[11.5px] mb-2">
+                No hay ningún error: solo falta tu visto bueno. Al dar el OK se descuentan del stock (Kardex de INVESTOCK) y ya no se puede deshacer.
+              </div>
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -361,7 +365,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                   className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
                   onClick={() => confirm(matching.map((m) => m.catalogItemId), true)}
                 >
-                  {busy ? "Confirmando…" : "Sí, confirmar"}
+                  {busy ? "Confirmando…" : "Sí, dar el OK"}
                 </button>
                 <button type="button" className="rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer" onClick={() => setConfirming(null)}>
                   Cancelar
@@ -370,7 +374,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
             </div>
           ) : (
             <button type="button" className="flex items-center gap-1.5 rounded border border-green bg-green/15 px-3.5 py-2 text-[12.5px] font-bold cursor-pointer" onClick={() => setConfirming("all")}>
-              <CheckCircle2 size={14} /> Confirmar todo lo que cuadra ({matching.length})
+              <CheckCircle2 size={14} /> Dar el OK a lo que ya sacaron bien ({matching.length})
             </button>
           )}
         </div>
