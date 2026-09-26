@@ -457,6 +457,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_aprobacion: "Análisis de Mercado — propuestas por aprobar",
   analisis_mercado_listo_comprar: "Análisis de Mercado — productos listos para comprar",
   analisis_mercado_brandear: "Nuevos IDs por brandear",
+  fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -2134,6 +2135,34 @@ async function getMyBankAccountPendingItem(userId: string, href: string): Promis
   };
 }
 
+// Confirmado 2026-09-26: bug real — cuando Yair envía un corte a Inventario
+// (sendLotToInventory) Daniel solo recibía un aviso puntual; si no lo abría,
+// en Inicio no le quedaba nada. Sigue apareciendo mientras el corte esté
+// SENT (enviado y todavía no confirmado por Daniel).
+async function getFulfillmentLotSentPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.fulfillmentLot.findMany({
+    where: { status: "SENT" },
+    select: { day: true, corte: true, sentAt: true, printedAt: true },
+    orderBy: [{ day: "asc" }, { corte: "asc" }],
+  });
+  if (rows.length === 0) return null;
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => (r.sentAt ?? new Date()) < cutoff);
+  const unprinted = rows.filter((r) => !r.printedAt).length;
+  const first = rows[0];
+  const [, m, d] = first.day.split("-");
+  const where = rows.length === 1 ? `Corte ${first.corte} del ${d}/${m}` : `${rows.length} cortes`;
+  const printNote = unprinted === 0 ? "" : unprinted === rows.length ? " · sin imprimir" : ` · ${unprinted} sin imprimir`;
+  return {
+    type: "fulfillment_corte_enviado",
+    icon: "🚚",
+    label: "Corte de Fulfillment por despachar",
+    meta: `${where}${printNote}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-08-19: pedido explícito del usuario — acceso directo
 // para Daniel cuando hay lotes de Reingreso de Mercadería ya enviados por
 // el equipo y esperando su revisión (submittedAt no nulo, danielApprovedAt
@@ -3026,6 +3055,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (externalSaleDispatchItem) items.push(externalSaleDispatchItem);
     const excessKardexItem = await getPurchaseExcessPendingItem("kardex", "/area/workspace?tab=compras&ptab=inventario");
     if (excessKardexItem) items.push(excessKardexItem);
+    const fulfillmentLotItem = await getFulfillmentLotSentPendingItem("/area/workspace?tab=egresos&otab=solicitud");
+    if (fulfillmentLotItem) items.unshift(fulfillmentLotItem);
   }
 
   if (me.leadsDept.code === "MKT") {
@@ -3159,7 +3190,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "compras_excedente_kardex", "danados_doble_registro");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
