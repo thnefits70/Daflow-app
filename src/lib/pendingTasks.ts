@@ -2139,13 +2139,13 @@ async function getMyBankAccountPendingItem(userId: string, href: string): Promis
 // (sendLotToInventory) Daniel solo recibía un aviso puntual; si no lo abría,
 // en Inicio no le quedaba nada. Sigue apareciendo mientras el corte esté
 // SENT (enviado y todavía no confirmado por Daniel).
-// 2026-09-26 (pedido del usuario): una fila POR CORTE. Si todavía no se
-// imprimió, el clic abre directo el manifiesto (se numera e imprime solo);
-// ya impreso, lleva al corte para escanear/confirmar lo despachado.
+// 2026-09-26 (pedido del usuario): una fila POR CORTE. Ese mismo día Daniel
+// pidió que imprimir sea opcional (se saca desde el celular): el clic lleva
+// siempre al corte, donde asigna los bloques y confirma lo que salió.
 async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingItem[]> {
   const rows = await prisma.fulfillmentLot.findMany({
     where: { status: "SENT" },
-    select: { id: true, day: true, corte: true, sentAt: true, printedAt: true },
+    select: { day: true, corte: true, sentAt: true },
     orderBy: [{ day: "asc" }, { corte: "asc" }],
   });
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -2155,11 +2155,11 @@ async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingI
     const where = `Corte ${r.corte} del ${d}/${m}`;
     return {
       type: "fulfillment_corte_enviado",
-      icon: r.printedAt ? "🚚" : "🖨️",
-      label: r.printedAt ? "Corte de Fulfillment por despachar" : "Imprimir manifiesto y despachar",
-      meta: `${where}${r.printedAt ? " · ya impreso, falta confirmar lo que salió" : " · enviado por Fulfillment"}${overdue ? " · atrasado" : ""}`,
+      icon: "🚚",
+      label: "Corte de Fulfillment por despachar",
+      meta: `${where} · asigna los bloques y confirma lo que salió${overdue ? " · atrasado" : ""}`,
       overdue,
-      href: r.printedAt ? href : `/manifiesto/${r.id}`,
+      href,
     };
   });
 }

@@ -752,9 +752,10 @@ export async function sendLotToInventory(lotId: string, userId: string | null): 
 
   const updated = await prisma.fulfillmentLot.updateMany({ where: { id: lotId, status: "DRAFT" }, data: { status: "SENT", sentAt: new Date(), sentById: userId } });
   if (updated.count === 0) return { ok: false, error: "Este corte ya se envió a Inventario." };
+  const mf = await assignManifestNumber(lotId);
 
   const units = lot.lines.reduce((s, l) => s + l.quantity, 0);
-  const label = `Corte ${lot.corte} del ${lot.day.split("-").reverse().join("/")}`;
+  const label = `${mf.ok ? `${manifestCode(mf.manifestNumber)} · ` : ""}Corte ${lot.corte} del ${lot.day.split("-").reverse().join("/")}`;
   const danielId = await getInventoryLeadId();
   // Pedido del usuario 2026-09-25: Daniel se entera DESDE EL AVISO de lo que
   // no alcanza según INVESTOCK — y si hay devoluciones que ya llegaron pero
@@ -772,7 +773,7 @@ export async function sendLotToInventory(lotId: string, userId: string | null): 
         : "";
     await notifyOwner(danielId, {
       title: "Nuevo corte de Fulfillment",
-      body: `${label}: ${lot.lines.length} productos, ${units} unidades${lot.warranty.length ? `, ${lot.warranty.length} garantía(s)` : ""}. Revisa e imprime el manifiesto.${shortText}`,
+      body: `${label}: ${lot.lines.length} productos, ${units} unidades${lot.warranty.length ? `, ${lot.warranty.length} garantía(s)` : ""}. Asigna los bloques a tu equipo desde el corte (imprimir la hoja es opcional).${shortText}`,
       url: LOT_URL,
     });
   }
@@ -799,10 +800,12 @@ export function manifestCode(n: number): string {
   return `MF-${String(n).padStart(4, "0")}`;
 }
 
-// La primera impresión le da al corte su número de Manifiesto DAFLOW
-// (MF-0001, MF-0002…); reimprimir usa el mismo número. Solo cortes ya
-// enviados por Yair — uno en preparación todavía puede cambiar.
-export async function markLotPrinted(lotId: string, userId: string | null): Promise<{ ok: true; manifestNumber: number } | { ok: false; error: string }> {
+// Número de Manifiesto DAFLOW (MF-0001, MF-0002…), que nunca cambia. Desde
+// el 2026-09-26 (pedido de Daniel: se saca la mercadería desde el celular y
+// la hoja impresa es opcional) se asigna al ENVIAR el corte a Inventario, no
+// al imprimir — así todo corte tiene su MF aunque nunca se imprima. Solo
+// cortes ya enviados por Yair — uno en preparación todavía puede cambiar.
+export async function assignManifestNumber(lotId: string): Promise<{ ok: true; manifestNumber: number } | { ok: false; error: string }> {
   const lot = await prisma.fulfillmentLot.findUnique({ where: { id: lotId }, select: { status: true, manifestNumber: true } });
   if (!lot) return { ok: false, error: "No encontrado." };
   if (lot.status === "DRAFT") return { ok: false, error: "Yair todavía no envía este corte a Inventario." };
@@ -811,7 +814,7 @@ export async function markLotPrinted(lotId: string, userId: string | null): Prom
     const last = await prisma.fulfillmentLot.aggregate({ _max: { manifestNumber: true } });
     const next = (last._max.manifestNumber ?? 0) + 1;
     try {
-      const updated = await prisma.fulfillmentLot.updateMany({ where: { id: lotId, manifestNumber: null }, data: { manifestNumber: next, printedAt: new Date(), printedById: userId } });
+      const updated = await prisma.fulfillmentLot.updateMany({ where: { id: lotId, manifestNumber: null }, data: { manifestNumber: next } });
       if (updated.count === 0) {
         const again = await prisma.fulfillmentLot.findUnique({ where: { id: lotId }, select: { manifestNumber: true } });
         if (again?.manifestNumber) return { ok: true, manifestNumber: again.manifestNumber };
@@ -823,6 +826,15 @@ export async function markLotPrinted(lotId: string, userId: string | null): Prom
     }
   }
   return { ok: false, error: "No se pudo asignar el número de manifiesto — vuelve a intentar." };
+}
+
+// Imprimir (opcional): se asegura el MF y deja registrado quién imprimió la
+// primera vez; reimprimir no cambia nada.
+export async function markLotPrinted(lotId: string, userId: string | null): Promise<{ ok: true; manifestNumber: number } | { ok: false; error: string }> {
+  const res = await assignManifestNumber(lotId);
+  if (!res.ok) return res;
+  await prisma.fulfillmentLot.updateMany({ where: { id: lotId, printedAt: null }, data: { printedAt: new Date(), printedById: userId } });
+  return res;
 }
 
 // ---- Corregir la receta de un combo desde el corte ----------------------

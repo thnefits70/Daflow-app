@@ -35,11 +35,10 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
   let lot = await getCompiledLot(id);
   if (!lot) notFound();
 
-  // Pedido del usuario 2026-09-26: Daniel imprime con UN clic desde Inicio,
-  // que abre esta página directo. Si el corte aún no tiene número MF y quien
-  // entra puede imprimir, se le asigna acá (mismo markLotPrinted que el
-  // botón de la pestaña).
-  if (!lot.manifestNumber && lot.status !== "DRAFT" && (await canPrintFulfillmentManifest())) {
+  // Abrir esta hoja directo (sin pasar por el botón) también deja registrado
+  // quién la imprimió y asegura el MF de cortes enviados antes del
+  // 2026-09-26, cuando el número todavía se daba al imprimir.
+  if (!lot.printedAt && lot.status !== "DRAFT" && (await canPrintFulfillmentManifest())) {
     const marked = await markLotPrinted(id, dbUserId(session.user.id));
     if (marked.ok) lot = (await getCompiledLot(id)) ?? lot;
   }

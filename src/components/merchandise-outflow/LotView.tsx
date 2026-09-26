@@ -167,7 +167,7 @@ export function LotView({
     }
     if (win) win.location.href = `/manifiesto/${lot.id}`;
     else window.location.href = `/manifiesto/${lot.id}`;
-    if (!lot.manifestNumber) onChanged();
+    if (!lot.printedAt) onChanged();
   }
 
   async function send() {
@@ -193,8 +193,9 @@ export function LotView({
         <span className={`font-mono text-[9.5px] font-bold uppercase rounded-full px-2 py-0.5 border ${STATUS_STYLE[lot.status]}`}>{STATUS_LABEL[lot.status]}</span>
         {lot.manifestNumber && <span className="font-mono text-[11px] font-bold">{manifestCode(lot.manifestNumber)}</span>}
         {lot.status !== "DRAFT" && lot.viewer?.canPrint && (
-          <button type="button" className="ml-auto flex items-center gap-1.5 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer" onClick={print}>
-            <Printer size={13} /> {lot.manifestNumber ? "Reimprimir manifiesto" : "Imprimir manifiesto"}
+          // Opcional desde 2026-09-26 (pedido de Daniel): se saca desde el celular.
+          <button type="button" className="ml-auto flex items-center gap-1.5 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold text-steel hover:text-teal cursor-pointer" onClick={print}>
+            <Printer size={13} /> {lot.printedAt ? "Reimprimir hoja" : "Imprimir hoja (opcional)"}
           </button>
         )}
       </div>

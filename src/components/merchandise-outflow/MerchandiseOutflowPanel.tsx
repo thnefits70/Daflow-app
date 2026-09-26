@@ -255,7 +255,7 @@ export function MerchandiseOutflowPanel({
           <TabGuide storageKey="merchoutflow-solicitud">
             {canSubmitFulfillmentRequest
               ? "Sube los PDF de guías de Dropi (y el Excel de Rocket) de cada corte. DAFLOW lo agrupa por el ID de INVESTOCK, abre los combos, lo reparte por transportadora y separa las garantías. Revisa y presiona \"Enviar a Inventario\" — después ya no se puede cambiar."
-              : "Los cortes que envía Fulfillment, agrupados por el ID de INVESTOCK y repartidos por transportadora. Daniel imprime el manifiesto; el equipo escanea el QR de la percha y escribe cuántos sacó; Daniel compara y confirma — recién ahí se descuenta del Kardex."}
+              : "Los cortes que envía Fulfillment, agrupados por el ID de INVESTOCK y repartidos por transportadora. Daniel asigna cada bloque a alguien de su equipo (imprimir la hoja es opcional); cada uno, desde el celular, escanea el QR de la percha y escribe cuántos sacó; Daniel compara y confirma — recién ahí se descuenta del Kardex."}
           </TabGuide>
           <FulfillmentRequestPanel canSubmit={canSubmitFulfillmentRequest} />
         </>
