@@ -130,7 +130,7 @@ export function LotView({
   }
 
   async function removeLot() {
-    if (!window.confirm(`¿Eliminar el Corte ${lot.corte} (${fmtDay(lot.day)})? Está vacío.`)) return;
+    if (!window.confirm(`¿Eliminar el Corte ${lot.corte} (${fmtDay(lot.day)})? No tiene productos; sus subidas vacías también se quitan.`)) return;
     const res = await fetch(`/api/fulfillment-lots/${lot.id}`, { method: "DELETE" });
     const json = await res.json().catch(() => null);
     if (!res.ok) {
@@ -350,7 +350,7 @@ export function LotView({
         </button>
       )}
 
-      {editable && !confirming && lot.batches.length === 0 && (
+      {editable && !confirming && lot.lines.length === 0 && lot.warranty.length === 0 && (
         <button type="button" className="ml-2 rounded border border-red/50 px-3.5 py-2 text-[12.5px] font-bold text-red cursor-pointer" onClick={removeLot}>
           Eliminar corte vacío
         </button>

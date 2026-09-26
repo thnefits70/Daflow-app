@@ -13,15 +13,25 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ ...lot, viewer: { canPrint: await canPrintFulfillmentManifest(), canPick: await canPickFulfillmentLot(), canConfirm: await canConfirmFulfillmentLot() } });
 }
 
-// Pedido del usuario 2026-09-26: un corte que quedó vacío (se quitaron
-// todas sus subidas) no se podía enviar ni borrar, y el de ayer se quedaba
-// arriba "En preparación". Solo se borra si sigue en preparación y sin
-// ninguna subida — la condición va en el mismo borrado para que una subida
-// que entra justo en ese momento no se pierda.
+// Pedido del usuario 2026-09-26: un corte sin productos (subidas quitadas,
+// o una subida que quedó en 0 productos) no se podía enviar ni borrar, y el
+// de ayer se quedaba arriba "En preparación". Solo se borra si sigue en
+// preparación y NINGUNA de sus subidas tiene productos; esas subidas vacías
+// se borran con él (sus guías quedan libres para volver a subirlas).
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await canSubmitFulfillmentRequest())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const { id } = await params;
-  const { count } = await prisma.fulfillmentLot.deleteMany({ where: { id, status: "DRAFT", batches: { none: {} } } });
-  if (count === 0) return NextResponse.json({ error: "Solo se puede eliminar un corte en preparación y sin subidas." }, { status: 409 });
+  const ok = await prisma
+    .$transaction(async (tx) => {
+      const lot = await tx.fulfillmentLot.findFirst({ where: { id, status: "DRAFT", batches: { none: { items: { some: {} } } } }, select: { id: true } });
+      if (!lot) return false;
+      await tx.fulfillmentRequestBatch.deleteMany({ where: { lotId: id, items: { none: {} } } });
+      // Si justo entró una subida con productos, no se borra nada.
+      const { count } = await tx.fulfillmentLot.deleteMany({ where: { id, status: "DRAFT", batches: { none: {} } } });
+      if (count === 0) throw new Error("El corte cambió mientras se borraba.");
+      return true;
+    })
+    .catch(() => false);
+  if (!ok) return NextResponse.json({ error: "Solo se puede eliminar un corte en preparación y sin productos." }, { status: 409 });
   return NextResponse.json({ ok: true });
 }
