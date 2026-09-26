@@ -128,6 +128,18 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
                 <td className="py-1.5 px-1.5 text-right font-mono">{units}</td>
                 <td />
               </tr>
+              <tr className="font-bold">
+                <td className="py-1.5 pr-2" colSpan={2}>
+                  Guías por transportadora
+                </td>
+                {lot.carriers.map((c) => (
+                  <td key={c} className="py-1.5 px-1.5 text-right font-mono">
+                    {lot.guidesByCarrier[c] ?? 0}
+                  </td>
+                ))}
+                <td className="py-1.5 px-1.5 text-right font-mono">{Object.values(lot.guidesByCarrier).reduce((s, n) => s + n, 0)}</td>
+                <td />
+              </tr>
             </tbody>
           </table>
         )}

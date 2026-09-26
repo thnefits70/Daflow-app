@@ -545,7 +545,7 @@ export async function getCompiledLot(lotId: string) {
           requestedBy: { select: { name: true } },
           items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true } } } },
           variantNotes: { select: { catalogItemId: true, label: true, quantity: true } },
-          _count: { select: { guides: true } },
+          guides: { select: { carrier: true } },
         },
       },
       picks: true,
@@ -594,6 +594,11 @@ export async function getCompiledLot(lotId: string) {
       if (line) line.variantMap.set(v.label, (line.variantMap.get(v.label) ?? 0) + v.quantity);
     }
   }
+
+  // Pedido de Yair (2026-09-26): además de las unidades, cuántas guías
+  // (paquetes) salen por transportadora, contadas de las guías que leyó el PDF.
+  const guidesByCarrier: Record<string, number> = {};
+  for (const b of lot.batches) for (const g of b.guides) guidesByCarrier[g.carrier] = (guidesByCarrier[g.carrier] ?? 0) + 1;
 
   const lineList: LotLine[] = [...lines.values()].map(({ variantMap, ...l }) => {
     const variants = [...variantMap.entries()].filter(([label]) => label !== "Sin variante" || variantMap.size > 1).map(([label, quantity]) => ({ label, quantity }));
@@ -666,12 +671,13 @@ export async function getCompiledLot(lotId: string) {
     printedByName: nameOf(lot.printedById),
     closedAt: lot.closedAt,
     carriers: sortCarriers([...carriers]),
+    guidesByCarrier,
     batches: lot.batches.map((b) => ({
       id: b.id,
       source: b.source,
       requestedAt: b.requestedAt,
       requestedByName: b.requestedBy?.name ?? "Administrador",
-      guideCount: b._count.guides,
+      guideCount: b.guides.length,
       fileCount: b.fileUrls.length,
     })),
     lines: lineList.sort((a, b) => b.quantity - a.quantity),

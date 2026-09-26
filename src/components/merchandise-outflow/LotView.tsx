@@ -42,6 +42,7 @@ export type CompiledLot = {
   sentAt: string | null;
   sentByName: string | null;
   carriers: string[];
+  guidesByCarrier: Record<string, number>;
   batches: LotBatch[];
   lines: LotLine[];
   warranty: LotWarrantyLine[];
@@ -118,7 +119,8 @@ export function LotView({
   const [openCombo, setOpenCombo] = useState<string | null>(null);
   const shownCombo = lot.combos.find((c) => c.code === openCombo) ?? null;
   const units = lot.lines.reduce((s, l) => s + l.quantity, 0);
-  const perCarrier = lot.carriers.map((c) => ({ c, q: lot.lines.reduce((s, l) => s + (l.byCarrier[c] ?? 0), 0) }));
+  const perCarrier = lot.carriers.map((c) => ({ c, q: lot.lines.reduce((s, l) => s + (l.byCarrier[c] ?? 0), 0), g: lot.guidesByCarrier[c] ?? 0 }));
+  const totalGuides = Object.values(lot.guidesByCarrier).reduce((s, n) => s + n, 0);
   const editable = lot.status === "DRAFT" && canSubmit;
 
   async function removeBatch(id: string) {
@@ -188,6 +190,7 @@ export function LotView({
         )}
       </div>
       <div className="text-[11.5px] text-steel mb-2">
+        {totalGuides > 0 ? `${totalGuides} guías · ` : ""}
         {lot.lines.length} productos · {units} unidades
         {lot.warranty.length > 0 ? ` · ${lot.warranty.length} garantía(s)` : ""}
         {lot.sentAt ? ` · enviado ${fmtTime(lot.sentAt)}${lot.sentByName ? ` por ${lot.sentByName}` : ""}` : ""}
@@ -288,6 +291,28 @@ export function LotView({
                   <td className="py-1.5 pl-1.5 text-right font-mono font-bold text-teal">{l.quantity}</td>
                 </tr>
               ))}
+              <tr className="border-t-2 border-rule font-bold">
+                <td className="py-1.5 pr-2" colSpan={2}>
+                  Unidades
+                </td>
+                {perCarrier.map((p) => (
+                  <td key={p.c} className="py-1.5 px-1.5 text-right font-mono">
+                    {p.q}
+                  </td>
+                ))}
+                <td className="py-1.5 pl-1.5 text-right font-mono text-teal">{units}</td>
+              </tr>
+              <tr className="font-bold">
+                <td className="py-1.5 pr-2" colSpan={2}>
+                  Guías
+                </td>
+                {perCarrier.map((p) => (
+                  <td key={p.c} className="py-1.5 px-1.5 text-right font-mono">
+                    {p.g}
+                  </td>
+                ))}
+                <td className="py-1.5 pl-1.5 text-right font-mono text-teal">{totalGuides}</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -364,10 +389,14 @@ export function LotView({
             ¿Enviar el Corte {lot.corte} ({fmtDay(lot.day)}) a Inventario?
           </div>
           <div className="text-[12px] mb-1">
-            {lot.batches.length} {lot.batches.length === 1 ? "subida" : "subidas"} · {lot.lines.length} productos · {units} unidades
+            {lot.batches.length} {lot.batches.length === 1 ? "subida" : "subidas"} · {totalGuides} guías · {lot.lines.length} productos · {units} unidades
             {lot.warranty.length > 0 ? ` · ${lot.warranty.length} garantía(s)` : ""}
           </div>
-          {perCarrier.length > 0 && <div className="text-[11.5px] text-steel mb-1">{perCarrier.map((p) => `${carrierLabel(p.c)} ${p.q}`).join(" · ")}</div>}
+          {perCarrier.length > 0 && (
+            <div className="text-[11.5px] text-steel mb-1">
+              {perCarrier.map((p) => `${carrierLabel(p.c)}: ${p.g} ${p.g === 1 ? "guía" : "guías"} (${p.q} unid.)`).join(" · ")}
+            </div>
+          )}
           {lot.shortages.length > 0 && (
             <div className="text-[11.5px] text-red mb-1">{lot.shortages.length} producto(s) no alcanzan en stock — se avisará a Bryan Ríos y Jariel.</div>
           )}
