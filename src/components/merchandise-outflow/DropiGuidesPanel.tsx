@@ -101,11 +101,19 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
   // que Yair ya había elegido (productos, combos vinculados, garantías)
   // porque solo se guarda al final con "Guardar". Ahora se respalda solo y
   // vuelve tal cual al recargar.
-  type GuidesDraft = { files: typeof files; data: ParseResult | null; decisions: typeof decisions; warrantyDecisions: typeof warrantyDecisions };
+  // Pedido del usuario 2026-09-26: al día siguiente seguían ahí los PDF de
+  // ayer (subidos pero nunca guardados) y no se veía cómo quitarlos. Ahora el
+  // respaldo recuerda de qué día es y, si no es de hoy, se avisa con un botón
+  // para descartarlo todo. No se borra solo: puede ser trabajo sin terminar.
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Guayaquil" });
+  const [draftDay, setDraftDay] = useState(today);
+  type GuidesDraft = { files: typeof files; data: ParseResult | null; decisions: typeof decisions; warrantyDecisions: typeof warrantyDecisions; day?: string };
   const { clearDraft } = useFormDraft<GuidesDraft>(
     "dropi-guides-panel",
-    { files, data, decisions, warrantyDecisions },
+    { files, data, decisions, warrantyDecisions, day: draftDay },
     (d) => {
+      // Respaldo de antes de este cambio (sin día) = de un día anterior.
+      setDraftDay(d.day ?? "");
       setFiles(d.files ?? []);
       setData(d.data ?? null);
       setDecisions(d.decisions ?? {});
@@ -131,6 +139,8 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
       }
       added.push({ url: up.url, name: file.name });
     }
+    // Si ya no quedaba nada de antes, lo que se sube ahora es de hoy.
+    if (files.length === 0) setDraftDay(today);
     setFiles((f) => [...f, ...added]);
     setUploading(false);
   }
@@ -182,6 +192,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     setWarrantyDecisions({});
     setPhase("idle");
     setErr("");
+    setDraftDay(today);
   }
 
   // Confirmado 2026-09-25: en Gintracom/Laar/Urbano todavía no sabemos cómo
@@ -636,6 +647,18 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
         <b>Dropi — PDF de guías:</b> sube el PDF de guías tal como lo descargas de Dropi (puedes subir varios a la vez, uno por transportadora). La app saca sola los
         productos (por su ID madre de INVESTOCK), las cantidades por transportadora, los combos, los colores/tallas y las garantías. Solo te pregunta lo que todavía no conoce.
       </div>
+
+      {files.length > 0 && draftDay !== today && phase !== "applying" && (
+        <div className="flex flex-wrap items-center gap-2 text-[12.5px] mb-3 rounded px-2.5 py-2 border" style={{ borderColor: "#D9A44166", background: "#D9A4411A" }}>
+          <AlertTriangle size={14} className="shrink-0" style={{ color: "#D9A441" }} />
+          <span className="flex-1 min-w-[200px]">
+            Estos PDF se subieron{draftDay ? ` el ${draftDay.split("-").reverse().join("/")}` : " otro día"} y <b>nunca se guardaron</b>. Si hoy vas a subir los nuevos, descártalos primero.
+          </span>
+          <button type="button" className="rounded border border-red px-2.5 py-1 text-[12px] font-semibold text-red cursor-pointer" onClick={reset}>
+            Descartar y empezar de cero
+          </button>
+        </div>
+      )}
 
       {phase === "idle" && (
         <>
