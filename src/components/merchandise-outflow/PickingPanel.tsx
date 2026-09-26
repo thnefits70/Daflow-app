@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useState } from "react";
 import { AlertTriangle, CheckCircle2, Package, RefreshCw, ScanLine, UserRound } from "lucide-react";
 import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { CatalogCode } from "@/components/shared/CatalogCode";
@@ -58,14 +58,23 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   // escáner desde cualquier parte de la lista, y después de "Registrar" la
   // cámara se vuelve a abrir sola para el siguiente producto.
   const [autoScan, setAutoScan] = useState(false);
-  const scanBoxRef = useRef<HTMLDivElement>(null);
+  // La cámara y el producto escaneado se abren en una ventana encima de la
+  // lista (2026-09-26): antes la página saltaba arriba y el equipo perdía el
+  // lugar donde iba en la lista.
+  const sheetOpen = scanning || !!current || !!notFound;
 
   function startScan() {
     setAutoScan(true);
     setCurrent(null);
     setNotFound("");
     setScanning(true);
-    scanBoxRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function closeSheet() {
+    setScanning(false);
+    setAutoScan(false);
+    setCurrent(null);
+    setNotFound("");
+    setErr("");
   }
   // Bloques (pedido de Daniel 2026-09-26): cada uno ve primero lo suyo.
   const myId = lot.viewer?.userId ?? null;
@@ -202,19 +211,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
       )}
 
       {canPick && (
-        <div ref={scanBoxRef} className="bg-cloud rounded-md p-3 mb-3 scroll-mt-20">
-          {scanning ? (
-            <LiveBarcodeScanner
-              onScanned={(code) => {
-                setScanning(false);
-                openCode(code);
-              }}
-              onCancel={() => {
-                setScanning(false);
-                setAutoScan(false);
-              }}
-            />
-          ) : (
+        <div className="bg-cloud rounded-md p-3 mb-3">
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
@@ -237,6 +234,27 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                 Buscar
               </button>
             </div>
+        </div>
+      )}
+
+      {canPick && sheetOpen && (
+        <>
+          <div className="fixed inset-0 z-[145] bg-black/50" onClick={closeSheet} />
+          <div className="fixed inset-x-0 bottom-0 z-[150] max-h-[92dvh] overflow-y-auto bg-cloud rounded-t-xl p-3 pb-6 shadow-2xl">
+          <div className="flex items-center mb-2">
+            <span className="font-display font-bold text-[13.5px]">Escanear QR de la percha</span>
+            <button type="button" className="ml-auto text-[12.5px] font-semibold text-steel cursor-pointer px-2 py-1" onClick={closeSheet}>
+              Cerrar
+            </button>
+          </div>
+          {scanning && (
+            <LiveBarcodeScanner
+              onScanned={(code) => {
+                setScanning(false);
+                openCode(code);
+              }}
+              onCancel={closeSheet}
+            />
           )}
 
           {notFound && (
@@ -316,12 +334,19 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                   </button>
                 </div>
               )}
+              {err && <div className="text-red text-[12px] mt-2">{err}</div>}
             </div>
           )}
-        </div>
+          {notFound && (
+            <button type="button" className="mt-3 flex items-center gap-1.5 rounded border border-teal bg-teal px-3.5 py-2 text-[13px] font-bold text-navy cursor-pointer" onClick={startScan}>
+              <ScanLine size={15} /> Escanear otro
+            </button>
+          )}
+          </div>
+        </>
       )}
 
-      {err && <div className="text-red text-[12px] mb-2">{err}</div>}
+      {err && !sheetOpen && <div className="text-red text-[12px] mb-2">{err}</div>}
 
       {canConfirm && matching.length > 0 && (
         <div className="mb-2">
