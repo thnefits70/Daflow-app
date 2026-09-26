@@ -82,7 +82,7 @@ export function FulfillmentRequestPanel({ canSubmit }: { canSubmit: boolean }) {
           Todavía no hay cortes. Aparecen aquí cuando Yair sube las guías; para escanear, el corte tiene que estar enviado a Inventario.
         </div>
       )}
-      {lot && <LotView key={`${lot.id}-${lot.status}-${lot.batches.length}`} lot={lot} canSubmit={canSubmit} onOpenBatch={showBatch} onChanged={() => loadLots(lot.id)} />}
+      {lot && <LotView key={`${lot.id}-${lot.status}-${lot.batches.length}`} lot={lot} canSubmit={canSubmit} onOpenBatch={showBatch} onChanged={() => loadLots(lot.id)} onDeleted={() => loadLots(null)} />}
       {batch && (
         <div className="-mt-3 mb-5">
           <div className="flex items-center justify-between mb-1">

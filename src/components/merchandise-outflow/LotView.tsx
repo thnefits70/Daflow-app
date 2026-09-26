@@ -104,11 +104,13 @@ export function LotView({
   canSubmit,
   onOpenBatch,
   onChanged,
+  onDeleted,
 }: {
   lot: CompiledLot;
   canSubmit: boolean;
   onOpenBatch: (id: string) => void;
   onChanged: () => void;
+  onDeleted: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [sending, setSending] = useState(false);
@@ -125,6 +127,17 @@ export function LotView({
     const json = await res.json().catch(() => null);
     if (!res.ok) setErr(json?.error ?? "No se pudo quitar.");
     onChanged();
+  }
+
+  async function removeLot() {
+    if (!window.confirm(`¿Eliminar el Corte ${lot.corte} (${fmtDay(lot.day)})? Está vacío.`)) return;
+    const res = await fetch(`/api/fulfillment-lots/${lot.id}`, { method: "DELETE" });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(json?.error ?? "No se pudo eliminar.");
+      return;
+    }
+    onDeleted();
   }
 
   // Parte 2 (plan acordado con el usuario): Daniel imprime el corte → queda
@@ -334,6 +347,12 @@ export function LotView({
           onClick={() => setConfirming(true)}
         >
           Enviar a Inventario
+        </button>
+      )}
+
+      {editable && !confirming && lot.batches.length === 0 && (
+        <button type="button" className="ml-2 rounded border border-red/50 px-3.5 py-2 text-[12.5px] font-bold text-red cursor-pointer" onClick={removeLot}>
+          Eliminar corte vacío
         </button>
       )}
 
