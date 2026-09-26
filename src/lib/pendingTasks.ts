@@ -11,6 +11,8 @@ import { NICHO_AUTO_MONTHLY_BUDGET_USD } from "@/lib/nichoAi";
 import { getReadyToBuyPendingProposalIds } from "@/lib/marketProduct";
 import { getNewIdBrandingBoard } from "@/lib/newIdBranding";
 import { CLAIM_GAP_DAYS, findPossibleDoubleRegistrations, getSupplierClaimGaps } from "@/lib/reentrySupplierClaim";
+import { getCompiledLot } from "@/lib/fulfillmentGuides";
+import { carrierLabel } from "@/lib/carriers";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -458,6 +460,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_listo_comprar: "Análisis de Mercado — productos listos para comprar",
   analisis_mercado_brandear: "Nuevos IDs por brandear",
   fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
+  fulfillment_bloque_asignado: "Bloque del corte asignado — sacar de bodega",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -2164,6 +2167,40 @@ async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingI
   });
 }
 
+// Confirmado 2026-09-26: pedido del usuario — quien tiene un bloque del
+// corte asignado por Daniel (ver FulfillmentLotBlock) llega con un clic desde
+// Inicio a lo que tiene que sacar de bodega. Antes solo tenía el aviso único
+// de la campana. Desaparece cuando registró todo lo de su bloque o Daniel
+// cierra el corte.
+async function getMyFulfillmentBlockPendingItems(userId: string, href: string): Promise<PendingItem[]> {
+  const lots = await prisma.fulfillmentLot.findMany({
+    where: { status: "SENT", blocks: { some: { assigneeId: userId } } },
+    select: { id: true },
+    orderBy: [{ day: "asc" }, { corte: "asc" }],
+  });
+  const items: PendingItem[] = [];
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  for (const { id } of lots) {
+    const lot = await getCompiledLot(id);
+    if (!lot) continue;
+    const mine = new Set(lot.blocks.filter((b) => b.assigneeId === userId).map((b) => b.carrier));
+    const rows = lot.picking.filter((p) => mine.has(p.block));
+    const left = rows.filter((p) => p.picked === null && !p.confirmedAt).length;
+    if (left === 0) continue;
+    const [, m, d] = lot.day.split("-");
+    const overdue = !!lot.sentAt && new Date(lot.sentAt) < cutoff;
+    items.push({
+      type: "fulfillment_bloque_asignado",
+      icon: "📦",
+      label: "Mercadería por sacar de bodega",
+      meta: `Corte ${lot.corte} del ${d}/${m} · ${[...mine].map(carrierLabel).join(", ")} · faltan ${left} de ${rows.length} productos${overdue ? " · atrasado" : ""}`,
+      overdue,
+      href,
+    });
+  }
+  return items;
+}
+
 // Confirmado 2026-08-19: pedido explícito del usuario — acceso directo
 // para Daniel cuando hay lotes de Reingreso de Mercadería ya enviados por
 // el equipo y esperando su revisión (submittedAt no nulo, danielApprovedAt
@@ -2896,6 +2933,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (myPersonalPurchaseStatusItem) teamItems.push(myPersonalPurchaseStatusItem);
     teamItems.push(...myPettyCashConfirmationItems);
     if (myPayrollMessageItem) teamItems.push(myPayrollMessageItem);
+    teamItems.unshift(...(await getMyFulfillmentBlockPendingItems(actor.userId, "/area/workspace?tab=egresos&otab=solicitud")));
     if (me.department?.code === "INV") {
       const [receivingItem, replacementItem, urgentUnresolvedItem] = await Promise.all([
         getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -3180,6 +3218,7 @@ export async function getPossiblePendingTypesForActor(
       // pero no su líder — mismo criterio que el resto de este bloque.
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar");
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
+      if (me.department?.code === "INV" || me.department?.code === "FUL") types.push("fulfillment_bloque_asignado");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }
 
