@@ -6,6 +6,7 @@ import { formatMerchandiseOutflowCode, nextMerchandiseOutflowNumber } from "@/li
 import { getCompiledLot, manifestCode, purchaseDeciderIds } from "@/lib/fulfillmentGuides";
 import { recomputeAutoFillRate } from "@/lib/autoFillRate";
 import { carrierLabel } from "@/lib/carriers";
+import { computeGuideHolds, holdSummary } from "@/lib/fulfillmentHolds";
 
 // Parte 3 del plan acordado con el usuario 2026-09-23:
 //   - Joel y Scott escanean UNA vez el QR de la percha y escriben cuántos
@@ -98,6 +99,7 @@ export async function confirmPicks(params: { lotId: string; catalogItemIds: stri
   if (lot.status !== "SENT") return { ok: false, error: "Este corte no está abierto para confirmar." };
 
   let confirmed = 0;
+  const confirmedNow: string[] = [];
   for (const id of params.catalogItemIds) {
     const line = lot.picking.find((p) => p.catalogItemId === id);
     if (!line || line.confirmedAt) continue;
@@ -120,7 +122,10 @@ export async function confirmPicks(params: { lotId: string; catalogItemIds: stri
     // Si el upsert de arriba acaba de crear la fila (nadie escaneó nada),
     // ya quedó confirmada en 0 — no hay nada que descontar.
     if (claimed.count === 0) {
-      if (line.picked === null) confirmed++;
+      if (line.picked === null) {
+        confirmed++;
+        confirmedNow.push(id);
+      }
       continue;
     }
 
@@ -145,8 +150,10 @@ export async function confirmPicks(params: { lotId: string; catalogItemIds: stri
       return { ok: false, error: `"${line.name}": se descontó el despacho pero no la parte de garantía (${garantia}). Avísale al administrador.` };
     }
     confirmed++;
+    confirmedNow.push(id);
   }
 
+  await notifyGuideHolds(params.lotId, confirmedNow).catch((e) => console.error("[fulfillment holds]", e));
   await maybeCloseLot(params.lotId);
   return { ok: true, confirmed };
 }
@@ -170,6 +177,27 @@ export async function confirmWarrantyPiece(params: { lotId: string; itemId: stri
   }
   await maybeCloseLot(params.lotId);
   return { ok: true };
+}
+
+// Pedido de Daniel 2026-09-26: en cuanto Daniel confirma que de un producto
+// salió menos de lo pedido, Fulfillment sabe qué guías retener (ver
+// fulfillmentHolds.ts). Va a todo Fulfillment activo (Yair incluido): son
+// quienes empacan y entregan las guías a la transportadora. Sin montos.
+async function notifyGuideHolds(lotId: string, catalogItemIds: string[]) {
+  if (catalogItemIds.length === 0) return;
+  const lot = await getCompiledLot(lotId);
+  if (!lot) return;
+  const holds = computeGuideHolds(lot).filter((h) => h.final && catalogItemIds.includes(h.catalogItemId));
+  if (holds.length === 0) return;
+  const label = `${lot.manifestNumber ? `${manifestCode(lot.manifestNumber)} · ` : ""}Corte ${lot.corte} del ${lot.day.split("-").reverse().join("/")}`;
+  const list = holds.map((h) => `${h.justCode ? `${h.justCode} ` : ""}${h.name}: faltan ${h.missing} → retén ${holdSummary(h, carrierLabel)}`).join(". ");
+  const team = await prisma.user.findMany({
+    where: { isActive: true, OR: [{ department: { code: "FUL" } }, { isLeader: true, leadsDept: { code: "FUL" } }] },
+    select: { id: true },
+  });
+  for (const u of team) {
+    await notifyOwner(u.id, { title: "Guías a retener (falta stock)", body: `${label}: ${list}.`, url: LOT_URL }).catch(() => null);
+  }
 }
 
 async function maybeCloseLot(lotId: string) {

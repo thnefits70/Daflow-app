@@ -7,6 +7,7 @@ import { carrierLabel, lineBlock, sortByBlock } from "@/lib/carriers";
 import { BlockAssignee } from "./BlockAssignee";
 import { sourceLabel, type VariantNote } from "./fulfillmentRequestShared";
 import { PickingPanel } from "./PickingPanel";
+import { GuideHoldsBox } from "./GuideHoldsBox";
 import { LotComboRecipe, type LotComboRecipe as ComboRecipe } from "./LotComboRecipe";
 
 type ItemView = { catalogItemId: string; name: string; photos: string[]; justCode: string | null };
@@ -405,6 +406,7 @@ export function LotView({
         </div>
       )}
 
+      {lot.status !== "DRAFT" && <GuideHoldsBox lot={lot} />}
       {lot.status !== "DRAFT" && <PickingPanel lot={lot} onChanged={onChanged} />}
 
       {editable && !confirming && (
