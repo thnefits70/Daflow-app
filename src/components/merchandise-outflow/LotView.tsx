@@ -468,8 +468,9 @@ export function LotView({
   );
 }
 
-export function LotHistoryList({ lots, onView }: { lots: LotListItem[]; onView: (id: string) => void }) {
-  const [show, setShow] = useState(false);
+export function LotHistoryList({ lots, onView, defaultOpen = false }: { lots: LotListItem[]; onView: (id: string) => void; defaultOpen?: boolean }) {
+  const [toggled, setToggled] = useState<boolean | null>(null);
+  const show = toggled ?? defaultOpen;
   if (lots.length === 0) return null;
   const days: { day: string; lots: LotListItem[] }[] = [];
   for (const l of lots) {
@@ -479,8 +480,8 @@ export function LotHistoryList({ lots, onView }: { lots: LotListItem[]; onView: 
   }
   return (
     <div>
-      <button type="button" className="flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-teal cursor-pointer" onClick={() => setShow((s) => !s)}>
-        {show ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Cortes por día ({days.length})
+      <button type="button" className="flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-teal cursor-pointer" onClick={() => setToggled(!show)}>
+        {show ? <ChevronUp size={12} /> : <ChevronDown size={12} />} Historial de cortes cerrados ({lots.length})
       </button>
       {show && (
         <div className="mt-2 flex flex-col gap-2">
