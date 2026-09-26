@@ -111,7 +111,7 @@ export function tidyVariantLabel(s: string): string {
     .join(" ");
 }
 
-const VARIANT_KEY = /\b(COLOR(?:ES)?|TALLAS?|UNIDAD(?:ES)?|TAMA\S*O|MODELO|SABOR|DISE\S*O|VARIANTE|TONO|CAPACIDAD|MEDIDA)\s*:\s*/i;
+const VARIANT_KEY = /\b(COLOR(?:ES)?|TALLAS?|UNIDAD(?:ES)?|TAMA\S*O|MODELO|SABOR|DISE\S*O|VARIANTE|TONO|CAPACIDAD|MEDIDA|CAJAS?)\s*:\s*/i;
 
 // Variantes de "paquete": Dropi vende un mismo ID madre como "1 Unidad",
 // "2 Unidades", "4 Unidades"… y la tabla resumen cuenta PEDIDOS, no
@@ -119,8 +119,11 @@ const VARIANT_KEY = /\b(COLOR(?:ES)?|TALLAS?|UNIDAD(?:ES)?|TAMA\S*O|MODELO|SABOR
 // etiqueta "4 unidades" = 4 rollos). Devuelve cuántas unidades trae 1 pedido.
 // "2UNID" (Gintracom, Almohada ergonómica 127053, 2026-09-25) no se
 // reconocía y cada pedido contaba 1 en vez de 2.
+// "CAJAS: 2 Cajas 4 Radios" (Servientrega, Radio Baofeng 110339,
+// 2026-09-26): se cuentan CAJAS, que es lo que cuenta Inventario; "4 Radios"
+// solo describe lo que trae. Antes contaba 1 por pedido (11 en vez de 17).
 export function packSize(variant: string | null | undefined): number | null {
-  const m = variant?.trim().match(/^(\d{1,3})\s*(?:unid(?:ad(?:es)?|s)?|unds?|uds?|u|rollos?|piezas?|pzs?)\.?$/i);
+  const m = variant?.trim().match(/^(\d{1,3})\s*(?:unid(?:ad(?:es)?|s)?|unds?|uds?|u|rollos?|piezas?|pzs?|cajas?)\.?(?:\s+\d{1,3}\s+[a-záéíóúñ]+)?$/i);
   const n = m ? Number(m[1]) : 0;
   return n >= 1 ? n : null;
 }
