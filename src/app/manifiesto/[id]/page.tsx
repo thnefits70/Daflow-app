@@ -1,8 +1,9 @@
+import { Fragment } from "react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { canPrintFulfillmentManifest, canViewFulfillmentRequests, dbUserId } from "@/lib/guards";
 import { getCompiledLot, manifestCode, markLotPrinted } from "@/lib/fulfillmentGuides";
-import { carrierLabel, CARRIER_ORDER } from "@/lib/carriers";
+import { carrierLabel, CARRIER_ORDER, NO_CARRIER } from "@/lib/carriers";
 import { PrintButton } from "./PrintButton";
 
 function fmtDay(day: string) {
@@ -58,6 +59,11 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
     return i === -1 ? CARRIER_ORDER.length : i;
   };
   const lines = [...lot.lines].sort((a, b) => rank(a.byCarrier) - rank(b.byCarrier) || b.quantity - a.quantity);
+  // Pedido de Daniel (2026-09-26): un título donde empieza cada grupo, para
+  // que se entienda por qué la cantidad vuelve a subir.
+  const groups = [...new Set(lines.map((l) => rank(l.byCarrier)))];
+  const groupTitle = (r: number) =>
+    `${groups.indexOf(r) + 1}° · ${r < CARRIER_ORDER.length ? `Lleva ${carrierLabel(CARRIER_ORDER[r])}` : carrierLabel(NO_CARRIER)}`;
   const totals = lot.carriers.map((c) => lines.reduce((s, l) => s + (l.byCarrier[c] ?? 0), 0));
   const units = lines.reduce((s, l) => s + l.quantity, 0);
 
@@ -114,8 +120,16 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
               </tr>
             </thead>
             <tbody>
-              {lines.map((l) => (
-                <tr key={l.catalogItemId} className="border-b border-gray-300 align-top" style={{ breakInside: "avoid" }}>
+              {lines.map((l, i) => (
+                <Fragment key={l.catalogItemId}>
+                  {(i === 0 || rank(lines[i - 1].byCarrier) !== rank(l.byCarrier)) && (
+                    <tr style={{ breakAfter: "avoid" }}>
+                      <td colSpan={lot.carriers.length + 4} className="pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider border-b border-black">
+                        {groupTitle(rank(l.byCarrier))}
+                      </td>
+                    </tr>
+                  )}
+                <tr className="border-b border-gray-300 align-top" style={{ breakInside: "avoid" }}>
                   <td className="py-1.5 pr-2 font-mono font-bold whitespace-nowrap">{l.justCode ?? "—"}</td>
                   <td className="py-1.5 pr-2">
                     <div className="font-semibold">{l.name}</div>
@@ -131,6 +145,7 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
                     <div className="w-12 h-5 border border-gray-500 mx-auto" />
                   </td>
                 </tr>
+                </Fragment>
               ))}
               <tr className="border-t-2 border-black font-bold">
                 <td className="py-1.5 pr-2" colSpan={2}>
