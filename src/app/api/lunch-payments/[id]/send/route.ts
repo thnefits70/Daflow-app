@@ -5,9 +5,8 @@ import { canRegisterLunchPayments } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { formatLunchMotivo } from "@/lib/lunchPayments";
 
-// Confirmado 2026-09-08: pedido explícito del usuario — solo se puede enviar
-// a Nairoby DESPUÉS de que Daniel confirmó que la proveedora avisó que envió
-// la factura (bloqueado si no). Manda a quien lidera Finanzas (Nairoby), no
+// 2026-09-26: pedido de Daniel — ya no hace falta confirmar la factura antes
+// de enviar (la factura le llega directo a Nairoby, él no la ve). Manda a quien lidera Finanzas (Nairoby), no
 // al admin — el admin no debe enterarse de esto todavía.
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -16,7 +15,6 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const submission = await prisma.lunchWeekSubmission.findUnique({ where: { id } });
   if (!submission) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
-  if (!submission.invoiceConfirmedAt) return NextResponse.json({ error: "Primero confirma que la proveedora envió la factura." }, { status: 409 });
   if (submission.sentToVerificationAt) return NextResponse.json({ error: "Ya fue enviada." }, { status: 409 });
 
   const updated = await prisma.lunchWeekSubmission.update({

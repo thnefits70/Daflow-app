@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle2 } from "lucide-react";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { AdminPayeePicker, type AdminPaymentPayeeDTO } from "@/components/finance/AdminPayeePicker";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -87,8 +86,9 @@ function nextMondayOnOrAfter(iso: string): string {
 function stageLabel(h: HistoryRow): string {
   if (h.adminPaymentRequest) return STATUS_LABELS[h.adminPaymentRequest.status];
   if (h.sentToVerificationAt) return "Enviado a Nairoby — pendiente de verificar";
-  if (h.invoiceConfirmedAt) return "Factura confirmada — falta enviar a Nairoby";
-  return "Registrado — falta confirmar factura";
+  // 2026-09-26: pedido de Daniel — se quitó "confirmar que la proveedora envió
+  // la factura": la factura le llega directo a Nairoby, Daniel no la ve.
+  return "Registrado — falta enviar a Nairoby";
 }
 
 export function LunchPaymentsPanel() {
@@ -191,19 +191,6 @@ export function LunchPaymentsPanel() {
     load();
   }
 
-  async function confirmInvoice(id: string) {
-    setErr("");
-    setActingOnId(id);
-    const res = await fetch(`/api/lunch-payments/${id}/confirm-invoice`, { method: "POST" });
-    setActingOnId(null);
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setErr(data?.error ?? "No se pudo confirmar.");
-      return;
-    }
-    load();
-  }
-
   async function sendToVerification(id: string) {
     setErr("");
     setActingOnId(id);
@@ -223,8 +210,8 @@ export function LunchPaymentsPanel() {
     <div>
       <TabGuide storageKey="almuerzos-semanales">
         Registra acá, cada semana, cuántos almuerzos se pidieron (convenio con el restaurante) — el monto se calcula
-        solo. Después confirma que la proveedora te avisó que envió la factura y envíalo a Nairoby: ella lo revisa y
-        recién ahí llega al admin para que pague.
+        solo. Después envíalo a Nairoby: a ella le llega la factura de la proveedora, la revisa y recién ahí llega al
+        admin para que pague.
       </TabGuide>
 
       <div className="bg-surface border border-rule rounded-md p-4 mb-4">
@@ -318,31 +305,15 @@ export function LunchPaymentsPanel() {
                 <span className="text-[11px] text-steel shrink-0">{stageLabel(h)}</span>
               </div>
 
-              {!h.invoiceConfirmedAt && (
+              {!h.sentToVerificationAt && (
                 <button
                   type="button"
                   disabled={actingOnId === h.id}
-                  className="mt-2 rounded border border-teal px-2.5 py-1 text-[11.5px] font-semibold text-teal cursor-pointer disabled:opacity-50"
-                  onClick={() => confirmInvoice(h.id)}
+                  className="mt-2 rounded border border-blue bg-blue px-2.5 py-1 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-50"
+                  onClick={() => sendToVerification(h.id)}
                 >
-                  Confirmar que la proveedora envió la factura
+                  Enviar a Nairoby
                 </button>
-              )}
-
-              {h.invoiceConfirmedAt && !h.sentToVerificationAt && (
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 text-[11.5px] text-teal">
-                    <CheckCircle2 size={13} /> Factura confirmada
-                  </div>
-                  <button
-                    type="button"
-                    disabled={actingOnId === h.id}
-                    className="rounded border border-blue bg-blue px-2.5 py-1 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-50"
-                    onClick={() => sendToVerification(h.id)}
-                  >
-                    Enviar a Nairoby
-                  </button>
-                </div>
               )}
             </div>
           ))}
