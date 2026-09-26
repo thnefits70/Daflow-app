@@ -85,6 +85,17 @@ export function DeteriorResolutionInbox({ canAct }: { canAct: boolean }) {
               </div>
             </div>
           </div>
+          {/* Desde 2026-09-26 un reporte de deterioro puede traer varias fotos. */}
+          {item.batch.documentPhotoUrls.length > 1 && (
+            <div className="flex gap-1.5 flex-wrap mb-2.5">
+              {item.batch.documentPhotoUrls.map((p, i) => (
+                <a key={p} href={p} target="_blank" rel="noopener noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={p} alt={`Foto ${i + 1}`} className="w-14 h-14 object-cover rounded border border-rule" />
+                </a>
+              ))}
+            </div>
+          )}
 
           {!canAct ? (
             <div className="text-[11.5px] text-steel">Solo Daniel puede resolver este reporte.</div>

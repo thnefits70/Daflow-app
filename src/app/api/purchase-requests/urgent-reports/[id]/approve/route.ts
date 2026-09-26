@@ -68,7 +68,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // correcto (mismo href que usa pendingTasks.ts para este mismo aviso).
       notifyOwner(ownerId, {
         title: "🚨 Reporte urgente de mercadería",
-        body: `${existing.request.catalogItem.name} — ${totalAffected} un. afectadas · $${disputedValue.toFixed(2)} en disputa${windowNote}`,
+        // Solo excedente (nada faltante/dañado): no decir "0 un. afectadas".
+        body:
+          totalAffected === 0 && existing.excessQty > 0
+            ? `${existing.request.catalogItem.name} — llegaron ${existing.excessQty} un. de más sobre lo pedido.`
+            : `${existing.request.catalogItem.name} — ${totalAffected} un. afectadas · $${disputedValue.toFixed(2)} en disputa${windowNote}`,
         url: ownerId === "admin" ? "/admin" : "/area/workspace?tab=compras&ptab=urgentes",
       }).catch(() => null)
     )

@@ -8,7 +8,8 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 import { clearFormDraft } from "@/lib/useFormDraft";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 
-const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
+const MAX_PHOTOS = 20; // mismo tope que batches/[id]/photos/route.ts
+const DAMAGE_REASONS =["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
 
 type SupplierOption = { id: string; name: string };
 type ItemDTO = {
@@ -104,16 +105,28 @@ export function DeteriorCapture({ allowUpload = false, onReported }: { allowUplo
     }
   }
 
-  async function setPhoto(url: string | null) {
+  // Confirmado 2026-09-26, pedido de Daniel: varias fotos por reporte (antes
+  // era una sola) — con varios productos del mismo proveedor, una foto no
+  // alcanza. Mismo patrón que SupplierExchangeCapture: se reenvía la lista completa.
+  async function savePhotos(photoUrls: string[]) {
     if (!batch) return;
-    setTaking(false);
-    const photoUrls = url ? [url] : [];
     setBatch({ ...batch, documentPhotoUrls: photoUrls });
     try {
       await postJson(`/api/merchandise-outflow/batches/${batch.id}/photos`, { photoUrls });
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo guardar la foto.");
     }
+  }
+
+  function addPhoto(url: string | null) {
+    setTaking(false);
+    if (!batch || !url) return;
+    savePhotos([...batch.documentPhotoUrls, url]);
+  }
+
+  function removePhoto(index: number) {
+    if (!batch) return;
+    savePhotos(batch.documentPhotoUrls.filter((_, i) => i !== index));
   }
 
   async function deleteItem(itemId: string) {
@@ -298,28 +311,40 @@ export function DeteriorCapture({ allowUpload = false, onReported }: { allowUplo
       )}
 
       <div className="bg-surface border border-rule rounded-md p-3.5 mb-3">
-        <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Foto del producto dañado</label>
-        {batch.documentPhotoUrls[0] ? (
-          <div className="flex items-center gap-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={batch.documentPhotoUrls[0]} alt="Foto del deterioro" className="w-20 h-20 object-cover rounded-md border border-rule cursor-zoom-in" onClick={() => setZoomedPhoto(batch.documentPhotoUrls[0])} />
-            <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => setTaking(true)}>Volver a tomar</button>
+        <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">
+          Fotos del producto dañado{batch.documentPhotoUrls.length > 0 ? ` (${batch.documentPhotoUrls.length})` : ""}
+        </label>
+        {batch.documentPhotoUrls.length > 0 && (
+          <div className="flex gap-2 flex-wrap mb-2">
+            {batch.documentPhotoUrls.map((p, i) => (
+              <div key={p} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p} alt={`Foto ${i + 1}`} className="w-20 h-20 object-cover rounded-md border border-rule cursor-zoom-in" onClick={() => setZoomedPhoto(p)} />
+                <button type="button" title="Quitar esta foto" className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer" onClick={() => removePhoto(i)}>
+                  <X size={11} />
+                </button>
+              </div>
+            ))}
           </div>
-        ) : taking ? (
-          <LiveCameraCapture allowUpload={allowUpload} folder="merchandise-outflow-photos" onCaptured={setPhoto} onCancel={() => setTaking(false)} />
+        )}
+        {taking ? (
+          <LiveCameraCapture allowUpload={allowUpload} folder="merchandise-outflow-photos" onCaptured={addPhoto} onCancel={() => setTaking(false)} />
+        ) : batch.documentPhotoUrls.length >= MAX_PHOTOS ? (
+          <div className="text-[11.5px] text-steel">Máximo {MAX_PHOTOS} fotos por reporte.</div>
         ) : (
           <button type="button" className="flex items-center gap-1.5 text-[12.5px] font-bold border-[1.5px] border-rule rounded-md px-3.5 py-2 cursor-pointer" onClick={() => setTaking(true)}>
-            <Camera size={14} /> {allowUpload ? "Tomar o subir foto" : "Tomar foto en vivo"}
+            <Camera size={14} />{" "}
+            {batch.documentPhotoUrls.length > 0 ? "Agregar otra foto" : allowUpload ? "Tomar o subir foto" : "Tomar foto en vivo"}
           </button>
         )}
-        <div className="text-[10.5px] text-steel mt-1.5">Una sola foto para todo el reporte, aunque agregues varios productos.</div>
+        <div className="text-[10.5px] text-steel mt-1.5">Puedes tomar varias fotos para todo el reporte (hasta {MAX_PHOTOS}).</div>
       </div>
 
       {!confirmingSubmit && (
         <button
           type="button"
           disabled={!canSubmit}
-          title={!canSubmit ? "Agrega al menos un producto y la foto antes de enviar" : undefined}
+          title={!canSubmit ? "Agrega al menos un producto y una foto antes de enviar" : undefined}
           className="w-full flex items-center justify-center gap-1.5 rounded border border-teal bg-teal px-3.5 py-2.5 text-[13px] font-bold text-navy cursor-pointer disabled:opacity-40"
           onClick={() => setConfirmingSubmit(true)}
         >

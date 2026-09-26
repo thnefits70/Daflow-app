@@ -1063,6 +1063,20 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       )
                     )}
                   </div>
+                  {/* Confirmado 2026-09-26: pedido de Daniel — si llegó de más, el
+                      campo no puede decir "Cantidad faltante" en 0; muestra cuánto
+                      llegó de más sobre lo pedido (lo calculó el servidor). */}
+                  {pr.excessQty > 0 ? (
+                    <div className="mb-2.5">
+                      <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-teal">Cantidad de más (sobre lo pedido)</label>
+                      <div
+                        className="w-full rounded border border-teal px-2.5 py-2 text-[13px] font-bold text-teal"
+                        style={{ maxWidth: 160 }}
+                      >
+                        + {pr.excessQty}
+                      </div>
+                    </div>
+                  ) : (
                   <div className="mb-2.5">
                     <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-red">Cantidad faltante</label>
                     <input
@@ -1080,6 +1094,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       </div>
                     )}
                   </div>
+                  )}
                   {total > 0 && (
                     <div className="text-[12px] font-semibold text-ink mb-2.5">
                       {total} un. afectadas · ${(total * pr.request.unitCost).toFixed(2)} en disputa
@@ -1111,7 +1126,9 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     <div className="bg-navy rounded-md p-3">
                       <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
                       <div className="text-[12px] text-steel mb-3">
-                        Vas a confirmar {missingNum} un. faltantes y mandar este reporte a Compras.
+                        {pr.excessQty > 0
+                          ? `Vas a avisar a Compras que llegaron ${pr.excessQty} un. de más, para que lo gestione con el proveedor.`
+                          : `Vas a confirmar ${missingNum} un. faltantes y mandar este reporte a Compras.`}
                       </div>
                       <div className="flex items-center gap-2">
                         <button
@@ -1131,7 +1148,9 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     <div className="bg-navy rounded-md p-3">
                       <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
                       <div className="text-[12px] text-steel mb-3">
-                        Vas a cerrar este reporte con {missingNum} un. faltantes resueltas internamente — no se le va a avisar a Compras.
+                        {pr.excessQty > 0
+                          ? `Vas a cerrar este reporte internamente — no se le va a avisar a Compras de las ${pr.excessQty} un. de más.`
+                          : `Vas a cerrar este reporte con ${missingNum} un. faltantes resueltas internamente — no se le va a avisar a Compras.`}
                       </div>
                       <div className="flex items-center gap-2">
                         <button

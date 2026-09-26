@@ -154,6 +154,17 @@ function Timeline({ i, canAct, onPack, canAdminDelete, onDeleted }: { i: TraceIt
         {i.quantity} un. · {i.damageReason?.name ?? i.damageReasonOther ?? "Sin motivo"}
         {i.batch.supplier && <> · proveedor sugerido: {i.batch.supplier.name}</>}
         {i.sourceReentryItem && <> · viene de la devolución de cliente {i.sourceReentryItem.batch.code}</>}
+        {/* Desde 2026-09-26 un reporte de deterioro puede traer varias fotos. */}
+        {i.batch.documentPhotoUrls.length > 1 && (
+          <span className="flex gap-1.5 flex-wrap mt-1.5">
+            {i.batch.documentPhotoUrls.map((p, n) => (
+              <a key={p} href={p} target="_blank" rel="noopener noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={p} alt={`Foto ${n + 1}`} className="w-12 h-12 object-cover rounded border border-rule" />
+              </a>
+            ))}
+          </span>
+        )}
       </Step>
       <Step done={!!i.resolution} title={i.resolution ? `Daniel decidió: ${DECISION_LABEL[i.resolution]}` : "Pendiente: decisión de Daniel"} when={i.resolvedAt}>
         {i.resolutionNote}

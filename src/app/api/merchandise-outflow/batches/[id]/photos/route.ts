@@ -5,10 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { canActOnMerchandiseOutflow, canCaptureMerchandiseOutflow } from "@/lib/guards";
 
 const MAX_PHOTOS = 20;
-// DETERIORO (confirmado 2026-09-21, pedido explícito del usuario/Daniel): un
-// solo reporte con "una sola foto" para todos los productos declarados, a
-// diferencia de CAMBIO_PROVEEDOR que sí acepta varias fotos de la lista física.
-const MAX_PHOTOS_BY_REASON: Partial<Record<string, number>> = { DETERIORO: 1 };
+// DETERIORO: antes (2026-09-21) era "una sola foto" por reporte. Cambiado
+// 2026-09-26, pedido de Daniel — un reporte puede traer varios productos del
+// mismo proveedor (ej. mucha mercadería de Chen) y una foto no alcanza; ahora
+// usa el mismo máximo (MAX_PHOTOS) que CAMBIO_PROVEEDOR.
+const MAX_PHOTOS_BY_REASON: Partial<Record<string, number>> = {};
 const schema = z.object({ photoUrls: z.array(z.string().min(1)).max(MAX_PHOTOS) });
 
 // CAMBIO_PROVEEDOR: fotos de la lista física de productos que se están
