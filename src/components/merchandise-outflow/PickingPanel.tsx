@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, CheckCircle2, Package, RefreshCw, ScanLine } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Package, RefreshCw, ScanLine, UserRound } from "lucide-react";
 import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { carrierLabel, sortCarriers } from "@/lib/carriers";
@@ -51,6 +51,12 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   const [err, setErr] = useState("");
   // Doble confirmación de Daniel: "all" = todo lo que cuadra; un id = ese producto.
   const [confirming, setConfirming] = useState<string | null>(null);
+  // Bloques (pedido de Daniel 2026-09-26): cada uno ve primero lo suyo.
+  const myId = lot.viewer?.userId ?? null;
+  const myBlocks = lot.blocks.filter((b) => myId && b.assigneeId === myId).map((b) => b.carrier);
+  const [onlyMine, setOnlyMine] = useState(true);
+  const showOnlyMine = onlyMine && myBlocks.length > 0 && !canConfirm;
+  const blockInfo = (carrier: string) => lot.blocks.find((b) => b.carrier === carrier);
 
   const matching = lot.picking.filter((p) => rowState(p) === "match");
   const byCarrierOf = (id: string) => lot.lines.find((l) => l.catalogItemId === id)?.byCarrier ?? {};
@@ -132,6 +138,23 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
     onChanged();
   }
 
+  async function assign(carrier: string, assigneeId: string | null) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/fulfillment-lots/${lot.id}/blocks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ carrier, assigneeId }),
+    });
+    const json = await res.json().catch(() => null);
+    setBusy(false);
+    if (!res.ok) {
+      setErr(json?.error ?? "No se pudo asignar.");
+      return;
+    }
+    onChanged();
+  }
+
   const done = lot.picking.filter((p) => p.confirmedAt).length;
   const picked = lot.picking.filter((p) => p.picked !== null).length;
 
@@ -152,6 +175,19 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
       {lot.status === "CLOSED" && (
         <div className="flex items-center gap-1.5 text-teal text-[12px] font-semibold mb-2">
           <CheckCircle2 size={14} /> Corte cerrado{lot.closedAt ? ` a las ${fmtTime(lot.closedAt)}` : ""} — ya se descontó del Kardex lo que salió.
+        </div>
+      )}
+
+      {myBlocks.length > 0 && !canConfirm && lot.status === "SENT" && (
+        <div className="flex items-center gap-2 flex-wrap bg-teal/10 border border-teal/40 rounded-md px-3 py-2 mb-2 text-[12.5px]">
+          <UserRound size={14} className="text-teal shrink-0" />
+          <span>
+            Daniel te asignó: <b>{myBlocks.map(carrierLabel).join(", ")}</b> ·{" "}
+            {lot.picking.filter((p) => myBlocks.includes(p.block) && p.picked !== null).length}/{lot.picking.filter((p) => myBlocks.includes(p.block)).length} registrados
+          </span>
+          <label className="ml-auto flex items-center gap-1 text-[11.5px] text-steel cursor-pointer">
+            <input type="checkbox" checked={onlyMine} onChange={(e) => setOnlyMine(e.target.checked)} /> Ver solo lo mío
+          </label>
         </div>
       )}
 
@@ -220,6 +256,13 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                   .map((c) => `${carrierLabel(c)} ${byCarrierOf(current.catalogItemId)[c]}`)
                   .join(" · ")}
               </div>
+              {myBlocks.length > 0 && !myBlocks.includes(current.block) && (
+                <div className="text-[11.5px] text-amber mb-1.5 flex items-start gap-1">
+                  <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                  Este producto es del bloque {carrierLabel(current.block)}
+                  {blockInfo(current.block)?.assigneeName ? `, le toca a ${blockInfo(current.block)?.assigneeName}` : ""}. Puedes registrarlo igual si lo sacaste tú.
+                </div>
+              )}
               {current.picked !== null && (
                 <div className="text-[11px] text-steel mb-1.5">
                   Ya registrado: {current.picked}
@@ -285,7 +328,46 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
       )}
 
       <div className="flex flex-col gap-1.5">
-        {lot.picking.map((p) => {
+        {lot.blocks
+          .filter((b) => !showOnlyMine || myBlocks.includes(b.carrier))
+          .map((b) => {
+            const rows = lot.picking.filter((p) => p.block === b.carrier);
+            const n = rows.length;
+            const reg = rows.filter((p) => p.picked !== null || p.confirmedAt).length;
+            const bad = rows.filter((p) => rowState(p) === "mismatch").length;
+            const mine = !!myId && b.assigneeId === myId;
+            return (
+              <div key={b.carrier} className="flex flex-col gap-1.5">
+                <div className={`flex items-center gap-2 flex-wrap mt-2 pb-1 border-b ${mine ? "border-teal" : "border-rule"}`}>
+                  <span className="text-[11.5px] font-bold uppercase tracking-wider">
+                    {lot.blocks.indexOf(b) + 1}° · Lleva {carrierLabel(b.carrier)}
+                  </span>
+                  <span className="text-[11px] text-steel">
+                    {n} productos · {rows.reduce((s, p) => s + p.needed, 0)} u · {reg}/{n} registrados
+                    {bad > 0 && <span className="text-red font-semibold"> · {bad} no cuadran</span>}
+                  </span>
+                  <span className="ml-auto flex items-center gap-1 text-[11.5px]">
+                    <UserRound size={12} className="text-steel" />
+                    {canConfirm && lot.status === "SENT" && lot.viewer?.team ? (
+                      <select
+                        disabled={busy}
+                        className="rounded border border-rule bg-surface px-1.5 py-0.5 text-[11.5px]"
+                        value={b.assigneeId ?? ""}
+                        onChange={(e) => assign(b.carrier, e.target.value || null)}
+                      >
+                        <option value="">Sin asignar</option>
+                        {lot.viewer.team.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span className={mine ? "font-bold text-teal" : b.assigneeName ? "font-semibold" : "text-steel"}>{mine ? "Te toca a ti" : (b.assigneeName ?? "Sin asignar")}</span>
+                    )}
+                  </span>
+                </div>
+        {rows.map((p) => {
           const st = rowState(p);
           const qtyToConfirm = Math.min(p.picked ?? 0, p.needed);
           return (
@@ -348,6 +430,9 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
             </div>
           );
         })}
+              </div>
+            );
+          })}
       </div>
 
       {pieces.length > 0 && (

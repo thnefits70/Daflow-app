@@ -5,6 +5,7 @@ import { getFulfilmentLeadId } from "@/lib/guards";
 import { formatMerchandiseOutflowCode, nextMerchandiseOutflowNumber } from "@/lib/merchandiseOutflow";
 import { getCompiledLot, manifestCode, purchaseDeciderIds } from "@/lib/fulfillmentGuides";
 import { recomputeAutoFillRate } from "@/lib/autoFillRate";
+import { carrierLabel } from "@/lib/carriers";
 
 // Parte 3 del plan acordado con el usuario 2026-09-23:
 //   - Joel y Scott escanean UNA vez el QR de la percha y escriben cuántos
@@ -199,4 +200,49 @@ async function maybeCloseLot(lotId: string) {
   for (const id of recipients) {
     await notifyOwner(id, { title: "Faltaron productos en el despacho", body, url: LOT_URL });
   }
+}
+
+// ---- Bloques asignados (pedido de Daniel 2026-09-26) ----------------------
+
+// Quién se puede asignar: el equipo de Inventario activo (Daniel incluido).
+// Por departamento, no por nombre, para que alguien nuevo aparezca solo.
+export async function listInventoryTeam(): Promise<{ id: string; name: string }[]> {
+  return prisma.user.findMany({
+    where: { isActive: true, OR: [{ department: { code: "INV" } }, { isLeader: true, leadsDept: { code: "INV" } }] },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+// Daniel asigna (o quita, con assigneeId null) un bloque del corte. A quien
+// le toca le llega un aviso con cuántos productos y unidades son.
+export async function assignBlock(params: { lotId: string; carrier: string; assigneeId: string | null; userId: string | null }): Promise<Result> {
+  const lot = await getCompiledLot(params.lotId);
+  if (!lot) return { ok: false, error: "No encontrado." };
+  if (lot.status !== "SENT") return { ok: false, error: lot.status === "DRAFT" ? "Yair todavía no envía este corte." : "Este corte ya se cerró." };
+  if (!lot.blocks.some((b) => b.carrier === params.carrier)) return { ok: false, error: "Ese bloque no está en este corte." };
+
+  if (!params.assigneeId) {
+    await prisma.fulfillmentLotBlock.deleteMany({ where: { lotId: params.lotId, carrier: params.carrier } });
+    return { ok: true };
+  }
+  const team = await listInventoryTeam();
+  if (!team.some((t) => t.id === params.assigneeId)) return { ok: false, error: "Esa persona no es del equipo de Inventario." };
+
+  const prev = lot.blocks.find((b) => b.carrier === params.carrier)?.assigneeId;
+  await prisma.fulfillmentLotBlock.upsert({
+    where: { lotId_carrier: { lotId: params.lotId, carrier: params.carrier } },
+    create: { lotId: params.lotId, carrier: params.carrier, assigneeId: params.assigneeId, assignedById: params.userId },
+    update: { assigneeId: params.assigneeId, assignedById: params.userId, assignedAt: new Date() },
+  });
+  if (prev !== params.assigneeId && params.assigneeId !== params.userId) {
+    const items = lot.picking.filter((p) => p.block === params.carrier);
+    const units = items.reduce((s, p) => s + p.needed, 0);
+    await notifyOwner(params.assigneeId, {
+      title: "Te asignaron un bloque del corte",
+      body: `${lot.manifestNumber ? manifestCode(lot.manifestNumber) : `Corte ${lot.corte}`} · bloque ${carrierLabel(params.carrier)}: ${items.length} productos, ${units} unidades. Sácalos y regístralos escaneando la percha.`,
+      url: LOT_URL,
+    }).catch(() => null);
+  }
+  return { ok: true };
 }

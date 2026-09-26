@@ -27,3 +27,17 @@ export function sortCarriers(carriers: string[]): string[] {
   };
   return [...carriers].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }
+
+// Bloque del manifiesto de un producto (pedido de Daniel 2026-09-26): la
+// transportadora que se va primero entre las que lo llevan. Todo el
+// producto (también sus unidades de otras transportadoras) va en ese bloque.
+export function lineBlock(byCarrier: Record<string, number>): string {
+  return sortCarriers(Object.keys(byCarrier).filter((c) => (byCarrier[c] ?? 0) > 0))[0] ?? NO_CARRIER;
+}
+
+// Productos del corte ordenados por bloque y, dentro de cada uno, de mayor a
+// menor cantidad — el mismo orden en el manifiesto impreso y en la pantalla.
+export function sortByBlock<T extends { byCarrier: Record<string, number>; quantity: number }>(lines: T[]): T[] {
+  const order = sortCarriers([...new Set(lines.map((l) => lineBlock(l.byCarrier)))]);
+  return [...lines].sort((a, b) => order.indexOf(lineBlock(a.byCarrier)) - order.indexOf(lineBlock(b.byCarrier)) || b.quantity - a.quantity);
+}

@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { canPrintFulfillmentManifest, canViewFulfillmentRequests, dbUserId } from "@/lib/guards";
 import { getCompiledLot, manifestCode, markLotPrinted } from "@/lib/fulfillmentGuides";
-import { carrierLabel, CARRIER_ORDER, NO_CARRIER } from "@/lib/carriers";
+import { carrierLabel, lineBlock, sortByBlock } from "@/lib/carriers";
 import { PrintButton } from "./PrintButton";
 
 function fmtDay(day: string) {
@@ -53,17 +53,14 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
   }
 
   // Primero lo que va a la transportadora de mayor prioridad; dentro de
-  // cada grupo, de mayor a menor cantidad.
-  const rank = (byCarrier: Record<string, number>) => {
-    const i = CARRIER_ORDER.findIndex((c) => (byCarrier[c] ?? 0) > 0);
-    return i === -1 ? CARRIER_ORDER.length : i;
+  // cada grupo, de mayor a menor cantidad. Pedido de Daniel (2026-09-26): un
+  // título donde empieza cada grupo, con a quién se lo asignó.
+  const lines = sortByBlock(lot.lines);
+  const groupTitle = (carrier: string) => {
+    const b = lot.blocks.find((x) => x.carrier === carrier);
+    const n = [...new Set(lines.map((l) => lineBlock(l.byCarrier)))].indexOf(carrier) + 1;
+    return `${n}° · Lleva ${carrierLabel(carrier)}${b?.assigneeName ? ` · Saca: ${b.assigneeName}` : ""}`;
   };
-  const lines = [...lot.lines].sort((a, b) => rank(a.byCarrier) - rank(b.byCarrier) || b.quantity - a.quantity);
-  // Pedido de Daniel (2026-09-26): un título donde empieza cada grupo, para
-  // que se entienda por qué la cantidad vuelve a subir.
-  const groups = [...new Set(lines.map((l) => rank(l.byCarrier)))];
-  const groupTitle = (r: number) =>
-    `${groups.indexOf(r) + 1}° · ${r < CARRIER_ORDER.length ? `Lleva ${carrierLabel(CARRIER_ORDER[r])}` : carrierLabel(NO_CARRIER)}`;
   const totals = lot.carriers.map((c) => lines.reduce((s, l) => s + (l.byCarrier[c] ?? 0), 0));
   const units = lines.reduce((s, l) => s + l.quantity, 0);
 
@@ -122,10 +119,10 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
             <tbody>
               {lines.map((l, i) => (
                 <Fragment key={l.catalogItemId}>
-                  {(i === 0 || rank(lines[i - 1].byCarrier) !== rank(l.byCarrier)) && (
+                  {(i === 0 || lineBlock(lines[i - 1].byCarrier) !== lineBlock(l.byCarrier)) && (
                     <tr style={{ breakAfter: "avoid" }}>
                       <td colSpan={lot.carriers.length + 4} className="pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider border-b border-black">
-                        {groupTitle(rank(l.byCarrier))}
+                        {groupTitle(lineBlock(l.byCarrier))}
                       </td>
                     </tr>
                   )}

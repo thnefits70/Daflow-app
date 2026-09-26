@@ -2644,6 +2644,23 @@ model FulfillmentLotPick {
   @@unique([lotId, catalogItemId])
 }
 
+// Pedido de Daniel 2026-09-26: el manifiesto va por bloques (los productos
+// que llevan Veloces, luego Gintracom, luego Servientrega…) y él asigna cada
+// bloque a alguien de su equipo, así cada uno sabe qué sacar. carrier = el
+// bloque (la transportadora que manda en esos productos). Es una guía, no un
+// candado: cualquiera del equipo puede seguir registrando cualquier producto.
+model FulfillmentLotBlock {
+  id           String         @id @default(cuid())
+  lotId        String
+  lot          FulfillmentLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
+  carrier      String
+  assigneeId   String
+  assignedById String?
+  assignedAt   DateTime       @default(now())
+
+  @@unique([lotId, carrier])
+}
+
 enum FulfillmentLotStatus {
   DRAFT
   SENT
@@ -2684,6 +2701,7 @@ model FulfillmentLot {
 
   batches FulfillmentRequestBatch[]
   picks   FulfillmentLotPick[]
+  blocks  FulfillmentLotBlock[]
 
   @@unique([day, corte])
   @@index([status])

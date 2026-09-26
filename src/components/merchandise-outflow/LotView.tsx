@@ -30,7 +30,9 @@ export type LotPickLine = ItemView & {
   confirmedQty: number | null;
   confirmedAt: string | null;
   confirmedByName: string | null;
+  block: string;
 };
+export type LotBlock = { carrier: string; assigneeId: string | null; assigneeName: string | null; assignedAt: string | null };
 export type LotShortage = ItemView & { needed: number; stock: number; pendingReturns: { label: string; qty: number }[]; realShortage: number };
 export type LotBatch = { id: string; source: string; requestedAt: string; requestedByName: string; guideCount: number; fileCount: number };
 export type LotStatus = "DRAFT" | "SENT" | "CLOSED";
@@ -53,7 +55,9 @@ export type CompiledLot = {
   printedByName: string | null;
   closedAt: string | null;
   picking: LotPickLine[];
-  viewer?: { canPrint: boolean; canPick: boolean; canConfirm: boolean };
+  blocks: LotBlock[];
+  // team: solo le llega a Daniel (para asignar bloques).
+  viewer?: { canPrint: boolean; canPick: boolean; canConfirm: boolean; userId: string | null; team?: { id: string; name: string }[] };
 };
 export type LotListItem = { id: string; day: string; corte: number; status: LotStatus; createdAt: string; sentAt: string | null; uploads: number; guides: number };
 

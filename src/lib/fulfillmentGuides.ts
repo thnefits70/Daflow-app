@@ -4,7 +4,7 @@ import { findSimilarUnlinkedItem, significantWords } from "@/lib/justCatalog";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId } from "@/lib/guards";
-import { NO_CARRIER, sortCarriers } from "@/lib/carriers";
+import { lineBlock, NO_CARRIER, sortCarriers } from "@/lib/carriers";
 
 // Confirmado 2026-09-23, diseño acordado con el usuario pregunta por
 // pregunta (ver memoria project_fulfillment_corte_manifest_plan):
@@ -533,6 +533,8 @@ export type LotPickLine = ItemView & {
   confirmedQty: number | null;
   confirmedAt: Date | null;
   confirmedByName: string | null;
+  // Bloque del manifiesto (transportadora que se va primero) — ver lineBlock.
+  block: string;
 };
 
 export async function getCompiledLot(lotId: string) {
@@ -549,10 +551,11 @@ export async function getCompiledLot(lotId: string) {
         },
       },
       picks: true,
+      blocks: true,
     },
   });
   if (!lot) return null;
-  const personIds = [lot.sentById, lot.printedById, ...lot.picks.flatMap((p) => [p.pickedById, p.confirmedById])].filter((x): x is string => !!x);
+  const personIds = [lot.sentById, lot.printedById, ...lot.picks.flatMap((p) => [p.pickedById, p.confirmedById]), ...lot.blocks.map((b) => b.assigneeId)].filter((x): x is string => !!x);
   const people = await prisma.user.findMany({ where: { id: { in: [...new Set(personIds)] } }, select: { id: true, name: true } });
   const nameOf = (id: string | null) => (id ? people.find((p) => p.id === id)?.name ?? "—" : null);
 
@@ -618,6 +621,14 @@ export async function getCompiledLot(lotId: string) {
     } else needed.set(w.catalogItemId, { view: w, qty: w.quantity, normal: 0, warranty: w.quantity });
   }
   const pickByItem = new Map(lot.picks.map((p) => [p.catalogItemId, p]));
+  const blockOf = (catalogItemId: string) => {
+    const line = lineList.find((l) => l.catalogItemId === catalogItemId);
+    if (line) return lineBlock(line.byCarrier);
+    // Solo garantía: el bloque de la transportadora de esas guías.
+    const byCarrier: Record<string, number> = {};
+    for (const w of warranty) if (w.catalogItemId === catalogItemId) byCarrier[w.carrier] = (byCarrier[w.carrier] ?? 0) + w.quantity;
+    return lineBlock(byCarrier);
+  };
   const picking: LotPickLine[] = [...needed.values()].map(({ view, qty, normal, warranty: w }) => {
     const p = pickByItem.get(view.catalogItemId);
     return {
@@ -634,7 +645,14 @@ export async function getCompiledLot(lotId: string) {
       confirmedQty: p?.confirmedQty ?? null,
       confirmedAt: p?.confirmedAt ?? null,
       confirmedByName: nameOf(p?.confirmedById ?? null),
+      block: blockOf(view.catalogItemId),
     };
+  });
+  // Un bloque por transportadora que manda en algún producto, con quién lo
+  // tiene asignado (si Daniel ya lo asignó).
+  const blocks = sortCarriers([...new Set(picking.map((p) => p.block))]).map((carrier) => {
+    const a = lot.blocks.find((b) => b.carrier === carrier);
+    return { carrier, assigneeId: a?.assigneeId ?? null, assigneeName: a ? nameOf(a.assigneeId) : null, assignedAt: a?.assignedAt ?? null };
   });
   const comboCodes = [...new Set(lot.batches.flatMap((b) => b.items.map((i) => i.fromComboCode)).filter((c): c is string => !!c))];
   const combos = await getComboRecipes(comboCodes);
@@ -685,6 +703,7 @@ export async function getCompiledLot(lotId: string) {
     combos,
     shortages,
     picking: picking.sort((a, b) => b.needed - a.needed),
+    blocks,
     stockByItem: Object.fromEntries([...needed.keys()].map((id) => [id, stock.get(id)?.balance ?? 0])),
   };
 }

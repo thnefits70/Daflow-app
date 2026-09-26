@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canConfirmFulfillmentLot, canPickFulfillmentLot, canPrintFulfillmentManifest, canSubmitFulfillmentRequest, canViewFulfillmentRequests } from "@/lib/guards";
+import { auth } from "@/auth";
+import { listInventoryTeam } from "@/lib/fulfillmentPicking";
+import { dbUserId, canConfirmFulfillmentLot, canPickFulfillmentLot, canPrintFulfillmentManifest, canSubmitFulfillmentRequest, canViewFulfillmentRequests } from "@/lib/guards";
 import { getCompiledLot } from "@/lib/fulfillmentGuides";
 import { prisma } from "@/lib/prisma";
 
@@ -10,7 +12,19 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   if (!lot) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   // Qué puede hacer quien mira — así la pantalla no necesita recibir
   // permisos nuevos desde arriba.
-  return NextResponse.json({ ...lot, viewer: { canPrint: await canPrintFulfillmentManifest(), canPick: await canPickFulfillmentLot(), canConfirm: await canConfirmFulfillmentLot() } });
+  const session = await auth();
+  const canConfirm = await canConfirmFulfillmentLot();
+  return NextResponse.json({
+    ...lot,
+    viewer: {
+      canPrint: await canPrintFulfillmentManifest(),
+      canPick: await canPickFulfillmentLot(),
+      canConfirm,
+      userId: session ? dbUserId(session.user.id) : null,
+      // Para que Daniel elija a quién asignarle cada bloque.
+      team: canConfirm ? await listInventoryTeam() : undefined,
+    },
+  });
 }
 
 // Pedido del usuario 2026-09-26: un corte sin productos (subidas quitadas,
