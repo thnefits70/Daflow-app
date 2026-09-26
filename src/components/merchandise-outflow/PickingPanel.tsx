@@ -12,13 +12,15 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" });
 }
 
-function Thumb({ url }: { url: string | undefined }) {
+// Doble clic en la foto la amplía (GlobalImageZoom, en toda la app).
+function Thumb({ url, small = false }: { url: string | undefined; small?: boolean }) {
+  const size = small ? "w-8 h-8" : "w-10 h-10";
   return url ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt="" className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+    <img src={url} alt="" loading="lazy" title="Doble clic para ampliar" className={`${size} object-cover rounded border border-rule shrink-0 bg-surface`} />
   ) : (
-    <div className="w-10 h-10 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel">
-      <Package size={14} />
+    <div className={`${size} rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel`}>
+      <Package size={small ? 12 : 14} />
     </div>
   );
 }
@@ -361,6 +363,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
           return (
             <div key={p.catalogItemId} className={`rounded-md px-3 py-2 text-[12px] ${ROW_STYLE[st]}`}>
               <div className="flex items-center gap-2 flex-wrap">
+                <Thumb url={p.photos[0]} small />
                 <CatalogCode code={p.justCode} />
                 <span className="flex-1 min-w-0">{p.name}</span>
                 <span className="font-mono text-[11.5px]">
