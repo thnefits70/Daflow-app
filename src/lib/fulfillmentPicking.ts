@@ -3,7 +3,7 @@ import { recordKardexEntry } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
 import { getFulfilmentLeadId } from "@/lib/guards";
 import { formatMerchandiseOutflowCode, nextMerchandiseOutflowNumber } from "@/lib/merchandiseOutflow";
-import { getCompiledLot, manifestCode } from "@/lib/fulfillmentGuides";
+import { getCompiledLot, manifestCode, purchaseDeciderIds } from "@/lib/fulfillmentGuides";
 import { recomputeAutoFillRate } from "@/lib/autoFillRate";
 
 // Parte 3 del plan acordado con el usuario 2026-09-23:
@@ -15,7 +15,7 @@ import { recomputeAutoFillRate } from "@/lib/autoFillRate";
 //     salió (nunca más de lo pedido), registrado como un Egreso normal
 //     (DESPACHO o GARANTIA) para que historial y reportes lo vean igual.
 //   - Cuando todo el corte está confirmado se cierra, y lo que faltó le
-//     llega a Yair y a Bryan Ríos en un solo aviso.
+//     llega a Yair, a Bryan Ríos y a Jariel en un solo aviso.
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -189,13 +189,13 @@ async function maybeCloseLot(lotId: string) {
   const more = missing.length > 8 ? ` y ${missing.length - 8} más` : "";
   const body = `${label}: faltaron unidades — ${list}${more}.`;
 
-  // Yair (para saber qué pedidos no salen) y Bryan Ríos (para organizar con
-  // Jariel la compra o la solución) — confirmado por el usuario.
+  // Yair (para saber qué pedidos no salen), Bryan Ríos y Jariel (quien hace
+  // las compras) — pedido de Daniel 2026-09-26: Jariel también debe
+  // enterarse. Misma lista que el aviso de "Stock insuficiente".
   const recipients = new Set<string>();
   const yair = await getFulfilmentLeadId();
   if (yair) recipients.add(yair);
-  const approvers = await prisma.user.findMany({ where: { isActive: true, canApprovePurchaseRequests: true }, select: { id: true } });
-  for (const a of approvers) recipients.add(a.id);
+  for (const id of await purchaseDeciderIds()) recipients.add(id);
   for (const id of recipients) {
     await notifyOwner(id, { title: "Faltaron productos en el despacho", body, url: LOT_URL });
   }

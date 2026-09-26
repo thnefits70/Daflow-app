@@ -711,7 +711,7 @@ const LOT_URL = "/area/workspace?tab=egresos&otab=solicitud";
 // Mercado) — por permiso, no por nombre. canManagePurchases solo se toma
 // dentro de MKT porque Nairoby (Finanzas) también lo tiene para facturar, y
 // este aviso no es para ella.
-async function purchaseDeciderIds(): Promise<string[]> {
+export async function purchaseDeciderIds(): Promise<string[]> {
   const users = await prisma.user.findMany({
     where: { isActive: true, OR: [{ canApprovePurchaseRequests: true }, { canManagePurchases: true, purchasingNewRequestsBlocked: false, department: { code: "MKT" } }] },
     select: { id: true },
