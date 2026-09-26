@@ -186,9 +186,13 @@ export function PurchaseUrgentReportsPanel({
   canAct,
   canManageGestion = false,
   canConfirmExcess = false,
+  hideMoney = false,
 }: {
   isAdmin: boolean;
   canAct: boolean;
+  // Corregido 2026-09-26, pedido del usuario: el equipo de Inventario (no
+  // Daniel) ve esta bandeja en solo lectura, pero sin ningún monto.
+  hideMoney?: boolean;
   // Confirmado 2026-09-17: pedido explícito del usuario — quien gestiona el
   // excedente con el proveedor (hoy Jariel, canManageOutflowPurchaseGestion)
   // y quien da la confirmación final (hoy Bryan, canActOnPurchaseApproval)
@@ -472,7 +476,7 @@ export function PurchaseUrgentReportsPanel({
         </div>
       )}
 
-      {pendingCredits.length > 0 && (
+      {pendingCredits.length > 0 && !hideMoney && (
         <div className="bg-surface border border-gold/40 rounded-md p-4">
           <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2" style={{ color: "var(--color-gold)" }}>
             <Wallet size={14} /> Créditos pendientes de recuperar ({pendingCredits.length})
@@ -522,9 +526,9 @@ export function PurchaseUrgentReportsPanel({
                     </span>
                   </div>
                   <div className="text-[11.5px] text-steel mb-1">
-                    {r.request.supplier.name} — pagado {money(r.request.totalCost)} · {r.request.quantity} un. pedidas
+                    {r.request.supplier.name} — {hideMoney ? "" : `pagado ${money(r.request.totalCost)} · `}{r.request.quantity} un. pedidas
                   </div>
-                  {r.isLateClaim && r.originUncertain && (
+                  {r.isLateClaim && r.originUncertain && !hideMoney && (
                     <div className="flex items-center gap-1.5 text-[11px] mb-1" style={{ color: "var(--color-gold)" }}>
                       <AlertTriangle size={11} /> Origen incierto — usando costo promedio ${r.estimatedUnitCost?.toFixed(2)}/un.
                     </div>
@@ -537,7 +541,7 @@ export function PurchaseUrgentReportsPanel({
                     {r.incompleteQty > 0 && <>Incompleta: {r.incompleteQty} · </>}
                     {r.differentQty > 0 && <>Diferente: {r.differentQty} · </>}
                     {r.missingQty > 0 && <>Faltante: {r.missingQty} · </>}
-                    ${(totalReported(r) * claimUnitCost(r)).toFixed(2)} en disputa
+                    {hideMoney ? `${totalReported(r)} un. en disputa` : `$${(totalReported(r) * claimUnitCost(r)).toFixed(2)} en disputa`}
                   </div>
                   <div className="text-[12px] mb-2">{r.description}</div>
 
@@ -580,6 +584,7 @@ export function PurchaseUrgentReportsPanel({
                           setCancelReason={setCancelReason}
                           onCancel={() => cancelResolution(res.id)}
                           cancelErr={cancelId === res.id ? err : ""}
+                          hideMoney={hideMoney}
                         />
                       ))}
                     </div>
@@ -680,7 +685,7 @@ export function PurchaseUrgentReportsPanel({
                 </div>
                 <div className="flex flex-col gap-1 mt-1.5">
                   {r.resolutions.map((res) => (
-                    <div key={res.id} className={res.status === "CANCELLED" ? "text-red line-through" : "text-steel"}>{resolutionLabel(res)} — {res.quantity} un. · {money(res.amount)}{res.status === "CANCELLED" ? " (anulado)" : ""}</div>
+                    <div key={res.id} className={res.status === "CANCELLED" ? "text-red line-through" : "text-steel"}>{resolutionLabel(res)} — {res.quantity} un.{hideMoney ? "" : ` · ${money(res.amount)}`}{res.status === "CANCELLED" ? " (anulado)" : ""}</div>
                   ))}
                 </div>
               </div>
@@ -694,9 +699,10 @@ export function PurchaseUrgentReportsPanel({
 
 function ResolutionRow({
   res, isAdmin, canAct, refundUploadingFor, confirmBankId, setConfirmBankId, onFileRefund, onConfirmBank, busy,
-  cancelId, setCancelId, cancelReason, setCancelReason, onCancel, cancelErr,
+  cancelId, setCancelId, cancelReason, setCancelReason, onCancel, cancelErr, hideMoney,
 }: {
   res: Resolution;
+  hideMoney: boolean;
   isAdmin: boolean;
   canAct: boolean;
   refundUploadingFor: string | null;
@@ -717,7 +723,7 @@ function ResolutionRow({
   return (
     <div className="bg-cloud rounded px-3 py-2 text-[11.5px]">
       <div className="flex items-center justify-between gap-2">
-        <span className={`font-semibold ${res.status === "CANCELLED" ? "line-through text-steel" : ""}`}>{resolutionLabel(res)} — {res.quantity} un. · {money(res.amount)}</span>
+        <span className={`font-semibold ${res.status === "CANCELLED" ? "line-through text-steel" : ""}`}>{resolutionLabel(res)} — {res.quantity} un.{hideMoney ? "" : ` · ${money(res.amount)}`}</span>
         <span className={`text-[10px] font-bold uppercase ${statusColor}`}>{statusLabel}</span>
       </div>
       <div className="text-steel-dim text-[10px] mt-0.5">Registrado por {actorName(res.createdBy?.name)} · {formatDateTime(res.createdAt)}</div>

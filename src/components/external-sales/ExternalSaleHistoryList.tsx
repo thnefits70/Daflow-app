@@ -84,7 +84,7 @@ function itemsSummary(s: SaleDTO): string {
   return s.items.length === 1 ? first : `${first} +${s.items.length - 1} más`;
 }
 
-function SaleDetail({ s, canPrintGuide }: { s: SaleDTO; canPrintGuide: boolean }) {
+function SaleDetail({ s, canPrintGuide, hideMoney }: { s: SaleDTO; canPrintGuide: boolean; hideMoney: boolean }) {
   const steps = saleSteps(s);
   return (
     <div className="mt-2.5 border-t border-rule pt-2.5 flex flex-col gap-2">
@@ -99,13 +99,13 @@ function SaleDetail({ s, canPrintGuide }: { s: SaleDTO; canPrintGuide: boolean }
           <Printer size={12} /> Ver / imprimir guía
         </a>
       )}
-      {s.isContraEntrega && s.freightCost != null && (
+      {!hideMoney && s.isContraEntrega && s.freightCost != null && (
         <div className="text-[10.5px] text-steel">Flete: -${s.freightCost.toFixed(2)} · Monto a transferir: ${(s.totalAmount - s.freightCost).toFixed(2)}</div>
       )}
-      {!s.isContraEntrega && s.freightCost != null && (
+      {!hideMoney && !s.isContraEntrega && s.freightCost != null && (
         <div className="text-[10.5px] text-steel">Monto a transferir: ${s.totalAmount.toFixed(2)} (sin recaudo) · flete (${s.freightCost.toFixed(2)}) pagado aparte al motorizado</div>
       )}
-      {s.closeReceivedAmount != null && (
+      {!hideMoney && s.closeReceivedAmount != null && (
         <div className="text-[10.5px] text-gold">
           Llegó ${s.closeReceivedAmount.toFixed(2)} · diferencia ${(s.totalAmount - s.closeReceivedAmount).toFixed(2)} justificada al cerrar:{" "}
           {s.closeDifferenceReason === "FLETE_MOTORIZADO" ? "flete del motorizado" : "otro motivo"}
@@ -120,12 +120,12 @@ function SaleDetail({ s, canPrintGuide }: { s: SaleDTO; canPrintGuide: boolean }
           {(s.client.city || s.client.country) ? ` · ${[s.client.city, s.client.country].filter(Boolean).join(", ")}` : ""}
         </div>
       )}
-      {s.paymentProofUrl && (
+      {!hideMoney && s.paymentProofUrl && (
         <a href={s.paymentProofUrl} target="_blank" rel="noreferrer" className="text-[10.5px] font-semibold text-blue underline">
           Ver comprobante de pago{s.paymentProofName ? ` (${s.paymentProofName})` : ""}
         </a>
       )}
-      {s.invoiceUrl && (
+      {!hideMoney && s.invoiceUrl && (
         <a href={s.invoiceUrl} target="_blank" rel="noreferrer" className="text-[10.5px] font-semibold text-blue underline">
           Ver factura
         </a>
@@ -146,6 +146,7 @@ function SaleCard({
   onConfirmDelete,
   deleting,
   deleteError,
+  hideMoney,
 }: {
   s: SaleDTO;
   isOpen: boolean;
@@ -158,6 +159,7 @@ function SaleCard({
   onConfirmDelete: () => void;
   deleting: boolean;
   deleteError: string;
+  hideMoney: boolean;
 }) {
   return (
     <div className="bg-surface border border-rule rounded-md p-2.5">
@@ -172,7 +174,7 @@ function SaleCard({
         {s.items.length === 1 && s.items[0].catalogItem && <CatalogCode code={s.items[0].catalogItem.justCode} />}
         <span>{itemsSummary(s)}</span>
       </div>
-      <div className="text-[10.5px] text-steel">${s.totalAmount.toFixed(2)} · {formatDateTime(s.createdAt)}</div>
+      <div className="text-[10.5px] text-steel">{hideMoney ? "" : `$${s.totalAmount.toFixed(2)} · `}{formatDateTime(s.createdAt)}</div>
       {s.deletedAt && <div className="text-[10.5px] text-red mt-0.5">Eliminada por admin · {formatDateTime(s.deletedAt)}</div>}
       {s.returnedAt && (
         <div className="text-[10.5px] text-red mt-0.5">
@@ -198,7 +200,7 @@ function SaleCard({
           >
             {isOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {isOpen ? "Ocultar" : "Ver detalle"}
           </button>
-          {isOpen && <SaleDetail s={s} canPrintGuide={canPrintGuide} />}
+          {isOpen && <SaleDetail s={s} canPrintGuide={canPrintGuide} hideMoney={hideMoney} />}
         </>
       )}
 
@@ -224,7 +226,10 @@ function SaleCard({
   );
 }
 
-export function ExternalSaleHistoryList({ canDelete = false, canPrintGuide = false }: { canDelete?: boolean; canPrintGuide?: boolean }) {
+// hideMoney (2026-09-26, pedido del usuario): quien solo prepara, embala o
+// recibe devoluciones (equipo de Inventario/Fulfillment) no ve montos,
+// comprobantes ni facturas.
+export function ExternalSaleHistoryList({ canDelete = false, canPrintGuide = false, hideMoney = false }: { canDelete?: boolean; canPrintGuide?: boolean; hideMoney?: boolean }) {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
@@ -295,6 +300,7 @@ export function ExternalSaleHistoryList({ canDelete = false, canPrintGuide = fal
                     onConfirmDelete={() => confirmDelete(s.id)}
                     deleting={deleting}
                     deleteError={confirmingDeleteId === s.id ? deleteError : ""}
+                    hideMoney={hideMoney}
                   />
                 ))
               )}

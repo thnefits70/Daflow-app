@@ -105,7 +105,7 @@ function Step({ done, title, when, children }: { done: boolean; title: string; w
 const DECISION_LABEL = { SOLVED_ONSITE: "Solucionado ahí mismo", WRITE_OFF: "Dar de baja", ESCALATED_TO_PURCHASES: "Escalado a Compras (Jariel)" } as const;
 const EXCEPTION_LABEL = { DATA_CORRECTED: "corrigió el dato — Jariel vuelve a intentar", AUTHORIZED: "autorizó seguir sin compra registrada", REJECTED: "rechazó el reclamo" } as const;
 
-function Timeline({ i, canAct, onPack, canAdminDelete, onDeleted }: { i: TraceItem; canAct: boolean; onPack: () => void; canAdminDelete: boolean; onDeleted: () => void }) {
+function Timeline({ i, canAct, onPack, canAdminDelete, onDeleted, hideMoney }: { i: TraceItem; canAct: boolean; onPack: () => void; canAdminDelete: boolean; onDeleted: () => void; hideMoney: boolean }) {
   const [packing, setPacking] = useState(false);
   const [packError, setPackError] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -146,7 +146,7 @@ function Timeline({ i, canAct, onPack, canAdminDelete, onDeleted }: { i: TraceIt
   }
 
   const escalated = i.resolution === "ESCALATED_TO_PURCHASES";
-  const creditAmount = i.credit?.amount ?? i.groupedSupplierCredit?.amount ?? null;
+  const creditAmount = hideMoney ? null : i.credit?.amount ?? i.groupedSupplierCredit?.amount ?? null;
   const creditSharedWith = (i.groupedSupplierCredit?._count.groupedOutflowItems ?? 1) - 1;
   return (
     <div className="flex flex-col gap-1.5 mt-2.5 pl-1">
@@ -176,7 +176,7 @@ function Timeline({ i, canAct, onPack, canAdminDelete, onDeleted }: { i: TraceIt
             title={i.purchaseGestionSupplier ? `Jariel confirmó el proveedor: ${i.purchaseGestionSupplier.name}` : "Pendiente: Jariel confirma el proveedor"}
           >
             {i.purchaseGestionSupplier && (i.linkedPurchaseRequestId
-              ? <>Compra encontrada{i.expectedCreditAmount != null && <> · crédito estimado ${i.expectedCreditAmount.toFixed(2)}</>}</>
+              ? <>Compra encontrada{!hideMoney && i.expectedCreditAmount != null && <> · crédito estimado ${i.expectedCreditAmount.toFixed(2)}</>}</>
               : "Sin compra registrada con ese proveedor")}
           </Step>
           {(i.purchaseNoMatchReportedAt || i.purchaseExceptionDecision) && (
@@ -305,7 +305,8 @@ export function DeteriorTraceList({
   defaultFilter = "open",
   refreshKey = 0,
   canAdminDelete = false,
-}: { canAct?: boolean; onGoToExchange?: () => void; defaultFilter?: "open" | "closed" | "all"; refreshKey?: number; canAdminDelete?: boolean } = {}) {
+  hideMoney = false,
+}: { canAct?: boolean; onGoToExchange?: () => void; defaultFilter?: "open" | "closed" | "all"; refreshKey?: number; canAdminDelete?: boolean; hideMoney?: boolean } = {}) {
   const [items, setItems] = useState<TraceItem[] | null>(null);
   const [filter, setFilter] = useState<"open" | "closed" | "all">(defaultFilter);
   const [query, setQuery] = useState("");
@@ -380,6 +381,7 @@ export function DeteriorTraceList({
                 </button>
                 {isOpen && (
                   <Timeline
+                    hideMoney={hideMoney}
                     i={i}
                     canAct={canAct && !!onGoToExchange}
                     onPack={() => onGoToExchange?.()}

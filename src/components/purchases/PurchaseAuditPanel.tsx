@@ -138,7 +138,9 @@ function monthFilterLabel(month: string) {
 // Filtra por fecha de recepción (receipt.confirmedAt), con selector de mes
 // + búsqueda libre por producto/proveedor/código, para encontrar algo
 // puntual rápido.
-export function PurchaseAuditPanel() {
+// hideMoney (2026-09-26): el equipo de Inventario (no Daniel) ve fechas y
+// quién hizo cada paso, pero no montos, comprobantes de pago ni documentos.
+export function PurchaseAuditPanel({ hideMoney = false }: { hideMoney?: boolean }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -304,8 +306,9 @@ export function PurchaseAuditPanel() {
                 </div>
               </div>
               <div className="text-[11.5px] text-steel">
-                {r0.supplier.name} —{" "}
-                {appliedCreditTotal > 0 ? (
+                {r0.supplier.name}
+                {hideMoney ? null : " — "}
+                {hideMoney ? null : appliedCreditTotal > 0 ? (
                   <>
                     <span className="line-through text-steel-dim">{money(total)}</span>{" "}
                     <span className="font-semibold text-teal">{money(Math.max(0, total - appliedCreditTotal))} pagado</span>{" "}
@@ -327,14 +330,14 @@ export function PurchaseAuditPanel() {
                 {" · "}Recibida por {actorName(r0.receipt?.confirmedBy?.name)}
                 {r0.receipt?.confirmedAt ? ` · ${formatDateTime(r0.receipt.confirmedAt)}` : ""}
               </div>
-              {(r0.paymentProofReceiptNumber || r0.shippingPaymentProofReceiptNumber) && (
+              {!hideMoney && (r0.paymentProofReceiptNumber || r0.shippingPaymentProofReceiptNumber) && (
                 <div className="text-[10px] text-steel-dim mb-2.5 font-mono">
                   {r0.paymentProofReceiptNumber && <>N° comprobante mercadería: {r0.paymentProofReceiptNumber}</>}
                   {r0.paymentProofReceiptNumber && r0.shippingPaymentProofReceiptNumber && " · "}
                   {r0.shippingPaymentProofReceiptNumber && <>N° comprobante flete: {r0.shippingPaymentProofReceiptNumber}</>}
                 </div>
               )}
-              {!(r0.paymentProofReceiptNumber || r0.shippingPaymentProofReceiptNumber) && <div className="mb-2.5" />}
+              {(hideMoney || !(r0.paymentProofReceiptNumber || r0.shippingPaymentProofReceiptNumber)) && <div className="mb-2.5" />}
 
               {urgentCount > 0 && (
                 <div className="flex items-center gap-1.5 bg-green/10 border border-green/30 rounded-md px-3 py-2 mb-2.5 text-[11.5px] text-green">
@@ -342,7 +345,7 @@ export function PurchaseAuditPanel() {
                 </div>
               )}
 
-              <PurchaseOperationDocuments rows={g} />
+              {!hideMoney && <PurchaseOperationDocuments rows={g} />}
             </div>
           );
         })}

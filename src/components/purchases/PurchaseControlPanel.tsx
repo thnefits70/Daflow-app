@@ -129,6 +129,9 @@ export function PurchaseControlPanel({
     // eso lo gatea canReview aparte, más abajo.
     ...(isAdmin || canSubmit || canReceive || canInvoice ? [{ key: "auditoria" as Tab, label: "Auditoría" }] : []),
   ];
+  // Corregido 2026-09-26, pedido del usuario: el equipo de Inventario (no
+  // Daniel) nunca ve montos — mismo criterio que PurchaseReceivingPanel.
+  const hideMoney = canReceiveTeam && !isAdmin && !canSubmit && !canReview && !canInvoice && !canApproveReceiving && !canManageGestion;
   const preferredDefault: Tab[] = ["solicitar", "aprobacion", "inventario", "finanzas", "mias", "comparar", "urgentes", "auditoria"];
   const [tab, setTab] = useState<Tab>(preferredDefault.find((k) => tabs.some((t) => t.key === k)) ?? tabs[0]?.key ?? "solicitar");
 
@@ -262,7 +265,7 @@ export function PurchaseControlPanel({
               <DeteriorTraceList defaultFilter="all" refreshKey={deteriorRefreshKey} canAdminDelete={isAdmin} />
             </details>
           )}
-          <PurchaseUrgentReportsPanel isAdmin={isAdmin} canAct={canSubmit} canManageGestion={canManageGestion} canConfirmExcess={canActOnApproval} />
+          <PurchaseUrgentReportsPanel isAdmin={isAdmin} canAct={canSubmit} canManageGestion={canManageGestion} canConfirmExcess={canActOnApproval} hideMoney={hideMoney} />
         </>
       )}
       {tab === "creditos" && (
@@ -332,7 +335,7 @@ export function PurchaseControlPanel({
           <TabGuide storageKey="compras-auditoria">
             Historial de solo lectura de todo lo recibido y facturado, para buscar o auditar algo pasado sin poder editarlo.
           </TabGuide>
-          <PurchaseAuditPanel />
+          <PurchaseAuditPanel hideMoney={hideMoney} />
         </>
       )}
     </div>
