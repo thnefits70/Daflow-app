@@ -212,7 +212,7 @@ export function MiniSparkline({
             <feGaussianBlur stdDeviation="2.2" />
           </filter>
         </defs>
-        <line x1="0" x2={w} y1={h / 2} y2={h / 2} stroke="#24365a" strokeWidth="1" strokeDasharray="2 3" />
+        <line x1="0" x2={w} y1={h / 2} y2={h / 2} stroke="var(--color-rule)" strokeWidth="1" strokeDasharray="2 3" />
         <path d={area} fill={`url(#kpitile-grad-${uid})`} />
         {dangerRuns ? (
           dangerRuns.map((run, i) => (

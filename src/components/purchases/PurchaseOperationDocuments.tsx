@@ -45,10 +45,10 @@ function DocRow({ icon, label, url, meta, missingNote }: { icon: React.ReactNode
     if (!missingNote) return null;
     return (
       <div className="flex items-center gap-3 py-2">
-        <div className="w-11 h-11 rounded border border-dashed border-gold/40 flex items-center justify-center shrink-0" style={{ color: "#D9A441" }}>
+        <div className="w-11 h-11 rounded border border-dashed border-gold/40 flex items-center justify-center shrink-0" style={{ color: "var(--color-gold)" }}>
           {icon}
         </div>
-        <div className="flex-1 text-[12px]" style={{ color: "#D9A441" }}>
+        <div className="flex-1 text-[12px]" style={{ color: "var(--color-gold)" }}>
           <div className="font-semibold">{label}</div>
           <div className="flex items-center gap-1"><AlertTriangle size={11} /> {missingNote}</div>
         </div>

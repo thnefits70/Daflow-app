@@ -64,7 +64,7 @@ export function PersonalPurchasesPaymentLedgerPanel() {
         </div>
         <div className="bg-surface border border-rule rounded-md px-3.5 py-2.5">
           <div className="text-[10.5px] text-steel-dim uppercase tracking-wide">Falta por cobrar</div>
-          <div className="text-[16px] font-bold" style={{ color: "#D9A441" }}>{money(totals.pendiente)}</div>
+          <div className="text-[16px] font-bold" style={{ color: "var(--color-gold)" }}>{money(totals.pendiente)}</div>
         </div>
       </div>
 

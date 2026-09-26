@@ -183,7 +183,7 @@ export function OvertimeEntryPanel() {
                     <XCircle size={10} /> Rechazado
                   </span>
                 ) : e.editable ? (
-                  <span className="flex items-center gap-1 text-[10.5px] font-semibold bg-gold/10 border border-gold/35 rounded-full px-2 py-0.5" style={{ color: "#D9A441" }}>
+                  <span className="flex items-center gap-1 text-[10.5px] font-semibold bg-gold/10 border border-gold/35 rounded-full px-2 py-0.5" style={{ color: "var(--color-gold)" }}>
                     <Clock size={10} /> Esperando aprobación
                   </span>
                 ) : (

@@ -229,7 +229,7 @@ export function SupplierCreditProofDialog({
                 <div className="flex items-center gap-1.5 text-[12px] text-green font-semibold mb-2"><CheckCircle2 size={13} /> Todo cuadra.</div>
               ) : (
                 <div className="bg-gold/10 border border-gold/40 rounded-md p-2.5 mb-2 text-[11.5px]">
-                  <div className="flex items-center gap-1.5 font-semibold mb-1" style={{ color: "#D9A441" }}><AlertTriangle size={12} /> Algo no cuadra</div>
+                  <div className="flex items-center gap-1.5 font-semibold mb-1" style={{ color: "var(--color-gold)" }}><AlertTriangle size={12} /> Algo no cuadra</div>
                   <ul className="list-disc pl-4 flex flex-col gap-0.5">
                     {warnings.map((w, i) => <li key={i}>{w}</li>)}
                   </ul>

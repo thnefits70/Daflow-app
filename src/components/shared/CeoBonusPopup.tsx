@@ -98,9 +98,9 @@ export function CeoBonusPopup() {
           <X size={18} />
         </button>
         <div className="w-20 h-20 rounded-full bg-gold/15 flex items-center justify-center mx-auto mb-4" style={{ backgroundColor: "#D9A44126" }}>
-          <Sparkles size={34} style={{ color: "#D9A441" }} />
+          <Sparkles size={34} style={{ color: "var(--color-gold)" }} />
         </div>
-        <div className="text-[13px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "#D9A441" }}>
+        <div className="text-[13px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: "var(--color-gold)" }}>
           🎉 ¡Felicitaciones! 🎉
         </div>
         <div className="font-display text-[22px] font-bold mb-1.5">

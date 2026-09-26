@@ -81,16 +81,16 @@ export function RoiGauge({
     <div className="max-w-[360px] mx-auto">
       <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} style={{ overflow: "visible" }}>
         {arcs}
-        <line x1={tInner.x} y1={tInner.y} x2={tOuter.x} y2={tOuter.y} stroke="#f1f5fb" strokeWidth={2} />
-        <text x={tOuter.x} y={tOuter.y - 4} textAnchor="middle" fontSize="9.5" fill="#f1f5fb">Objetivo {bands.target}%</text>
+        <line x1={tInner.x} y1={tInner.y} x2={tOuter.x} y2={tOuter.y} stroke="var(--color-ink)" strokeWidth={2} />
+        <text x={tOuter.x} y={tOuter.y - 4} textAnchor="middle" fontSize="9.5" fill="var(--color-ink)">Objetivo {bands.target}%</text>
         {compareTick}
         <polygon
           points={`${needleTip.x.toFixed(1)},${needleTip.y.toFixed(1)} ${needleBaseL.x.toFixed(1)},${needleBaseL.y.toFixed(1)} ${needleBaseR.x.toFixed(1)},${needleBaseR.y.toFixed(1)}`}
-          fill="#92a3c0"
+          fill="var(--color-steel)"
         />
-        <circle cx={cx} cy={cy} r={10} fill="#101f3b" stroke="#92a3c0" strokeWidth={2} />
-        <text x={minPt.x} y={minPt.y} textAnchor="middle" fontSize="10.5" fill="#92a3c0">0%</text>
-        <text x={maxPt.x} y={maxPt.y} textAnchor="middle" fontSize="10.5" fill="#92a3c0">{max}%</text>
+        <circle cx={cx} cy={cy} r={10} fill="var(--color-surface)" stroke="var(--color-steel)" strokeWidth={2} />
+        <text x={minPt.x} y={minPt.y} textAnchor="middle" fontSize="10.5" fill="var(--color-steel)">0%</text>
+        <text x={maxPt.x} y={maxPt.y} textAnchor="middle" fontSize="10.5" fill="var(--color-steel)">{max}%</text>
       </svg>
       <div className="text-center -mt-3.5">
         <div className="font-display text-[32px] font-bold" style={{ color: statusColor }}>{value.toFixed(1)}%</div>

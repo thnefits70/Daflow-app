@@ -187,7 +187,7 @@ export function RecognitionPanel({
         {loading && <div className="text-[13px] text-steel">Cargando preguntas…</div>}
 
         {blocked && !loading && (
-          <div className="bg-gold/10 border border-gold/35 rounded-md p-4.5 text-[12.5px]" style={{ color: "#D9A441" }}>
+          <div className="bg-gold/10 border border-gold/35 rounded-md p-4.5 text-[12.5px]" style={{ color: "var(--color-gold)" }}>
             <div className="mb-2.5">{blocked.message}</div>
             {blocked.blockedMonth && (
               <button
@@ -316,7 +316,7 @@ export function RecognitionPanel({
             onChange={(e) => setSelectedMonth(e.target.value)}
           />
           {!isCurrentMonth && pendingCount > 0 && (
-            <span className="text-[11px] font-semibold" style={{ color: "#D9A441" }}>
+            <span className="text-[11px] font-semibold" style={{ color: "var(--color-gold)" }}>
               Cargando para un mes distinto al actual — úsalo solo para ponerte al día.
             </span>
           )}

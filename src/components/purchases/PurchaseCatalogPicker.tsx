@@ -463,7 +463,7 @@ export function PurchaseCatalogPicker({
         ) : (
           <>
             {similarity?.suspected && (
-              <div className="flex items-start gap-2 bg-gold/10 border border-gold/30 rounded-md p-3 mb-3 text-[12.5px]" style={{ color: "#D9A441" }}>
+              <div className="flex items-start gap-2 bg-gold/10 border border-gold/30 rounded-md p-3 mb-3 text-[12.5px]" style={{ color: "var(--color-gold)" }}>
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
                 <span className="text-ink">{similarity.message}</span>
               </div>
@@ -548,14 +548,14 @@ export function PurchaseCatalogPicker({
                     }}
                   >
                     {item.pendingRegistration ? (
-                      <Clock size={13} className="text-gold shrink-0" style={{ color: "#D9A441" }} />
+                      <Clock size={13} className="text-gold shrink-0" style={{ color: "var(--color-gold)" }} />
                     ) : (
                       <CheckCircle2 size={13} className="text-teal shrink-0" />
                     )}
                     <CatalogCode code={item.justCode} />
                     <span className="truncate" title={item.name}>{item.name}</span>
                     {item.pendingRegistration && (
-                      <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>
+                      <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "var(--color-gold)" }}>
                         Sin fotos — matricular
                       </span>
                     )}
@@ -633,7 +633,7 @@ export function PurchaseCatalogPicker({
                         type="button"
                         disabled={requestDeleteBusy}
                         className="rounded border border-gold/50 px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60"
-                        style={{ color: "#D9A441" }}
+                        style={{ color: "var(--color-gold)" }}
                         onClick={(e) => requestDelete(item, e)}
                       >
                         Pedirle al admin que lo borre
@@ -647,7 +647,7 @@ export function PurchaseCatalogPicker({
 
                 {isAdmin && item.pendingDeleteRequest && (
                   <div className="px-3 pb-2.5">
-                    <div className="flex items-start justify-between gap-2 bg-gold/10 border border-gold/35 rounded-md px-2.5 py-2 text-[11px]" style={{ color: "#D9A441" }}>
+                    <div className="flex items-start justify-between gap-2 bg-gold/10 border border-gold/35 rounded-md px-2.5 py-2 text-[11px]" style={{ color: "var(--color-gold)" }}>
                       <div>
                         <div className="font-semibold">Solicitud de borrado — {item.pendingDeleteRequest.requestedByName}</div>
                         {item.pendingDeleteRequest.reason && <div className="text-steel mt-0.5">&quot;{item.pendingDeleteRequest.reason}&quot;</div>}

@@ -1020,7 +1020,7 @@ export function PurchaseInvoicingPanel({
                         </div>
                       )}
                       {availableCredits.length > 0 && (
-                        <div className="bg-gold/10 border border-gold/35 rounded-md p-3 mb-2.5" style={{ color: "#D9A441" }}>
+                        <div className="bg-gold/10 border border-gold/35 rounded-md p-3 mb-2.5" style={{ color: "var(--color-gold)" }}>
                           <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-1.5"><Wallet size={13} /> Crédito adicional disponible con {g[0].supplier.name}</div>
                           <div className="flex flex-col gap-1 mb-1.5">
                             {availableCredits.map((c) => (
@@ -1421,7 +1421,7 @@ export function PurchaseInvoicingPanel({
               })()}
 
               {r0.financeFlagNote ? (
-                <div className="flex items-start justify-between gap-2 bg-gold/10 border border-gold/35 rounded-md px-3 py-2 mb-2.5 text-[12px]" style={{ color: "#D9A441" }}>
+                <div className="flex items-start justify-between gap-2 bg-gold/10 border border-gold/35 rounded-md px-3 py-2 mb-2.5 text-[12px]" style={{ color: "var(--color-gold)" }}>
                   <div>
                     <div className="font-semibold">⚠️ Revisar: {r0.financeFlagNote}</div>
                     <div className="text-steel mt-0.5">Marcado por {actorName(r0.financeFlaggedBy?.name)}{r0.financeFlaggedAt ? ` · ${formatDateTime(r0.financeFlaggedAt)}` : ""}</div>
@@ -1432,7 +1432,7 @@ export function PurchaseInvoicingPanel({
                 <div className="bg-cloud rounded-md p-2.5 mb-2.5">
                   <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12px] mb-2" rows={2} placeholder="¿Qué hay que revisar en esta operación?" value={flagNote} onChange={(e) => setFlagNote(e.target.value)} />
                   <div className="flex items-center gap-2">
-                    <button type="button" disabled={isAdmin || busyGroup === groupId || !flagNote.trim()} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-gold/50 px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-60" style={{ color: "#D9A441" }} onClick={() => saveFinanceFlag(groupId, flagNote.trim())}>
+                    <button type="button" disabled={isAdmin || busyGroup === groupId || !flagNote.trim()} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-gold/50 px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-60" style={{ color: "var(--color-gold)" }} onClick={() => saveFinanceFlag(groupId, flagNote.trim())}>
                       Marcar para revisar
                     </button>
                     <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setFlagOpenGroupId(null)}>Cancelar</button>
@@ -1608,7 +1608,7 @@ export function PurchaseInvoicingPanel({
                     </div>
                   ) : null}
                   {!g.every((r) => r.status === "RECEIVED") && (
-                    <div className="flex items-center gap-1.5 text-[11px] mt-1.5 pt-1.5 border-t border-rule" style={{ color: "#D9A441" }}>
+                    <div className="flex items-center gap-1.5 text-[11px] mt-1.5 pt-1.5 border-t border-rule" style={{ color: "var(--color-gold)" }}>
                       <AlertTriangle size={12} className="shrink-0" /> Sigue aquí hasta que Inventario confirme que llegó todo — recién ahí pasa a Auditoría.
                     </div>
                   )}

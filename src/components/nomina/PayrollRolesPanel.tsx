@@ -96,7 +96,7 @@ function MonthlyRolePreview({ roleId }: { roleId: string }) {
 
   return (
     <div className="mb-2.5 -mt-1.5 rounded border border-rule overflow-hidden">
-      <div className="px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-wide bg-gold/15 border-b border-gold/40" style={{ color: "#D9A441" }}>
+      <div className="px-3 py-1.5 text-[10.5px] font-bold uppercase tracking-wide bg-gold/15 border-b border-gold/40" style={{ color: "var(--color-gold)" }}>
         Vista previa — así lo va a ver el colaborador (todavía no se publicó)
       </div>
       {loading && <div className="bg-white text-black p-6 text-[12px] text-center">Cargando…</div>}
@@ -434,7 +434,7 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, isEndOfMonth
       <button
         type="button"
         className={`flex items-center gap-1.5 text-[11px] font-semibold rounded px-2 py-1 mb-2.5 cursor-pointer border ${bankAccount ? "text-steel border-rule" : "text-gold border-gold/40"}`}
-        style={bankAccount ? undefined : { color: "#D9A441" }}
+        style={bankAccount ? undefined : { color: "var(--color-gold)" }}
         onClick={() => setShowBank((s) => !s)}
       >
         <Landmark size={12} />
@@ -561,7 +561,7 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, isEndOfMonth
           ) : canEdit ? (
             <PayoutUploader roleId={role.id} expectedAmount={total} onSent={onChanged} />
           ) : (
-            <div className="text-[11px]" style={{ color: "#D9A441" }}>Pendiente de pago</div>
+            <div className="text-[11px]" style={{ color: "var(--color-gold)" }}>Pendiente de pago</div>
           )}
         </div>
       )}
@@ -990,7 +990,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                 <div className="flex flex-col gap-1">
                   {sortedRoles.map((r) => (
                     <div key={r.id} className="flex justify-between text-[12.5px]">
-                      <span className={r.paidAt ? "text-ink" : "text-gold font-semibold"} style={r.paidAt ? undefined : { color: "#D9A441" }}>{r.employee.name}</span>
+                      <span className={r.paidAt ? "text-ink" : "text-gold font-semibold"} style={r.paidAt ? undefined : { color: "var(--color-gold)" }}>{r.employee.name}</span>
                       <span className="font-semibold tabular-nums">{money(r.netTotal)}</span>
                     </div>
                   ))}

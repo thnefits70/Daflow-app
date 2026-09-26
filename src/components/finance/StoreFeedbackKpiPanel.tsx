@@ -69,7 +69,7 @@ export function StoreFeedbackKpiPanel({ aggregates }: { aggregates: StoreFeedbac
                 {driverValues.map((d) => (
                   <div key={d.key} className={`rounded p-2 text-center border ${d.value === lowest ? "border-gold/45 bg-gold/10" : "border-rule bg-cloud"}`}>
                     <div className="text-[9px] uppercase tracking-wide text-steel mb-0.5">{d.label}</div>
-                    <div className="text-[14px] font-bold font-mono" style={d.value === lowest ? { color: "#D9A441" } : undefined}>{d.value.toFixed(1)}</div>
+                    <div className="text-[14px] font-bold font-mono" style={d.value === lowest ? { color: "var(--color-gold)" } : undefined}>{d.value.toFixed(1)}</div>
                   </div>
                 ))}
               </div>

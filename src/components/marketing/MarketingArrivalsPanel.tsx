@@ -47,7 +47,7 @@ function ConfirmButton({ label, icon, onConfirm, busy }: { label: string; icon: 
   if (asking) {
     return (
       <div className="flex-1 flex items-center gap-2 bg-gold/10 border border-gold/35 rounded px-2.5 py-2">
-        <span className="flex-1 text-[11.5px]" style={{ color: "#D9A441" }}>¿Seguro que ya hiciste todo?</span>
+        <span className="flex-1 text-[11.5px]" style={{ color: "var(--color-gold)" }}>¿Seguro que ya hiciste todo?</span>
         <button type="button" disabled={busy} className="text-[11.5px] font-bold text-teal cursor-pointer disabled:opacity-60" onClick={onConfirm}>Sí</button>
         <button type="button" className="text-[11.5px] text-steel cursor-pointer" onClick={() => setAsking(false)}>No</button>
       </div>

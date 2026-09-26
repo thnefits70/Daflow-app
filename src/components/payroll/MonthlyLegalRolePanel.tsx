@@ -95,7 +95,7 @@ export function MonthlyLegalRolePanel() {
               </a>
 
               {current.changeNote && (
-                <div className="mt-3 p-2.5 rounded bg-gold/10 border border-gold/30 text-[11.5px]" style={{ color: "#D9A441" }}>
+                <div className="mt-3 p-2.5 rounded bg-gold/10 border border-gold/30 text-[11.5px]" style={{ color: "var(--color-gold)" }}>
                   Este rol se corrigió — {current.changeNote}
                 </div>
               )}

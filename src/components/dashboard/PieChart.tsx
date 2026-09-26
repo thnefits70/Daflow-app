@@ -75,7 +75,7 @@ export function PieChart({
               d={path}
               fill={PALETTE[i % PALETTE.length]}
               opacity={hoverIndex === null || isHover ? 1 : 0.45}
-              stroke="#0a1526"
+              stroke="var(--color-bg)"
               strokeWidth={isHover ? 2 : 1}
               onMouseEnter={() => setHoverIndex(i)}
               onMouseLeave={() => setHoverIndex(null)}

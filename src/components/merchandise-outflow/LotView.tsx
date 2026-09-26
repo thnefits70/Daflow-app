@@ -226,7 +226,7 @@ export function LotView({
                 </span>
               </div>
               {s.pendingReturns.map((p) => (
-                <div key={p.label} className="text-[11px] pl-2" style={{ color: "#D9A441" }}>
+                <div key={p.label} className="text-[11px] pl-2" style={{ color: "var(--color-gold)" }}>
                   ↳ {p.qty} en {p.label} — ingrésalas para que cuenten en el stock
                 </div>
               ))}

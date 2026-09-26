@@ -74,7 +74,7 @@ export function TrendSpark({
   const totalHeight = detailed ? height + padTop + padBottom : height;
 
   const points = buildSparkPoints(values, width, totalHeight, padX, padTop, padBottom);
-  const color = good === false ? "#e0574a" : good === true ? "#22a67e" : "#92a3c0";
+  const color = good === false ? "#e0574a" : good === true ? "#22a67e" : "var(--color-steel)";
 
   if (!points) return <div className="text-[11px] text-steel py-2">Aún no hay suficientes meses para ver tendencia.</div>;
 
@@ -100,8 +100,8 @@ export function TrendSpark({
           const isFirst = idx === 0;
           const isLast = idx === points.length - 1;
           const isActive = idx === activeIdx;
-          const dotColor = isFirst ? "#92a3c0" : color;
-          const textColor = isFirst ? "#92a3c0" : color;
+          const dotColor = isFirst ? "var(--color-steel)" : color;
+          const textColor = isFirst ? "var(--color-steel)" : color;
           return (
             <g
               key={p.i}

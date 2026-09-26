@@ -93,7 +93,7 @@ export function CeoBonusesForNairobyPanel() {
               </span>
             )}
             {g.status === "PENDING" && (
-              <span className="text-[10.5px] font-semibold bg-gold/10 border border-gold/35 rounded-full px-2 py-0.5 shrink-0" style={{ color: "#D9A441" }}>
+              <span className="text-[10.5px] font-semibold bg-gold/10 border border-gold/35 rounded-full px-2 py-0.5 shrink-0" style={{ color: "var(--color-gold)" }}>
                 Pendiente
               </span>
             )}

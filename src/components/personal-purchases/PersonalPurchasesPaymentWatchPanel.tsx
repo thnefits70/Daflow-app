@@ -129,7 +129,7 @@ export function PersonalPurchasesPaymentWatchPanel({ canReopenPrice = false }: {
                       type="button"
                       disabled={reopening === o.id}
                       className="text-[11.5px] font-semibold cursor-pointer disabled:opacity-50"
-                      style={{ color: "#D9A441" }}
+                      style={{ color: "var(--color-gold)" }}
                       onClick={() => reopenPrice(o.id)}
                     >
                       {reopening === o.id ? "Reabriendo…" : "Corregir precio"}

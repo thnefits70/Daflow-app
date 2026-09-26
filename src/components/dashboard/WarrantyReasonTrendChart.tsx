@@ -49,8 +49,8 @@ export function WarrantyReasonTrendChart({ series }: { series: WarrantyReasonTre
           const y = yFor(v);
           return (
             <g key={v}>
-              <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="#24365a" strokeWidth="1" />
-              <text x={padL - 8} y={y + 3} textAnchor="end" fontSize="10.5" fill="#92a3c0">
+              <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="var(--color-rule)" strokeWidth="1" />
+              <text x={padL - 8} y={y + 3} textAnchor="end" fontSize="10.5" fill="var(--color-steel)">
                 {v}%
               </text>
             </g>
@@ -59,7 +59,7 @@ export function WarrantyReasonTrendChart({ series }: { series: WarrantyReasonTre
 
         {months.map((m, i) =>
           i % tickEvery === 0 || i === months.length - 1 ? (
-            <text key={m} x={xFor(i)} y={height - 10} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
+            <text key={m} x={xFor(i)} y={height - 10} textAnchor="middle" fontSize="10.5" fill="var(--color-steel)">
               {formatMonthShort(m)}
             </text>
           ) : null
@@ -93,7 +93,7 @@ export function WarrantyReasonTrendChart({ series }: { series: WarrantyReasonTre
             const isHover = hover?.seriesIndex === si && hover.pointIndex === i;
             return (
               <g key={`${s.label}-${p.month}`} opacity={isDimmed ? 0.15 : 1}>
-                <circle cx={cx} cy={cy} r={isHover ? 5 : 2.75} fill={color} stroke="#0a1526" strokeWidth={isHover ? 2 : 1} />
+                <circle cx={cx} cy={cy} r={isHover ? 5 : 2.75} fill={color} stroke="var(--color-bg)" strokeWidth={isHover ? 2 : 1} />
                 <circle
                   cx={cx}
                   cy={cy}
@@ -121,14 +121,14 @@ export function WarrantyReasonTrendChart({ series }: { series: WarrantyReasonTre
             const boxY = Math.max(4, cy - 64);
             return (
               <g pointerEvents="none">
-                <rect x={boxX} y={boxY} width={boxW} height={52} rx="5" fill="#101f3b" stroke="#24365a" strokeWidth="1" />
-                <text x={boxX + boxW / 2} y={boxY + 15} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
+                <rect x={boxX} y={boxY} width={boxW} height={52} rx="5" fill="var(--color-surface)" stroke="var(--color-rule)" strokeWidth="1" />
+                <text x={boxX + boxW / 2} y={boxY + 15} textAnchor="middle" fontSize="10.5" fill="var(--color-steel)">
                   {formatMonthShort(p.month)}
                 </text>
                 <text x={boxX + boxW / 2} y={boxY + 30} textAnchor="middle" fontSize="12" fontWeight="700" fill={color}>
                   {line2}
                 </text>
-                <text x={boxX + boxW / 2} y={boxY + 44} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
+                <text x={boxX + boxW / 2} y={boxY + 44} textAnchor="middle" fontSize="10.5" fill="var(--color-steel)">
                   {line3}
                 </text>
               </g>

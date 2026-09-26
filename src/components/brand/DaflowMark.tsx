@@ -14,12 +14,12 @@ export function DaflowWordmark({ light = true, showTag = true }: { light?: boole
     <div>
       <div
         className="font-display font-bold leading-none"
-        style={{ fontSize: 19, letterSpacing: ".01em", color: light ? "#fff" : "#0B1F3A" }}
+        style={{ fontSize: 19, letterSpacing: ".01em", color: light ? "var(--color-ink)" : "#0B1F3A" }}
       >
         DAFLOW
       </div>
       {showTag && (
-        <div className="font-mono" style={{ fontSize: 8.5, letterSpacing: ".12em", color: "#14C7C7", marginTop: 3 }}>
+        <div className="font-mono" style={{ fontSize: 8.5, letterSpacing: ".12em", color: "var(--color-teal)", marginTop: 3 }}>
           PROCESS STANDARDIZATION
         </div>
       )}

@@ -474,7 +474,7 @@ export function PurchaseUrgentReportsPanel({
 
       {pendingCredits.length > 0 && (
         <div className="bg-surface border border-gold/40 rounded-md p-4">
-          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2" style={{ color: "#D9A441" }}>
+          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2" style={{ color: "var(--color-gold)" }}>
             <Wallet size={14} /> Créditos pendientes de recuperar ({pendingCredits.length})
           </div>
           <div className="flex flex-col gap-1.5">
@@ -525,7 +525,7 @@ export function PurchaseUrgentReportsPanel({
                     {r.request.supplier.name} — pagado {money(r.request.totalCost)} · {r.request.quantity} un. pedidas
                   </div>
                   {r.isLateClaim && r.originUncertain && (
-                    <div className="flex items-center gap-1.5 text-[11px] mb-1" style={{ color: "#D9A441" }}>
+                    <div className="flex items-center gap-1.5 text-[11px] mb-1" style={{ color: "var(--color-gold)" }}>
                       <AlertTriangle size={11} /> Origen incierto — usando costo promedio ${r.estimatedUnitCost?.toFixed(2)}/un.
                     </div>
                   )}
@@ -773,7 +773,7 @@ function ResolutionRow({
           )}
           {res.refundAiMatch && res.status === "PENDING" && isAdmin && (
             confirmBankId === res.id ? (
-              <div className="bg-surface border border-gold/40 rounded-md p-2.5 mt-2" style={{ color: "#D9A441" }}>
+              <div className="bg-surface border border-gold/40 rounded-md p-2.5 mt-2" style={{ color: "var(--color-gold)" }}>
                 <div className="text-[11.5px] font-semibold mb-1.5">¿Confirmas que revisaste tu cuenta bancaria y sí llegó {money(res.amount)}?</div>
                 <div className="text-[11px] text-steel mb-2">Desde que confirmes, este reembolso queda bajo tu responsabilidad.</div>
                 <div className="flex items-center gap-2">
@@ -782,7 +782,7 @@ function ResolutionRow({
                 </div>
               </div>
             ) : (
-              <button type="button" className="rounded border border-gold/50 px-2.5 py-1.5 text-[11px] font-semibold mt-1.5 cursor-pointer" style={{ color: "#D9A441" }} onClick={() => setConfirmBankId(res.id)}>
+              <button type="button" className="rounded border border-gold/50 px-2.5 py-1.5 text-[11px] font-semibold mt-1.5 cursor-pointer" style={{ color: "var(--color-gold)" }} onClick={() => setConfirmBankId(res.id)}>
                 Confirmar que llegó el dinero
               </button>
             )

@@ -279,7 +279,7 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
               <div key={p.productCode} className="flex items-center gap-2 border-t border-rule/50 pt-1.5 text-[11.5px]">
                 <span
                   className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-navy shrink-0"
-                  style={{ background: i < 3 ? RANK_COLORS[i] : "#24365a", color: i < 3 ? "#0b1f3a" : "#92a3c0" }}
+                  style={{ background: i < 3 ? RANK_COLORS[i] : "var(--color-rule)", color: i < 3 ? "#0b1f3a" : "var(--color-steel)" }}
                   title="Puesto en el ranking de más urgente"
                 >
                   {i + 1}

@@ -21,7 +21,7 @@ const MARKDOWN_COMPONENTS = {
     </div>
   ),
   th: (props: React.ComponentPropsWithoutRef<"th">) => (
-    <th className="border border-rule px-2 py-1 text-left font-bold bg-navy/40" {...props} />
+    <th className="border border-rule px-2 py-1 text-left font-bold bg-cloud" {...props} />
   ),
   td: (props: React.ComponentPropsWithoutRef<"td">) => <td className="border border-rule px-2 py-1" {...props} />,
 };

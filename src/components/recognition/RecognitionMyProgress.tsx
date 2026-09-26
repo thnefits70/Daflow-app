@@ -137,7 +137,7 @@ export function RecognitionMyProgress() {
                 </div>
               ))}
               {h.teamFeedback.improvementComments.map((c, i) => (
-                <div key={`ti-${i}`} className="text-[12px] italic mb-1" style={{ color: "#D9A441" }}>
+                <div key={`ti-${i}`} className="text-[12px] italic mb-1" style={{ color: "var(--color-gold)" }}>
                   &ldquo;{c}&rdquo;
                 </div>
               ))}
@@ -158,7 +158,7 @@ export function RecognitionMyProgress() {
                 </div>
               ))}
               {h.externalObservations.improvementComments.map((c, i) => (
-                <div key={`oi-${i}`} className="text-[12px] italic mb-1" style={{ color: "#D9A441" }}>
+                <div key={`oi-${i}`} className="text-[12px] italic mb-1" style={{ color: "var(--color-gold)" }}>
                   &ldquo;{c}&rdquo;
                 </div>
               ))}

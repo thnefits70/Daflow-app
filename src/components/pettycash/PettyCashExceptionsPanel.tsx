@@ -28,7 +28,7 @@ export function PettyCashExceptionsPanel({ exceptions }: { exceptions: PendingEx
     <div className="flex flex-col gap-2.5 mb-4">
       {exceptions.map((e) => (
         <div key={e.id} className="bg-surface border border-gold/40 rounded-md p-4">
-          <div className="text-[12.5px] font-semibold mb-1" style={{ color: "#D9A441" }}>
+          <div className="text-[12.5px] font-semibold mb-1" style={{ color: "var(--color-gold)" }}>
             ⏳ Excepción pendiente — {e.requestedByName}, {e.label}
           </div>
           <div className="text-[12px] text-steel bg-cloud rounded p-2.5 mb-2.5">&quot;{e.reason}&quot;</div>

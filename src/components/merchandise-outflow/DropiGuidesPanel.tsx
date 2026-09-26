@@ -354,7 +354,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
           </span>
         </div>
         {data?.uncertainWarrantyGuides.includes(w.guide) && (
-          <div className="mt-1 text-[11px] flex items-center gap-2 flex-wrap" style={{ color: "#D9A441" }}>
+          <div className="mt-1 text-[11px] flex items-center gap-2 flex-wrap" style={{ color: "var(--color-gold)" }}>
             <span>
               No se cobra al entregar (&quot;SIN RECAUDO&quot;) — puede ser garantía o un pedido ya pagado por adelantado. Revísala: si no es garantía, márcala.
             </span>
@@ -366,7 +366,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
         {decisions[w.code]?.kind === "ignore" ? (
           <div className="text-[11px] text-steel mt-1">Marcado como &quot;no es un producto&quot; — no se incluye.</div>
         ) : parts.length === 0 ? (
-          <div className="text-[11px] mt-1" style={{ color: "#D9A441" }}>
+          <div className="text-[11px] mt-1" style={{ color: "var(--color-gold)" }}>
             Primero indica arriba qué producto es el código {w.code}.
           </div>
         ) : (
@@ -487,12 +487,12 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
               {d.item.justCode ? <CatalogCode code={d.item.justCode} /> : <span className="font-mono text-[10.5px] text-steel">sin ID en INVESTOCK</span>}
               {isRocket(r.code)
                 ? res.kind !== "product" && (
-                    <span className="text-[10.5px]" style={{ color: "#D9A441" }}>
+                    <span className="text-[10.5px]" style={{ color: "var(--color-gold)" }}>
                       ({rocketLabel(r.code)} quedará vinculado a este producto)
                     </span>
                   )
                 : d.item.justCode !== r.code && (
-                    <span className="text-[10.5px]" style={{ color: "#D9A441" }}>
+                    <span className="text-[10.5px]" style={{ color: "var(--color-gold)" }}>
                       {d.item.justCode ? `(${r.code} quedará como ID alterno de ${d.item.justCode}, el principal en INVESTOCK)` : `(se le pondrá el ID ${r.code})`}
                     </span>
                   )}
@@ -518,7 +518,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
 
           {res.kind === "combo" && !(res.components.length === 1 && res.components[0].quantity === 1 && res.missingIds.length === 0) && (
             <div className="flex flex-col gap-0.5">
-              <span className="font-mono text-[9.5px] font-bold uppercase" style={{ color: "#D9A441" }}>
+              <span className="font-mono text-[9.5px] font-bold uppercase" style={{ color: "var(--color-gold)" }}>
                 Combo — se abre en:
               </span>
               {res.components.map((c) => (
@@ -544,7 +544,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
           {d?.kind === "combo" && res.kind !== "combo" && (
             // Código de Rocket recién vinculado a un combo de Dropi.
             <div className="flex flex-col gap-0.5">
-              <span className="font-mono text-[9.5px] font-bold uppercase" style={{ color: "#D9A441" }}>
+              <span className="font-mono text-[9.5px] font-bold uppercase" style={{ color: "var(--color-gold)" }}>
                 Combo {d.comboCode} — se abre en:
               </span>
               {d.components.map((c) => (
@@ -572,7 +572,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
 
           {!d && (res.kind === "unknown" || res.kind === "comboNoRecipe") && (
             <>
-              <div className="text-[11px] mb-1.5" style={{ color: "#D9A441" }}>
+              <div className="text-[11px] mb-1.5" style={{ color: "var(--color-gold)" }}>
                 {res.kind === "comboNoRecipe" ? "Combo sin receta todavía — dile a la app qué productos trae (una sola vez)." : "Código nuevo — dile a la app qué es (una sola vez, después lo recuerda)."}
               </div>
               {res.kind === "unknown" && /\s(y|\+)\s|combo|\bkit\b/i.test(r.name) && (
@@ -650,7 +650,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
 
       {files.length > 0 && draftDay !== today && phase !== "applying" && (
         <div className="flex flex-wrap items-center gap-2 text-[12.5px] mb-3 rounded px-2.5 py-2 border" style={{ borderColor: "#D9A44166", background: "#D9A4411A" }}>
-          <AlertTriangle size={14} className="shrink-0" style={{ color: "#D9A441" }} />
+          <AlertTriangle size={14} className="shrink-0" style={{ color: "var(--color-gold)" }} />
           <span className="flex-1 min-w-[200px]">
             Estos PDF se subieron{draftDay ? ` el ${draftDay.split("-").reverse().join("/")}` : " otro día"} y <b>nunca se guardaron</b>. Si hoy vas a subir los nuevos, descártalos primero.
           </span>
@@ -714,7 +714,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             // Pedido del usuario 2026-09-25: explicarle a Yair qué no se pudo
             // leer bien, para ir ajustando la lectura en el camino.
             <div className="text-[11.5px] bg-gold/10 border border-gold/40 rounded-md p-2.5 mb-3">
-              <div className="font-semibold mb-1 flex items-center gap-1.5" style={{ color: "#D9A441" }}>
+              <div className="font-semibold mb-1 flex items-center gap-1.5" style={{ color: "var(--color-gold)" }}>
                 <AlertTriangle size={13} /> Cosas que no pude leer bien
               </div>
               <ul className="list-disc pl-4 flex flex-col gap-0.5">
@@ -728,7 +728,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
 
           {pending.length > 0 ? (
             <>
-              <div className="mb-2 font-mono text-[10.5px] bg-gold/15 border border-gold/40 rounded-full px-2.5 py-1 inline-block" style={{ color: "#D9A441" }}>
+              <div className="mb-2 font-mono text-[10.5px] bg-gold/15 border border-gold/40 rounded-full px-2.5 py-1 inline-block" style={{ color: "var(--color-gold)" }}>
                 {pending.length} {pending.length === 1 ? "código necesita" : "códigos necesitan"} tu ayuda
               </div>
               <div className="flex flex-col gap-2 mb-4">{pending.map(renderRow)}</div>
@@ -805,7 +805,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
               Cancelar
             </button>
             {(pending.length > 0 || pendingWarranty > 0) && (
-              <span className="text-[11.5px]" style={{ color: "#D9A441" }}>
+              <span className="text-[11.5px]" style={{ color: "var(--color-gold)" }}>
                 {pending.length > 0 ? `Resuelve los ${pending.length} código(s) pendientes` : `Marca qué sale en ${pendingWarranty} garantía(s)`} antes de guardar.
               </span>
             )}
@@ -859,7 +859,7 @@ function RocketComboLink({
   if (register) {
     return (
       <div>
-        <div className="text-[11px] mb-1.5" style={{ color: "#D9A441" }}>
+        <div className="text-[11px] mb-1.5" style={{ color: "var(--color-gold)" }}>
           El combo {code} todavía no tiene receta — regístrala una sola vez:
         </div>
         <RegisterComboForm initialCode={code.trim()} initialLabel={label} onRegistered={(c) => lookup(c.code)} onCancel={onCancel} />

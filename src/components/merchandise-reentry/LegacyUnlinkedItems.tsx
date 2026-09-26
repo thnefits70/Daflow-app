@@ -79,7 +79,7 @@ export function LegacyUnlinkedItems() {
 
   return (
     <div className="bg-gold/10 border border-gold/35 rounded-md p-3.5 mb-5">
-      <div className="flex items-center gap-1.5 text-[12px] font-bold mb-1" style={{ color: "#D9A441" }}>
+      <div className="flex items-center gap-1.5 text-[12px] font-bold mb-1" style={{ color: "var(--color-gold)" }}>
         <AlertTriangle size={14} /> {items.length} producto{items.length === 1 ? "" : "s"} de Reingreso sin conectar al catálogo (de antes del 29 ago)
       </div>
       <div className="text-[11px] text-steel mb-2.5">

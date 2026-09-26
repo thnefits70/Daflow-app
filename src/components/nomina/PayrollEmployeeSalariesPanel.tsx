@@ -77,7 +77,7 @@ function FixedBonusCell({ employeeId, bonus, canPropose, canApprove, onSaved }: 
       />
       {hasPending && (
         <div className="mt-1 text-[10px]">
-          <div style={{ color: "#D9A441" }} className="font-semibold">
+          <div style={{ color: "var(--color-gold)" }} className="font-semibold">
             Esperando aprobación (vigente: {money(bonus?.amount ?? 0)})
           </div>
           {canApprove && (

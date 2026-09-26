@@ -905,7 +905,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         </div>
       )}
       {editingGroupId && (
-        <div className="bg-gold/10 border border-gold/35 rounded-md px-3.5 py-2.5 mb-4 text-[12.5px]" style={{ color: "#D9A441" }}>
+        <div className="bg-gold/10 border border-gold/35 rounded-md px-3.5 py-2.5 mb-4 text-[12.5px]" style={{ color: "var(--color-gold)" }}>
           <AlertTriangle size={14} className="inline mr-1.5 -mt-0.5" />
           Estás corrigiendo esta misma solicitud rechazada{resubmitAttemptHint ? ` — este será tu ${resubmitAttemptHint === 2 ? "2do" : resubmitAttemptHint === 3 ? "3er" : `${resubmitAttemptHint}to`} intento` : ""}. No se crea una solicitud nueva, se corrige la misma. Revisa qué faltaba antes de enviar de nuevo.
         </div>
@@ -1074,7 +1074,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
             !manualCreditOpen && <div className="text-[12px] text-steel">Sin créditos disponibles todavía con este proveedor.</div>
           )}
 
-          {creditExceedsMsg && <div className="text-[11.5px] mt-1" style={{ color: "#D9A441" }}>{creditExceedsMsg}</div>}
+          {creditExceedsMsg && <div className="text-[11.5px] mt-1" style={{ color: "var(--color-gold)" }}>{creditExceedsMsg}</div>}
 
           {selectedCreditIds.length > 0 && (
             <div className="text-[12px] mt-2 pt-2 border-t border-rule">
@@ -1200,7 +1200,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
               <>
                 {codeOnlyIdxs.length > 0 ? (
                   <div>
-                    <div className="flex items-center gap-2 text-[12.5px] text-gold mb-2" style={{ color: "#D9A441" }}>
+                    <div className="flex items-center gap-2 text-[12.5px] text-gold mb-2" style={{ color: "var(--color-gold)" }}>
                       🔎 La cotización trae {codeOnlyIdxs.length === 1 ? "un código de proveedor" : `${codeOnlyIdxs.length} códigos de proveedor`} sin nombre de producto — confirma a qué producto corresponde cada uno.
                     </div>
                     {isAdmin && quoteCreditGap !== null && (

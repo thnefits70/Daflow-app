@@ -88,7 +88,7 @@ function ClaimToSupplierButton({ row, onChanged }: { row: BreakdownRow; onChange
 
   if (!open) {
     return (
-      <button type="button" className="self-start inline-flex items-center gap-1.5 rounded border border-gold/60 px-2.5 py-1 text-[11px] font-bold cursor-pointer hover:bg-gold/10" style={{ color: "#D9A441" }} onClick={start}>
+      <button type="button" className="self-start inline-flex items-center gap-1.5 rounded border border-gold/60 px-2.5 py-1 text-[11px] font-bold cursor-pointer hover:bg-gold/10" style={{ color: "var(--color-gold)" }} onClick={start}>
         <Undo2 size={12} /> No es baja: se devolvió al proveedor
       </button>
     );

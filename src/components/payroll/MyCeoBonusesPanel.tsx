@@ -23,7 +23,7 @@ export function MyCeoBonusesPanel() {
   return (
     <div className="bg-surface border border-rule rounded-md p-4 mb-4.5">
       <div className="font-semibold text-[13.5px] mb-2 flex items-center gap-1.5">
-        <Sparkles size={14} className="text-gold" style={{ color: "#D9A441" }} /> Mis bonos
+        <Sparkles size={14} className="text-gold" style={{ color: "var(--color-gold)" }} /> Mis bonos
       </div>
       <div className="flex flex-col gap-2">
         {grants.map((g) => (

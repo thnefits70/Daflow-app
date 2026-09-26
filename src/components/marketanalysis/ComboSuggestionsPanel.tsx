@@ -50,7 +50,7 @@ export function ComboSuggestionsPanel({
   return (
     <div>
       {stale?.dueToday && (
-        <div className="flex items-center gap-2 bg-gold/10 border border-gold/40 rounded-md px-3.5 py-2.5 mb-4 text-[12.5px]" style={{ color: "#D9A441" }}>
+        <div className="flex items-center gap-2 bg-gold/10 border border-gold/40 rounded-md px-3.5 py-2.5 mb-4 text-[12.5px]" style={{ color: "var(--color-gold)" }}>
           <AlertTriangle size={15} className="shrink-0" />
           Hoy toca leer ATOM y todavía no se registró ninguna lectura — entra a ATOM y pega la tabla en "Actualizar ATOM".
         </div>

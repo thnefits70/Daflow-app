@@ -163,7 +163,7 @@ function BankAccountChangeSection({ g, onUpdate }: { g: Row[]; onUpdate: (patch:
 
   return (
     <div className="mt-3 pt-3 border-t border-rule">
-      <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "#D9A441" }}>
+      <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "var(--color-gold)" }}>
         🏦 El admin no pudo pagar con la cuenta actual{r0.bankAccountChangeNote ? ` — "${r0.bankAccountChangeNote}"` : ""}
       </div>
       <div className="text-[11.5px] text-steel mb-2">Elige otra cuenta de {supplier.name} o agrega una nueva.</div>
@@ -323,7 +323,7 @@ function ShippingPaymentSection({ g, onUpdate, isAdmin, canPettyCashSecundaria }
   if (correcting) {
     return (
       <div className="mt-3 pt-3 border-t border-rule">
-        <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "#D9A441" }}>
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "var(--color-gold)" }}>
           <Truck size={13} /> Corrigiendo el flete
         </div>
         <CarrierInfoForm
@@ -345,7 +345,7 @@ function ShippingPaymentSection({ g, onUpdate, isAdmin, canPettyCashSecundaria }
   return (
     <div className="mt-3 pt-3 border-t border-rule">
       <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "#D9A441" }}>
+        <div className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "var(--color-gold)" }}>
           <Truck size={13} /> Flete pendiente — ${(r0.shippingCostTotal ?? 0).toFixed(2)} a {carrier?.name ?? "transportista"}
         </div>
         {/* Confirmado 2026-09-15, pedido explícito del usuario: Jariel puso
@@ -547,7 +547,7 @@ function CarrierInfoForm({
 function ShippingCarrierPendingSection({ g, onUpdate, isAdmin, canPettyCashSecundaria }: { g: Row[]; onUpdate: (patch: Partial<Row>) => void; isAdmin: boolean; canPettyCashSecundaria: boolean }) {
   return (
     <div className="mt-3 pt-3 border-t border-dashed border-gold/40">
-      <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "#D9A441" }}>
+      <div className="flex items-center gap-1.5 text-[12px] font-semibold mb-2" style={{ color: "var(--color-gold)" }}>
         <Truck size={13} /> Falta completar el transportista y el costo del flete
       </div>
       <CarrierInfoForm

@@ -202,7 +202,7 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
                 </div>
                 <div className="flex items-center gap-3 text-[11px] mb-1.5">
                   <span className="text-green font-semibold">Ya cobrado: {money(charged)}</span>
-                  <span className="text-[#D9A441] font-semibold">Falta por cobrar: {money(pending)}</span>
+                  <span className="text-gold font-semibold">Falta por cobrar: {money(pending)}</span>
                 </div>
                 <div className="flex flex-col gap-1 rounded border border-rule bg-cloud px-2.5 py-2">
                   {d.schedule.map((s) => (

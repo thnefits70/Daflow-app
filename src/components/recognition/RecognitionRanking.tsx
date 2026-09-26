@@ -206,7 +206,7 @@ export function RecognitionRanking({
           cuántos faltan en vez de dejar el botón siempre disponible. Solo
           aplica a la vista general del admin, que es donde vive "confirmar". */}
       {!loading && scope === "admin" && !deptId && confirmedPodium.length === 0 && !canConfirm && missingCount > 0 && (
-        <div className="bg-gold/10 border border-gold/35 rounded-md p-4 mb-5 text-[12.5px]" style={{ color: "#D9A441" }}>
+        <div className="bg-gold/10 border border-gold/35 rounded-md p-4 mb-5 text-[12.5px]" style={{ color: "var(--color-gold)" }}>
           Faltan {missingCount} de {totalEligible} colaboradores por calificar este mes — la confirmación se
           habilita automáticamente cuando todos estén evaluados.
         </div>

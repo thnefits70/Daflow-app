@@ -140,7 +140,7 @@ export function MonthlyTopMoversPanel() {
             ))}
           </select>
           {!withinWindow && (
-            <div className="mt-1.5 text-[11px]" style={{ color: "#D9A441" }}>
+            <div className="mt-1.5 text-[11px]" style={{ color: "var(--color-gold)" }}>
               ⚠️ Ya pasaron los primeros 3 días del mes — igual puedes subirlo, pero lo ideal es hacerlo apenas empiece el mes.
             </div>
           )}
@@ -148,7 +148,7 @@ export function MonthlyTopMoversPanel() {
       )}
 
       {phase !== "preview" && alreadyLoaded && (
-        <div className="bg-gold/10 border border-gold/30 rounded-md p-3 mb-3.5 text-[12.5px]" style={{ color: "#D9A441" }}>
+        <div className="bg-gold/10 border border-gold/30 rounded-md p-3 mb-3.5 text-[12.5px]" style={{ color: "var(--color-gold)" }}>
           <div className="flex items-center gap-1.5 font-semibold">
             <AlertTriangle size={14} /> Ya existe un reporte cargado para {monthLabel(month)}.
           </div>
@@ -215,7 +215,7 @@ export function MonthlyTopMoversPanel() {
           {warnings.length > 0 && (
             <div className="flex flex-col gap-1 mb-3">
               {warnings.map((w, i) => (
-                <div key={i} className="text-[11.5px] flex items-start gap-1.5" style={{ color: "#D9A441" }}>
+                <div key={i} className="text-[11.5px] flex items-start gap-1.5" style={{ color: "var(--color-gold)" }}>
                   <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {w}
                 </div>
               ))}

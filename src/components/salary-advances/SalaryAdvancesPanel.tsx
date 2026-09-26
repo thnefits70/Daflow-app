@@ -323,7 +323,7 @@ export function SalaryAdvancesPanel() {
               </div>
             )}
             {needsReason && (
-              <div className="flex items-start gap-2 rounded-md border border-[#D9A441]/50 bg-[#D9A441]/10 px-3 py-2 text-[11.5px] text-[#D9A441] leading-relaxed">
+              <div className="flex items-start gap-2 rounded-md border border-[#D9A441]/50 bg-[#D9A441]/10 px-3 py-2 text-[11.5px] text-gold leading-relaxed">
                 <TriangleAlert size={14} className="shrink-0 mt-0.5" />
                 <span>
                   Montos arriba de {money(NO_REASON_MAX)} se revisan caso por caso y normalmente solo se aprueban por

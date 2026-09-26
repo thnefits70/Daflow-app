@@ -45,7 +45,7 @@ export function RecognitionPodium() {
             <div key={p.userId} className="flex flex-col items-center" style={{ width: 64 }}>
               <div
                 className="rounded-full overflow-hidden bg-cloud border-2 flex items-center justify-center shrink-0"
-                style={{ width: size, height: size, borderColor: isFirst ? "#D9A441" : "#24365a" }}
+                style={{ width: size, height: size, borderColor: isFirst ? "#D9A441" : "var(--color-rule)" }}
               >
                 {p.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element

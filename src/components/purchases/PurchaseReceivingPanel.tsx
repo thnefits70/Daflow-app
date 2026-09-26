@@ -1123,7 +1123,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       faltante se confirma en un segundo paso aparte, para que un clic de
                       más no mande a Compras un número que Daniel no revisó a propósito. */}
                   {confirmingMissingId === pr.id ? (
-                    <div className="bg-navy rounded-md p-3">
+                    <div className="bg-inset rounded-md p-3">
                       <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
                       <div className="text-[12px] text-steel mb-3">
                         {pr.excessQty > 0
@@ -1145,7 +1145,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       </div>
                     </div>
                   ) : confirmingInternalId === pr.id ? (
-                    <div className="bg-navy rounded-md p-3">
+                    <div className="bg-inset rounded-md p-3">
                       <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
                       <div className="text-[12px] text-steel mb-3">
                         {pr.excessQty > 0
@@ -1263,11 +1263,11 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                   {c.stockStatus === "SOLD" && " · ya se vendieron"}
                 </div>
                 {c.originUncertain && (
-                  <div className="flex items-center gap-1.5 text-[11px] text-gold mb-2" style={{ color: "#D9A441" }}>
+                  <div className="flex items-center gap-1.5 text-[11px] text-gold mb-2" style={{ color: "var(--color-gold)" }}>
                     <AlertTriangle size={12} /> Origen incierto — costo promedio ${c.estimatedUnitCost?.toFixed(2)}/un. en vez del de {c.request.requestNumber ? `SC-${String(c.request.requestNumber).padStart(3, "0")}` : "la solicitud"}.
                   </div>
                 )}
-                <div className="bg-navy rounded px-3 py-2 mb-2">
+                <div className="bg-inset rounded px-3 py-2 mb-2">
                   <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1">¿Por qué no se detectó al recibir?</div>
                   <div className="text-[11.5px] text-ink italic">&quot;{c.description}&quot;</div>
                 </div>
@@ -1323,7 +1323,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
 
       {pendingReplacements.length > 0 && (
         <div className="bg-surface border border-gold/40 rounded-md p-4 mb-1">
-          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2" style={{ color: "#D9A441" }}>
+          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2" style={{ color: "var(--color-gold)" }}>
             <Truck size={14} /> Mercadería del proveedor pendiente de verificar
           </div>
           <div className="flex flex-col gap-2.5">
@@ -1503,7 +1503,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         Pendiente de aprobación
                       </span>
                     ) : (
-                      <span className="text-[10px] font-bold uppercase tracking-wide bg-gold/15 border border-gold/40 rounded-full px-2.5 py-1" style={{ color: "#D9A441" }}>
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-gold/15 border border-gold/40 rounded-full px-2.5 py-1" style={{ color: "var(--color-gold)" }}>
                         Pendiente
                       </span>
                     )}
@@ -1690,13 +1690,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               urgente" (que sí manda notificación con la novedad real). */}
                           {aiResult && aiResult.likelyMatch === false && aiResult.minorDifferenceOnly && !minorDifferenceConfirmed && (
                             <div className="bg-gold/10 border border-gold/35 rounded-md px-3 py-2.5 mb-2.5">
-                              <div className="text-[11px] mb-2" style={{ color: "#D9A441" }}>
+                              <div className="text-[11px] mb-2" style={{ color: "var(--color-gold)" }}>
                                 La IA detectó que sigue siendo el mismo producto de la referencia, con una diferencia menor (ej. color, logo, empaque) — si está bien así, confirma con un clic para no quedarse detenido. Si de verdad llegó otro producto que no se puede dejar pasar, usa &quot;🚨 Informar urgente&quot; en vez de esto.
                               </div>
                               <button
                                 type="button"
                                 className="rounded border border-gold/50 px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer"
-                                style={{ color: "#D9A441" }}
+                                style={{ color: "var(--color-gold)" }}
                                 onClick={() => setMinorDifferenceConfirmed(true)}
                               >
                                 ✓ Es el mismo producto, seguir con el ingreso
@@ -1704,7 +1704,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                             </div>
                           )}
                           {aiResult && aiResult.likelyMatch === false && aiResult.minorDifferenceOnly && minorDifferenceConfirmed && (
-                            <div className="flex items-center gap-1.5 text-[11px] mb-2.5" style={{ color: "#D9A441" }}>
+                            <div className="flex items-center gap-1.5 text-[11px] mb-2.5" style={{ color: "var(--color-gold)" }}>
                               <CheckCircle2 size={13} /> Diferencia confirmada — se avisará a todas las partes de ese detalle.
                             </div>
                           )}
@@ -2026,7 +2026,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       {(canApprove || isAdmin) && !receivedQtyMatches && (
                         correctingQtyId === r.id ? (
                           confirmingCorrectQtyId === r.id ? (
-                            <div className="bg-navy rounded-md p-3 mb-2">
+                            <div className="bg-inset rounded-md p-3 mb-2">
                               <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
                               <div className="text-[12px] text-steel mb-3">
                                 Vas a corregir la cantidad declarada de {r.receipt.receivedQuantity} a {Number(correctQtyValue) || 0} un.

@@ -288,7 +288,7 @@ export function PurchaseAuditPanel() {
                         return (
                           <span
                             className={`text-[15px] font-extrabold tabular-nums mt-0.5 ${cls === "good" ? "text-green" : cls === "slow" ? "text-red" : ""}`}
-                            style={cls === "mid" ? { color: "#D9A441" } : undefined}
+                            style={cls === "mid" ? { color: "var(--color-gold)" } : undefined}
                           >
                             {formatDurationLong(timing.totalMs)}
                           </span>

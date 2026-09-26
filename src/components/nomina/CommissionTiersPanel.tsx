@@ -107,7 +107,7 @@ function TierCell({ tierId, cell, employeeId, canPropose, canApprove, onSaved }:
       />
       {hasPending && (
         <div className="mt-1 text-[10px]">
-          <div style={{ color: "#D9A441" }} className="font-semibold">Esperando aprobación (vigente: {money(cell.amount)})</div>
+          <div style={{ color: "var(--color-gold)" }} className="font-semibold">Esperando aprobación (vigente: {money(cell.amount)})</div>
           {canApprove && (
             <div className="flex items-center gap-2 mt-0.5">
               <button type="button" disabled={busy} className="flex items-center gap-0.5 text-green font-semibold cursor-pointer" onClick={() => resolve("approve")}>

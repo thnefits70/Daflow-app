@@ -98,7 +98,7 @@ export function PayrollPaymentHistoryPanel() {
                     {e.paidProofUrl && <ProofPreview url={e.paidProofUrl} filename={e.paidProofName ?? undefined} />}
                   </div>
                 ) : (
-                  <span className="text-[11px]" style={{ color: "#D9A441" }}>Pendiente</span>
+                  <span className="text-[11px]" style={{ color: "var(--color-gold)" }}>Pendiente</span>
                 )}
               </div>
             </div>

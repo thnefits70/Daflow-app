@@ -7,6 +7,7 @@ import { signOut } from "next-auth/react";
 import { LayoutDashboard, ClipboardList, Scale, LogOut, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints, ShoppingBag, Banknote } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
+import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { NotificationBell } from "@/components/shared/NotificationBell";
 
 export function EmployeeSidebar({
@@ -166,6 +167,7 @@ export function EmployeeSidebar({
 
       <div className="px-4.5 py-3.5 border-t border-white/10 flex flex-col gap-2.5">
         <PushSettingsToggle />
+        <ThemeToggle />
         <button
           type="button"
           className="flex items-center gap-2 text-[#C9CFC5] hover:text-white text-[12.5px] cursor-pointer"

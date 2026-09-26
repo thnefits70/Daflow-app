@@ -124,8 +124,8 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
           const y = padT + innerH - (v / yMax) * innerH;
           return (
             <g key={i}>
-              <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="#24365a" strokeWidth="1" />
-              <text x={padL - 10} y={y + 3} textAnchor="end" fontSize="11" fill="#92a3c0">
+              <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="var(--color-rule)" strokeWidth="1" />
+              <text x={padL - 10} y={y + 3} textAnchor="end" fontSize="11" fill="var(--color-steel)">
                 {v}
               </text>
             </g>
@@ -150,7 +150,7 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
                 onClick={() => setHoverIndex((v) => (v === i ? null : i))}
                 style={{ cursor: "pointer" }}
               />
-              <text x={slotX + slotW / 2} y={barY - 8} textAnchor="middle" fontSize="12" fontWeight="700" fill="#f1f5fb">
+              <text x={slotX + slotW / 2} y={barY - 8} textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--color-ink)">
                 {p.value}
               </text>
               <text
@@ -158,7 +158,7 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
                 y={height - 10}
                 textAnchor="middle"
                 fontSize="10.5"
-                fill={dateTooltipWeek === p.week ? "#14C7C7" : "#92a3c0"}
+                fill={dateTooltipWeek === p.week ? "#14C7C7" : "var(--color-steel)"}
                 style={{ cursor: "pointer" }}
                 onClick={() => setDateTooltipWeek((v) => (v === p.week ? null : p.week))}
               >
@@ -170,7 +170,7 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
 
         <path d={trendPath} fill="none" stroke="#1E5EFF" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
         {topCoords.map((c, i) => (
-          <circle key={`trend-${i}`} cx={c.x} cy={c.y} r={i === hoverIndex ? 5 : 3} fill="#1E5EFF" stroke="#0a1526" strokeWidth="1.5" pointerEvents="none" />
+          <circle key={`trend-${i}`} cx={c.x} cy={c.y} r={i === hoverIndex ? 5 : 3} fill="#1E5EFF" stroke="var(--color-bg)" strokeWidth="1.5" pointerEvents="none" />
         ))}
 
         {dateTooltipWeek !== null &&
@@ -183,8 +183,8 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
             const boxX = Math.max(padL, Math.min(slotX + slotW / 2 - boxW / 2, width - padR - boxW));
             return (
               <g pointerEvents="none">
-                <rect x={boxX} y={height - 52} width={boxW} height={20} rx="5" fill="#101f3b" stroke="#14C7C7" strokeWidth="1" />
-                <text x={boxX + boxW / 2} y={height - 38} textAnchor="middle" fontSize="10.5" fill="#f1f5fb">
+                <rect x={boxX} y={height - 52} width={boxW} height={20} rx="5" fill="var(--color-surface)" stroke="#14C7C7" strokeWidth="1" />
+                <text x={boxX + boxW / 2} y={height - 38} textAnchor="middle" fontSize="10.5" fill="var(--color-ink)">
                   {rangeLabel}
                 </text>
               </g>
@@ -203,7 +203,7 @@ export function StockoutBarChart({ points }: { points: StockoutWeekPoint[] }) {
           const tooltipBottom = height - barY + 10;
           return (
             <div
-              className="absolute z-10 bg-[#101f3b] border border-rule rounded-md px-3 py-2.5 shadow-lg"
+              className="absolute z-10 bg-surface border border-rule rounded-md px-3 py-2.5 shadow-lg"
               style={{ left: `${leftPct}%`, transform: "translateX(-50%)", bottom: tooltipBottom, width: 260 }}
             >
               <div className="flex items-center justify-between gap-3 mb-1.5">

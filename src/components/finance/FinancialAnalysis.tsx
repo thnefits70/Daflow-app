@@ -13,7 +13,7 @@ export function FinancialAnalysis({ good, improve }: { good: string[]; improve: 
         </ul>
       </div>
       <div>
-        <div className="font-mono text-[10.5px] uppercase tracking-wide font-bold mb-2" style={{ color: "#D9A441" }}>🔧 Por mejorar / atender</div>
+        <div className="font-mono text-[10.5px] uppercase tracking-wide font-bold mb-2" style={{ color: "var(--color-gold)" }}>🔧 Por mejorar / atender</div>
         <ul className="list-disc pl-4.5 space-y-1">
           {improve.map((line, i) => <li key={i} className="text-[12.5px] leading-relaxed">{line}</li>)}
         </ul>

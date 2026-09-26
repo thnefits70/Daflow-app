@@ -43,6 +43,35 @@
      correcto. Tono intermedio entre surface y cloud — una superficie
      "elevada" (popover/modal) distinguible de ambas. */
   --color-surface2: #16294a;
+  /* Recuadro "hundido" dentro de una tarjeta (antes se usaba bg-navy para
+     esto; en modo claro navy no sirve porque el texto de adentro es oscuro). */
+  --color-inset: #0b1f3a;
+}
+
+/* Modo claro — 2026-09-26, pedido del equipo (celular y laptop). Lo activa
+   src/lib/theme.ts poniendo data-theme="light" en <html> (elegido a mano o
+   automático según la hora del sol en Guayaquil). Solo cambian las superficies,
+   el texto y los acentos que en fondo blanco se leían muy bajitos (teal, dorado,
+   verde). "navy" NO cambia: el menú lateral y la tarjeta principal del Inicio
+   siguen navy en ambos temas, y text-navy se usa sobre botones de color. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --color-teal: #0b9a9c;
+  --color-green: #1a8a68;
+  --color-red: #cf4336;
+  --color-amber: #b9821f;
+  --color-orange: #c4642a;
+  --color-gold: #b9821f;
+
+  --color-bg: #eef2f8;
+  --color-surface: #ffffff;
+  --color-cloud: #e4eaf3;
+  --color-rule: #d2dbe8;
+  --color-steel: #5a6b86;
+  --color-ink: #0f1d33;
+  --color-surface2: #f5f8fc;
+  --color-inset: #eef2f8;
 }
 
 /* Confirmado 2026-09-10, reportado por Jariel: color-scheme:dark por sí solo
@@ -70,6 +99,7 @@ select option {
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);
   --color-surface2: var(--color-surface2);
+  --color-inset: var(--color-inset);
   --color-ink: var(--color-ink);
   --font-display: var(--font-space-grotesk);
   --font-sans: var(--font-inter);

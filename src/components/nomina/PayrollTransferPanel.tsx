@@ -176,7 +176,7 @@ function BankAccountBlock({ account }: { account: BankAccount | null }) {
       <button
         type="button"
         className={`flex items-center gap-1.5 text-[11px] font-semibold rounded px-2 py-1 cursor-pointer border ${account ? "text-steel border-rule" : "text-gold border-gold/40"}`}
-        style={account ? undefined : { color: "#D9A441" }}
+        style={account ? undefined : { color: "var(--color-gold)" }}
         onClick={() => setShow((s) => !s)}
       >
         <Landmark size={12} />

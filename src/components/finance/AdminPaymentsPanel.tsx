@@ -991,10 +991,10 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
           <div className="flex flex-col gap-2">
             {pendingThisMonth.map((t) => (
               <div key={t.id} className="flex items-center justify-between gap-2 bg-gold/10 border border-gold/35 rounded-md px-3 py-2.5">
-                <span className="text-[12.5px] font-semibold" style={{ color: "#D9A441" }}>{t.motivo} — todavía no se registró este mes</span>
+                <span className="text-[12.5px] font-semibold" style={{ color: "var(--color-gold)" }}>{t.motivo} — todavía no se registró este mes</span>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {!isAdmin && (
-                    <button type="button" className="rounded border border-gold/50 px-2.5 py-1 text-[11.5px] font-semibold cursor-pointer" style={{ color: "#D9A441" }} onClick={() => openFormForTemplate(t)}>
+                    <button type="button" className="rounded border border-gold/50 px-2.5 py-1 text-[11.5px] font-semibold cursor-pointer" style={{ color: "var(--color-gold)" }} onClick={() => openFormForTemplate(t)}>
                       Registrar
                     </button>
                   )}
@@ -1333,7 +1333,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                       <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Pagado</div>
                       <div
                         className={`text-[15px] font-bold leading-tight flex items-center justify-end gap-1 ${r.paymentAiMatch === true ? "text-green" : ""}`}
-                        style={r.paymentAiMatch !== true ? { color: "#D9A441" } : undefined}
+                        style={r.paymentAiMatch !== true ? { color: "var(--color-gold)" } : undefined}
                       >
                         <CheckCircle2 size={12} /> {money(r.paymentAiReadAmount)} · Pagado
                       </div>
@@ -1605,7 +1605,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                               codesMatch(r.iessReceiptNumber, p.contractAccountNumber ?? p.receiptNumber!) ? (
                                 <span className="text-green font-semibold"> · ✅ coincide con el código del IESS</span>
                               ) : (
-                                <span className="font-semibold" style={{ color: "#D9A441" }}> · ⚠️ no coincide con el código del IESS ({r.iessReceiptNumber})</span>
+                                <span className="font-semibold" style={{ color: "var(--color-gold)" }}> · ⚠️ no coincide con el código del IESS ({r.iessReceiptNumber})</span>
                               )
                             )}
                             <button
@@ -1625,20 +1625,20 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                     {r.paymentAiMatch ? (
                       <CheckCircle2 size={13} className="text-green shrink-0" />
                     ) : r.paymentOverrideNote || proofInProgress ? (
-                      <CheckCircle2 size={13} className="shrink-0" style={{ color: "#D9A441" }} />
+                      <CheckCircle2 size={13} className="shrink-0" style={{ color: "var(--color-gold)" }} />
                     ) : (
                       <Lock size={13} className="text-red shrink-0" />
                     )}
                     <div
                       className={`text-[11px] ${r.paymentAiMatch ? "text-green" : r.paymentOverrideNote || proofInProgress ? "" : "text-red"}`}
-                      style={r.paymentOverrideNote || proofInProgress ? { color: "#D9A441" } : undefined}
+                      style={r.paymentOverrideNote || proofInProgress ? { color: "var(--color-gold)" } : undefined}
                     >
                       {r.paymentAiMatch ? "✅ Todo en orden — la suma coincide o supera el monto pedido. " : ""}
                       {r.paymentAiNote}
                     </div>
                   </div>
                   {r.paymentOverrideNote && (
-                    <div className="text-[11px] mt-1" style={{ color: "#D9A441" }}>
+                    <div className="text-[11px] mt-1" style={{ color: "var(--color-gold)" }}>
                       ⚠️ Verificado manualmente por el admin: {r.paymentOverrideNote}
                     </div>
                   )}
@@ -1665,7 +1665,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                           type="button"
                           disabled={overridingId === r.id}
                           className="rounded border border-gold/50 px-3 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-60"
-                          style={{ color: "#D9A441" }}
+                          style={{ color: "var(--color-gold)" }}
                           onClick={() => submitOverride(r.id)}
                         >
                           {overridingId === r.id ? "Confirmando…" : "✓ Confirmar que está bien"}
@@ -1677,7 +1677,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                     <button
                       type="button"
                       className="rounded border border-gold/50 px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer"
-                      style={{ color: "#D9A441" }}
+                      style={{ color: "var(--color-gold)" }}
                       onClick={() => { setOverrideOpenId(r.id); setOverrideNote(""); setErr(""); }}
                     >
                       ✓ Verificar que está bien

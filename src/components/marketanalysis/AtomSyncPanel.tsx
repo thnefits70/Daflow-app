@@ -401,7 +401,7 @@ export function AtomSyncPanel() {
                   </div>
                 )}
                 {comboLookup[i]?.status === "not_found" && (
-                  <div className="bg-gold/10 border border-gold/35 rounded-md p-2.5 mt-2 text-[12px]" style={{ color: "#D9A441" }}>
+                  <div className="bg-gold/10 border border-gold/35 rounded-md p-2.5 mt-2 text-[12px]" style={{ color: "var(--color-gold)" }}>
                     <div className="mb-2">Este combo todavía no está registrado en Base de datos de productos — pídele a Daniel que lo registre ahí primero.</div>
                     <div className="flex gap-2">
                       <button type="button" className="rounded border border-rule px-2.5 py-1 text-[11px] font-semibold cursor-pointer" onClick={() => confirmCombo(i)}>

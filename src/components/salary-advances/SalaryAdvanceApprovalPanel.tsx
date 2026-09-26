@@ -170,7 +170,7 @@ export function SalaryAdvanceApprovalPanel() {
               {a.employee.name} — <span className="text-[15px] text-green">{money(a.amount)}</span>{a.installments > 1 ? ` (${a.installments} cuotas)` : ""}
             </div>
             {a.reason && (
-              <div className={`text-[11.5px] mt-0.5 ${isCalamidad ? "text-[#D9A441] font-semibold" : "text-steel"}`}>
+              <div className={`text-[11.5px] mt-0.5 ${isCalamidad ? "text-gold font-semibold" : "text-steel"}`}>
                 Motivo: {REASON_LABEL[a.reason] ?? a.reason}
                 {isCalamidad && " — revisá cómo está, no solo el anticipo"}
               </div>

@@ -708,7 +708,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
         </span>
       </div>
       {openFormula && (
-        <div className="flex items-start justify-between gap-3 bg-navy border-b border-rule px-3 py-2.5 min-w-[1380px]">
+        <div className="flex items-start justify-between gap-3 bg-inset border-b border-rule px-3 py-2.5 min-w-[1380px]">
           <div className="text-[12px]">
             <span className="font-bold text-ink">{FORMULA_EXPLANATIONS[openFormula].title}: </span>
             <span className="text-steel">{FORMULA_EXPLANATIONS[openFormula].text}</span>

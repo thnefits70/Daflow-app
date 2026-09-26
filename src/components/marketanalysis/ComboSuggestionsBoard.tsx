@@ -43,7 +43,7 @@ function Pair({ s }: { s: Suggestion }) {
         <span className="text-[10px] font-normal text-steel">(vende bien)</span>
       </span>
       <span className="text-steel">+</span>
-      <span className="inline-flex items-center gap-1 font-semibold" style={{ color: "#D9A441" }}>
+      <span className="inline-flex items-center gap-1 font-semibold" style={{ color: "var(--color-gold)" }}>
         <TrendingDown size={12} /> {s.lowRotationCatalogItem.name}
         <span className="text-[10px] font-normal text-steel">(casi no se vende)</span>
       </span>

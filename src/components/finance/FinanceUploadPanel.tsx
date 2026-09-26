@@ -257,7 +257,7 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
         </div>
 
         {hasExistingData && (
-          <div className="bg-gold/10 border border-gold/30 rounded-md p-3 mb-3.5 text-[12.5px]" style={{ color: "#D9A441" }}>
+          <div className="bg-gold/10 border border-gold/30 rounded-md p-3 mb-3.5 text-[12.5px]" style={{ color: "var(--color-gold)" }}>
             <div className="flex items-center gap-1.5 font-semibold mb-2">
               <AlertTriangle size={14} /> Ya existe información cargada para {monthLabel(targetPeriod)}.
             </div>
@@ -380,7 +380,7 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
             {warnings.length > 0 && (
               <div className="flex flex-col gap-1 mb-3">
                 {warnings.map((w, i) => (
-                  <div key={i} className="text-[11.5px] flex items-start gap-1.5" style={{ color: "#D9A441" }}>
+                  <div key={i} className="text-[11.5px] flex items-start gap-1.5" style={{ color: "var(--color-gold)" }}>
                     <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {w}
                   </div>
                 ))}
@@ -496,7 +496,7 @@ export function FinanceUploadPanel({ deptId, data }: { deptId: string; data: Fin
             <div>
               <span className="font-semibold">{u.uploadedByName ?? "Admin"}</span> subió{" "}
               <b>{monthLabel(u.period)}</b>
-              {u.isCorrection && <span className="text-gold" style={{ color: "#D9A441" }}> (corregido)</span>}
+              {u.isCorrection && <span className="text-gold" style={{ color: "var(--color-gold)" }}> (corregido)</span>}
             </div>
             <div className="ml-auto text-steel font-mono text-[11px]">{new Date(u.createdAt).toLocaleString("es-MX")}</div>
           </div>

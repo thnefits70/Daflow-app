@@ -52,7 +52,7 @@ function NichoBackfillButton() {
   if (!info || info.missingCount === 0) return null;
 
   return (
-    <div className="bg-gold/10 border border-gold/35 rounded-md p-3.5 mb-5 text-[12.5px]" style={{ color: "#D9A441" }}>
+    <div className="bg-gold/10 border border-gold/35 rounded-md p-3.5 mb-5 text-[12.5px]" style={{ color: "var(--color-gold)" }}>
       <div className="font-bold mb-1">{info.missingCount} productos del catálogo todavía no tienen nicho asignado</div>
       <div className="mb-2.5">Sugerirlos con IA costaría aproximadamente ${info.estimatedCostUsd.toFixed(2)} en total (una sola vez).</div>
       {confirming ? (
@@ -99,7 +99,7 @@ function MissingReportsQueue() {
 
   return (
     <div className="bg-gold/10 border border-gold/35 rounded-md p-3.5 mb-5">
-      <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2.5" style={{ color: "#D9A441" }}>
+      <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2.5" style={{ color: "var(--color-gold)" }}>
         <AlertTriangle size={14} /> Productos que no encontraron ({reports.length})
       </div>
       <div className="flex flex-col gap-1.5">
@@ -381,7 +381,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
               <ExpandableName text={item.name} className="text-[12.5px] flex-1" />
             )}
             {item.pendingRegistration && (
-              <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "#D9A441" }}>
+              <span className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-gold/15 border border-gold/40" style={{ color: "var(--color-gold)" }}>
                 Pendiente de matricular
               </span>
             )}

@@ -343,7 +343,7 @@ export function SupplierExchangeResolutionInbox({
           ))}
           {!item.replacementReceivedAt && (
             <>
-              <div className="flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: "#D9A441" }}>
+              <div className="flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: "var(--color-gold)" }}>
                 <Clock size={12} /> Esperando que llegue el reemplazo ({receivedQty(item)} de {item.quantity} recibidas)
               </div>
               {canConfirmReplacementArrival ? (
@@ -363,7 +363,7 @@ export function SupplierExchangeResolutionInbox({
             <DollarSign size={12} /> Crédito de {item.credit ? money(item.credit.amount) : "—"} — gestionado por {item.resolvedBy?.name ?? "—"}{item.resolvedAt ? ` · ${formatDateTime(item.resolvedAt)}` : ""}
           </div>
           {item.credit && !item.fromDeterioro && item.expectedCreditAmount !== null && item.credit.amount !== item.expectedCreditAmount && (
-            <div className="flex items-center gap-1.5 text-[10.5px] font-semibold text-gold" style={{ color: "#D9A441" }}>
+            <div className="flex items-center gap-1.5 text-[10.5px] font-semibold text-gold" style={{ color: "var(--color-gold)" }}>
               <AlertTriangle size={11} /> Distinto a lo pagado ({money(item.expectedCreditAmount)}) — revisar
             </div>
           )}

@@ -93,7 +93,7 @@ function StepCheck({ label, mark, canToggle, onToggle }: { label: string; mark: 
       )}
       {asking && !mark && (
         <span className="flex items-center gap-2 bg-gold/10 border border-gold/35 rounded px-2 py-1">
-          <span className="text-[11.5px]" style={{ color: "#D9A441" }}>¿Seguro que ya lo hiciste?</span>
+          <span className="text-[11.5px]" style={{ color: "var(--color-gold)" }}>¿Seguro que ya lo hiciste?</span>
           <button type="button" disabled={busy} className="text-[11.5px] font-bold text-teal cursor-pointer disabled:opacity-60" onClick={() => run(true)}>Sí</button>
           <button type="button" className="text-[11.5px] text-steel cursor-pointer" onClick={() => setAsking(false)}>No</button>
         </span>

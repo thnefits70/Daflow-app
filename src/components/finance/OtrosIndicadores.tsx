@@ -167,7 +167,7 @@ export function OtrosIndicadores({
           {dpo.node}
           <div className="rounded-md p-3" style={{ background: "rgba(217,164,65,.08)" }}>
             <div className="text-[9.5px] uppercase tracking-wide text-steel mb-1.5">Ciclo de conversión de efectivo<InfoToggle id="ccc" openInfo={openInfo} setOpenInfo={setOpenInfo} /></div>
-            <div className="font-display text-[19px] font-bold" style={{ color: "#D9A441" }}>{ccc !== null ? `${ccc.toFixed(0)} días` : "—"}</div>
+            <div className="font-display text-[19px] font-bold" style={{ color: "var(--color-gold)" }}>{ccc !== null ? `${ccc.toFixed(0)} días` : "—"}</div>
             {ccc !== null && <div className="text-[9.5px] text-steel mt-1">DIO + DSO − DPO</div>}
             <InfoBox id="ccc" openInfo={openInfo} />
           </div>

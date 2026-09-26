@@ -458,8 +458,8 @@ export function WeeklyTrendChart({
           const y = padT + innerH - (v / yMax) * innerH;
           return (
             <g key={i}>
-              <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="#24365a" strokeWidth="1" />
-              <text x={padL - 10} y={y + 3} textAnchor="end" fontSize="11" fill="#92a3c0">
+              <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="var(--color-rule)" strokeWidth="1" />
+              <text x={padL - 10} y={y + 3} textAnchor="end" fontSize="11" fill="var(--color-steel)">
                 {fmt(v)}
               </text>
             </g>
@@ -493,7 +493,7 @@ export function WeeklyTrendChart({
                     width={metaBoxW}
                     height="16"
                     rx="4"
-                    fill="#0a1526"
+                    fill="var(--color-bg)"
                     stroke="#C4453A"
                     strokeWidth="1"
                   />
@@ -514,7 +514,7 @@ export function WeeklyTrendChart({
               y={height - 8}
               textAnchor="middle"
               fontSize="10.5"
-              fill={dateTooltipWeek === points[i].week ? "#14C7C7" : "#92a3c0"}
+              fill={dateTooltipWeek === points[i].week ? "#14C7C7" : "var(--color-steel)"}
               style={isoWeekDateRange(points[i].week) ? { cursor: "pointer" } : undefined}
               onClick={() =>
                 isoWeekDateRange(points[i].week) &&
@@ -579,7 +579,7 @@ export function WeeklyTrendChart({
             x2={coords[hoverIndex].x}
             y1={padT}
             y2={padT + innerH}
-            stroke="#92A3C0"
+            stroke="var(--color-steel)"
             strokeWidth="1"
             strokeDasharray="3 3"
             opacity="0.5"
@@ -593,7 +593,7 @@ export function WeeklyTrendChart({
           if (colorDotsByDirection) {
             const diff = i > 0 ? points[i].value - points[i - 1].value : 0;
             const rose = diff >= 0;
-            const dirColor = i === 0 ? "#92A3C0" : (invertDirection ? !rose : rose) ? "#14C7C7" : "#FF9B90";
+            const dirColor = i === 0 ? "var(--color-steel)" : (invertDirection ? !rose : rose) ? "#14C7C7" : "#FF9B90";
             return (
               <circle
                 key={i}
@@ -601,7 +601,7 @@ export function WeeklyTrendChart({
                 cy={c.y}
                 r={isHover ? 6 : 4}
                 fill={dirColor}
-                stroke="#0a1526"
+                stroke="var(--color-bg)"
                 strokeWidth={2}
                 pointerEvents="none"
                 opacity={segCount > 0 && !reducedMotion ? 0 : 1}
@@ -616,8 +616,8 @@ export function WeeklyTrendChart({
               cx={c.x}
               cy={c.y}
               r={isHover ? 5 : isLast ? 4 : 2}
-              fill={isHover || isLast ? "#14C7C7" : "#0a1526"}
-              stroke={isHover ? "#0a1526" : isLast ? "none" : "#14C7C7"}
+              fill={isHover || isLast ? "#14C7C7" : "var(--color-bg)"}
+              stroke={isHover ? "var(--color-bg)" : isLast ? "none" : "#14C7C7"}
               strokeWidth={isHover ? 2 : isLast ? 0 : 1.5}
               pointerEvents="none"
               opacity={segCount > 0 && !reducedMotion ? 0 : 1}
@@ -649,15 +649,15 @@ export function WeeklyTrendChart({
             const boxY = Math.max(4, c.y - boxH - 12);
             return (
               <g pointerEvents="none">
-                <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="6" fill="#101f3b" stroke="#24365a" strokeWidth="1" />
-                <text x={boxX + boxW / 2} y={boxY + 17} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
+                <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="6" fill="var(--color-surface)" stroke="var(--color-rule)" strokeWidth="1" />
+                <text x={boxX + boxW / 2} y={boxY + 17} textAnchor="middle" fontSize="10.5" fill="var(--color-steel)">
                   {periodLabel(p.week)}
                 </text>
-                <text x={boxX + boxW / 2} y={boxY + 33} textAnchor="middle" fontSize="14" fontWeight="700" fill="#f1f5fb">
+                <text x={boxX + boxW / 2} y={boxY + 33} textAnchor="middle" fontSize="14" fontWeight="700" fill="var(--color-ink)">
                   {fmt(p.value)}{!valueFormat && format !== "percent" && " pedidos"}
                 </text>
                 {p.detail && (
-                  <text x={boxX + boxW / 2} y={boxY + 49} textAnchor="middle" fontSize="10.5" fill="#92a3c0">
+                  <text x={boxX + boxW / 2} y={boxY + 49} textAnchor="middle" fontSize="10.5" fill="var(--color-steel)">
                     {p.detail}
                   </text>
                 )}
@@ -675,8 +675,8 @@ export function WeeklyTrendChart({
             const boxX = Math.max(padL, Math.min(c.x - boxW / 2, width - padR - boxW));
             return (
               <g pointerEvents="none">
-                <rect x={boxX} y={height - 52} width={boxW} height={20} rx="5" fill="#101f3b" stroke="#14C7C7" strokeWidth="1" />
-                <text x={boxX + boxW / 2} y={height - 38} textAnchor="middle" fontSize="10.5" fill="#f1f5fb">
+                <rect x={boxX} y={height - 52} width={boxW} height={20} rx="5" fill="var(--color-surface)" stroke="#14C7C7" strokeWidth="1" />
+                <text x={boxX + boxW / 2} y={height - 38} textAnchor="middle" fontSize="10.5" fill="var(--color-ink)">
                   {rangeLabel}
                 </text>
               </g>
@@ -700,7 +700,7 @@ export function WeeklyTrendChart({
             const diff = laterVal - earlierVal;
             const pctDiff = earlierVal !== 0 ? (diff / Math.abs(earlierVal)) * 100 : 0;
             const roseAB = pctDiff >= 0;
-            const deltaColor = Math.abs(pctDiff) < 0.5 ? "#92A3C0" : (invertDirection ? !roseAB : roseAB) ? "#14C7C7" : "#FF9B90";
+            const deltaColor = Math.abs(pctDiff) < 0.5 ? "var(--color-steel)" : (invertDirection ? !roseAB : roseAB) ? "#14C7C7" : "#FF9B90";
             const sign = pctDiff >= 0 ? "+" : "";
             const deltaLabel = `${sign}${pctDiff.toFixed(1)}% (${diff >= 0 ? "+" : ""}${fmt(diff)})`;
             const mid = (left + right) / 2;
@@ -732,7 +732,7 @@ export function WeeklyTrendChart({
                     transition: "transform 0.15s ease-out",
                   }}
                 >
-                  <rect x={mid - boxW / 2} y={bracketY - 9} width={boxW} height="15" rx="4" fill="#0a1526" stroke="#D9A441" strokeWidth="1" />
+                  <rect x={mid - boxW / 2} y={bracketY - 9} width={boxW} height="15" rx="4" fill="var(--color-bg)" stroke="#D9A441" strokeWidth="1" />
                   <text x={mid} y={bracketY + 2} textAnchor="middle" fontSize="9.5" fontWeight="700" fill={deltaColor}>{deltaLabel}</text>
                 </g>
               </g>

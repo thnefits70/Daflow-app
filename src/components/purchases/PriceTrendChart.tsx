@@ -71,8 +71,8 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
         const y = padT + innerH - ((v - yMin) / (yMax - yMin)) * innerH;
         return (
           <g key={i}>
-            <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="#24365a" strokeWidth="1" />
-            <text x={padL - 8} y={y + 3} textAnchor="end" fontSize="10" fill="#92a3c0">${v.toFixed(2)}</text>
+            <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="var(--color-rule)" strokeWidth="1" />
+            <text x={padL - 8} y={y + 3} textAnchor="end" fontSize="10" fill="var(--color-steel)">${v.toFixed(2)}</text>
           </g>
         );
       })}
@@ -83,7 +83,7 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
 
       {showDateLabels &&
         coords.map((c, i) => (
-          <text key={`d-${i}`} x={c.x} y={height - 8} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+          <text key={`d-${i}`} x={c.x} y={height - 8} textAnchor="middle" fontSize="9.5" fill="var(--color-steel)">
             {fmtDate(effDate(points[i]))}
           </text>
         ))}
@@ -94,7 +94,7 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
           cx={c.x}
           cy={c.y}
           r={hover === i ? 6 : 3.5}
-          fill={hover === i ? "#14C7C7" : "#0a1526"}
+          fill={hover === i ? "#14C7C7" : "var(--color-bg)"}
           stroke="#14C7C7"
           strokeWidth={hover === i ? 0 : 1.75}
           onMouseEnter={() => setHover(i)}
@@ -113,25 +113,25 @@ export function PriceTrendChart({ points }: { points: SupplierPricePoint[] }) {
           const boxY = Math.max(2, c.y - boxH - 10);
           return (
             <g pointerEvents="none">
-              <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="5" fill="#101f3b" stroke="#24365a" strokeWidth="1" />
-              <text x={boxX + boxW / 2} y={boxY + 16} textAnchor="middle" fontSize="12" fontWeight="700" fill="#f1f5fb">
+              <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="5" fill="var(--color-surface)" stroke="var(--color-rule)" strokeWidth="1" />
+              <text x={boxX + boxW / 2} y={boxY + 16} textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--color-ink)">
                 ${p.unitCost.toFixed(2)}
               </text>
               {hasBreakdown && (
-                <text x={boxX + boxW / 2} y={boxY + 29} textAnchor="middle" fontSize="8.5" fill="#92a3c0">
+                <text x={boxX + boxW / 2} y={boxY + 29} textAnchor="middle" fontSize="8.5" fill="var(--color-steel)">
                   ${p.baseUnitCost.toFixed(2)} + ${p.shippingPerUnit.toFixed(2)} flete
                 </text>
               )}
-              <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 42 : 30)} textAnchor="middle" fontSize="10" fontWeight="600" fill="#f1f5fb">
+              <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 42 : 30)} textAnchor="middle" fontSize="10" fontWeight="600" fill="var(--color-ink)">
                 {p.supplierName}
               </text>
-              <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 55 : 43)} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+              <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 55 : 43)} textAnchor="middle" fontSize="9.5" fill="var(--color-steel)">
                 {fmtDate(effDate(p))} · {p.quantity} un.
               </text>
-              <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 67 : 55)} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+              <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 67 : 55)} textAnchor="middle" fontSize="9.5" fill="var(--color-steel)">
                 {p.paidAt ? "Pagado" : `${STATUS_LABEL[p.status] ?? p.status} · pago pendiente`}
               </text>
-              <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 80 : 68)} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+              <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 80 : 68)} textAnchor="middle" fontSize="9.5" fill="var(--color-steel)">
                 Pedido por: {p.requestedByName ?? "?"}
               </text>
             </g>
@@ -198,8 +198,8 @@ export function CombinedPriceChart({ suppliers }: { suppliers: SupplierPriceHist
           const y = padT + innerH - ((v - yMin) / (yMax - yMin)) * innerH;
           return (
             <g key={i}>
-              <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="#24365a" strokeWidth="1" />
-              <text x={padL - 8} y={y + 3} textAnchor="end" fontSize="10" fill="#92a3c0">${v.toFixed(2)}</text>
+              <line x1={padL} x2={width - padR} y1={y} y2={y} stroke="var(--color-rule)" strokeWidth="1" />
+              <text x={padL - 8} y={y + 3} textAnchor="end" fontSize="10" fill="var(--color-steel)">${v.toFixed(2)}</text>
             </g>
           );
         })}
@@ -208,7 +208,7 @@ export function CombinedPriceChart({ suppliers }: { suppliers: SupplierPriceHist
 
         {showDateLabels &&
           coords.map((c, i) => (
-            <text key={`d-${i}`} x={c.x} y={height - 8} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+            <text key={`d-${i}`} x={c.x} y={height - 8} textAnchor="middle" fontSize="9.5" fill="var(--color-steel)">
               {fmtDate(effDate(points[i]))}
             </text>
           ))}
@@ -220,7 +220,7 @@ export function CombinedPriceChart({ suppliers }: { suppliers: SupplierPriceHist
             cy={c.y}
             r={hover === i ? 6.5 : 4.5}
             fill={colorBySupplierId.get(points[i].supplierId)}
-            stroke="#0a1526"
+            stroke="var(--color-bg)"
             strokeWidth={hover === i ? 2 : 1.5}
             onMouseEnter={() => setHover(i)}
             style={{ cursor: "pointer" }}
@@ -238,22 +238,22 @@ export function CombinedPriceChart({ suppliers }: { suppliers: SupplierPriceHist
             const boxY = Math.max(2, c.y - boxH - 10);
             return (
               <g pointerEvents="none">
-                <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="5" fill="#101f3b" stroke="#24365a" strokeWidth="1" />
-                <text x={boxX + boxW / 2} y={boxY + 16} textAnchor="middle" fontSize="12" fontWeight="700" fill="#f1f5fb">
+                <rect x={boxX} y={boxY} width={boxW} height={boxH} rx="5" fill="var(--color-surface)" stroke="var(--color-rule)" strokeWidth="1" />
+                <text x={boxX + boxW / 2} y={boxY + 16} textAnchor="middle" fontSize="12" fontWeight="700" fill="var(--color-ink)">
                   ${p.unitCost.toFixed(2)}
                 </text>
                 {hasBreakdown && (
-                  <text x={boxX + boxW / 2} y={boxY + 29} textAnchor="middle" fontSize="8.5" fill="#92a3c0">
+                  <text x={boxX + boxW / 2} y={boxY + 29} textAnchor="middle" fontSize="8.5" fill="var(--color-steel)">
                     ${p.baseUnitCost.toFixed(2)} + ${p.shippingPerUnit.toFixed(2)} flete
                   </text>
                 )}
-                <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 42 : 30)} textAnchor="middle" fontSize="10" fontWeight="600" fill="#f1f5fb">
+                <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 42 : 30)} textAnchor="middle" fontSize="10" fontWeight="600" fill="var(--color-ink)">
                   {p.supplierName}
                 </text>
-                <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 55 : 43)} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+                <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 55 : 43)} textAnchor="middle" fontSize="9.5" fill="var(--color-steel)">
                   {fmtDate(effDate(p))} · {p.quantity} un.
                 </text>
-                <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 67 : 55)} textAnchor="middle" fontSize="9.5" fill="#92a3c0">
+                <text x={boxX + boxW / 2} y={boxY + (hasBreakdown ? 67 : 55)} textAnchor="middle" fontSize="9.5" fill="var(--color-steel)">
                   {p.paidAt ? "Pagado" : `${STATUS_LABEL[p.status] ?? p.status} · pago pendiente`}
                 </text>
               </g>

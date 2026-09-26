@@ -85,7 +85,7 @@ const STATUS_META: Record<HistoryRow["status"], { text: string; cls: string; sty
   REJECTED: { text: "Rechazada", cls: "bg-red/15 text-red border-red/40", Icon: AlertTriangle },
   APPROVED: { text: "Aprobada", cls: "bg-teal/15 text-teal border-teal/40", Icon: CheckCircle2 },
   PAID: { text: "Pagada", cls: "bg-blue/15 text-blue border-blue/40", Icon: CreditCard },
-  RECEIVED_PENDING_REVIEW: { text: "Recibida — pendiente revisión", cls: "bg-gold/15 border-gold/40", style: { color: "#D9A441" }, Icon: PackageSearch },
+  RECEIVED_PENDING_REVIEW: { text: "Recibida — pendiente revisión", cls: "bg-gold/15 border-gold/40", style: { color: "var(--color-gold)" }, Icon: PackageSearch },
   RECEIVED: { text: "Recibida y cerrada", cls: "bg-green/15 text-green border-green/40", Icon: PackageCheck },
 };
 
@@ -949,7 +949,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
             </div>
 
             {g[0].bankAccountChangeRequestedAt ? (
-              <div className="flex items-start gap-1.5 bg-gold/10 border border-gold/35 rounded-md px-3 py-2 mb-2.5 text-[11.5px]" style={{ color: "#D9A441" }}>
+              <div className="flex items-start gap-1.5 bg-gold/10 border border-gold/35 rounded-md px-3 py-2 mb-2.5 text-[11.5px]" style={{ color: "var(--color-gold)" }}>
                 <Landmark size={13} className="mt-0.5 shrink-0" />
                 <span>
                   Esperando que {actorName(g[0].requestedBy?.name)} cambie la cuenta bancaria{g[0].bankAccountChangeNote ? ` — "${g[0].bankAccountChangeNote}"` : ""}.
@@ -994,7 +994,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                         onChange={(e) => setAccountChangeNote(e.target.value)}
                       />
                       <div className="flex items-center gap-2">
-                        <button type="button" disabled={busyAccountGroup === groupId} className="rounded border border-gold/50 px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60" style={{ color: "#D9A441" }} onClick={() => requestAccountChange(groupId)}>
+                        <button type="button" disabled={busyAccountGroup === groupId} className="rounded border border-gold/50 px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60" style={{ color: "var(--color-gold)" }} onClick={() => requestAccountChange(groupId)}>
                           Confirmar aviso
                         </button>
                         <button type="button" className="text-steel text-[11px] cursor-pointer" onClick={() => { setRequestingAccountChangeFor(null); setAccountChangeNote(""); }}>Cancelar</button>

@@ -758,7 +758,7 @@ function PublishQueue() {
           </div>
           <PublishPriceGuide p={p} />
           {confirmingId === p.id ? (
-            <div className="bg-navy rounded-md p-3">
+            <div className="bg-inset rounded-md p-3">
               <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
               <div className="flex items-center gap-2.5 mb-2.5">
                 <img src={p.referenceImageUrl} alt="" className="w-12 h-12 rounded object-cover border border-rule shrink-0" />
@@ -1148,7 +1148,7 @@ function ReadyToBuyQueue() {
             <div className="text-[12.5px] text-steel mb-2.5">
               Proveedor elegido: <b className="text-ink">{p.chosenSupplier?.name ?? "—"}</b>
               {p.chosenSupplier?.paymentMode === "CREDITO" && (
-                <span className="ml-1 font-semibold" style={{ color: "#D9A441" }}>
+                <span className="ml-1 font-semibold" style={{ color: "var(--color-gold)" }}>
                   (crédito)
                 </span>
               )}
