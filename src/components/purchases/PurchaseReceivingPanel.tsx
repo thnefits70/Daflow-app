@@ -1528,6 +1528,22 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     <div className="text-[11.5px] text-steel mb-1">pagado {formatDateTime(r.paidAt)}</div>
                   )}
 
+                  {/* Confirmado 2026-09-26, pedido de Daniel: él no recibe físicamente,
+                      así que nunca abre "Confirmar que llegó" y no veía cómo es el
+                      producto. Ahora las fotos de referencia salen en la tarjeta desde
+                      que está pendiente, antes de que llegue la mercadería. Al abrir
+                      confirmar/informar urgente ya salen en grande, no se repiten. */}
+                  {(r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")) &&
+                    openId !== r.id && urgentId !== r.id && r.catalogItem.photos.length > 0 && (
+                    <div className="flex gap-2 flex-wrap my-2">
+                      {r.catalogItem.photos.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" title="Foto de referencia — como se registró el producto" className="bg-cloud rounded border border-teal/40 flex items-center justify-center w-24 h-24 overflow-hidden">
+                          <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
                   {(r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")) && (
                     <>
                       {openId === r.id ? (
