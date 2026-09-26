@@ -1638,7 +1638,10 @@ async function getSupplierExchangeFinanceWriteOffPendingItem(href: string): Prom
 // que la reciba — se quedaba invisible mientras seguía "Aprobado" para
 // siempre. El "atrasado" para esos casos ahora cuenta desde reviewedAt (la
 // aprobación) ya que no hay paidAt que usar.
-async function getPurchaseReceivingPendingItem(href: string): Promise<PendingItem | null> {
+// Corregido 2026-09-26, pedido del usuario: el equipo de Inventario veía el
+// monto ("$1680.00") en Inicio — mismo criterio de 2026-08-18 que
+// PurchaseReceivingPanel: valores económicos solo para Daniel (líder) y admin.
+async function getPurchaseReceivingPendingItem(href: string, showAmount: boolean): Promise<PendingItem | null> {
   const rows = await prisma.purchaseRequest.findMany({
     where: {
       OR: [
@@ -1665,7 +1668,7 @@ async function getPurchaseReceivingPendingItem(href: string): Promise<PendingIte
     type: "compras_recepcion",
     icon: "📥",
     label: "Confirmar mercadería recibida",
-    meta: `${groups.length} solicitud${groups.length === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    meta: `${groups.length} solicitud${groups.length === 1 ? "" : "es"}${showAmount ? ` · $${total.toFixed(2)}` : ""}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
   };
@@ -2936,7 +2939,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     teamItems.unshift(...(await getMyFulfillmentBlockPendingItems(actor.userId, "/area/workspace?tab=egresos&otab=solicitud")));
     if (me.department?.code === "INV") {
       const [receivingItem, replacementItem, urgentUnresolvedItem] = await Promise.all([
-        getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
+        getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario", false),
         getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
         getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes"),
       ]);
@@ -3066,7 +3069,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (me.leadsDept.code === "INV") {
     const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, personalPurchaseInventoryItem, lateClaimReviewItem, urgentUnresolvedItem, nichoBackfillItem, monthlyTopMoversItem, deteriorResolutionItem, externalSaleDispatchItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
-      getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario"),
+      getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario", true),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getInventoryControlPendingItem("/area/workspace?tab=inventario"),
       getMerchandiseReentryPendingItem("/area/reingreso-mercaderia?tab=revision"),

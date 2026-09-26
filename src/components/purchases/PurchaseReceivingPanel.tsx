@@ -2303,7 +2303,8 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               <input type="radio" name={`origin-${row.id}`} checked={!lateOriginUncertain && lateOriginId === c.id} onChange={() => { setLateOriginId(c.id); setLateOriginUncertain(false); }} />
                               <span className="text-[12.5px]">
                                 <span className="font-mono text-teal font-semibold">{c.code ?? "—"}</span> · {c.quantity} un. recibidas
-                                {c.receivedAt && ` ${formatDateTime(c.receivedAt)}`} · ${c.totalCost.toFixed(2)}
+                                {c.receivedAt && ` ${formatDateTime(c.receivedAt)}`}
+                                {(canApprove || isAdmin) && ` · $${c.totalCost.toFixed(2)}`}
                               </span>
                             </label>
                           ))}
@@ -2311,7 +2312,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                             <input type="radio" name={`origin-${row.id}`} checked={lateOriginUncertain} onChange={() => setLateOriginUncertain(true)} />
                             <span className="text-[12.5px] text-steel italic">No estoy seguro / mercadería mezclada</span>
                           </label>
-                          {lateOriginUncertain && (
+                          {lateOriginUncertain && (canApprove || isAdmin) && (
                             <div className="text-[11px] text-steel px-1">
                               {lateAverageCost != null ? `Se usará el costo promedio: $${lateAverageCost.toFixed(2)}/un.` : "No hay costo promedio disponible."}
                             </div>
