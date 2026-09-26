@@ -63,6 +63,9 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
 
   const matching = lot.picking.filter((p) => rowState(p) === "match");
   const byCarrierOf = (id: string) => lot.lines.find((l) => l.catalogItemId === id)?.byCarrier ?? {};
+  // Variantes (color/talla/paquete): antes solo salían en la hoja impresa,
+  // y ahora imprimir es opcional — se sacan desde el celular.
+  const variantsOf = (id: string) => lot.lines.find((l) => l.catalogItemId === id)?.variants ?? [];
   const pieces = lot.warranty.filter((w) => w.mode === "PIECE");
 
   function openCode(raw: string) {
@@ -246,6 +249,15 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                   .map((c) => `${carrierLabel(c)} ${byCarrierOf(current.catalogItemId)[c]}`)
                   .join(" · ")}
               </div>
+              {variantsOf(current.catalogItemId).length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {variantsOf(current.catalogItemId).map((v) => (
+                    <span key={v.label} className="text-[11.5px] bg-teal/10 border border-teal/30 rounded-full px-2 py-0.5">
+                      {v.label} <b className="font-mono">{v.quantity}</b>
+                    </span>
+                  ))}
+                </div>
+              )}
               {myBlocks.length > 0 && !myBlocks.includes(current.block) && (
                 <div className="text-[11.5px] text-amber mb-1.5 flex items-start gap-1">
                   <AlertTriangle size={13} className="mt-0.5 shrink-0" />
@@ -362,6 +374,11 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                 </span>
                 {st === "confirmed" && <CheckCircle2 size={14} className="text-teal shrink-0" />}
               </div>
+              {variantsOf(p.catalogItemId).length > 0 && (
+                <div className="text-[11px] text-teal mt-0.5">
+                  {variantsOf(p.catalogItemId).map((v) => `${v.label} ${v.quantity}`).join(" · ")}
+                </div>
+              )}
               {p.pickedByName && p.pickedAt && st !== "confirmed" && (
                 <div className="text-[10.5px] text-steel mt-0.5">
                   Registró {p.pickedByName} a las {fmtTime(p.pickedAt)}
