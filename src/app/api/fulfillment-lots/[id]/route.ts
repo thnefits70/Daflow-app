@@ -39,9 +39,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
   const ok = await prisma
     .$transaction(async (tx) => {
-      const lot = await tx.fulfillmentLot.findFirst({ where: { id, status: "DRAFT", batches: { none: { items: { some: {} } } } }, select: { id: true } });
+      const lot = await tx.fulfillmentLot.findFirst({ where: { id, status: "DRAFT", batches: { none: { OR: [{ items: { some: {} } }, { provisionalLines: { some: {} } }] } } }, select: { id: true } });
       if (!lot) return false;
-      await tx.fulfillmentRequestBatch.deleteMany({ where: { lotId: id, items: { none: {} } } });
+      await tx.fulfillmentRequestBatch.deleteMany({ where: { lotId: id, items: { none: {} }, provisionalLines: { none: {} } } });
       // Si justo entró una subida con productos, no se borra nada.
       const { count } = await tx.fulfillmentLot.deleteMany({ where: { id, status: "DRAFT", batches: { none: {} } } });
       if (count === 0) throw new Error("El corte cambió mientras se borraba.");

@@ -200,6 +200,9 @@ export type GuidesApplyResult = { ok: true; batchId: string; lotId: string } | {
 // etiquetas + lo que quedó sin variante + lo que no se alcanzó a leer. Suma
 // siempre exactamente `quantity` (así cuadra con la validación de
 // saveVariantNotes). Vacío si la fila no trae ninguna variante.
+// Pedido del usuario 2026-09-28 (temporal): ID provisional de ALF.
+export const isProvisionalAlfName = (name: string) => /-\s*ALF\s*$/i.test(name.trim());
+
 function rowBreakdown(row: GuidesApplyRow): { label: string; quantity: number }[] {
   const variants = row.variants.filter((v) => v.label.trim() && v.quantity > 0);
   if (variants.length === 0 || row.quantity === 0) return [];
@@ -240,7 +243,16 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
   const rocketRows = input.rows.filter((r) => isRocketCode(r.code) && r.decision.kind !== "ignore");
   const productRows = input.rows.filter((r) => r.decision.kind === "product" && !isRocketCode(r.code));
   const comboCodes = [...new Set(input.rows.map(comboCodeOf).filter((c): c is string => !!c && !isRocketCode(c)))];
-  const ignoreRows = input.rows.filter((r) => r.decision.kind === "ignore");
+  // IDs provisionales de ALF (pedido del usuario 2026-09-28, temporal): no
+  // tocan INVESTOCK, pero sí salen en el corte y en la hoja de despacho.
+  const provisionalRows = input.rows.filter((r) => r.decision.kind === "ignore" && isProvisionalAlfName(r.name) && r.quantity > 0);
+  const ignoreRows = input.rows.filter((r) => r.decision.kind === "ignore" && !isProvisionalAlfName(r.name));
+  const provisionalLines = provisionalRows.flatMap((r) => {
+    const variants = rowBreakdown(r).map((b) => `${b.label} ${b.quantity}`).join(" · ") || null;
+    return Object.entries(r.byCarrier)
+      .filter(([, q]) => q > 0)
+      .map(([carrier, quantity], idx) => ({ code: r.code, name: r.name, quantity, carrier, variants: idx === 0 ? variants : null }));
+  });
 
   const pickedIds = [...new Set(productRows.map((r) => (r.decision as { catalogItemId: string }).catalogItemId))];
   const [pickedItems, combos, codeOwners] = await Promise.all([
@@ -368,7 +380,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
     }
   }
 
-  if (itemRows.length === 0) return { ok: false, error: "No hay ningún producto listo para guardar." };
+  if (itemRows.length === 0 && provisionalLines.length === 0) return { ok: false, error: "No hay ningún producto listo para guardar." };
 
   // Notas de variante por producto: solo si alguna de sus filas trae
   // variantes; las demás filas del mismo producto entran como "Sin
@@ -418,8 +430,6 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
         });
       }
       for (const r of ignoreRows) {
-        // IDs provisionales de ALF: se omiten pero no se recuerdan (desaparecerán).
-        if (/-\s*ALF\s*$/i.test(r.name.trim())) continue;
         await tx.dropiIgnoredCode.upsert({ where: { code: r.code }, create: { code: r.code, label: r.name, createdById: userId }, update: { label: r.name } });
       }
       return tx.fulfillmentRequestBatch.create({
@@ -445,6 +455,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
             })),
           },
           guides: { create: input.guides.map((g) => ({ guideNumber: g.number, carrier: g.carrier })) },
+          provisionalLines: { create: provisionalLines },
           variantNotes: {
             create: [...notesByItem.entries()].flatMap(([catalogItemId, m]) =>
               [...m.entries()].map(([label, quantity]) => ({ catalogItemId, label, quantity, createdById: userId }))
@@ -477,6 +488,8 @@ export type LotLine = ItemView & {
   fromCombos: { code: string; quantity: number }[];
   variants: { label: string; quantity: number }[];
 };
+// Producto con ID provisional de ALF: no está en INVESTOCK (sin foto, sin QR).
+export type ProvisionalLotLine = { code: string; name: string; quantity: number; byCarrier: Record<string, number>; variants: string[] };
 export type LotWarrantyLine = ItemView & {
   itemId: string;
   guide: string;
@@ -552,6 +565,7 @@ export async function getCompiledLot(lotId: string) {
           items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true, warehouseArea: true } } } },
           variantNotes: { select: { catalogItemId: true, label: true, quantity: true } },
           guides: { select: { carrier: true } },
+          provisionalLines: true,
         },
       },
       picks: true,
@@ -615,6 +629,20 @@ export async function getCompiledLot(lotId: string) {
       guidesByCarrier[g.carrier] = (guidesByCarrier[g.carrier] ?? 0) + 1;
       const bySource = (guidesBySource[b.source] ??= {});
       bySource[g.carrier] = (bySource[g.carrier] ?? 0) + 1;
+    }
+  }
+
+  // IDs provisionales de ALF (temporal, 2026-09-28): sumados por código.
+  const provisionalMap = new Map<string, ProvisionalLotLine>();
+  for (const b of lot.batches) {
+    for (const p of b.provisionalLines) {
+      let line = provisionalMap.get(p.code);
+      if (!line) provisionalMap.set(p.code, (line = { code: p.code, name: p.name, quantity: 0, byCarrier: {}, variants: [] }));
+      const carrier = p.carrier ?? NO_CARRIER;
+      carriers.add(carrier);
+      line.quantity += p.quantity;
+      line.byCarrier[carrier] = (line.byCarrier[carrier] ?? 0) + p.quantity;
+      if (p.variants) line.variants.push(p.variants);
     }
   }
 
@@ -716,6 +744,7 @@ export async function getCompiledLot(lotId: string) {
       fileCount: b.fileUrls.length,
     })),
     lines: lineList.sort((a, b) => b.quantity - a.quantity),
+    provisional: [...provisionalMap.values()].sort((a, b) => b.quantity - a.quantity),
     warranty,
     combos,
     shortages,
@@ -767,7 +796,7 @@ export async function sendLotToInventory(lotId: string, userId: string | null): 
   const lot = await getCompiledLot(lotId);
   if (!lot) return { ok: false, error: "No encontrado." };
   if (lot.status !== "DRAFT") return { ok: false, error: "Este corte ya se envió a Inventario." };
-  if (lot.batches.length === 0 || (lot.lines.length === 0 && lot.warranty.length === 0)) return { ok: false, error: "El corte está vacío — sube las guías primero." };
+  if (lot.batches.length === 0 || (lot.lines.length === 0 && lot.warranty.length === 0 && lot.provisional.length === 0)) return { ok: false, error: "El corte está vacío — sube las guías primero." };
 
   const updated = await prisma.fulfillmentLot.updateMany({ where: { id: lotId, status: "DRAFT" }, data: { status: "SENT", sentAt: new Date(), sentById: userId } });
   if (updated.count === 0) return { ok: false, error: "Este corte ya se envió a Inventario." };

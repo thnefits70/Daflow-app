@@ -56,7 +56,8 @@ function RowCode({ code }: { code: string }) {
 type WarrantyDecision = { mode: "COMPLETE" } | { mode: "PARTIAL"; catalogItemIds: string[] } | { mode: "PIECE"; catalogItemId: string; piece: string } | null;
 
 // Pedido del usuario 2026-09-28: los productos de ALF con ID provisional
-// (nombre termina en "- ALF") se omiten solos mientras esos IDs existan.
+// (nombre termina en "- ALF") no tocan INVESTOCK, pero salen en el corte y
+// en la hoja de despacho aparte (FulfillmentProvisionalLine).
 // También los ya vinculados (2026-09-28). "Volver a incluir" les devuelve
 // su vínculo, o los regresa a pendientes si no tenían.
 const isProvisionalAlf = (name: string) => /-\s*ALF\s*$/i.test(name.trim());
@@ -576,7 +577,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             <div className="flex items-center gap-2 text-steel">
               <span>
                 {res.kind !== "ignored" && isProvisionalAlf(r.name)
-                  ? "ID provisional de ALF — se omite solo."
+                  ? "ID provisional de ALF — sale en la hoja de despacho, sin descontar stock."
                   : `No es un producto — no se incluye${res.kind === "ignored" ? " (recordado)" : ""}.`}
               </span>
               <button type="button" className="text-teal font-semibold cursor-pointer" onClick={() => includeAgain(r)}>

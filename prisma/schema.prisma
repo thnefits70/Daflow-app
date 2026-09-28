@@ -2539,8 +2539,8 @@ model FulfillmentRequestBatch {
   // src/lib/dropiGuidesPdf.ts) — los PDF originales quedan guardados para
   // poder revisarlos después, y la fecha del manifiesto tal como la imprime
   // Dropi (YYYY-MM-DD). Vacíos/null en las subidas por foto o Excel.
-  fileUrls     String[] @default([])
-  manifestDate String?
+  fileUrls      String[] @default([])
+  manifestDate  String?
   // Confirmado 2026-09-25, pedido del usuario: lo que la app no pudo leer
   // bien del PDF (se le mostró a Yair) queda guardado para revisar y ajustar
   // la lectura en el camino.
@@ -2551,9 +2551,10 @@ model FulfillmentRequestBatch {
   lotId String?
   lot   FulfillmentLot? @relation(fields: [lotId], references: [id], onDelete: SetNull)
 
-  items        FulfillmentRequestItem[]
-  variantNotes FulfillmentRequestVariantNote[]
-  guides       FulfillmentRequestGuide[]
+  items            FulfillmentRequestItem[]
+  variantNotes     FulfillmentRequestVariantNote[]
+  guides           FulfillmentRequestGuide[]
+  provisionalLines FulfillmentProvisionalLine[]
 
   @@index([requestedAt])
 }
@@ -2569,6 +2570,25 @@ model FulfillmentRequestGuide {
   guideNumber String                  @unique
   carrier     String
   createdAt   DateTime                @default(now())
+
+  @@index([batchId])
+}
+
+// Pedido del usuario 2026-09-28 (PROVISIONAL): productos de ALF con ID
+// provisional de Dropi (nombre termina en "- ALF") que están en bodega pero
+// todavía no existen en INVESTOCK. Salen en el corte y en la hoja de
+// despacho para que el equipo los saque, pero no se escanean ni tocan el
+// stock. Quitar cuando esos IDs desaparezcan.
+model FulfillmentProvisionalLine {
+  id       String                  @id @default(cuid())
+  batchId  String
+  batch    FulfillmentRequestBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  code     String
+  name     String
+  quantity Int
+  carrier  String?
+  // Colores/tallas del total ("Negro 2 · Rojo 1"), solo en la primera fila del código.
+  variants String?
 
   @@index([batchId])
 }
@@ -3157,10 +3177,10 @@ model PurchaseRequestReceipt {
   // se usa para crear el lote real (ver approve-receipt/route.ts).
   // expirationDeclared: null = no se preguntó (recepciones viejas o creadas
   // desde un reporte urgente), true = tiene caducidad, false = no tiene.
-  expirationDeclared    Boolean?
-  lotManufactureDate    DateTime?
-  lotExpirationDate     DateTime?
-  lotQuantity           Int?
+  expirationDeclared Boolean?
+  lotManufactureDate DateTime?
+  lotExpirationDate  DateTime?
+  lotQuantity        Int?
 
   // Confirmado 2026-08-18: pedido explícito del usuario — quien de verdad
   // recibió la mercadería físicamente (cualquiera del equipo de Inventario,

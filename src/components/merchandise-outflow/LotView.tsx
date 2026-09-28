@@ -36,6 +36,8 @@ export type LotPickLine = ItemView & {
   block: string;
 };
 export type LotBlock = { carrier: string; assigneeId: string | null; assigneeName: string | null; assignedAt: string | null };
+// ID provisional de ALF (temporal, 2026-09-28): no está en INVESTOCK.
+export type ProvisionalLotLine = { code: string; name: string; quantity: number; byCarrier: Record<string, number>; variants: string[] };
 export type LotShortage = ItemView & { needed: number; stock: number; pendingReturns: { label: string; qty: number }[]; realShortage: number };
 export type LotBatch = { id: string; source: string; requestedAt: string; requestedByName: string; guideCount: number; fileCount: number };
 export type LotStatus = "DRAFT" | "SENT" | "CLOSED";
@@ -52,6 +54,7 @@ export type CompiledLot = {
   guidesBySource: Record<string, Record<string, number>>;
   batches: LotBatch[];
   lines: LotLine[];
+  provisional?: ProvisionalLotLine[];
   warranty: LotWarrantyLine[];
   combos: ComboRecipe[];
   shortages: LotShortage[];
@@ -127,6 +130,8 @@ export function LotView({
   const [err, setErr] = useState("");
   const [openCombo, setOpenCombo] = useState<string | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const provisional = lot.provisional ?? [];
+  const isEmpty = lot.lines.length === 0 && lot.warranty.length === 0 && provisional.length === 0;
   const shownCombo = lot.combos.find((c) => c.code === openCombo) ?? null;
   const units = lot.lines.reduce((s, l) => s + l.quantity, 0);
   const perCarrier = lot.carriers.map((c) => ({ c, q: lot.lines.reduce((s, l) => s + (l.byCarrier[c] ?? 0), 0), g: lot.guidesByCarrier[c] ?? 0 }));
@@ -208,6 +213,7 @@ export function LotView({
         {totalGuides > 0 ? `${totalGuides} guías · ` : ""}
         {lot.lines.length} productos · {units} unidades
         {lot.warranty.length > 0 ? ` · ${lot.warranty.length} garantía(s)` : ""}
+        {provisional.length > 0 ? ` · ${provisional.length} con ID provisional` : ""}
         {lot.sentAt ? ` · enviado ${fmtTime(lot.sentAt)}${lot.sentByName ? ` por ${lot.sentByName}` : ""}` : ""}
         {lot.printedAt ? ` · impreso ${fmtTime(lot.printedAt)}${lot.printedByName ? ` por ${lot.printedByName}` : ""}` : ""}
       </div>
@@ -410,6 +416,8 @@ export function LotView({
         </div>
       )}
 
+      {provisional.length > 0 && <ProvisionalBox lines={provisional} />}
+
       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
 
       {lot.status === "DRAFT" && !canSubmit && (
@@ -424,7 +432,7 @@ export function LotView({
       {editable && !confirming && (
         <button
           type="button"
-          disabled={lot.lines.length === 0 && lot.warranty.length === 0}
+          disabled={isEmpty}
           className="rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-50"
           onClick={() => setConfirming(true)}
         >
@@ -432,7 +440,7 @@ export function LotView({
         </button>
       )}
 
-      {editable && !confirming && lot.lines.length === 0 && lot.warranty.length === 0 && (
+      {editable && !confirming && isEmpty && (
         <button type="button" className="ml-2 rounded border border-red/50 px-3.5 py-2 text-[12.5px] font-bold text-red cursor-pointer" onClick={removeLot}>
           Eliminar corte vacío
         </button>
@@ -468,6 +476,35 @@ export function LotView({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Pedido del usuario 2026-09-28 (PROVISIONAL): productos de ALF con ID
+// provisional — están en bodega pero no en INVESTOCK. Siempre a la vista
+// (el equipo los saca a mano): no se escanean ni se descuentan del stock.
+function ProvisionalBox({ lines }: { lines: ProvisionalLotLine[] }) {
+  return (
+    <div className="text-[11.5px] bg-gold/10 border border-gold/40 rounded-md p-2.5 mb-3">
+      <div className="font-semibold mb-0.5" style={{ color: "var(--color-gold)" }}>
+        Productos con ID provisional ({lines.length}) — no están en INVESTOCK
+      </div>
+      <div className="text-[10.5px] text-steel mb-1.5">Sácalos mirando esta lista: no se escanean ni se descuentan del stock.</div>
+      {lines.map((l) => (
+        <div key={l.code} className="flex items-start gap-2 py-1 border-t border-gold/20">
+          <span className="font-mono text-[10.5px] font-bold shrink-0">{l.code}</span>
+          <div className="flex-1 min-w-0">
+            <div>{l.name}</div>
+            <div className="text-[10.5px] text-steel">
+              {sortCarriers(Object.keys(l.byCarrier))
+                .map((c) => `${carrierLabel(c)} ${l.byCarrier[c]}`)
+                .join(" · ")}
+              {l.variants.length > 0 ? ` · ${l.variants.join(" · ")}` : ""}
+            </div>
+          </div>
+          <span className="font-mono font-bold text-teal shrink-0">{l.quantity}</span>
+        </div>
+      ))}
     </div>
   );
 }

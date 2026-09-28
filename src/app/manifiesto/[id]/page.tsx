@@ -97,6 +97,7 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
             <div className="font-semibold mt-1">
               {lines.length} productos · {units} unidades
               {lot.warranty.length > 0 ? ` · ${lot.warranty.length} garantía(s)` : ""}
+              {lot.provisional.length > 0 ? ` · ${lot.provisional.length} con ID provisional` : ""}
             </div>
           </div>
         </div>
@@ -177,6 +178,49 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
               </tr>
             </tbody>
           </table>
+        )}
+
+        {lot.provisional.length > 0 && (
+          // Pedido del usuario 2026-09-28 (temporal): productos de ALF con ID
+          // provisional — no están en INVESTOCK, se sacan con esta lista.
+          <div className="mb-6">
+            <div className="text-[13px] font-bold border-b-2 border-black pb-1 mb-1">ID provisional — no están en INVESTOCK (no se escanean)</div>
+            <table className="w-full text-[12px] border-collapse">
+              <thead>
+                <tr className="text-left border-b border-gray-400">
+                  <th className="py-1 pr-2">ID</th>
+                  <th className="py-1 pr-2">Producto</th>
+                  {lot.carriers.map((c) => (
+                    <th key={c} className="py-1 px-1.5 text-right whitespace-nowrap">
+                      {carrierLabel(c)}
+                    </th>
+                  ))}
+                  <th className="py-1 px-1.5 text-right">Total</th>
+                  <th className="py-1 pl-2 text-center">Sacado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lot.provisional.map((p) => (
+                  <tr key={p.code} className="border-b border-gray-300 align-top" style={{ breakInside: "avoid" }}>
+                    <td className="py-1.5 pr-2 font-mono font-bold">{p.code}</td>
+                    <td className="py-1.5 pr-2">
+                      <div className="font-semibold">{p.name}</div>
+                      {p.variants.length > 0 && <div className="text-[10.5px] text-gray-600">{p.variants.join(" · ")}</div>}
+                    </td>
+                    {lot.carriers.map((c) => (
+                      <td key={c} className="py-1.5 px-1.5 text-right font-mono">
+                        {p.byCarrier[c] ?? "–"}
+                      </td>
+                    ))}
+                    <td className="py-1.5 px-1.5 text-right font-mono font-bold">{p.quantity}</td>
+                    <td className="py-1.5 pl-2">
+                      <div className="w-12 h-5 border border-gray-500 mx-auto" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
         {lot.warranty.length > 0 && (
