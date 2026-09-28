@@ -194,7 +194,10 @@ const CARRIER_RE = /TRANSPORTADORA:\s*([A-Z0-9 ]+?)\s*$/i;
 const DATE_RE = /FECHA MANIFIESTO \(DD\/MM\/YYYY\):\s*(\d{2})-(\d{2})-(\d{4})/;
 // Greedy a propósito: "(103511)CUATRO ALMOHADAS X4 X1" → la cantidad es el
 // ÚLTIMO "X<n>", no el "X4" que es parte del nombre.
-const ID_LABEL_RE = /(?:^|\s|-)\((\d{3,})\)\s*(.+)\s+X\s?(\d+)\b/;
+// El "(ID)" puede venir pegado a la dirección cuando es larga (Laar, real
+// 2026-09-28: "…Jonathan Ocampo(113467)HIDROLAVADORA … X1"); en ese caso
+// solo se acepta si el ID está en la tabla resumen (ver `glued` abajo).
+const ID_LABEL_RE = /(?<![\d(])\((\d{3,})\)\s*(.+)\s+X\s?(\d+)\b/;
 const GINTRA_PART_RE = /^(\d+)(?:[.,]\d+)?\s*\*\s*(.+)$/;
 const URBANO_ROW_RE = /^\s*\d{1,2}\s{2,}(.+?)\s{2,}(\d+)\s*$/;
 
@@ -362,14 +365,20 @@ function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuide
   }
 
   if (pagesWithoutGuide.length > 0) {
-    warnings.push(`En ${pagesWithoutGuide.length} página(s) no encontré el número de guía (página ${pagesWithoutGuide.slice(0, 5).join(", ")}) — esas etiquetas no se sumaron.`);
+    warnings.push(
+      `En ${pagesWithoutGuide.length} página(s) no encontré el número de guía (página ${pagesWithoutGuide.slice(0, 5).join(", ")}). Por qué: esa página no trae el código de barras de la guía como las demás. Qué hacer: abre el PDF en esa página; si es una etiqueta, sus productos NO se sumaron — avisa al administrador.`
+    );
   }
   if (guidesWithoutProducts.length > 0) {
-    warnings.push(`En ${guidesWithoutProducts.length} guía(s) no pude leer los productos (ej. ${guidesWithoutProducts.slice(0, 3).join(", ")}) — no se sumaron.`);
+    warnings.push(
+      `En ${guidesWithoutProducts.length} guía(s) no pude leer los productos (ej. ${guidesWithoutProducts.slice(0, 3).join(", ")}). Por qué: la parte de PRODUCTOS de esa etiqueta viene con otro formato o cortada. Qué hacer: esos productos NO se sumaron — revisa esa etiqueta y avisa al administrador.`
+    );
   }
   const noCarrier = [...guides.entries()].filter(([, v]) => v.carrier === "SIN TRANSPORTADORA").map(([n]) => n);
   if (noCarrier.length > 0) {
-    warnings.push(`No reconocí la transportadora de ${noCarrier.length} guía(s) por su número (ej. ${noCarrier.slice(0, 3).join(", ")}).`);
+    warnings.push(
+      `No reconocí la transportadora de ${noCarrier.length} guía(s) (ej. ${noCarrier.slice(0, 3).join(", ")}). Por qué: el número de guía no empieza como los de Gintracom, Laar, Servientrega, Veloces o Urbano. Qué hacer: puedes guardar; esas guías salen como "sin transportadora" en el corte.`
+    );
   }
 
   const lines: ParsedGuidesLine[] = [...normal.entries()].map(([code, r]) => ({
@@ -466,6 +475,9 @@ function parseDropiPages(pages: PdfLine[][], warrantyFile = false): ParsedGuides
   };
 
   const hits: LabelHit[] = [];
+  // Productos escritos en una etiqueta que no se parecen a ningún nombre de
+  // la tabla — se muestran tal cual en el aviso para que Yair vea el porqué.
+  const unmatched: { text: string; page: number; line: number }[] = [];
   // Dónde aparece cada número de guía FUERA de la tabla resumen — sirve
   // para saber a qué guía pertenece cada etiqueta (se usa para separar las
   // garantías). Servientrega/Laar/Urbano/Veloces imprimen el número antes
@@ -488,7 +500,8 @@ function parseDropiPages(pages: PdfLine[][], warrantyFile = false): ParsedGuides
 
       // Servientrega / Laar / Veloces: traen el ID de Dropi.
       const idm = text.match(ID_LABEL_RE);
-      if (idm) {
+      const glued = idm && idm.index! > 0 && !/[\s-]/.test(text[idm.index! - 1]);
+      if (idm && (!glued || summary.has(idm[1]))) {
         const { variant } = splitVariant(idm[2]);
         // La etiqueta a veces trae el ID de la VARIANTE y el resumen el del
         // producto madre (ej. real 2026-09-25: resumen 127946, etiqueta
@@ -513,6 +526,7 @@ function parseDropiPages(pages: PdfLine[][], warrantyFile = false): ParsedGuides
           if (!pm) continue;
           const hit = matchByName(pm[2]);
           if (hit) hits.push({ code: hit.code, variant: hit.variant, qty: Number(pm[1]), page: p, line: i });
+          else unmatched.push({ text: pm[2].trim(), page: p, line: i });
         }
         continue;
       }
@@ -524,6 +538,7 @@ function parseDropiPages(pages: PdfLine[][], warrantyFile = false): ParsedGuides
           if (!um) break;
           const hit = matchByName(fixBrokenAccents(um[1]));
           if (hit) hits.push({ code: hit.code, variant: hit.variant, qty: Number(um[2]), page: p, line: j });
+          else unmatched.push({ text: um[1].trim(), page: p, line: j });
           i = j;
         }
       }
@@ -644,18 +659,58 @@ function parseDropiPages(pages: PdfLine[][], warrantyFile = false): ParsedGuides
       `⚠ ${p.name}: se vende en paquetes (1, 2, 4 unidades…) y no pude leer ${p.orders} etiqueta(s) — cada una se contó como 1 unidad, puede faltar. Revisa esas etiquetas al preparar.`
     );
   }
-  const incomplete = lines.filter((l) => l.labelUnits < l.quantity);
-  if (incomplete.length > 0) {
-    const units = incomplete.reduce((a, l) => a + (l.quantity - l.labelUnits), 0);
-    warnings.push(
-      `En ${incomplete.length} producto(s) no pude leer todas las etiquetas (${units} unidad(es)) — el total está bien porque sale de la tabla, pero sus colores/tallas pueden salir incompletos. Ej: ${incomplete
-        .slice(0, 3)
-        .map((l) => l.name)
-        .join(", ")}.`
-    );
+  // Pedido de Yair 2026-09-28: decir AHÍ MISMO por qué no se leyó y si
+  // importa, no solo "no pude leer". Por cada producto: en qué
+  // transportadora falta, qué guías de esa transportadora quedaron sin
+  // ningún producto leído y qué texto de etiqueta no se reconoció.
+  const carrierOfGuide = (g: string | null) => (g && guides.get(g)?.carrier) || "";
+  const emptyGuides = [...guides.entries()].filter(([n, g]) => !g.warranty && !codesByGuide.has(n));
+  const unmatchedAt = unmatched.map((u) => {
+    const guide = guideOf({ code: "", variant: null, qty: 0, page: u.page, line: u.line });
+    return { text: u.text, guide, carrier: carrierOfGuide(guide) };
+  });
+  const readAt = new Map<string, number>(); // "code|transportadora" → pedidos leídos
+  for (const h of hits) {
+    const k = `${h.code}|${carrierOfGuide(guideOf(h))}`;
+    readAt.set(k, (readAt.get(k) ?? 0) + h.qty);
+  }
+  for (const l of lines.filter((x) => x.labelUnits < x.quantity)) {
+    const missing = l.quantity - l.labelUnits;
+    const shortCarriers = [...summary.get(l.code)!.byCarrier].filter(([c, q]) => q > (readAt.get(`${l.code}|${c}`) ?? 0)).map(([c]) => c);
+    const reasons: string[] = [];
+    for (const c of shortCarriers) {
+      const where = c || "sin transportadora";
+      const texts = unmatchedAt.filter((u) => u.carrier === c);
+      if (texts.length > 0) {
+        reasons.push(
+          `en ${where} hay etiqueta(s) que dicen ${texts
+            .slice(0, 2)
+            .map((t) => `«${t.text}»${t.guide ? ` (guía ${t.guide})` : ""}`)
+            .join(", ")} y ese nombre no se parece al de la tabla`
+        );
+      }
+      const empty = emptyGuides.filter(([, g]) => g.carrier === c).map(([n]) => n);
+      if (empty.length > 0) {
+        reasons.push(
+          `en ${where} no encontré ningún producto en la etiqueta de la guía ${empty.slice(0, 3).join(", ")}${empty.length > 3 ? ` y ${empty.length - 3} más` : ""} (la etiqueta viene con otro formato o el texto está pegado/cortado)`
+        );
+      }
+      if (texts.length === 0 && empty.length === 0) reasons.push(`en ${where} no encontré su línea de producto en ninguna etiqueta`);
+    }
+    const impact =
+      l.variants.length > 0
+        ? `este producto sí tiene colores/tallas — al preparar, mira en la etiqueta cuál es ${missing === 1 ? "la unidad que falta" : `las ${missing} unidades que faltan`}.`
+        : l.labelUnits > 0
+          ? "no afecta. Las demás etiquetas de este producto no traen color/talla y el total ya está bien (sale de la tabla)."
+          : "el total ya está bien (sale de la tabla). Solo si este producto tiene colores/tallas, mira la etiqueta al preparar.";
+    warnings.push(`${l.name}: la tabla dice ${l.quantity} y en las etiquetas leí ${l.labelUnits}. Por qué: ${reasons.join("; ")}. Qué hacer: ${impact}`);
   }
   const noCarrier = [...guides.entries()].filter(([, v]) => !v.carrier || v.carrier === "SIN TRANSPORTADORA").map(([n]) => n);
-  if (noCarrier.length > 0) warnings.push(`No reconocí la transportadora de ${noCarrier.length} guía(s) (ej. ${noCarrier.slice(0, 3).join(", ")}).`);
+  if (noCarrier.length > 0) {
+    warnings.push(
+      `No reconocí la transportadora de ${noCarrier.length} guía(s) (ej. ${noCarrier.slice(0, 3).join(", ")}). Por qué: en el PDF no encontré la línea "TRANSPORTADORA:" antes de esas guías. Qué hacer: puedes guardar; esas guías salen como "sin transportadora" en el corte.`
+    );
+  }
 
   return {
     manifestDate,

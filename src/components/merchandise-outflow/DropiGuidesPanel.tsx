@@ -734,8 +734,19 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                 <AlertTriangle size={13} /> Cosas que no pude leer bien
               </div>
               <ul className="list-disc pl-4 flex flex-col gap-0.5">
+                {/* "Por qué:" / "Qué hacer:" en negrita (pedido de Yair 2026-09-28). */}
                 {data.warnings.map((w, i) => (
-                  <li key={i}>{w}</li>
+                  <li key={i}>
+                    {w.split(/(Por qué:|Qué hacer:)/).map((part, j) =>
+                      part === "Por qué:" || part === "Qué hacer:" ? (
+                        <strong key={j} className="font-semibold">
+                          {part}
+                        </strong>
+                      ) : (
+                        part
+                      )
+                    )}
+                  </li>
                 ))}
               </ul>
               <div className="text-[10.5px] text-steel mt-1">Puedes guardar igual. Quedan anotados para que el administrador ajuste la lectura; si se repiten, avísale.</div>
