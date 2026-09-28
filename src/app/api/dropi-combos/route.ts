@@ -33,7 +33,11 @@ export async function GET() {
 
   const combos = await prisma.dropiCombo.findMany({
     orderBy: { createdAt: "desc" },
-    include: { createdBy: { select: { name: true } }, components: { include: { catalogItem: { select: CATALOG_ITEM_SELECT } } } },
+    include: {
+      createdBy: { select: { name: true } },
+      components: { include: { catalogItem: { select: CATALOG_ITEM_SELECT } } },
+      rocketCodeMappings: { select: { rocketCode: true }, orderBy: { rocketCode: "asc" } },
+    },
   });
 
   // Confirmado 2026-09-16, pedido explícito del usuario: los mismos
@@ -86,6 +90,10 @@ export async function GET() {
         createdByName: c.createdBy?.name ?? null,
         createdAt: c.createdAt,
         components: c.components.map((comp) => ({ id: comp.id, quantity: comp.quantity, catalogItem: comp.catalogItem })),
+        // Pedido del usuario 2026-09-28: el ID de Rocket del mismo combo, solo
+        // como referencia (Rocket no está en INVESTOCK; la receta dice qué
+        // productos reales se descuentan) — ver RocketCodeMapping.
+        rocketCodes: c.rocketCodeMappings.map((m) => m.rocketCode),
         ...prices,
       };
     })

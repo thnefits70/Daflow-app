@@ -47,6 +47,8 @@ type ComboRow = {
   code: string;
   label: string | null;
   bodega: Marca | null;
+  // IDs de Rocket del mismo combo — solo referencia, no están en INVESTOCK.
+  rocketCodes?: string[];
   components: { id: string; quantity: number; catalogItem: { id: string; name: string; justCode: string | null } }[];
   providerPrice: number | null;
   bodegaPrice: number | null;
@@ -717,7 +719,10 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
     : marcaFilteredCombosBase
         .map((c) => {
           const ownNameNorm = normalize(c.label ?? "");
-          const ownDirectMatch = ownNameNorm.includes(normalize(comboQ)) || c.code.toLowerCase().includes(comboQ.toLowerCase());
+          const ownDirectMatch =
+            ownNameNorm.includes(normalize(comboQ)) ||
+            c.code.toLowerCase().includes(comboQ.toLowerCase()) ||
+            (c.rocketCodes ?? []).some((r) => r.toLowerCase().includes(comboQ.toLowerCase().replace(/^r/, "")));
           const ownMatchCount = comboQWords.filter((w) => ownNameNorm.includes(w)).length;
 
           const componentHits = c.components.map((comp) => {
@@ -1194,6 +1199,19 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                       <span className="text-[12.5px] flex items-center gap-1.5 min-w-0">
                         <CopyableText value={combo.code} className="font-mono font-bold text-teal shrink-0" />
                         {combo.label && <ExpandableName text={combo.label} className="text-steel" />}
+                        {/* Pedido del usuario 2026-09-28: el ID de Rocket es solo referencia —
+                            no existe en INVESTOCK; el stock se descuenta de los productos reales de la receta. */}
+                        {(combo.rocketCodes ?? []).map((r) => (
+                          <span
+                            key={r}
+                            className="shrink-0 inline-flex items-center gap-1 rounded-full border border-gold/60 px-2 py-0.5 text-[10.5px] text-gold"
+                            title={`ID ${r} es de Rocket, no de Dropi. Es solo una referencia: no existe en INVESTOCK ni tiene stock. Cuando se despacha, se descuentan los productos reales de la receta de este combo (los que ves abajo).`}
+                          >
+                            <span className="font-bold uppercase">Rocket</span>
+                            <span className="font-mono font-bold">{r}</span>
+                            <span className="italic">· referencia</span>
+                          </span>
+                        ))}
                       </span>
                       {/* La marca del combo la aprende la app del manifiesto en que viene; solo el admin corrige. */}
                       <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} readOnly={!isAdmin} />
