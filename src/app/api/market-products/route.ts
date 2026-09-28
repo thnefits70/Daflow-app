@@ -228,7 +228,25 @@ export async function GET(req: NextRequest) {
     // ya en bodega) va primero, con cuántas unidades esperan — mismo cálculo que
     // su pendiente obligatorio de Inicio.
     const pending = new Map((await getMarketProductKardexReleasePendingRows()).map((r) => [r.id, r.units]));
-    const withUnits = rows.map((r) => ({ ...r, kardexPendingUnits: pending.get(r.id) ?? 0 }));
+    // Confirmado 2026-09-28: si el artículo ya se compró por otro camino (ej.
+    // directo en Control de Compras, sin pasar por "listo para comprar"), ese
+    // paso ya no aplica — antes a Bryan le seguía pidiendo proveedor para un
+    // producto con mercadería ya en bodega.
+    const catalogItemIds = rows.map((r) => r.catalogItemId).filter((id): id is string => !!id);
+    const bought = catalogItemIds.length
+      ? await prisma.purchaseRequest.findMany({
+          where: { catalogItemId: { in: catalogItemIds }, status: { not: "REJECTED" } },
+          select: { catalogItemId: true, createdAt: true },
+          orderBy: { createdAt: "asc" },
+        })
+      : [];
+    const firstBoughtAt = new Map<string, Date>();
+    for (const b of bought) if (!firstBoughtAt.has(b.catalogItemId)) firstBoughtAt.set(b.catalogItemId, b.createdAt);
+    const withUnits = rows.map((r) => ({
+      ...r,
+      kardexPendingUnits: pending.get(r.id) ?? 0,
+      boughtAt: r.catalogItemId ? firstBoughtAt.get(r.catalogItemId) ?? null : null,
+    }));
     withUnits.sort((a, b) => (b.kardexPendingUnits > 0 ? 1 : 0) - (a.kardexPendingUnits > 0 ? 1 : 0));
     return NextResponse.json(withUnits);
   }

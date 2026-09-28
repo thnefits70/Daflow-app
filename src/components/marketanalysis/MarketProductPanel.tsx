@@ -51,6 +51,7 @@ type Proposal = {
   kardexReleasedAt: string | null;
   kardexReleasedBy: { name: string } | null;
   kardexPendingUnits?: number;
+  boughtAt?: string | null;
   catalogItem: { id: string; name: string; photos: string[]; awaitingDropiId?: boolean } | null;
   supplierPrices: SupplierPrice[];
   traceability?: { totalMinutes: number | null };
@@ -1250,7 +1251,10 @@ function TraceabilityView({ canDecidePurchase }: { canDecidePurchase: boolean })
               Liberado al Kardex por {p.kardexReleasedBy?.name ?? "—"} — {formatDateTime(p.kardexReleasedAt)}
             </div>
           )}
-          {canDecidePurchase && !p.readyToBuyAt && p.catalogItem && (
+          {!p.readyToBuyAt && p.boughtAt && (
+            <div className="text-[12px] text-teal font-semibold">Ya comprado en Control de Compras — {formatDateTime(p.boughtAt)}</div>
+          )}
+          {canDecidePurchase && !p.readyToBuyAt && !p.boughtAt && p.catalogItem && (
             <div className="flex flex-wrap items-center gap-2">
               <select className="rounded border border-rule px-2 py-1.5 text-[12px]" value={chosen[p.id] ?? p.suggestedSupplierId ?? ""} onChange={(e) => setChosen((c) => ({ ...c, [p.id]: e.target.value }))}>
                 <option value="">Elige proveedor…</option>
