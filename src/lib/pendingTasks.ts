@@ -13,6 +13,7 @@ import { getNewIdBrandingBoard } from "@/lib/newIdBranding";
 import { CLAIM_GAP_DAYS, findPossibleDoubleRegistrations, getSupplierClaimGaps } from "@/lib/reentrySupplierClaim";
 import { getCompiledLot } from "@/lib/fulfillmentGuides";
 import { carrierLabel } from "@/lib/carriers";
+import { isAutoStockoutWeek } from "@/lib/autoStockout";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -620,6 +621,9 @@ async function getFillRateJustificationPendingItem(deptId: string, href: string)
 
 async function getStockoutPendingItem(href: string): Promise<PendingItem | null> {
   const status = await weeklyPendingStatus(async (week) => {
+    // Desde la semana 40 se arma sola con los cortes (autoStockout.ts) — no
+    // hay nada que cargar a mano.
+    if (isAutoStockoutWeek(week)) return true;
     const [productCount, confirmed] = await Promise.all([
       prisma.stockoutWeekProduct.count({ where: { week } }),
       prisma.stockoutWeekConfirmation.findUnique({ where: { week } }),

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getStockoutWeekDetails } from "@/lib/dashboard";
 import { TopLine } from "@/components/ui/TopLine";
 import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { ReturnRatePanel } from "@/components/finance/ReturnRatePanel";
@@ -21,16 +22,10 @@ export default async function AreaKpisGeneralesPage() {
     canManageInventoryControl(),
   ]);
 
-  const [returnRateRecords, stockoutWeekRows, stockoutConfirmations, warrantyCategories, warrantyMonthTotals, warrantyCounts] =
+  const [returnRateRecords, stockoutWeeks, warrantyCategories, warrantyMonthTotals, warrantyCounts] =
     await Promise.all([
       canReturnRate ? prisma.returnRateRecord.findMany({ orderBy: { month: "desc" } }) : Promise.resolve([]),
-      canStockouts
-        ? prisma.stockoutWeekProduct.findMany({
-            include: { product: { select: { id: true, name: true, catalogItem: { select: { justCode: true } } } } },
-            orderBy: [{ week: "desc" }, { createdAt: "asc" }],
-          })
-        : Promise.resolve([]),
-      canStockouts ? prisma.stockoutWeekConfirmation.findMany({ select: { week: true } }) : Promise.resolve([]),
+      canStockouts ? getStockoutWeekDetails() : Promise.resolve([]),
       canWarranties ? prisma.warrantyCategory.findMany({ orderBy: { name: "asc" } }) : Promise.resolve([]),
       canWarranties ? prisma.warrantyMonthTotal.findMany({ orderBy: { month: "desc" } }) : Promise.resolve([]),
       canWarranties
@@ -65,12 +60,9 @@ export default async function AreaKpisGeneralesPage() {
             <PushTypeToggle type="ruptura_stock" />
           </div>
           <TabGuide storageKey="kpis-generales-stock">
-            Cada semana, busca y marca aquí cada producto que se quedó sin stock — el mismo catálogo (con su código) que usan Reingreso, Compras y Ventas Externas, así que ya no hay que escribir el nombre a mano ni el riesgo de duplicarlo por un error de tipeo. Si esa semana no faltó ningún producto, usa el botón &quot;Confirmar: sin productos agotados esa semana&quot; en vez de dejarla en blanco — así el sistema distingue &quot;no hubo ruptura&quot; de &quot;nadie revisó&quot;.
+            Se llena sola con los cortes de Fulfillment: si Daniel confirma que de un producto salió menos de lo pedido, ese producto cuenta como ruptura en esa semana. Las semanas hasta la 39 quedan como se cargaron a mano.
           </TabGuide>
-          <StockoutPanel
-            weekRows={stockoutWeekRows}
-            confirmedWeeks={stockoutConfirmations.map((c) => c.week)}
-          />
+          <StockoutPanel weeks={stockoutWeeks} />
         </>
       )}
 

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getMonthDispatchSummary } from "@/lib/commissionTiers";
 import { prevMonthStr } from "@/lib/pendingTasks";
+import { computeAutoStockoutWeeks, isAutoStockoutWeek } from "@/lib/autoStockout";
 
 function pct(a: number, b: number) {
   return b === 0 ? 0 : Math.round((a / b) * 100);
@@ -342,30 +343,49 @@ export async function getReturnRateTrend(): Promise<WeeklyTrend> {
 
 export type StockoutWeekPoint = { week: string; value: number; products: string[] };
 
-// Ruptura de Stock — a cada semana se le asocian los productos del catálogo
-// que se quedaron sin stock. El valor de la barra es la CANTIDAD de
-// productos distintos esa semana, no una cantidad de unidades ni de veces.
-export async function getStockoutWeeks(): Promise<StockoutWeekPoint[]> {
-  const [rows, confirmations] = await Promise.all([
+export type StockoutWeekDetail = {
+  week: string;
+  // true = armada sola con los cortes (desde 2026-W40); false = cargada a mano.
+  auto: boolean;
+  products: { name: string; justCode: string | null; needed?: number; out?: number }[];
+};
+
+// Ruptura de Stock semana por semana. Hasta la semana 39 son los productos
+// que Daniel marcó a mano; desde la 40 se arma sola con los cortes (ver
+// autoStockout.ts) y lo manual de esas semanas se ignora.
+export async function getStockoutWeekDetails(): Promise<StockoutWeekDetail[]> {
+  const [rows, confirmations, autoWeeks] = await Promise.all([
     prisma.stockoutWeekProduct.findMany({
-      select: { week: true, product: { select: { name: true } } },
+      select: { week: true, product: { select: { name: true, catalogItem: { select: { justCode: true } } } } },
     }),
     prisma.stockoutWeekConfirmation.findMany({ select: { week: true } }),
+    computeAutoStockoutWeeks(),
   ]);
-  if (rows.length === 0 && confirmations.length === 0) return [];
 
-  // Semanas confirmadas "sin productos agotados" entran con 0 — antes no
-  // aparecían en el gráfico porque no tenían ninguna fila de producto.
-  const byWeek = new Map<string, string[]>();
-  for (const c of confirmations) byWeek.set(c.week, []);
+  const byWeek = new Map<string, StockoutWeekDetail>();
+  // Semanas confirmadas "sin productos agotados" entran con 0.
+  for (const c of confirmations) {
+    if (!isAutoStockoutWeek(c.week)) byWeek.set(c.week, { week: c.week, auto: false, products: [] });
+  }
   for (const r of rows) {
-    if (!byWeek.has(r.week)) byWeek.set(r.week, []);
-    byWeek.get(r.week)!.push(r.product.name);
+    if (isAutoStockoutWeek(r.week)) continue;
+    if (!byWeek.has(r.week)) byWeek.set(r.week, { week: r.week, auto: false, products: [] });
+    byWeek.get(r.week)!.products.push({ name: r.product.name, justCode: r.product.catalogItem?.justCode ?? null });
+  }
+  for (const [week, products] of autoWeeks) {
+    byWeek.set(week, { week, auto: true, products: products.map(({ name, justCode, needed, out }) => ({ name, justCode, needed, out })) });
   }
 
-  return [...byWeek.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([week, products]) => ({ week, value: products.length, products: [...products].sort() }));
+  return [...byWeek.values()]
+    .sort((a, b) => a.week.localeCompare(b.week))
+    .map((w) => ({ ...w, products: [...w.products].sort((a, b) => a.name.localeCompare(b.name)) }));
+}
+
+// La barra de cada semana es la CANTIDAD de productos distintos con
+// ruptura, no una cantidad de unidades ni de veces.
+export async function getStockoutWeeks(): Promise<StockoutWeekPoint[]> {
+  const weeks = await getStockoutWeekDetails();
+  return weeks.map((w) => ({ week: w.week, value: w.products.length, products: w.products.map((p) => p.name) }));
 }
 
 // trend compares this category's share of the total (not its raw count) in
