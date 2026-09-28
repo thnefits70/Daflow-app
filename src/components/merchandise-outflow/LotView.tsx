@@ -52,6 +52,9 @@ export type CompiledLot = {
   guidesByCarrier: Record<string, number>;
   // plataforma (DROPI/ROCKET) → transportadora → guías
   guidesBySource: Record<string, Record<string, number>>;
+  // marca (MKT_…/ROCKET/SIN_MARCA) → transportadora → guías; null en cortes
+  // subidos antes de guardar los productos de cada guía.
+  guidesByBrand?: Record<string, Record<string, number>> | null;
   batches: LotBatch[];
   lines: LotLine[];
   provisional?: ProvisionalLotLine[];
@@ -509,22 +512,40 @@ function ProvisionalBox({ lines }: { lines: ProvisionalLotLine[] }) {
   );
 }
 
+const BRAND_ORDER = ["MKT_PROVEDIX", "MKT_DAMIAN", "MKT_SHANGHAI", "MKT_SUMINISTROS", "ROCKET", "SIN_MARCA"];
+const BRAND_LABEL: Record<string, string> = {
+  MKT_PROVEDIX: "Provedix",
+  MKT_DAMIAN: "Imp. Damián",
+  MKT_SHANGHAI: "Imp. Shanghai",
+  MKT_SUMINISTROS: "Suministros",
+  ROCKET: "Rocket",
+  SIN_MARCA: "Sin marca",
+};
+
 // Pedido de Daniel (2026-09-28): cuántas guías trae el manifiesto de cada
-// transportadora, siempre a la vista (sin abrir el detalle) para que el
-// equipo lo vea al escanear sin preguntarle a Yair. Si el corte mezcla Dropi
-// y Rocket, una fila por plataforma porque cada una imprime su manifiesto.
+// marca y transportadora, siempre a la vista (sin abrir el detalle) para que
+// el equipo lo vea al escanear sin preguntarle a Yair. Rocket va como su
+// propio grupo. Cortes viejos (sin productos por guía): por plataforma.
 function GuideCounts({ lot }: { lot: CompiledLot }) {
+  const byBrand = lot.guidesByBrand;
   const sources = Object.keys(lot.guidesBySource ?? {}).sort();
-  const rows = sources.length > 1 ? sources.map((s) => ({ label: sourceLabel(s), counts: lot.guidesBySource[s] })) : [{ label: null, counts: lot.guidesByCarrier }];
+  const rows: { label: string | null; counts: Record<string, number> }[] = byBrand
+    ? Object.keys(byBrand)
+        .sort((a, b) => BRAND_ORDER.indexOf(a) - BRAND_ORDER.indexOf(b))
+        .map((k) => ({ label: BRAND_LABEL[k] ?? k, counts: byBrand[k] }))
+    : sources.length > 1
+      ? sources.map((s) => ({ label: sourceLabel(s), counts: lot.guidesBySource[s] }))
+      : [{ label: null, counts: lot.guidesByCarrier }];
+  if (rows.length > 1) rows.push({ label: "Total", counts: lot.guidesByCarrier });
   return (
     <div className="bg-cloud border border-rule rounded-md px-2.5 py-2 mb-3">
-      <div className="text-[10.5px] font-semibold uppercase tracking-wider text-steel mb-1">Guías por transportadora</div>
+      <div className="text-[10.5px] font-semibold uppercase tracking-wider text-steel mb-1">{byBrand ? "Guías por marca y transportadora" : "Guías por transportadora"}</div>
       {rows.map((r) => {
         const carriers = sortCarriers(Object.keys(r.counts).filter((c) => r.counts[c] > 0));
         const total = carriers.reduce((s, c) => s + r.counts[c], 0);
         return (
           <div key={r.label ?? "all"} className="flex flex-wrap items-center gap-1.5 mb-1 last:mb-0">
-            {r.label && <span className="text-[11px] font-bold w-16 shrink-0">{r.label}</span>}
+            {r.label && <span className="text-[11px] font-bold w-24 shrink-0">{r.label}</span>}
             {carriers.map((c) => (
               <span key={c} className="text-[12px] rounded-full border border-teal/35 bg-teal/10 px-2.5 py-0.5">
                 {carrierLabel(c)} <b className="font-mono text-teal">{r.counts[c]}</b>

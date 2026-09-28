@@ -7,6 +7,8 @@ import { getInventoryLeadId } from "@/lib/guards";
 import { lineBlock, NO_CARRIER, sortCarriers } from "@/lib/carriers";
 import { areaRank } from "@/lib/warehouseAreas";
 
+export const NO_BRAND = "SIN_MARCA";
+
 // Confirmado 2026-09-23, diseño acordado con el usuario pregunta por
 // pregunta (ver memoria project_fulfillment_corte_manifest_plan):
 //   1. Yair sube los PDF de guías de cada corte → la app agrupa todo por el
@@ -189,7 +191,7 @@ export type GuidesApplyInput = {
   // Lo que no se pudo leer bien (se le mostró a Yair) — queda guardado.
   parseWarnings?: string[];
   manifestDate: string | null;
-  guides: { number: string; carrier: string }[];
+  guides: { number: string; carrier: string; codes?: string[] }[];
   rows: GuidesApplyRow[];
   warranty: GuidesApplyWarranty[];
 };
@@ -454,7 +456,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
               warrantyPiece: r.warrantyPiece ?? null,
             })),
           },
-          guides: { create: input.guides.map((g) => ({ guideNumber: g.number, carrier: g.carrier })) },
+          guides: { create: input.guides.map((g) => ({ guideNumber: g.number, carrier: g.carrier, codes: g.codes ?? [] })) },
           provisionalLines: { create: provisionalLines },
           variantNotes: {
             create: [...notesByItem.entries()].flatMap(([catalogItemId, m]) =>
@@ -562,9 +564,9 @@ export async function getCompiledLot(lotId: string) {
         orderBy: { requestedAt: "asc" },
         include: {
           requestedBy: { select: { name: true } },
-          items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true, warehouseArea: true } } } },
+          items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true, warehouseArea: true, bodega: true } } } },
           variantNotes: { select: { catalogItemId: true, label: true, quantity: true } },
-          guides: { select: { carrier: true } },
+          guides: { select: { guideNumber: true, carrier: true, codes: true } },
           provisionalLines: true,
         },
       },
@@ -624,11 +626,29 @@ export async function getCompiledLot(lotId: string) {
   // equipo vea en la app cuántas guías trae cada manifiesto sin preguntarle
   // a Yair.
   const guidesBySource: Record<string, Record<string, number>> = {};
+  // Y por marca (pedido de Daniel 2026-09-28, sí del usuario): cada guía
+  // guarda los productos de su etiqueta; la marca sale de la "Marca" que
+  // Daniel pone en Stock Actual (cada producto tiene una sola marca). Rocket
+  // va aparte como su propio grupo: códigos con prefijo R o guía RKT….
+  // Guías subidas antes de 2026-09-28 no tienen productos guardados.
+  const brandByCode = new Map<string, string>();
+  for (const b of lot.batches) {
+    for (const it of b.items) {
+      if (it.catalogItem.bodega && !brandByCode.has(it.sourceCode)) brandByCode.set(it.sourceCode, it.catalogItem.bodega);
+    }
+  }
+  const guidesByBrand: Record<string, Record<string, number>> = {};
+  let guidesWithCodes = 0;
   for (const b of lot.batches) {
     for (const g of b.guides) {
       guidesByCarrier[g.carrier] = (guidesByCarrier[g.carrier] ?? 0) + 1;
       const bySource = (guidesBySource[b.source] ??= {});
       bySource[g.carrier] = (bySource[g.carrier] ?? 0) + 1;
+      if (g.codes.length > 0) guidesWithCodes++;
+      const rocket = b.source === "ROCKET" || /^RKT/i.test(g.guideNumber) || g.codes.some(isRocketCode);
+      const brand = rocket ? "ROCKET" : (g.codes.map((c) => brandByCode.get(c)).find(Boolean) ?? NO_BRAND);
+      const byBrand = (guidesByBrand[brand] ??= {});
+      byBrand[g.carrier] = (byBrand[g.carrier] ?? 0) + 1;
     }
   }
 
@@ -735,6 +755,8 @@ export async function getCompiledLot(lotId: string) {
     carriers: sortCarriers([...carriers]),
     guidesByCarrier,
     guidesBySource,
+    // Solo se muestra por marca si el corte trae guías con productos guardados.
+    guidesByBrand: guidesWithCodes > 0 ? guidesByBrand : null,
     batches: lot.batches.map((b) => ({
       id: b.id,
       source: b.source,

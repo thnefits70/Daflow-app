@@ -172,7 +172,8 @@ export type ParsedWarrantyLine = { guide: string; carrier: string; code: string;
 
 export type ParsedGuidesPdf = {
   manifestDate: string | null;
-  guides: { number: string; carrier: string; warranty: boolean }[];
+  // codes: productos que trae la etiqueta de la guía (de ahí sale su marca).
+  guides: { number: string; carrier: string; warranty: boolean; codes: string[] }[];
   lines: ParsedGuidesLine[];
   warranty: ParsedWarrantyLine[];
   // Guías de garantía cuya etiqueta no se pudo leer — se avisa, nunca se
@@ -282,7 +283,10 @@ function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuide
     }
   }
 
+  const codesByGuide = new Map<string, Set<string>>();
   const add = (code: string, rawName: string, orders: number, guide: string, carrier: string, isWarranty: boolean) => {
+    if (!codesByGuide.has(guide)) codesByGuide.set(guide, new Set());
+    codesByGuide.get(guide)!.add(code);
     const { name, variant: rawVariant } = splitVariant(rawName);
     const n = packSize(rawVariant ? tidyVariantLabel(rawVariant) : null);
     const qty = orders * (n ?? 1);
@@ -378,7 +382,7 @@ function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuide
   }));
   return {
     manifestDate,
-    guides: [...guides.entries()].map(([number, v]) => ({ number, carrier: v.carrier, warranty: v.warranty })),
+    guides: [...guides.entries()].map(([number, v]) => ({ number, carrier: v.carrier, warranty: v.warranty, codes: [...(codesByGuide.get(number) ?? [])] })),
     lines,
     warranty,
     unreadWarrantyGuides: [...guides.entries()].filter(([n, v]) => v.warranty && !warranty.some((w) => w.guide === n)).map(([n]) => n),
@@ -555,8 +559,14 @@ function parseDropiPages(pages: PdfLine[][], warrantyFile = false): ParsedGuides
   const byLabel = new Map<string, Map<string, number>>(); // code → variante ("" = sin variante) → unidades
   const ordersRead = new Map<string, number>(); // code → pedidos leídos en etiquetas
   const packExtra = new Map<string, Map<string, number>>(); // code → transportadora → unidades extra por paquetes
+  const codesByGuide = new Map<string, Set<string>>();
   for (const h of hits) {
-    const g = warrantyGuides.size > 0 ? guideOf(h) : null;
+    const hg = guideOf(h);
+    if (hg) {
+      if (!codesByGuide.has(hg)) codesByGuide.set(hg, new Set());
+      codesByGuide.get(hg)!.add(h.code);
+    }
+    const g = warrantyGuides.size > 0 ? hg : null;
     if (warrantyFile || (g && warrantyGuides.has(g))) {
       warranty.push({
         guide: g ?? "SIN GUÍA",
@@ -649,7 +659,7 @@ function parseDropiPages(pages: PdfLine[][], warrantyFile = false): ParsedGuides
 
   return {
     manifestDate,
-    guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty })),
+    guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty, codes: [...(codesByGuide.get(number) ?? [])] })),
     lines,
     warranty,
     unreadWarrantyGuides: [...warrantyGuides].filter((g) => !readWarranty.has(g)),

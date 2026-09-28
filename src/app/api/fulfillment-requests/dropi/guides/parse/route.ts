@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   const unreadWarranty: string[] = [];
   const uncertainWarranty: string[] = [];
   const warnings: string[] = [];
-  const guides = new Map<string, { carrier: string; warranty: boolean }>();
+  const guides = new Map<string, { carrier: string; warranty: boolean; codes: string[] }>();
   const repeatedInUpload: string[] = [];
   let manifestDate: string | null = null;
   const emptyFiles: number[] = [];
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     manifestDate = manifestDate ?? result.manifestDate;
     for (const g of result.guides) {
       if (guides.has(g.number)) repeatedInUpload.push(g.number);
-      else guides.set(g.number, { carrier: g.carrier, warranty: g.warranty });
+      else guides.set(g.number, { carrier: g.carrier, warranty: g.warranty, codes: g.codes });
     }
     warranty.push(...result.warranty);
     unreadWarranty.push(...result.unreadWarrantyGuides);
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     manifestDate,
     carriers: [...new Set([...guides.values()].map((g) => g.carrier))].filter(Boolean),
-    guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty })),
+    guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty, codes: g.codes })),
     rows,
     warranty,
     unreadWarrantyGuides: unreadWarranty,

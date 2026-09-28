@@ -2569,6 +2569,11 @@ model FulfillmentRequestGuide {
   batch       FulfillmentRequestBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
   guideNumber String                  @unique
   carrier     String
+  // Confirmado 2026-09-28 (pedido de Daniel, sí del usuario): códigos de
+  // producto que trae la etiqueta de esta guía (Dropi numérico, Rocket con
+  // prefijo R) — de ahí sale la marca de la guía para contar guías por
+  // marca y transportadora en el corte. Vacío en guías anteriores.
+  codes       String[]                @default([])
   createdAt   DateTime                @default(now())
 
   @@index([batchId])
