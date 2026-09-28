@@ -7,6 +7,7 @@ import { TabGuide } from "@/components/shared/TabGuide";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { WAREHOUSE_AREAS, areaLabel, isWarehouseArea, type WarehouseArea } from "@/lib/warehouseAreas";
+import { ManifestBrandLearner } from "./ManifestBrandLearner";
 
 type PendingAdjustmentRow = {
   id: string;
@@ -46,8 +47,6 @@ type ComboRow = {
   code: string;
   label: string | null;
   bodega: Marca | null;
-  // true = sus productos son de marcas distintas; solo ahí el admin elige.
-  mixesBrands?: boolean;
   components: { id: string; quantity: number; catalogItem: { id: string; name: string; justCode: string | null } }[];
   providerPrice: number | null;
   bodegaPrice: number | null;
@@ -1105,6 +1104,14 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
 
       {viewMode !== "products" && filteredCombos.length > 0 && (
         <div className="mt-5">
+          {isAdmin && (
+            <ManifestBrandLearner
+              onDone={() => {
+                loadRows();
+                loadCombos();
+              }}
+            />
+          )}
           <div className="text-[13px] font-bold text-ink mb-1">Combos registrados</div>
           <div className="text-[11.5px] text-steel mb-2.5">
             Un combo no es un producto real — nunca tiene stock propio. El número &quot;≈&quot; de la columna Stock es solo una referencia: cuántos combos alcanzan a armarse con el stock real de sus productos (dividido por lo que lleva la receta; manda el que alcanza para menos, marcado &quot;lo limita&quot;). Se actualiza solo con el stock real. Si dos combos usan el mismo producto, esas unidades se comparten. Mismas columnas de costo y precio que los productos, calculadas sumando cada producto real que trae. Debajo de cada fila ves qué trae y cuánto stock real le queda a cada uno, para saber si alcanza para seguir armándolo.
@@ -1138,8 +1145,8 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                         <span className="font-mono font-bold text-teal shrink-0">{combo.code}</span>
                         {combo.label && <ExpandableName text={combo.label} className="text-steel" />}
                       </span>
-                      {/* La marca del combo sale de sus productos; solo si mezcla marcas el admin la elige. */}
-                      <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} readOnly={!isAdmin || !combo.mixesBrands} />
+                      {/* La marca del combo la aprende la app del manifiesto en que viene; solo el admin corrige. */}
+                      <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} readOnly={!isAdmin} />
                       {/* Un combo no está en ninguna área: cada producto que trae tiene la suya. */}
                       <span className="text-[11px] text-steel-dim">—</span>
                       {comboRef != null ? (

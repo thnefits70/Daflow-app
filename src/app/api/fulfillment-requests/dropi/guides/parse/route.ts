@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { canSubmitFulfillmentRequest } from "@/lib/guards";
 import { parseGuidesPdf, rocketNameCode, ROCKET_NAME_PREFIX, type ParsedGuidesLine, type ParsedWarrantyLine } from "@/lib/dropiGuidesPdf";
+import { learnBrandsFromManifest } from "@/lib/manifestBrand";
 import { findAlreadyUploadedGuides, resolveGuideLines } from "@/lib/fulfillmentGuides";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 
@@ -55,6 +56,12 @@ export async function POST(req: NextRequest) {
     for (const g of result.guides) {
       if (guides.has(g.number)) repeatedInUpload.push(g.number);
       else guides.set(g.number, { carrier: g.carrier, warranty: g.warranty, codes: g.codes });
+    }
+    // Cada PDF de Dropi es el manifiesto de una marca: el sistema aprende
+    // solo la marca de los IDs (combos sobre todo) que aún no la tienen —
+    // ver lib/manifestBrand.ts. Nunca frena la subida si algo falla.
+    if (result.source === "DROPI") {
+      await learnBrandsFromManifest([...result.lines.map((l) => l.code), ...result.warranty.map((w) => w.code)]).catch(() => null);
     }
     warranty.push(...result.warranty);
     unreadWarranty.push(...result.unreadWarrantyGuides);

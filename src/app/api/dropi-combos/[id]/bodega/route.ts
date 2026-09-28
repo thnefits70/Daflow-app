@@ -11,8 +11,8 @@ const schema = z.object({ bodega: z.enum(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHA
 // directamente sobre el combo, independiente de la marca de sus
 // componentes.
 // Desde 2026-09-28 (pedido del usuario): solo el admin. La marca de un combo
-// sale sola de sus productos (lib/comboBrand.ts); lo guardado aquí solo se
-// usa si el combo mezcla productos de marcas distintas.
+// la aprende la app del manifiesto en que viene (lib/manifestBrand.ts); esto
+// queda solo para que el admin corrija.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (session?.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });

@@ -6,7 +6,6 @@ import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId } from "@/lib/guards";
 import { lineBlock, NO_CARRIER, sortCarriers } from "@/lib/carriers";
 import { areaRank } from "@/lib/warehouseAreas";
-import { comboBrand } from "@/lib/comboBrand";
 
 export const NO_BRAND = "SIN_MARCA";
 
@@ -633,18 +632,15 @@ export async function getCompiledLot(lotId: string) {
   // va aparte como su propio grupo: códigos con prefijo R o guía RKT….
   // Guías subidas antes de 2026-09-28 no tienen productos guardados.
   const brandByCode = new Map<string, string>();
-  // Un combo cuenta en la marca del combo (sale de sus productos, o la que
-  // eligió el admin si mezcla marcas — ver lib/comboBrand.ts).
+  // Un combo cuenta en la marca del combo, que la app aprende del manifiesto
+  // en que viene (lib/manifestBrand.ts) — nunca la de sus productos, porque
+  // un combo puede traer productos de otra marca.
   const lotComboCodes = [...new Set(lot.batches.flatMap((b) => b.items.map((i) => i.fromComboCode)).filter((c): c is string => !!c))];
-  const lotCombos = lotComboCodes.length
-    ? await prisma.dropiCombo.findMany({ where: { code: { in: lotComboCodes } }, select: { code: true, bodega: true, components: { select: { catalogItem: { select: { bodega: true } } } } } })
-    : [];
-  for (const c of lotCombos) {
-    const brand = comboBrand(c.bodega, c.components.map((x) => x.catalogItem.bodega));
-    if (brand) brandByCode.set(c.code, brand);
-  }
+  const lotCombos = lotComboCodes.length ? await prisma.dropiCombo.findMany({ where: { code: { in: lotComboCodes } }, select: { code: true, bodega: true } }) : [];
+  for (const c of lotCombos) if (c.bodega) brandByCode.set(c.code, c.bodega);
   for (const b of lot.batches) {
     for (const it of b.items) {
+      if (it.fromComboCode) continue;
       if (it.catalogItem.bodega && !brandByCode.has(it.sourceCode)) brandByCode.set(it.sourceCode, it.catalogItem.bodega);
     }
   }

@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { componentsMissingDropiId, missingDropiIdMessage } from "@/lib/fulfillmentGuides";
 import { canManageJustCatalog, dbUserId } from "@/lib/guards";
-import { comboBrand, comboCodeUsedByProduct, comboMixesBrands } from "@/lib/comboBrand";
+import { comboCodeUsedByProduct } from "@/lib/comboBrand";
 import {
   resolveCostBasisForCatalogItems,
   computeComboBenistockPrice,
@@ -81,9 +81,8 @@ export async function GET() {
         id: c.id,
         code: c.code,
         label: c.label,
-        // Sale sola de sus productos (ver lib/comboBrand.ts).
-        bodega: comboBrand(c.bodega, c.components.map((comp) => comp.catalogItem.bodega)),
-        mixesBrands: comboMixesBrands(c.components.map((comp) => comp.catalogItem.bodega)),
+        // La aprende la app del manifiesto en que viene (lib/manifestBrand.ts).
+        bodega: c.bodega,
         createdByName: c.createdBy?.name ?? null,
         createdAt: c.createdAt,
         components: c.components.map((comp) => ({ id: comp.id, quantity: comp.quantity, catalogItem: comp.catalogItem })),
