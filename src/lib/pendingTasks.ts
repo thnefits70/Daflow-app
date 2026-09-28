@@ -481,7 +481,10 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
 // usuario) es igual de obligatorio: cuando un proveedor rechaza un cambio es
 // dinero/mercadería en riesgo de perderse — nadie (admin, Nairoby, Daniel)
 // debe poder silenciarlo por accidente.
-export const MANDATORY_PUSH_TYPES = new Set(["colaborador_del_mes", "cambio_proveedor_rechazo"]);
+// "analisis_mercado_liberar_kardex" (confirmado 2026-09-28, pedido explícito
+// del usuario): mercadería ya en bodega que no aparece en INVESTOCK hasta que
+// Bryan la libere — se le pasó por semanas porque solo tenía un aviso único.
+export const MANDATORY_PUSH_TYPES = new Set(["colaborador_del_mes", "cambio_proveedor_rechazo", "analisis_mercado_liberar_kardex"]);
 
 // Each department's admin-leader feedback meeting falls on a different
 // weekday — confirmed by the user 2026-07-21: Análisis de Mercado (Bryan)
@@ -1251,6 +1254,63 @@ async function getMarketProductReadyToBuyPendingItem(href: string): Promise<Pend
     icon: "🛒",
     label: "Productos listos para comprar",
     meta: `${rows.length} producto${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-09-28, pedido explícito del usuario: Daniel vio productos
+// comprados y recibidos (190075, 190752…) con stock 0 en INVESTOCK — estaban
+// esperando que Bryan apretara "Confirmar y liberar al Kardex", que solo
+// vivía en la pestaña Trazabilidad con un aviso único al publicar. Ahora es
+// pendiente obligatorio (ver MANDATORY_PUSH_TYPES) en cuanto ya depende solo
+// de él: Heidy confirmó el ID de Dropi Y hay mercadería recibida esperando.
+// Si todavía no llegó nada, no se le pide (no hay nada que se vea mal).
+export async function getMarketProductKardexReleasePendingRows() {
+  const rows = await prisma.marketProductProposal.findMany({
+    where: {
+      publishedAt: { not: null },
+      dropiProductId: { not: null },
+      kardexReleasedAt: null,
+      catalogItem: { awaitingDropiId: true },
+    },
+    select: {
+      id: true,
+      publishedAt: true,
+      catalogItem: {
+        select: {
+          requests: {
+            where: { status: "RECEIVED", receipt: { approvedAt: { not: null }, stockKardexEntry: null } },
+            select: { receipt: { select: { approvedAt: true, receivedQuantity: true } } },
+          },
+        },
+      },
+    },
+  });
+  return rows
+    .map((r) => {
+      const receipts = (r.catalogItem?.requests ?? []).map((pr) => pr.receipt!).filter(Boolean);
+      if (receipts.length === 0) return null;
+      // Desde cuándo depende solo de Bryan: lo último entre la publicación y la llegada más antigua.
+      const firstArrival = receipts.reduce((min, x) => (x.approvedAt! < min ? x.approvedAt! : min), receipts[0].approvedAt!);
+      const since = firstArrival > r.publishedAt! ? firstArrival : r.publishedAt!;
+      return { id: r.id, since, units: receipts.reduce((s, x) => s + x.receivedQuantity, 0) };
+    })
+    .filter((r): r is { id: string; since: Date; units: number } => r !== null);
+}
+
+async function getMarketProductKardexReleasePendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await getMarketProductKardexReleasePendingRows();
+  if (rows.length === 0) return null;
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.since < cutoff);
+  const units = rows.reduce((s, r) => s + r.units, 0);
+
+  return {
+    type: "analisis_mercado_liberar_kardex",
+    icon: "📦",
+    label: "Liberar al Kardex — mercadería en bodega sin INVESTOCK",
+    meta: `${rows.length} producto${rows.length === 1 ? "" : "s"} · ${units} un.${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
   };
@@ -3263,6 +3323,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (me.leadsDept.code === "MKT") {
     const marketProductReviewItem = await getMarketProductReviewPendingItem("/area/workspace?tab=analisis-mercado");
     if (marketProductReviewItem) items.push(marketProductReviewItem);
+    const kardexReleaseItem = await getMarketProductKardexReleasePendingItem("/area/workspace?tab=analisis-mercado&ptab=trazabilidad");
+    if (kardexReleaseItem) items.unshift(kardexReleaseItem);
     const externalSaleReviewItem = await getExternalSaleReviewPendingItem("/area/workspace?tab=ventas-externas&etab=revision");
     if (externalSaleReviewItem) items.push(externalSaleReviewItem);
     // Confirmado 2026-09-23, pedido de Jariel: Bryan resuelve "Sin stock de

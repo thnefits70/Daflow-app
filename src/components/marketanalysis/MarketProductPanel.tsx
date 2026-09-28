@@ -50,6 +50,7 @@ type Proposal = {
   readyToBuyAt: string | null;
   kardexReleasedAt: string | null;
   kardexReleasedBy: { name: string } | null;
+  kardexPendingUnits?: number;
   catalogItem: { id: string; name: string; photos: string[]; awaitingDropiId?: boolean } | null;
   supplierPrices: SupplierPrice[];
   traceability?: { totalMinutes: number | null };
@@ -1228,6 +1229,11 @@ function TraceabilityView({ canDecidePurchase }: { canDecidePurchase: boolean })
             <div className="bg-blue/10 border border-blue/30 rounded-md p-2.5 mb-3">
               <div className="text-[12px] text-ink mb-2">
                 Heidy confirmó el ID de Dropi ({p.dropiProductId}). Cualquier compra de este producto que ya haya llegado a bodega está esperando esta liberación para sumarse a INVESTOCK.
+                {!!p.kardexPendingUnits && (
+                  <span className="block mt-1 font-semibold text-red">
+                    Ya hay {p.kardexPendingUnits} un. en bodega que no aparecen en INVESTOCK hasta que lo liberes.
+                  </span>
+                )}
               </div>
               <button
                 type="button"

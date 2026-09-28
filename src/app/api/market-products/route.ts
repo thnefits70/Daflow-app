@@ -25,6 +25,7 @@ import {
 } from "@/lib/marketProduct";
 import { getAllCurrentStock } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
+import { getMarketProductKardexReleasePendingRows } from "@/lib/pendingTasks";
 
 const supplierPriceSchema = z.object({
   supplierId: z.string(),
@@ -223,7 +224,13 @@ export async function GET(req: NextRequest) {
       include: includeFull,
       orderBy: { proposedAt: "desc" },
     });
-    return NextResponse.json(rows);
+    // Confirmado 2026-09-28: lo que Bryan tiene que liberar al Kardex (mercadería
+    // ya en bodega) va primero, con cuántas unidades esperan — mismo cálculo que
+    // su pendiente obligatorio de Inicio.
+    const pending = new Map((await getMarketProductKardexReleasePendingRows()).map((r) => [r.id, r.units]));
+    const withUnits = rows.map((r) => ({ ...r, kardexPendingUnits: pending.get(r.id) ?? 0 }));
+    withUnits.sort((a, b) => (b.kardexPendingUnits > 0 ? 1 : 0) - (a.kardexPendingUnits > 0 ? 1 : 0));
+    return NextResponse.json(withUnits);
   }
 
   // Confirmado 2026-09-08 (Fase 2), ampliado 2026-09-14: pantalla de solo

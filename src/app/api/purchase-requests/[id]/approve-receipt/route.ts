@@ -88,16 +88,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // Queda RECEIVED con receipt.stockKardexEntry en null hasta que Heidy
     // confirme el ID y Bryan libere (ver release-kardex/route.ts, que
     // recorre estas recepciones pendientes y las suma en orden real).
-    const publishers = await prisma.user.findMany({ where: { canPublishMarketProduct: true }, select: { id: true } });
-    await Promise.all(
-      publishers.map((u) =>
-        notifyOwner(u.id, {
-          title: "Compra recibida — falta tu ID de Dropi",
-          body: `${existing.catalogItem.name} ya llegó a bodega. Súbelo a Dropi para que Bryan pueda liberarlo al Kardex.`,
-          url: "/area/workspace?tab=analisis-mercado",
-        }).catch(() => null)
-      )
-    );
+    // Confirmado 2026-09-28: si Heidy YA confirmó el ID, lo que falta es de
+    // Bryan (antes igual le avisaba a Heidy "falta tu ID" y a Bryan nada) —
+    // además le queda como pendiente obligatorio en Inicio
+    // (getMarketProductKardexReleasePendingItem en pendingTasks.ts).
+    const proposal = await prisma.marketProductProposal.findFirst({
+      where: { catalogItemId: existing.catalogItemId, publishedAt: { not: null }, kardexReleasedAt: null },
+      select: { id: true },
+    });
+    const marketingLead = proposal
+      ? await prisma.user.findFirst({ where: { isLeader: true, isActive: true, leadsDept: { code: "MKT" } }, select: { id: true } })
+      : null;
+    if (proposal && marketingLead) {
+      await notifyOwner(marketingLead.id, {
+        title: "Mercadería en bodega — falta liberar al Kardex",
+        body: `${existing.catalogItem.name} ya llegó (${existing.receipt.receivedQuantity} un.) y ya tiene ID de Dropi. No aparece en INVESTOCK hasta que lo liberes.`,
+        url: "/area/workspace?tab=analisis-mercado&ptab=trazabilidad",
+      }).catch(() => null);
+    } else {
+      const publishers = await prisma.user.findMany({ where: { canPublishMarketProduct: true }, select: { id: true } });
+      await Promise.all(
+        publishers.map((u) =>
+          notifyOwner(u.id, {
+            title: "Compra recibida — falta tu ID de Dropi",
+            body: `${existing.catalogItem.name} ya llegó a bodega. Súbelo a Dropi para que Bryan pueda liberarlo al Kardex.`,
+            url: "/area/workspace?tab=analisis-mercado",
+          }).catch(() => null)
+        )
+      );
+    }
   } else {
     // Confirmado 2026-09-09 (Fase 3, INVESTOCK): esta aprobación es el mismo
     // candado real de siempre para Compras — acá es donde el Kardex propio
