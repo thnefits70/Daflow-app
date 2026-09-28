@@ -707,11 +707,12 @@ function parseDropiPages(pages: PdfLine[][], warrantyFile = false): ParsedGuides
   }
   // Pedido del usuario 2026-09-28 (caso LC55573158 de Laar): cada guía sin
   // ningún producto leído se nombra con su número, para que Yair lo vea al
-  // subir y se ajuste la lectura — sin producto no se sabe su marca.
+  // subir y avise al admin ANTES de guardar para ajustar la lectura (si el
+  // admin no está, puede guardar igual) — sin producto no se sabe su marca.
   if (emptyGuides.length > 0) {
     const list = emptyGuides.map(([n, g]) => `${n}${g.carrier ? ` (${g.carrier.charAt(0)}${g.carrier.slice(1).toLowerCase()})` : ""}`);
     warnings.push(
-      `No pude leer el producto de ${emptyGuides.length === 1 ? "la guía" : `${emptyGuides.length} guías`} ${list.slice(0, 10).join(", ")}${list.length > 10 ? ` y ${list.length - 10} más` : ""}. Por qué: la etiqueta viene con otro formato o el texto está pegado/cortado. Qué hacer: puedes guardar, los totales están bien (salen de la tabla), pero ${emptyGuides.length === 1 ? "esa guía sale" : "esas guías salen"} en "Sin marca" en el corte — avisa al administrador para ajustar la lectura.`
+      `No pude leer el producto de ${emptyGuides.length === 1 ? "la guía" : `${emptyGuides.length} guías`} ${list.slice(0, 10).join(", ")}${list.length > 10 ? ` y ${list.length - 10} más` : ""}. Por qué: la etiqueta viene con otro formato o el texto está pegado/cortado. Qué hacer: ANTES de guardar, avisa al administrador y pásale este PDF para que ajuste la lectura y no se repita. Solo si el administrador no está disponible, guarda igual: los totales están bien (salen de la tabla), pero ${emptyGuides.length === 1 ? "esa guía sale" : "esas guías salen"} en "Sin marca" en el corte.`
     );
   }
   const noCarrier = [...guides.entries()].filter(([, v]) => !v.carrier || v.carrier === "SIN TRANSPORTADORA").map(([n]) => n);
