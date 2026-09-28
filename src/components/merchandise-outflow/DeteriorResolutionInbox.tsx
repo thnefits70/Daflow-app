@@ -19,6 +19,12 @@ type ItemDTO = {
 
 type Resolution = "SOLVED_ONSITE" | "WRITE_OFF" | "ESCALATED_TO_PURCHASES";
 
+const RESOLUTION_LABEL: Record<Resolution, string> = {
+  SOLVED_ONSITE: "Solucionado ahí mismo",
+  WRITE_OFF: "Dar de baja",
+  ESCALATED_TO_PURCHASES: "Escalar a Compras",
+};
+
 async function postJson(url: string, body?: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   const data = await res.json().catch(() => null);
@@ -36,11 +42,22 @@ export function DeteriorResolutionInbox({ canAct }: { canAct: boolean }) {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Pedido de Daniel 2026-09-28: recuadro "Seleccionar todo" arriba a la
+  // derecha para resolver varios reportes de una vez, con una pregunta de
+  // confirmación para evitar un toque sin querer.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkChoosing, setBulkChoosing] = useState<Resolution | null>(null);
+  const [bulkNote, setBulkNote] = useState("");
+  const [bulkError, setBulkError] = useState("");
 
   function load() {
     fetch("/api/merchandise-outflow/deterioro")
       .then((r) => r.json())
-      .then(setItems)
+      .then((data: ItemDTO[]) => {
+        setItems(data);
+        const ids = new Set(data.map((i) => i.id));
+        setSelected((prev) => new Set([...prev].filter((id) => ids.has(id))));
+      })
       .catch(() => setItems([]));
   }
   useEffect(load, []);
@@ -61,13 +78,131 @@ export function DeteriorResolutionInbox({ canAct }: { canAct: boolean }) {
     }
   }
 
-  if (items === null) return <div className="text-[13px] text-steel">Cargando…</div>;
-  if (items.length === 0) return <div className="text-[13px] text-steel">No hay deterioros pendientes de resolución.</div>;
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function cancelBulk() {
+    setBulkChoosing(null);
+    setBulkNote("");
+    setBulkError("");
+  }
+
+  async function resolveBulk() {
+    if (!bulkChoosing || !items) return;
+    const ids = items.filter((i) => selected.has(i.id)).map((i) => i.id);
+    setSaving(true);
+    setBulkError("");
+    let failed = 0;
+    let lastError = "";
+    // Uno por uno: si alguno falla (p. ej. ya lo resolvió otra persona),
+    // los demás igual quedan resueltos.
+    for (const id of ids) {
+      try {
+        await postJson(`/api/merchandise-outflow/items/${id}/resolve`, { resolution: bulkChoosing, note: bulkNote.trim() || undefined });
+      } catch (e) {
+        failed++;
+        lastError = e instanceof Error ? e.message : "No se pudo resolver.";
+      }
+    }
+    setSaving(false);
+    if (failed > 0) {
+      setBulkError(`${failed} de ${ids.length} no se pudieron resolver: ${lastError}`);
+    } else {
+      cancelBulk();
+      setSelected(new Set());
+    }
+    load();
+  }
+
+  const header = <div className="font-display font-bold text-[14px]">Pendientes de resolución</div>;
+
+  if (items === null) return <div>{header}<div className="text-[13px] text-steel mt-2.5">Cargando…</div></div>;
+  if (items.length === 0) return <div>{header}<div className="text-[13px] text-steel mt-2.5">No hay deterioros pendientes de resolución.</div></div>;
+
+  const allSelected = items.every((i) => selected.has(i.id));
+  const selectedCount = items.filter((i) => selected.has(i.id)).length;
+  const bulkTarget = allSelected ? "todo" : selectedCount === 1 ? "el producto seleccionado" : `los ${selectedCount} productos seleccionados`;
 
   return (
     <div className="flex flex-col gap-2.5 max-w-lg">
+      <div className="flex items-center justify-between gap-3">
+        {header}
+        {canAct && (
+          <label className="flex items-center gap-1.5 text-[12px] font-semibold text-steel cursor-pointer select-none">
+            Seleccionar todo
+            <input
+              type="checkbox"
+              className="w-5 h-5 cursor-pointer"
+              checked={allSelected}
+              onChange={() => {
+                cancelBulk();
+                setSelected(allSelected ? new Set() : new Set(items.map((i) => i.id)));
+              }}
+            />
+          </label>
+        )}
+      </div>
+
+      {canAct && selectedCount > 0 && (
+        <div className="sticky top-2 z-10 bg-cloud border border-teal/50 rounded-md p-3 shadow-sm">
+          {bulkChoosing ? (
+            <>
+              <div className="text-[12.5px] font-semibold mb-1.5">
+                ¿Estás seguro que {bulkTarget} lo reportas como &quot;{RESOLUTION_LABEL[bulkChoosing]}&quot;?
+              </div>
+              {bulkChoosing !== "SOLVED_ONSITE" && (
+                <textarea
+                  className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px] mb-2"
+                  rows={2}
+                  value={bulkNote}
+                  onChange={(e) => setBulkNote(e.target.value)}
+                  placeholder={bulkChoosing === "WRITE_OFF" ? "Explica por qué no se puede arreglar (vale para todos)…" : "Explica qué se va a pedir al proveedor (vale para todos)…"}
+                />
+              )}
+              {bulkError && <div className="text-red text-[11px] mb-1.5">{bulkError}</div>}
+              <div className="flex gap-2">
+                <button type="button" disabled={saving} className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer disabled:opacity-40" onClick={cancelBulk}>
+                  No, cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={saving || (bulkChoosing !== "SOLVED_ONSITE" && !bulkNote.trim())}
+                  className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40"
+                  onClick={resolveBulk}
+                >
+                  {saving ? "Guardando…" : "Sí, confirmar"}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-[12px] font-semibold mb-2">
+                {allSelected ? `Todo seleccionado (${selectedCount})` : `${selectedCount} seleccionado${selectedCount === 1 ? "" : "s"}`} — ¿cómo lo reportas?
+              </div>
+              <div className="flex gap-1.5 flex-wrap">
+                <button type="button" className="flex items-center gap-1 text-[11.5px] font-semibold border border-green/40 text-green rounded-full px-2.5 py-1 cursor-pointer" onClick={() => setBulkChoosing("SOLVED_ONSITE")}>
+                  <CheckCircle2 size={12} /> Solucionado ahí mismo
+                </button>
+                <button type="button" className="flex items-center gap-1 text-[11.5px] font-semibold border border-red/40 text-red rounded-full px-2.5 py-1 cursor-pointer" onClick={() => setBulkChoosing("WRITE_OFF")}>
+                  <PackageMinus size={12} /> Dar de baja
+                </button>
+                <button type="button" className="flex items-center gap-1 text-[11.5px] font-semibold border border-blue/40 text-blue rounded-full px-2.5 py-1 cursor-pointer" onClick={() => setBulkChoosing("ESCALATED_TO_PURCHASES")}>
+                  <TrendingUp size={12} /> Escalar a Compras
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {items.map((item) => (
-        <div key={item.id} className="bg-surface border border-rule rounded-md p-3.5">
+        <div key={item.id} className={`bg-surface border rounded-md p-3.5 ${selected.has(item.id) ? "border-teal" : "border-rule"}`}>
           <div className="flex items-center gap-3 mb-2.5">
             {(item.photoUrls[0] ?? item.batch.documentPhotoUrls[0]) && (
               // eslint-disable-next-line @next/next/no-img-element
@@ -84,6 +219,15 @@ export function DeteriorResolutionInbox({ canAct }: { canAct: boolean }) {
                 {item.batch.supplier && <> · Proveedor: <span className="font-semibold text-ink">{item.batch.supplier.name}</span></>}
               </div>
             </div>
+            {canAct && (
+              <input
+                type="checkbox"
+                aria-label={`Seleccionar ${itemName(item)}`}
+                className="w-5 h-5 cursor-pointer shrink-0 self-start"
+                checked={selected.has(item.id)}
+                onChange={() => { cancelBulk(); toggle(item.id); }}
+              />
+            )}
           </div>
           {/* Desde 2026-09-26 un reporte de deterioro puede traer varias fotos. */}
           {item.batch.documentPhotoUrls.length > 1 && (

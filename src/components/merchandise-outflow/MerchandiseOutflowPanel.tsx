@@ -199,10 +199,7 @@ export function MerchandiseOutflowPanel({
           </TabGuide>
           <div className="flex flex-col gap-6">
             <DeteriorCapture allowUpload={canAct} onReported={() => setDeteriorRefreshKey((k) => k + 1)} />
-            <div>
-              <div className="font-display font-bold text-[14px] mb-2.5">Pendientes de resolución</div>
-              <DeteriorResolutionInbox key={deteriorRefreshKey} canAct={canAct} />
-            </div>
+            <DeteriorResolutionInbox key={deteriorRefreshKey} canAct={canAct} />
           </div>
         </>
       )}
