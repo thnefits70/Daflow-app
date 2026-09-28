@@ -306,13 +306,17 @@ function EditJustCode({ item, onChanged }: { item: CatalogItemDTO; onChanged: (j
 export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<CatalogItemDTO[]>([]);
+  const [canEditCode, setCanEditCode] = useState(false);
   const [query, setQuery] = useState("");
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   function load() {
     fetch("/api/merchandise-reentry/just-catalog")
       .then((r) => (r.ok ? r.json() : { items: [] }))
-      .then((data) => setItems(data.items ?? []))
+      .then((data) => {
+        setItems(data.items ?? []);
+        setCanEditCode(!!data.canEditCode);
+      })
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
   }
@@ -364,7 +368,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
                 <Clock size={13} />
               </div>
             )}
-            {canManage ? (
+            {canEditCode ? (
               <EditJustCode
                 item={item}
                 onChanged={(justCode) => setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, justCode } : i)))}

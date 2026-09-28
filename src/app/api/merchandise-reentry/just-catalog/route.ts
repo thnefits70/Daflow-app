@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canApproveMerchandiseReentry, canCloseMerchandiseReentry } from "@/lib/guards";
 import { actorName } from "@/lib/actorName";
+import { auth } from "@/auth";
 
 // Vista de la pestaña "Base de datos de productos" — visible a quien puede
 // ver Revisión o Cierre de Reingreso (Daniel/Nairoby/admin), igual que
@@ -39,6 +40,8 @@ export async function GET() {
 
   return NextResponse.json({
     items,
+    // Solo admin ve el lápiz para corregir el ID (ver just-code/route.ts).
+    canEditCode: (await auth())?.user.role === "admin",
     lastImport: importsDTO[0] ?? null,
     imports: importsDTO,
   });

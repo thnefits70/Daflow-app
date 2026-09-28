@@ -14,6 +14,7 @@ import { CLAIM_GAP_DAYS, findPossibleDoubleRegistrations, getSupplierClaimGaps }
 import { getCompiledLot } from "@/lib/fulfillmentGuides";
 import { carrierLabel } from "@/lib/carriers";
 import { isAutoStockoutWeek } from "@/lib/autoStockout";
+import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -467,6 +468,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_aprobacion: "Análisis de Mercado — propuestas por aprobar",
   analisis_mercado_listo_comprar: "Análisis de Mercado — productos listos para comprar",
   analisis_mercado_brandear: "Nuevos IDs por brandear",
+  analisis_mercado_sin_id: "Productos de Compras sin ID de Dropi",
   fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
   fulfillment_bloque_asignado: "Bloque del corte asignado — sacar de bodega",
 };
@@ -1612,6 +1614,20 @@ async function getPurchaseExcessPendingItem(step: keyof typeof EXCESS_STEPS, hre
 // canResolveSupplierStockout en guards.ts).
 export async function getSupplierStockoutPendingCount(): Promise<number> {
   return prisma.supplierStockoutReport.count({ where: { resolvedAt: null } });
+}
+
+// Confirmado 2026-09-28 — ver catalogMissingDropiId.ts. Para Heidy (canPublishMarketProduct).
+async function getCatalogMissingDropiIdPendingItem(href: string): Promise<PendingItem | null> {
+  const count = await prisma.purchaseCatalogItem.count({ where: catalogMissingDropiIdWhere });
+  if (count === 0) return null;
+  return {
+    type: "analisis_mercado_sin_id",
+    icon: "🏷️",
+    label: "Productos de Compras sin ID de Dropi",
+    meta: `${count} producto${count === 1 ? "" : "s"}`,
+    overdue: false,
+    href,
+  };
 }
 
 async function getSupplierStockoutPendingItem(href: string): Promise<PendingItem | null> {
@@ -3143,6 +3159,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       canBrandMarketProduct: true,
       canConfirmMarketingDesign: true,
       canResolveSupplierStockout: true,
+      canPublishMarketProduct: true,
       leadsDept: { select: { code: true, name: true, trackWeeklyMetric: true } },
       department: { select: { code: true } },
     },
@@ -3205,6 +3222,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (me.canResolveSupplierStockout) {
       const supplierStockoutItem = await getSupplierStockoutPendingItem("/area/workspace?tab=analisis-mercado&ptab=sinstock");
       if (supplierStockoutItem) teamItems.push(supplierStockoutItem);
+    }
+    if (me.canPublishMarketProduct) {
+      const missingIdItem = await getCatalogMissingDropiIdPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
+      if (missingIdItem) teamItems.push(missingIdItem);
     }
     // Confirmado 2026-09-03: Jariel (transición Bryan→Jariel en Compras) es
     // delegado vía canManagePurchases pero no lidera ningún departamento —
@@ -3449,6 +3470,7 @@ export async function getPossiblePendingTypesForActor(
         canApprovePurchaseRequests: true,
         canBrandMarketProduct: true,
         canConfirmMarketingDesign: true,
+        canPublishMarketProduct: true,
         leadsDept: { select: { code: true, trackWeeklyMetric: true } },
         department: { select: { code: true } },
       },
@@ -3467,12 +3489,14 @@ export async function getPossiblePendingTypesForActor(
       // pero no su líder — mismo criterio que el resto de este bloque.
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar");
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
+      if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id");
       if (me.department?.code === "INV" || me.department?.code === "FUL") types.push("fulfillment_bloque_asignado");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }
 
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
+    if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id");
     if (me.leadsDept.code === "FIN") {
       types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia", "reclamos_proveedor_atrasados");
     }

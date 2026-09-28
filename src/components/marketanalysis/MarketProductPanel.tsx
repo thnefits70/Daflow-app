@@ -201,7 +201,12 @@ export function MarketProductPanel({
       {tab === "listoparacomprar" && <ReadyToBuyQueue />}
       {tab === "consulta" && <PricingConsultaTable />}
       {tab === "aprobacion" && <ReviewQueue canAct={canActOnReview} />}
-      {tab === "publicar" && <PublishQueue />}
+      {tab === "publicar" && (
+        <>
+          <CatalogMissingIdQueue />
+          <PublishQueue />
+        </>
+      )}
       {tab === "mispublicados" && <PublishedHistoryView />}
       {tab === "trazabilidad" && <TraceabilityView canDecidePurchase={canDecidePurchase} />}
     </div>
@@ -712,6 +717,87 @@ function ReviewQueue({ canAct }: { canAct: boolean }) {
 }
 
 // ---------------- Paso 3: Publicar en Dropi (Heidy) ----------------
+// Confirmado 2026-09-28, pedido del usuario — ver catalogMissingDropiId.ts.
+// Productos creados en Compras sin ID antes de que se exigiera: Heidy les
+// pone el ID acá, con la misma doble confirmación que PublishQueue. Si no
+// hay ninguno, no se muestra nada.
+type MissingIdItem = { id: string; name: string; photos: string[]; bodega: string | null; createdBy: { name: string } | null };
+function CatalogMissingIdQueue() {
+  const [rows, setRows] = useState<MissingIdItem[]>([]);
+  const [dropiId, setDropiId] = useState<Record<string, string>>({});
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState("");
+
+  function load() {
+    fetch("/api/market-products/catalog-missing-id").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+  }
+  useEffect(load, []);
+
+  async function save(id: string) {
+    setErr(""); setBusy(id);
+    const res = await fetch("/api/market-products/catalog-missing-id", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ catalogItemId: id, dropiProductId: dropiId[id]?.trim() ?? "" }),
+    });
+    setBusy(null);
+    setConfirmingId(null);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo guardar."); return; }
+    load();
+  }
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="mb-6">
+      <div className="text-[13.5px] font-bold mb-1">Productos de Compras sin ID de Dropi</div>
+      <div className="text-[12px] text-steel mb-3">Se crearon en Compras antes de que se pidiera el ID. Escribe el ID que tiene en Dropi (si todavía no está publicado, publícalo primero).</div>
+      {err && <div className="text-red text-[12.5px] mb-2">{err}</div>}
+      <div className="flex flex-col gap-3">
+        {rows.map((p) => (
+          <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
+            <div className="flex items-start gap-3 mb-2">
+              {p.photos[0] && <img src={p.photos[0]} alt="" className="w-16 h-16 rounded object-cover shrink-0" />}
+              <div className="flex-1">
+                <div className="font-semibold text-[13.5px]">{p.name}</div>
+                <div className="text-[12px] text-steel">Bodega: {BODEGA_LABELS[p.bodega ?? ""] ?? "—"} · Creado por {p.createdBy?.name ?? "—"}</div>
+              </div>
+            </div>
+            {confirmingId === p.id ? (
+              <div className="bg-inset rounded-md p-3">
+                <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
+                <div className="text-[12px] text-steel mb-2.5">
+                  Vas a guardar el ID <b className="text-ink">{dropiId[p.id]}</b> para <b className="text-ink">{p.name}</b> — verifica que sea esta foto.
+                </div>
+                <div className="flex items-center gap-2">
+                  <button type="button" disabled={busy === p.id} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => save(p.id)}>
+                    Sí, este ID es de este producto
+                  </button>
+                  <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setConfirmingId(null)}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="ID que tiene en Dropi" value={dropiId[p.id] ?? ""} onChange={(e) => setDropiId((s) => ({ ...s, [p.id]: e.target.value }))} />
+                <button
+                  type="button"
+                  className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                  disabled={!dropiId[p.id]?.trim()}
+                  onClick={() => { setErr(""); setConfirmingId(p.id); }}
+                >
+                  Guardar ID
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PublishQueue() {
   const [rows, setRows] = useState<Proposal[] | null>(null);
   const [dropiId, setDropiId] = useState<Record<string, string>>({});

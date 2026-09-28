@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { canManageJustCatalog } from "@/lib/guards";
+import { auth } from "@/auth";
 import { productIdUsedByCombo } from "@/lib/comboBrand";
 
 const schema = z.object({ justCode: z.string().trim().min(1, "El código no puede estar vacío.").max(50) });
@@ -14,7 +14,11 @@ const schema = z.object({ justCode: z.string().trim().min(1, "El código no pued
 // que ya controla "Base de datos de productos" (canManageJustCatalog),
 // igual criterio que rename/route.ts.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await canManageJustCatalog())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  // Confirmado 2026-09-28, pedido del usuario: ya ningún producto necesita
+  // ID a mano (Compras lo exige, Análisis de Mercado lo trae de Heidy) — el
+  // lápiz queda solo para que el admin corrija un ID mal escrito.
+  const session = await auth();
+  if (session?.user.role !== "admin") return NextResponse.json({ error: "Solo el administrador puede corregir un ID." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);
