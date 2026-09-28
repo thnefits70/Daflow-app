@@ -147,7 +147,9 @@ export function StockoutPanel({
     if (!byWeek.has(r.week)) byWeek.set(r.week, []);
     byWeek.get(r.week)!.push(r);
   }
-  const weeks = [...byWeek.keys()].sort().reverse();
+  // Las semanas confirmadas "sin productos agotados" también son semanas
+  // cargadas (con 0) — si no, desaparecían del historial.
+  const weeks = [...new Set([...byWeek.keys(), ...confirmedWeeks, ...(confirmedWeek ? [confirmedWeek] : [])])].sort().reverse();
   const latestWeek = weeks[0] ?? null;
 
   return (
@@ -216,7 +218,10 @@ export function StockoutPanel({
               <div className="flex items-center gap-3">
                 <span className="font-semibold text-[13.5px]">{formatWeekLabel(latestWeek)}</span>
                 <span className="text-[12.5px] text-steel">
-                  {byWeek.get(latestWeek)!.length} producto{byWeek.get(latestWeek)!.length === 1 ? "" : "s"} · última semana
+                  {(byWeek.get(latestWeek)?.length ?? 0) === 0
+                    ? "0 productos (sin ruptura)"
+                    : `${byWeek.get(latestWeek)!.length} producto${byWeek.get(latestWeek)!.length === 1 ? "" : "s"}`}{" "}
+                  · última semana
                 </span>
               </div>
             ) : (
@@ -233,7 +238,12 @@ export function StockoutPanel({
               <div key={w} className="bg-surface border border-rule rounded p-3.5 mb-2.5">
                 <div className="font-semibold text-[13px] mb-2">{formatWeekLabel(w)}</div>
                 <div className="flex flex-wrap gap-2">
-                  {byWeek.get(w)!.map((r) =>
+                  {!byWeek.has(w) && (
+                    <span className="inline-flex items-center gap-1.5 text-[12px] text-teal">
+                      <ShieldCheck size={12} /> Sin productos agotados (0)
+                    </span>
+                  )}
+                  {(byWeek.get(w) ?? []).map((r) =>
                     relinkingProductId === r.product.id ? (
                       <div key={r.id} className="w-full sm:w-96">
                         <ProductMatchPicker

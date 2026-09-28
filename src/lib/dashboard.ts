@@ -346,12 +346,18 @@ export type StockoutWeekPoint = { week: string; value: number; products: string[
 // que se quedaron sin stock. El valor de la barra es la CANTIDAD de
 // productos distintos esa semana, no una cantidad de unidades ni de veces.
 export async function getStockoutWeeks(): Promise<StockoutWeekPoint[]> {
-  const rows = await prisma.stockoutWeekProduct.findMany({
-    select: { week: true, product: { select: { name: true } } },
-  });
-  if (rows.length === 0) return [];
+  const [rows, confirmations] = await Promise.all([
+    prisma.stockoutWeekProduct.findMany({
+      select: { week: true, product: { select: { name: true } } },
+    }),
+    prisma.stockoutWeekConfirmation.findMany({ select: { week: true } }),
+  ]);
+  if (rows.length === 0 && confirmations.length === 0) return [];
 
+  // Semanas confirmadas "sin productos agotados" entran con 0 — antes no
+  // aparecían en el gráfico porque no tenían ninguna fila de producto.
   const byWeek = new Map<string, string[]>();
+  for (const c of confirmations) byWeek.set(c.week, []);
   for (const r of rows) {
     if (!byWeek.has(r.week)) byWeek.set(r.week, []);
     byWeek.get(r.week)!.push(r.product.name);
