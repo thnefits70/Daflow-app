@@ -35,6 +35,10 @@ type PendingAdjustmentRow = {
 // pantalla; en el backend el campo se llama `bodega` (mismo enum que ya
 // usa Análisis de Mercado).
 type Marca = "MKT_DAMIAN" | "MKT_PROVEDIX" | "MKT_SHANGHAI" | "MKT_SUMINISTROS";
+// Combo que solo existe en Rocket: se guarda con código "R…" (sin ID de Dropi).
+const isRocketOnlyCombo = (c: { code: string }) => c.code.startsWith("R");
+const hasRocketId = (c: { code: string; rocketCodes?: string[] }) => isRocketOnlyCombo(c) || (c.rocketCodes?.length ?? 0) > 0;
+
 const MARCA_LABELS: Record<Marca, string> = {
   MKT_PROVEDIX: "Provedix",
   MKT_DAMIAN: "Importadora Damián",
@@ -549,7 +553,8 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   // para ver solo los productos/combos de una marca de bodega en concreto
   // (Provedix, Importadora Damián o Importadora Shanghai) — clic de nuevo
   // sobre la misma marca lo quita y vuelve a mostrar todas.
-  const [marcaFilter, setMarcaFilter] = useState<Marca | null>(null);
+  // "ROCKET" = combos con ID de Rocket (solo referencia, no es una marca de INVESTOCK).
+  const [marcaFilter, setMarcaFilter] = useState<Marca | "ROCKET" | null>(null);
   const [openFormula, setOpenFormula] = useState<FormulaKey | null>(null);
   // Confirmado 2026-09-21, pedido explícito del usuario: ver de un clic qué
   // productos del catálogo (todo lo que ya está registrado en INVESTOCK) se
@@ -682,7 +687,8 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
     .filter((r) => !sinPrecioFilter || r.providerPrice === undefined)
     .filter((r) => !sinStockFilter || r.balance === 0)
     .filter((r) => !sinAreaFilter || r.warehouseArea == null);
-  const marcaFilteredCombosBase = marcaFilter ? combos.filter((c) => c.bodega === marcaFilter) : combos;
+  const marcaFilteredCombosBase =
+    marcaFilter === "ROCKET" ? combos.filter(hasRocketId) : marcaFilter ? combos.filter((c) => c.bodega === marcaFilter) : combos;
 
   const queryTrimmed = query.trim();
   const queryWords = queryTrimmed ? significantWords(queryTrimmed) : [];
@@ -939,6 +945,19 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
             {MARCA_LABELS[m]}
           </button>
         ))}
+        {/* Pedido del usuario 2026-09-28: ver de un clic qué combos son de Rocket
+            (IDs de referencia, sin marca ni stock propio en INVESTOCK). */}
+        <button
+          type="button"
+          className={`rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer border ${marcaFilter === "ROCKET" ? "bg-gold border-gold text-navy" : "border-gold/60 text-gold hover:opacity-80"}`}
+          title="Solo los combos que tienen ID de Rocket (son referencia: se descuentan los productos reales de su receta)"
+          onClick={() => {
+            setMarcaFilter((v) => (v === "ROCKET" ? null : "ROCKET"));
+            setViewMode("combos");
+          }}
+        >
+          Rocket
+        </button>
       </div>
 
       {/* Confirmado 2026-09-21, pedido explícito del usuario: chips de alerta
@@ -1198,11 +1217,11 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                       </div>
                       <span className="text-[12.5px] flex items-center gap-1.5 min-w-0">
                         {/* Combo que solo existe en Rocket: se guarda como "R…" y no tiene ID de Dropi. */}
-                        {!combo.code.startsWith("R") && <CopyableText value={combo.code} className="font-mono font-bold text-teal shrink-0" />}
+                        {!isRocketOnlyCombo(combo) && <CopyableText value={combo.code} className="font-mono font-bold text-teal shrink-0" />}
                         {combo.label && <ExpandableName text={combo.label} className="text-steel" />}
                         {/* Pedido del usuario 2026-09-28: el ID de Rocket es solo referencia —
                             no existe en INVESTOCK; el stock se descuenta de los productos reales de la receta. */}
-                        {[...new Set([...(combo.code.startsWith("R") ? [combo.code.slice(1)] : []), ...(combo.rocketCodes ?? [])])].map((r) => (
+                        {[...new Set([...(isRocketOnlyCombo(combo) ? [combo.code.slice(1)] : []), ...(combo.rocketCodes ?? [])])].map((r) => (
                           <span
                             key={r}
                             className="shrink-0 inline-flex items-center gap-1 rounded-full border border-gold/60 px-2 py-0.5 text-[10.5px] text-gold"
@@ -1215,7 +1234,14 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                         ))}
                       </span>
                       {/* La marca del combo la aprende la app del manifiesto en que viene; solo el admin corrige. */}
-                      <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} readOnly={!isAdmin} />
+                      {isRocketOnlyCombo(combo) ? (
+                        // Pedido del usuario 2026-09-28: un combo de Rocket es referencia, no tiene marca en INVESTOCK.
+                        <span className="text-[11px] font-bold text-gold" title="Combo de Rocket: solo referencia. No tiene marca ni stock propio en INVESTOCK; se descuentan los productos reales de su receta.">
+                          Rocket
+                        </span>
+                      ) : (
+                        <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} readOnly={!isAdmin} />
+                      )}
                       {/* Un combo no está en ninguna área: cada producto que trae tiene la suya. */}
                       <span className="text-[11px] text-steel-dim">—</span>
                       {comboRef != null ? (
