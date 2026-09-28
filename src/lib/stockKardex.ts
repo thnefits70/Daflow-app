@@ -146,9 +146,11 @@ export type KardexReleaseResult = { entriesPosted: number; catalogItemId: string
 // su propio costo real, en el orden en que de verdad llegaron.
 export async function releasePendingKardexForCatalogItem(catalogItemId: string, dropiProductId: string): Promise<KardexReleaseResult> {
   const justCodeTaken = await prisma.purchaseCatalogItem.findUnique({ where: { justCode: dropiProductId } });
+  // Un ID de combo nunca se usa como ID de producto real (usuario 2026-09-28).
+  const usedByCombo = await prisma.dropiCombo.findUnique({ where: { code: dropiProductId }, select: { id: true } });
   await prisma.purchaseCatalogItem.update({
     where: { id: catalogItemId },
-    data: { awaitingDropiId: false, justCode: justCodeTaken && justCodeTaken.id !== catalogItemId ? null : dropiProductId },
+    data: { awaitingDropiId: false, justCode: (justCodeTaken && justCodeTaken.id !== catalogItemId) || usedByCombo ? null : dropiProductId },
   });
 
   const pendingRequests = await prisma.purchaseRequest.findMany({

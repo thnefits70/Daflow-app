@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { componentsMissingDropiId, missingDropiIdMessage } from "@/lib/fulfillmentGuides";
 import { canManageJustCatalog, dbUserId } from "@/lib/guards";
+import { comboBrand, comboCodeUsedByProduct, comboMixesBrands } from "@/lib/comboBrand";
 import {
   resolveCostBasisForCatalogItems,
   computeComboBenistockPrice,
@@ -16,7 +17,7 @@ import {
   type ComboComponentInput,
 } from "@/lib/marketProduct";
 
-const CATALOG_ITEM_SELECT = { id: true, name: true, photos: true, justCode: true } as const;
+const CATALOG_ITEM_SELECT = { id: true, name: true, photos: true, justCode: true, bodega: true } as const;
 
 // Confirmado 2026-08-26 (pedido explícito del usuario): un ID de combo de
 // Dropi NO es un producto físico real — Dropi los crea con nombres
@@ -80,7 +81,9 @@ export async function GET() {
         id: c.id,
         code: c.code,
         label: c.label,
-        bodega: c.bodega,
+        // Sale sola de sus productos (ver lib/comboBrand.ts).
+        bodega: comboBrand(c.bodega, c.components.map((comp) => comp.catalogItem.bodega)),
+        mixesBrands: comboMixesBrands(c.components.map((comp) => comp.catalogItem.bodega)),
         createdByName: c.createdBy?.name ?? null,
         createdAt: c.createdAt,
         components: c.components.map((comp) => ({ id: comp.id, quantity: comp.quantity, catalogItem: comp.catalogItem })),
@@ -113,6 +116,10 @@ export async function POST(req: NextRequest) {
   // deja corregirlo sin tener que ir a buscarlo aparte en Base de datos de
   // productos.
   const existing = await prisma.dropiCombo.findUnique({ where: { code: parsed.data.code } });
+  if (!existing) {
+    const clash = await comboCodeUsedByProduct(parsed.data.code);
+    if (clash) return NextResponse.json({ error: clash }, { status: 409 });
+  }
   const combo = existing
     ? await prisma.$transaction(async (tx) => {
         await tx.dropiComboComponent.deleteMany({ where: { comboId: existing.id } });

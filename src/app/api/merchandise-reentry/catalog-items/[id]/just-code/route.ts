@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canManageJustCatalog } from "@/lib/guards";
+import { productIdUsedByCombo } from "@/lib/comboBrand";
 
 const schema = z.object({ justCode: z.string().trim().min(1, "El código no puede estar vacío.").max(50) });
 
@@ -32,6 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (duplicate) {
     return NextResponse.json({ error: `Ese código ya está asignado a "${duplicate.name}".` }, { status: 409 });
   }
+
+  const comboClash = await productIdUsedByCombo(parsed.data.justCode);
+  if (comboClash) return NextResponse.json({ error: comboClash }, { status: 409 });
 
   const updated = await prisma.purchaseCatalogItem.update({
     where: { id },

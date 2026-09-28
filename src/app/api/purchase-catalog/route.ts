@@ -7,6 +7,7 @@ import { canSubmitPurchaseRequests, canManageJustCatalog } from "@/lib/guards";
 import { getCatalogItemPriceStats } from "@/lib/purchases";
 import { actorName } from "@/lib/actorName";
 import { suggestNichoIfMissing } from "@/lib/nichoAi";
+import { productIdUsedByCombo } from "@/lib/comboBrand";
 
 // Confirmado 2026-08-06: quien creó un producto puede eliminarlo él mismo
 // dentro de las primeras 2 horas desde que lo creó (ver DELETE en
@@ -144,6 +145,9 @@ export async function POST(req: NextRequest) {
       { status: 409 }
     );
   }
+
+  const comboClash = await productIdUsedByCombo(parsed.data.justCode);
+  if (comboClash) return NextResponse.json({ error: comboClash }, { status: 409 });
 
   const isAdmin = session.user.role === "admin";
   const item = await prisma.purchaseCatalogItem.create({

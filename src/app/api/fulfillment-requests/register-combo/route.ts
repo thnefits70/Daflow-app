@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { comboCodeUsedByProduct } from "@/lib/comboBrand";
 import { componentsMissingDropiId, missingDropiIdMessage } from "@/lib/fulfillmentGuides";
 import { canSubmitFulfillmentRequest, canManageJustCatalog, dbUserId } from "@/lib/guards";
 
@@ -33,6 +34,10 @@ export async function POST(req: NextRequest) {
   if (missingIds.length > 0) return NextResponse.json({ error: missingDropiIdMessage(missingIds) }, { status: 400 });
 
   const existing = await prisma.dropiCombo.findUnique({ where: { code: parsed.data.code }, include: { components: true } });
+  if (!existing) {
+    const clash = await comboCodeUsedByProduct(parsed.data.code);
+    if (clash) return NextResponse.json({ error: clash }, { status: 409 });
+  }
   if (existing && existing.components.length > 0) {
     return NextResponse.json({ error: "Este combo ya tiene una receta registrada — si crees que está mal, pídele a Daniel que la corrija en Base de datos de productos." }, { status: 400 });
   }

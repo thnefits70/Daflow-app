@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { canManageJustCatalog } from "@/lib/guards";
+import { auth } from "@/auth";
 
 const schema = z.object({ bodega: z.enum(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "MKT_SUMINISTROS"]).nullable() });
 
@@ -10,8 +10,12 @@ const schema = z.object({ bodega: z.enum(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHA
 // PurchaseCatalogItem's bodega (ver catalog-items/[id]/bodega), elegida
 // directamente sobre el combo, independiente de la marca de sus
 // componentes.
+// Desde 2026-09-28 (pedido del usuario): solo el admin. La marca de un combo
+// sale sola de sus productos (lib/comboBrand.ts); lo guardado aquí solo se
+// usa si el combo mezcla productos de marcas distintas.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await canManageJustCatalog())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const session = await auth();
+  if (session?.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);

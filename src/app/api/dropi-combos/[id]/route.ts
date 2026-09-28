@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { comboCodeUsedByProduct } from "@/lib/comboBrand";
 import { componentsMissingDropiId, missingDropiIdMessage } from "@/lib/fulfillmentGuides";
 import { canManageJustCatalog } from "@/lib/guards";
 
@@ -27,6 +28,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const codeTaken = await prisma.dropiCombo.findFirst({ where: { code: parsed.data.code, id: { not: id } } });
   if (codeTaken) return NextResponse.json({ error: "Ya existe otro combo con ese código." }, { status: 409 });
+  const clash = await comboCodeUsedByProduct(parsed.data.code);
+  if (clash) return NextResponse.json({ error: clash }, { status: 409 });
 
   const combo = await prisma.$transaction(async (tx) => {
     await tx.dropiComboComponent.deleteMany({ where: { comboId: id } });

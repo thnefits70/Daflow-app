@@ -46,6 +46,8 @@ type ComboRow = {
   code: string;
   label: string | null;
   bodega: Marca | null;
+  // true = sus productos son de marcas distintas; solo ahí el admin elige.
+  mixesBrands?: boolean;
   components: { id: string; quantity: number; catalogItem: { id: string; name: string; justCode: string | null } }[];
   providerPrice: number | null;
   bodegaPrice: number | null;
@@ -1037,7 +1039,8 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                   <CatalogCode code={r.justCode} />
                   <ExpandableName text={r.name} />
                 </span>
-                <MarcaSelect value={r.bodega} onChange={(v) => updateProductMarca(r.catalogItemId, v)} readOnly={!canEdit} />
+                {/* Desde 2026-09-28: la marca viene de Análisis de Mercado / Control de Compras; solo el admin corrige. */}
+                <MarcaSelect value={r.bodega} onChange={(v) => updateProductMarca(r.catalogItemId, v)} readOnly={!isAdmin} />
                 <AreaSelect value={r.warehouseArea} onChange={(v) => updateProductArea(r.catalogItemId, v)} readOnly={!canEdit} />
                 <span className="flex flex-col items-end gap-0.5">
                   <span className={`text-right font-mono text-[12.5px] font-bold ${r.balance < 0 ? "text-red" : "text-ink"}`}>{r.balance}</span>
@@ -1121,7 +1124,8 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                         <span className="font-mono font-bold text-teal shrink-0">{combo.code}</span>
                         {combo.label && <ExpandableName text={combo.label} className="text-steel" />}
                       </span>
-                      <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} readOnly={!canEdit} />
+                      {/* La marca del combo sale de sus productos; solo si mezcla marcas el admin la elige. */}
+                      <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} readOnly={!isAdmin || !combo.mixesBrands} />
                       {/* Un combo no está en ninguna área: cada producto que trae tiene la suya. */}
                       <span className="text-[11px] text-steel-dim">—</span>
                       <span className="text-right font-mono text-[11px] italic text-steel-dim">combo</span>
