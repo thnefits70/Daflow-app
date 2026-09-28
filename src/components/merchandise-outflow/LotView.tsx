@@ -3,7 +3,7 @@
 import { Fragment, useState } from "react";
 import { ChevronDown, ChevronUp, Package, Printer, X } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
-import { areaGroupCount, carrierLabel, lineBlock, newAreaGroup, sortByBlock } from "@/lib/carriers";
+import { areaGroupCount, carrierLabel, lineBlock, newAreaGroup, sortByBlock, sortCarriers } from "@/lib/carriers";
 import { areaLabel } from "@/lib/warehouseAreas";
 import { BlockAssignee } from "./BlockAssignee";
 import { sourceLabel, type VariantNote } from "./fulfillmentRequestShared";
@@ -48,6 +48,8 @@ export type CompiledLot = {
   sentByName: string | null;
   carriers: string[];
   guidesByCarrier: Record<string, number>;
+  // plataforma (DROPI/ROCKET) → transportadora → guías
+  guidesBySource: Record<string, Record<string, number>>;
   batches: LotBatch[];
   lines: LotLine[];
   warranty: LotWarrantyLine[];
@@ -209,6 +211,8 @@ export function LotView({
         {lot.sentAt ? ` · enviado ${fmtTime(lot.sentAt)}${lot.sentByName ? ` por ${lot.sentByName}` : ""}` : ""}
         {lot.printedAt ? ` · impreso ${fmtTime(lot.printedAt)}${lot.printedByName ? ` por ${lot.printedByName}` : ""}` : ""}
       </div>
+
+      {totalGuides > 0 && <GuideCounts lot={lot} />}
 
       <div className="flex flex-wrap gap-1.5 mb-3">
         {lot.batches.map((b) => (
@@ -464,6 +468,37 @@ export function LotView({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Pedido de Daniel (2026-09-28): cuántas guías trae el manifiesto de cada
+// transportadora, siempre a la vista (sin abrir el detalle) para que el
+// equipo lo vea al escanear sin preguntarle a Yair. Si el corte mezcla Dropi
+// y Rocket, una fila por plataforma porque cada una imprime su manifiesto.
+function GuideCounts({ lot }: { lot: CompiledLot }) {
+  const sources = Object.keys(lot.guidesBySource ?? {}).sort();
+  const rows = sources.length > 1 ? sources.map((s) => ({ label: sourceLabel(s), counts: lot.guidesBySource[s] })) : [{ label: null, counts: lot.guidesByCarrier }];
+  return (
+    <div className="bg-cloud border border-rule rounded-md px-2.5 py-2 mb-3">
+      <div className="text-[10.5px] font-semibold uppercase tracking-wider text-steel mb-1">Guías por transportadora</div>
+      {rows.map((r) => {
+        const carriers = sortCarriers(Object.keys(r.counts).filter((c) => r.counts[c] > 0));
+        const total = carriers.reduce((s, c) => s + r.counts[c], 0);
+        return (
+          <div key={r.label ?? "all"} className="flex flex-wrap items-center gap-1.5 mb-1 last:mb-0">
+            {r.label && <span className="text-[11px] font-bold w-16 shrink-0">{r.label}</span>}
+            {carriers.map((c) => (
+              <span key={c} className="text-[12px] rounded-full border border-teal/35 bg-teal/10 px-2.5 py-0.5">
+                {carrierLabel(c)} <b className="font-mono text-teal">{r.counts[c]}</b>
+              </span>
+            ))}
+            <span className="text-[12px] font-semibold px-1">
+              Total <b className="font-mono text-teal">{total}</b>
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -603,7 +603,18 @@ export async function getCompiledLot(lotId: string) {
   // Pedido de Yair (2026-09-26): además de las unidades, cuántas guías
   // (paquetes) salen por transportadora, contadas de las guías que leyó el PDF.
   const guidesByCarrier: Record<string, number> = {};
-  for (const b of lot.batches) for (const g of b.guides) guidesByCarrier[g.carrier] = (guidesByCarrier[g.carrier] ?? 0) + 1;
+  // Pedido de Daniel (2026-09-28): lo mismo separado por plataforma (Dropi y
+  // Rocket imprimen su propio manifiesto por transportadora), para que el
+  // equipo vea en la app cuántas guías trae cada manifiesto sin preguntarle
+  // a Yair.
+  const guidesBySource: Record<string, Record<string, number>> = {};
+  for (const b of lot.batches) {
+    for (const g of b.guides) {
+      guidesByCarrier[g.carrier] = (guidesByCarrier[g.carrier] ?? 0) + 1;
+      const bySource = (guidesBySource[b.source] ??= {});
+      bySource[g.carrier] = (bySource[g.carrier] ?? 0) + 1;
+    }
+  }
 
   const lineList: LotLine[] = [...lines.values()].map(({ variantMap, ...l }) => {
     const variants = [...variantMap.entries()].filter(([label]) => label !== "Sin variante" || variantMap.size > 1).map(([label, quantity]) => ({ label, quantity }));
@@ -693,6 +704,7 @@ export async function getCompiledLot(lotId: string) {
     closedAt: lot.closedAt,
     carriers: sortCarriers([...carriers]),
     guidesByCarrier,
+    guidesBySource,
     batches: lot.batches.map((b) => ({
       id: b.id,
       source: b.source,
