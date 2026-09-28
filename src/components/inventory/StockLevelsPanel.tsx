@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, RefreshCw } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { ExpandableName } from "@/components/ui/ExpandableName";
@@ -540,11 +540,33 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   const [reviewingAdjustmentId, setReviewingAdjustmentId] = useState<string | null>(null);
 
   const [combos, setCombos] = useState<ComboRow[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
   function loadRows() {
-    fetch("/api/inventory-control/stock-levels")
+    return fetch("/api/inventory-control/stock-levels", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : { rows: [] }))
-      .then((data) => setRows(data.rows))
+      .then((data) => {
+        setRows(data.rows);
+        setLastLoadedAt(new Date());
+      })
       .catch(() => setRows([]));
+  }
+
+  function loadCombos() {
+    return fetch("/api/dropi-combos", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setCombos)
+      .catch(() => setCombos([]));
+  }
+
+  // Pedido del usuario 2026-09-28: botón "Actualizar stock" para ver los
+  // números reales de INVESTOCK sin recargar toda la página. Búsqueda,
+  // filtros y orden se quedan como estaban.
+  async function refreshStock() {
+    if (refreshing) return;
+    setRefreshing(true);
+    await Promise.all([loadRows(), loadCombos()]);
+    setRefreshing(false);
   }
 
   async function updateProductMarca(catalogItemId: string, bodega: Marca | null) {
@@ -582,10 +604,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
 
   useEffect(() => {
     loadRows();
-    fetch("/api/dropi-combos")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(setCombos)
-      .catch(() => setCombos([]));
+    loadCombos();
     // Confirmado 2026-09-22: carga el conteo de solicitudes pendientes en
     // segundo plano para que el número aparezca en el título del bloque
     // sin que el admin tenga que abrirlo primero.
@@ -955,6 +974,16 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
             </select>
           </label>
         )}
+        <button
+          type="button"
+          onClick={refreshStock}
+          disabled={refreshing}
+          title={lastLoadedAt ? `Última actualización: ${formatDateTime(lastLoadedAt)}` : undefined}
+          className="flex items-center gap-1.5 rounded border border-rule px-2.5 py-1.5 text-[12px] font-semibold whitespace-nowrap cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+        >
+          <RefreshCw size={13} className={`shrink-0 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "Actualizando…" : "Actualizar stock"}
+        </button>
       </div>
 
       {viewMode !== "combos" && (
