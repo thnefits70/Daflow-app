@@ -1107,14 +1107,28 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
         <div className="mt-5">
           <div className="text-[13px] font-bold text-ink mb-1">Combos registrados</div>
           <div className="text-[11.5px] text-steel mb-2.5">
-            Un combo no es un producto real — nunca tiene stock propio (por eso la columna Stock dice &quot;combo&quot;, nunca un número). Mismas columnas de costo y precio que los productos, calculadas sumando cada producto real que trae. Debajo de cada fila ves qué trae y cuánto stock real le queda a cada uno, para saber si alcanza para seguir armándolo.
+            Un combo no es un producto real — nunca tiene stock propio. El número &quot;≈&quot; de la columna Stock es solo una referencia: cuántos combos alcanzan a armarse con el stock real de sus productos (dividido por lo que lleva la receta; manda el que alcanza para menos, marcado &quot;lo limita&quot;). Se actualiza solo con el stock real. Si dos combos usan el mismo producto, esas unidades se comparten. Mismas columnas de costo y precio que los productos, calculadas sumando cada producto real que trae. Debajo de cada fila ves qué trae y cuánto stock real le queda a cada uno, para saber si alcanza para seguir armándolo.
           </div>
           <div className="border border-rule rounded-md overflow-x-auto">
             {columnsHeader}
             <div className="min-w-[1470px]">
               {[...filteredCombos]
                 .sort((a, b) => Number(a.bodega != null) - Number(b.bodega != null) || a.code.localeCompare(b.code))
-                .map((combo, i) => (
+                .map((combo, i) => {
+                  // Stock referencial: cuántos combos alcanzan con el stock real de cada producto,
+                  // dividiendo por lo que lleva la receta. Manda el que alcanza para menos.
+                  const stockOf = (id: string) => rows?.find((r) => r.catalogItemId === id)?.balance ?? null;
+                  let comboRef: number | null = combo.components.length > 0 ? Infinity : null;
+                  let limitingId: string | null = null;
+                  for (const c of combo.components) {
+                    const s = stockOf(c.catalogItem.id);
+                    if (s == null || c.quantity <= 0) { comboRef = null; limitingId = null; break; }
+                    const fits = Math.floor(Math.max(0, s) / c.quantity);
+                    if (comboRef != null && fits < comboRef) { comboRef = fits; limitingId = c.id; }
+                  }
+                  const limiting = combo.components.find((c) => c.id === limitingId);
+                  const manyProducts = combo.components.length > 1;
+                  return (
                   <div key={combo.id} className={`border-t first:border-t-0 border-rule ${i % 2 === 1 ? "bg-cloud/40" : ""}`}>
                     <div className="grid grid-cols-[auto_minmax(200px,1fr)_110px_80px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 items-center">
                       <div className="w-8 h-8 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel-dim">
@@ -1128,7 +1142,17 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                       <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} readOnly={!isAdmin || !combo.mixesBrands} />
                       {/* Un combo no está en ninguna área: cada producto que trae tiene la suya. */}
                       <span className="text-[11px] text-steel-dim">—</span>
-                      <span className="text-right font-mono text-[11px] italic text-steel-dim">combo</span>
+                      {comboRef != null ? (
+                        <span
+                          className="text-right leading-tight"
+                          title={`Referencia: alcanza para armar ${comboRef} combos con el stock real de hoy.${limiting ? ` Lo limita ${limiting.catalogItem.justCode} ${limiting.catalogItem.name}.` : ""} Si otro combo usa el mismo producto, esas unidades se comparten.`}
+                        >
+                          <span className={`block font-mono text-[13px] font-bold ${comboRef === 0 ? "text-red" : "text-steel"}`}>≈ {comboRef}</span>
+                          <span className="block text-[10px] italic text-steel-dim">combo · referencia</span>
+                        </span>
+                      ) : (
+                        <span className="text-right font-mono text-[11px] italic text-steel-dim">combo</span>
+                      )}
                       <CopyableAmount
                         value={combo.providerPrice}
                         className={"text-right font-mono text-[13px] text-steel border-l border-rule pl-3"}
@@ -1160,21 +1184,23 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                     </div>
                     <div className="flex flex-wrap gap-1.5 px-3 pb-2.5 pl-[52px]">
                       {combo.components.map((c) => {
-                        const stockRow = rows?.find((r) => r.catalogItemId === c.catalogItem.id);
-                        const stock = stockRow?.balance ?? null;
+                        const stock = stockOf(c.catalogItem.id);
+                        const isLimit = manyProducts && c.id === limitingId;
                         return (
-                          <span key={c.id} className="inline-flex items-center gap-1.5 text-[11.5px] bg-cloud border border-rule rounded-full px-2.5 py-1">
+                          <span key={c.id} className={`inline-flex items-center gap-1.5 text-[11.5px] bg-cloud border rounded-full px-2.5 py-1 ${isLimit ? "border-amber" : "border-rule"}`}>
                             <CatalogCode code={c.catalogItem.justCode} />
                             <span>{c.quantity}× {c.catalogItem.name}</span>
                             <span className={`font-mono font-bold ${stock != null && stock < 0 ? "text-red" : "text-steel"}`}>
                               ({stock != null ? `stock: ${stock}` : "sin dato"})
                             </span>
+                            {isLimit && <span className="text-[10.5px] font-bold text-amber">← lo limita</span>}
                           </span>
                         );
                       })}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
             </div>
           </div>
         </div>
