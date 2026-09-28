@@ -57,11 +57,16 @@ type WarrantyDecision = { mode: "COMPLETE" } | { mode: "PARTIAL"; catalogItemIds
 
 // Pedido del usuario 2026-09-28: los productos de ALF con ID provisional
 // (nombre termina en "- ALF") se omiten solos mientras esos IDs existan.
-// Solo si la app no los conoce; "Volver a incluir" los regresa a pendientes.
+// También los ya vinculados (2026-09-28). "Volver a incluir" les devuelve
+// su vínculo, o los regresa a pendientes si no tenían.
 const isProvisionalAlf = (name: string) => /-\s*ALF\s*$/i.test(name.trim());
 
 function initialDecision(r: Row): Decision {
-  if ((r.resolution.kind === "unknown" || r.resolution.kind === "comboNoRecipe") && isProvisionalAlf(r.name)) return { kind: "ignore" };
+  if (isProvisionalAlf(r.name)) return { kind: "ignore" };
+  return linkedDecision(r);
+}
+
+function linkedDecision(r: Row): Decision {
   switch (r.resolution.kind) {
     case "product":
       return { kind: "product", item: r.resolution.catalogItem };
@@ -246,7 +251,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
       await fetch(`/api/fulfillment-requests/ignored-codes/${encodeURIComponent(r.code)}`, { method: "DELETE" });
       await read(true);
     } else {
-      setDecisions((p) => ({ ...p, [r.code]: null }));
+      setDecisions((p) => ({ ...p, [r.code]: isProvisionalAlf(r.name) ? linkedDecision(r) : null }));
     }
   }
 
