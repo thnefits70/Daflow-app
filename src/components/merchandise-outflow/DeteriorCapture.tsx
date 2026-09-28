@@ -9,7 +9,9 @@ import { clearFormDraft } from "@/lib/useFormDraft";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 
 const MAX_PHOTOS = 20; // mismo tope que batches/[id]/photos/route.ts
-const DAMAGE_REASONS =["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
+// "Mal funcionamiento" va primero y viene marcado por defecto: pedido de Daniel
+// 2026-09-28, es el motivo que casi siempre aplica en deterioro.
+const DAMAGE_REASONS = ["Mal funcionamiento", "Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
 
 type SupplierOption = { id: string; name: string };
 type ItemDTO = {
@@ -377,7 +379,7 @@ export function DeteriorCapture({ allowUpload = false, onReported }: { allowUplo
 function AddDeteriorItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded: () => void; onCancel: () => void }) {
   const [selected, setSelected] = useState<MatchCatalogItem | null>(null);
   const [quantity, setQuantity] = useState("");
-  const [damageReason, setDamageReason] = useState("");
+  const [damageReason, setDamageReason] = useState(DAMAGE_REASONS[0]);
   const [damageReasonOther, setDamageReasonOther] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
