@@ -536,6 +536,11 @@ function FormulaInfoButton({ open, onToggle }: { open: boolean; onToggle: () => 
 export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?: boolean; canEdit?: boolean }) {
   const [rows, setRows] = useState<StockRow[] | null>(null);
   const [query, setQuery] = useState("");
+  // Confirmado 2026-09-28, pedido del usuario: buscador propio de los combos,
+  // justo encima de su tabla (el de arriba queda lejos cuando se ven
+  // productos y combos juntos). Pegar el ID del combo o palabras clave; si
+  // está vacío, los combos siguen filtrándose con el buscador general.
+  const [comboQuery, setComboQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [viewMode, setViewMode] = useState<ViewMode>("all");
   // Confirmado 2026-09-21, pedido explícito del usuario: filtro de un clic
@@ -705,19 +710,21 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   // cualquier producto real que trae adentro (ej. buscar "138397" debe
   // encontrar el combo que tiene ese producto como componente, no solo
   // combos cuyo propio código empiece con eso).
-  const filteredCombos = !queryTrimmed
+  const comboQ = comboQuery.trim() || queryTrimmed;
+  const comboQWords = comboQ ? significantWords(comboQ) : [];
+  const filteredCombos = !comboQ
     ? marcaFilteredCombosBase
     : marcaFilteredCombosBase
         .map((c) => {
           const ownNameNorm = normalize(c.label ?? "");
-          const ownDirectMatch = ownNameNorm.includes(normalize(queryTrimmed)) || c.code.toLowerCase().includes(queryTrimmed.toLowerCase());
-          const ownMatchCount = queryWords.filter((w) => ownNameNorm.includes(w)).length;
+          const ownDirectMatch = ownNameNorm.includes(normalize(comboQ)) || c.code.toLowerCase().includes(comboQ.toLowerCase());
+          const ownMatchCount = comboQWords.filter((w) => ownNameNorm.includes(w)).length;
 
           const componentHits = c.components.map((comp) => {
             const compNameNorm = normalize(comp.catalogItem.name);
             const compDirectMatch =
-              compNameNorm.includes(normalize(queryTrimmed)) || (comp.catalogItem.justCode ?? "").toLowerCase().includes(queryTrimmed.toLowerCase());
-            const compMatchCount = queryWords.filter((w) => compNameNorm.includes(w)).length;
+              compNameNorm.includes(normalize(comboQ)) || (comp.catalogItem.justCode ?? "").toLowerCase().includes(comboQ.toLowerCase());
+            const compMatchCount = comboQWords.filter((w) => compNameNorm.includes(w)).length;
             return { directMatch: compDirectMatch, matchCount: compMatchCount };
           });
 
@@ -1122,11 +1129,11 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
         <div className="px-3 py-4 text-[12.5px] text-steel">Todavía no hay combos registrados.</div>
       )}
 
-      {viewMode === "combos" && combos.length > 0 && filteredCombos.length === 0 && (
+      {viewMode === "combos" && combos.length > 0 && filteredCombos.length === 0 && comboQuery.trim() === "" && (
         <div className="px-3 py-4 text-[12.5px] text-steel">Ningún combo coincide con esa búsqueda.</div>
       )}
 
-      {viewMode !== "products" && filteredCombos.length > 0 && (
+      {viewMode !== "products" && (filteredCombos.length > 0 || comboQuery.trim() !== "") && (
         <div className="mt-5">
           {isAdmin && (
             <ManifestBrandLearner
@@ -1136,7 +1143,26 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
               }}
             />
           )}
-          <div className="text-[13px] font-bold text-ink mb-1">Combos registrados</div>
+          <div className="flex flex-wrap items-center gap-2 mb-1">
+            <div className="text-[13px] font-bold text-ink">Combos registrados</div>
+            <div className="flex items-center gap-1.5 flex-1 min-w-[220px] max-w-[420px] rounded border border-rule px-2.5 py-1">
+              <Search size={13} className="text-steel" />
+              <input
+                className="flex-1 text-[12.5px] outline-none bg-transparent"
+                placeholder="Buscar combo: pega el ID o palabras clave…"
+                value={comboQuery}
+                onChange={(e) => setComboQuery(e.target.value)}
+              />
+              {comboQuery && (
+                <button type="button" title="Limpiar" className="text-steel hover:text-ink cursor-pointer" onClick={() => setComboQuery("")}>
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+            {comboQuery.trim() !== "" && filteredCombos.length === 0 && (
+              <span className="text-[12px] text-steel">Ningún combo coincide.</span>
+            )}
+          </div>
           <div className="text-[11.5px] text-steel mb-2.5">
             Un combo no es un producto real — nunca tiene stock propio. El número &quot;≈&quot; de la columna Stock es solo una referencia: cuántos combos alcanzan a armarse con el stock real de sus productos (dividido por lo que lleva la receta; manda el que alcanza para menos, marcado &quot;lo limita&quot;). Se actualiza solo con el stock real. Si dos combos usan el mismo producto, esas unidades se comparten. Mismas columnas de costo y precio que los productos, calculadas sumando cada producto real que trae. Debajo de cada fila ves qué trae y cuánto stock real le queda a cada uno, para saber si alcanza para seguir armándolo.
           </div>
