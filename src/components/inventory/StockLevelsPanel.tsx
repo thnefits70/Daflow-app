@@ -598,7 +598,12 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
     setPendingAdjustmentsError("");
     fetch("/api/inventory-control/physical-count-adjustments")
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then(setPendingAdjustments)
+      .then((list: PendingAdjustmentRow[]) => {
+        setPendingAdjustments(list);
+        // 2026-09-28: el admin llega acá desde el pendiente de Inicio — que
+        // la bandeja ya esté abierta si hay algo por decidir.
+        if (list.length > 0) setPendingAdjustmentsOpen(true);
+      })
       .catch(() => setPendingAdjustmentsError("No se pudo cargar la lista."))
       .finally(() => setPendingAdjustmentsLoading(false));
   }
