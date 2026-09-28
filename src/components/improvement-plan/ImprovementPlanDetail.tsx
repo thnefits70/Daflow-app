@@ -194,7 +194,7 @@ export function ImprovementPlanDetail({
 
       {!canAct && !isClosed && (
         <div className="text-[12px] text-steel mb-4">
-          Modo lectura — solo {plan.leaderName ?? "el líder a cargo"} puede registrar evaluaciones y decisiones de este plan.
+          Modo lectura — solo {plan.leaderName ?? "el administrador"} puede registrar evaluaciones y decisiones de este plan.
         </div>
       )}
 

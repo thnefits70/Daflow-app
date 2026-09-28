@@ -1714,6 +1714,10 @@ export async function canActOnImprovementPlan(plan: { deptId: string; leaderId: 
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return plan.leaderId === null;
+  // Confirmado 2026-09-28, pedido del usuario: "al líder solo yo lo debo
+  // evaluar" — un plan que abrió el admin (leaderId=null) nunca lo toca el
+  // líder del departamento, aunque sea de su área.
+  if (plan.leaderId === null) return false;
   if (session.user.role === "employee" && session.user.deptId === plan.deptId) {
     const user = await getGuardUser(session.user.id);
     return !!user?.isLeader && user.leadsDeptId === plan.deptId;

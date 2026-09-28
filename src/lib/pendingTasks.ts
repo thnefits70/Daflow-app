@@ -457,6 +457,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   caja_chica_excepcion_flete: "Caja Chica — excepción de flete por aprobar",
   sueldo_nairoby_transferencia: "Transferencia del sueldo de Nairoby",
   plan_mejora_admin: "Plan de Mejora que tú abriste — evaluación o etapa vencida",
+  catalogo_producto_faltante: "Productos reportados como faltantes en el catálogo",
   control_inventario: "Control de Inventario — captura mensual",
   combo_sugerencias_nicho_backfill: "Sugerencias de Combos — nichos por asignar (tope de gasto alcanzado)",
   monthly_top_movers: "KPIs Generales — productos ganadores del mes por subir",
@@ -1744,6 +1745,27 @@ async function getPayrollNairobySalaryTransferPendingItem(forAdmin: boolean, hre
     include: { period: { select: { period: true } } },
   });
   return getPayrollTransferKindPendingItem({ forAdmin, href, noun: "sueldo de Nairoby", type: "sueldo_nairoby_transferencia", rows });
+}
+
+// Confirmado 2026-09-28, pedido del usuario: cuando alguien reporta que un
+// producto no está en el catálogo, antes no le salía a nadie en Inicio —
+// lo resuelve Daniel (JustCatalogPanel → MissingReportsQueue).
+async function getCatalogMissingReportPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.catalogMissingReport.findMany({
+    where: { resolvedAt: null },
+    select: { query: true },
+    orderBy: { reportedAt: "asc" },
+  });
+  if (rows.length === 0) return null;
+  const names = rows.map((r) => `"${r.query}"`);
+  return {
+    type: "catalogo_producto_faltante",
+    icon: "🔎",
+    label: "Reportan productos que no están en el catálogo",
+    meta: `${names.slice(0, 3).join(", ")}${names.length > 3 ? ` y ${names.length - 3} más` : ""}`,
+    overdue: false,
+    href,
+  };
 }
 
 // Confirmado 2026-08-27, pedido explícito del usuario: si un proveedor
@@ -3317,6 +3339,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (externalSaleDispatchItem) items.push(externalSaleDispatchItem);
     const excessKardexItem = await getPurchaseExcessPendingItem("kardex", "/area/workspace?tab=compras&ptab=inventario");
     if (excessKardexItem) items.push(excessKardexItem);
+    const catalogMissingItem = await getCatalogMissingReportPendingItem("/area/reingreso-mercaderia?tab=productos");
+    if (catalogMissingItem) items.push(catalogMissingItem);
     items.unshift(...(await getFulfillmentLotSentPendingItems("/area/workspace?tab=egresos&otab=solicitud")));
   }
 
@@ -3454,7 +3478,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
