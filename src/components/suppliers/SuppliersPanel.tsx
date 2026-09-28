@@ -161,13 +161,15 @@ export function SuppliersPanel({
   // transportistas del directorio de proveedores normales, y poder
   // registrarlos ahí mismo sin pasar por Solicitar. Viven en la misma tabla
   // (type=CARRIER), solo se filtran/etiquetan distinto en esta pantalla.
-  const [tab, setTab] = useState<"directorio" | "transportistas" | "pendientes">(() =>
-    initialOnlyUnverified &&
-    !suppliers.some((s) => s.type === "SUPPLIER" && hasUnverifiedAccount(s)) &&
-    suppliers.some((s) => s.type === "CARRIER" && hasUnverifiedAccount(s))
-      ? "transportistas"
-      : "directorio",
-  );
+  // Con ?verificar=1 abre la pestaña donde de verdad está la cuenta pendiente:
+  // directorio, transportistas o Pendientes (proveedor aún sin aprobar).
+  const [tab, setTab] = useState<"directorio" | "transportistas" | "pendientes">(() => {
+    if (!initialOnlyUnverified) return "directorio";
+    if (suppliers.some((s) => s.type === "SUPPLIER" && hasUnverifiedAccount(s))) return "directorio";
+    if (suppliers.some((s) => s.type === "CARRIER" && hasUnverifiedAccount(s))) return "transportistas";
+    if (canReview && pending.some(hasUnverifiedAccount)) return "pendientes";
+    return "directorio";
+  });
   const [onlyUnverified, setOnlyUnverified] = useState(initialOnlyUnverified);
   const listType: SupplierType = tab === "transportistas" ? "CARRIER" : "SUPPLIER";
   const [formOpen, setFormOpen] = useState(false);
@@ -418,6 +420,53 @@ export function SuppliersPanel({
     router.refresh();
   };
 
+  // Tarjeta de una cuenta bancaria (se usa en el directorio y en Pendientes,
+  // para que una cuenta por verificar nunca quede escondida).
+  const renderBankAccount = (supplierId: string, b: SupplierBankAccountDTO) => {
+    const revealed = revealedAccountIds.has(b.id);
+    return (
+      <div key={b.id} className={`bg-cloud border rounded px-3 py-2.5 ${b.verifiedAt ? "border-rule" : "border-red/50"}`}>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[12.5px] font-semibold text-ink">
+            {b.bankName} · {b.bankAccountType}
+          </span>
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-ink cursor-pointer shrink-0"
+            onClick={() => toggleRevealAccount(b.id)}
+          >
+            {revealed ? <EyeOff size={12} /> : <Eye size={12} />} {revealed ? "Ocultar" : "Revelar"}
+          </button>
+        </div>
+        <div className="text-[13px] font-mono text-ink mt-1.5">
+          {revealed ? b.bankAccountNumber : maskAccountNumber(b.bankAccountNumber)}
+        </div>
+        <div className="text-[11px] text-steel mt-1.5">
+          Titular: {b.bankAccountHolder}
+          {b.holderIdType && b.holderIdNumber ? ` · ${b.holderIdType === "RUC" ? "RUC" : "Cédula"} ${b.holderIdNumber}` : ""}
+        </div>
+        <div className="text-[10.5px] text-steel-dim mt-1">
+          Agregada por {b.createdByName ?? "—"} · {formatDateTime(b.createdAt)}
+        </div>
+        {b.verifiedAt ? (
+          <div className="text-[10.5px] text-green mt-1">✓ Verificada · {formatDateTime(b.verifiedAt)}</div>
+        ) : (
+          <div className="flex items-center justify-between gap-2 mt-2 bg-red/10 border border-red/40 rounded px-2.5 py-1.5">
+            <span className="text-[11px] text-red font-semibold">Por verificar — no se le puede transferir todavía. Confirma con el proveedor que la cuenta es suya.</span>
+            <button
+              type="button"
+              disabled={verifyingAccountId === b.id}
+              className="shrink-0 rounded border border-teal bg-teal px-2.5 py-1 text-[11px] font-bold text-navy cursor-pointer disabled:opacity-60"
+              onClick={() => verifyBankAccount(supplierId, b.id)}
+            >
+              {verifyingAccountId === b.id ? "…" : "Es del proveedor"}
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const addBankAccount = async (supplierId: string) => {
     if (!accountForm.bankName.trim() || !accountForm.bankAccountType.trim() || !accountForm.bankAccountNumber.trim() || !accountForm.bankAccountHolder.trim() || !accountForm.holderIdType || !accountForm.holderIdNumber.trim()) {
       setAccountErr("Completa todos los campos.");
@@ -456,6 +505,7 @@ export function SuppliersPanel({
   };
 
   const pendingCount = pending.filter((p) => p.status === "PENDING").length;
+  const pendingUnverifiedCount = pending.filter(hasUnverifiedAccount).length;
 
   return (
     <div>
@@ -480,7 +530,7 @@ export function SuppliersPanel({
             className={`pb-2.5 text-[13px] font-semibold border-b-2 cursor-pointer ${tab === "pendientes" ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"}`}
             onClick={() => setTab("pendientes")}
           >
-            Pendientes {pendingCount > 0 && <span className="ml-1 font-mono text-[10.5px] bg-red/15 text-red px-1.5 py-0.5 rounded-full">{pendingCount}</span>}
+            Pendientes {(pendingCount > 0 || pendingUnverifiedCount > 0) && <span className="ml-1 font-mono text-[10.5px] bg-red/15 text-red px-1.5 py-0.5 rounded-full">{pendingCount || pendingUnverifiedCount}</span>}
           </button>
         )}
       </div>
@@ -701,50 +751,7 @@ export function SuppliersPanel({
                     )}
                     {isAdmin && s.bankAccounts && s.bankAccounts.length > 0 && (
                       <div className="flex flex-col gap-2 mb-2">
-                        {s.bankAccounts.map((b) => {
-                          const revealed = revealedAccountIds.has(b.id);
-                          return (
-                            <div key={b.id} className={`bg-cloud border rounded px-3 py-2.5 ${b.verifiedAt ? "border-rule" : "border-red/50"}`}>
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-[12.5px] font-semibold text-ink">
-                                  {b.bankName} · {b.bankAccountType}
-                                </span>
-                                <button
-                                  type="button"
-                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-ink cursor-pointer shrink-0"
-                                  onClick={() => toggleRevealAccount(b.id)}
-                                >
-                                  {revealed ? <EyeOff size={12} /> : <Eye size={12} />} {revealed ? "Ocultar" : "Revelar"}
-                                </button>
-                              </div>
-                              <div className="text-[13px] font-mono text-ink mt-1.5">
-                                {revealed ? b.bankAccountNumber : maskAccountNumber(b.bankAccountNumber)}
-                              </div>
-                              <div className="text-[11px] text-steel mt-1.5">
-                                Titular: {b.bankAccountHolder}
-                                {b.holderIdType && b.holderIdNumber ? ` · ${b.holderIdType === "RUC" ? "RUC" : "Cédula"} ${b.holderIdNumber}` : ""}
-                              </div>
-                              <div className="text-[10.5px] text-steel-dim mt-1">
-                                Agregada por {b.createdByName ?? "—"} · {formatDateTime(b.createdAt)}
-                              </div>
-                              {b.verifiedAt ? (
-                                <div className="text-[10.5px] text-green mt-1">✓ Verificada · {formatDateTime(b.verifiedAt)}</div>
-                              ) : (
-                                <div className="flex items-center justify-between gap-2 mt-2 bg-red/10 border border-red/40 rounded px-2.5 py-1.5">
-                                  <span className="text-[11px] text-red font-semibold">Por verificar — no se le puede transferir todavía. Confirma con el proveedor que la cuenta es suya.</span>
-                                  <button
-                                    type="button"
-                                    disabled={verifyingAccountId === b.id}
-                                    className="shrink-0 rounded border border-teal bg-teal px-2.5 py-1 text-[11px] font-bold text-navy cursor-pointer disabled:opacity-60"
-                                    onClick={() => verifyBankAccount(s.id, b.id)}
-                                  >
-                                    {verifyingAccountId === b.id ? "…" : "Es del proveedor"}
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
+                        {s.bankAccounts.map((b) => renderBankAccount(s.id, b))}
                       </div>
                     )}
 
@@ -850,6 +857,11 @@ export function SuppliersPanel({
                   </span>
                 ))}
               </div>
+              {isAdmin && hasUnverifiedAccount(s) && (
+                <div className="flex flex-col gap-2 mb-2.5">
+                  {s.bankAccounts!.filter((b) => !b.verifiedAt).map((b) => renderBankAccount(s.id, b))}
+                </div>
+              )}
               {s.status === "REJECTED" && (
                 <div className="text-[12px] text-red mb-2">
                   Rechazado por {s.approvedByName ?? "—"}
