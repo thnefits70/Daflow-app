@@ -15,6 +15,8 @@ const schema = z.discriminatedUnion("resolution", [
   z.object({
     resolution: z.literal("REJECTED"),
     note: z.string().trim().min(1, "Cuenta brevemente con quién hablaste y qué te dijo."),
+    // Solo si la mercadería ya se le envió para revisión (2026-09-28).
+    returnsToWarehouse: z.boolean().optional(),
   }),
 ]);
 
@@ -39,6 +41,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       batch: { select: { reason: true } },
       catalogItem: { select: { name: true } },
       purchaseGestionSupplier: { select: { name: true, paymentMode: true } },
+      exchangeItem: { select: { batch: { select: { submittedAt: true } } } },
     },
   });
   if (!item) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
@@ -56,6 +59,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Este reclamo ya está esperando la aprobación de admin." }, { status: 409 });
   }
 
+  const sentForInspection = !!item.exchangeItem?.batch.submittedAt;
+  const returnsToWarehouse = parsed.data.resolution === "REJECTED" && sentForInspection ? parsed.data.returnsToWarehouse : undefined;
+  if (parsed.data.resolution === "REJECTED" && sentForInspection && returnsToWarehouse === undefined) {
+    return NextResponse.json({ error: "Indica si el proveedor devuelve la mercadería a bodega o se queda allá." }, { status: 400 });
+  }
+
   const amount = parsed.data.resolution === "CREDIT_ISSUED" ? parsed.data.amount : null;
   await prisma.merchandiseOutflowItem.update({
     where: { id },
@@ -70,6 +79,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       noProofDecisionNote: null,
       noProofDecidedAt: null,
       noProofDecidedById: null,
+      // Se guarda ya; el aviso a Daniel sale recién cuando admin aprueba.
+      inspectionReturnsToWarehouse: returnsToWarehouse ?? null,
     },
   });
 

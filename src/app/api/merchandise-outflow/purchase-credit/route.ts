@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageOutflowPurchaseGestion } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
-import { notifyInventoryLeadDeteriorPurchaseResolved } from "@/lib/merchandiseOutflow";
+import { notifyInventoryLeadDeteriorPurchaseResolved, syncInspectionPackageResolution } from "@/lib/merchandiseOutflow";
 import {
   computeCreditProofWarnings,
   findPossibleDuplicateCredits,
@@ -116,6 +116,8 @@ export async function POST(req: NextRequest) {
         groupedSupplierCreditId: credit.id,
       },
     });
+    // Los que ya se mandaron para revisión del proveedor (2026-09-28).
+    await syncInspectionPackageResolution(tx, selected.map((c) => c.id), { resolution: "CREDIT_ISSUED", note, resolvedAt: now, resolvedById: session.user.id });
     // Cada renglón con código que quedó emparejado a un reclamo marcado se
     // recuerda para este proveedor — Jariel lo vio en pantalla antes de
     // confirmar ("se recordará: ZW-881 = Exprimidor").

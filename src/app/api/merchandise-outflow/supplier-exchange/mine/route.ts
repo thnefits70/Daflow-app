@@ -26,7 +26,9 @@ export async function GET() {
   if (marketingLeadId === session.user.id) or.push({ linkedPurchaseRequestId: null });
 
   const items = await prisma.merchandiseOutflowItem.findMany({
-    where: { batch: { reason: "CAMBIO_PROVEEDOR", submittedAt: { not: null } }, resolution: null, OR: or },
+    // Los de un paquete de revisión (deterioro) los resuelve Jariel desde el
+    // reclamo de deterioro, no quien compró — ver to-exchange/route.ts.
+    where: { batch: { reason: "CAMBIO_PROVEEDOR", submittedAt: { not: null } }, resolution: null, sourceDeteriorItemId: null, OR: or },
     include: {
       ...ITEM_INCLUDE,
       batch: { select: { id: true, code: true, createdAt: true, documentPhotoUrls: true, supplier: { select: { id: true, name: true } } } },

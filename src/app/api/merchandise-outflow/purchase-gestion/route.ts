@@ -31,6 +31,8 @@ export async function GET() {
       batch: { select: { code: true, supplier: { select: { id: true, name: true } } } },
       purchaseGestionSupplier: { select: { id: true, name: true, paymentMode: true } },
       linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true, quantity: true, unitCost: true } },
+      // Paquete de revisión del proveedor (2026-09-28).
+      exchangeItem: { select: { batch: { select: { code: true, submittedAt: true } } } },
       resolvedBy: { select: { name: true } },
     },
     orderBy: { resolvedAt: "asc" },

@@ -33,12 +33,17 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // así que igual hay que armar el paquete. El ítem nuevo entra como
   // CREDIT_ISSUED SIN crear otro SupplierCredit (ya existe en el deterioro;
   // supplier-exchange/route.ts lo muestra desde ahí).
+  // Confirmado 2026-09-28, pedido de Jariel: también ANTES de que haya
+  // respuesta, si Jariel marcó que el proveedor quiere revisarla primero —
+  // el producto entra al paquete SIN resolución, y cuando Jariel registra la
+  // respuesta se copia sola (syncInspectionPackageResolution).
+  const forInspection = !source.purchaseResolution && !!source.supplierInspectionRequestedAt;
   if (
     source.batch.reason !== "DETERIORO" ||
     source.resolution !== "ESCALATED_TO_PURCHASES" ||
-    (source.purchaseResolution !== "REPLACED" && source.purchaseResolution !== "CREDIT_ISSUED")
+    (!forInspection && source.purchaseResolution !== "REPLACED" && source.purchaseResolution !== "CREDIT_ISSUED")
   ) {
-    return NextResponse.json({ error: "Solo se puede armar el paquete cuando el proveedor ya aceptó (cambio o crédito)." }, { status: 400 });
+    return NextResponse.json({ error: "Solo se puede armar el paquete cuando el proveedor ya aceptó (cambio o crédito), o si pidió revisarla primero." }, { status: 400 });
   }
   const isCredit = source.purchaseResolution === "CREDIT_ISSUED";
   if (!source.purchaseGestionSupplier) return NextResponse.json({ error: "Falta el proveedor confirmado por Jariel." }, { status: 409 });
@@ -73,10 +78,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       unitCostAtExchange: source.unitCostAtExchange,
       expectedCreditAmount: source.expectedCreditAmount,
       sourceDeteriorItemId: source.id,
-      resolution: isCredit ? "CREDIT_ISSUED" : "REPLACED",
-      resolutionNote: source.purchaseResolutionNote ?? (isCredit ? "Crédito ya acordado con el proveedor desde el deterioro." : "Cambio ya acordado con el proveedor desde el deterioro."),
-      resolvedAt: source.purchaseResolvedAt ?? new Date(),
-      resolvedById: source.purchaseResolvedById,
+      ...(forInspection
+        ? {}
+        : {
+            resolution: isCredit ? ("CREDIT_ISSUED" as const) : ("REPLACED" as const),
+            resolutionNote: source.purchaseResolutionNote ?? (isCredit ? "Crédito ya acordado con el proveedor desde el deterioro." : "Cambio ya acordado con el proveedor desde el deterioro."),
+            resolvedAt: source.purchaseResolvedAt ?? new Date(),
+            resolvedById: source.purchaseResolvedById,
+          }),
     },
   });
 

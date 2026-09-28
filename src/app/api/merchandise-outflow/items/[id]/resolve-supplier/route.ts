@@ -62,6 +62,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (item.batch.reason !== "CAMBIO_PROVEEDOR" || !item.batch.supplierId) return NextResponse.json({ error: "Este ítem no es de cambio con proveedor." }, { status: 400 });
   if (!item.batch.submittedAt) return NextResponse.json({ error: "Esta solicitud todavía no se ha enviado." }, { status: 409 });
   if (item.resolution) return NextResponse.json({ error: "Este ítem ya fue resuelto." }, { status: 409 });
+  // Confirmado 2026-09-28: un producto enviado para revisión del proveedor
+  // (deterioro) se resuelve desde el reclamo de deterioro, no acá.
+  if (item.sourceDeteriorItemId) return NextResponse.json({ error: "Este producto se resuelve desde su reclamo de deterioro (Reportes urgentes)." }, { status: 409 });
 
   const gestorId = await resolveOutflowItemGestorId(item);
   if (gestorId !== session.user.id) return NextResponse.json({ error: "No autorizado." }, { status: 403 });

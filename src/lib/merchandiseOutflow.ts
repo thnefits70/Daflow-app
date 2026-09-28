@@ -7,6 +7,36 @@ import { recordKardexEntry } from "@/lib/stockKardex";
 
 export { OUTFLOW_REASON_LABELS };
 
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+// Confirmado 2026-09-28, pedido de Jariel: el proveedor quiere REVISAR la
+// mercadería antes de decidir, así que Daniel ya la mandó en un paquete
+// (to-exchange) SIN resolución. Cuando Jariel por fin registra la respuesta
+// del proveedor en el deterioro, esa misma respuesta se copia a ese
+// producto del paquete — nadie lo vuelve a gestionar por otro lado.
+export async function syncInspectionPackageResolution(
+  tx: Tx,
+  deteriorItemIds: string[],
+  data: { resolution: "REPLACED" | "CREDIT_ISSUED" | "REJECTED"; note: string | null; resolvedAt: Date; resolvedById: string | null },
+): Promise<void> {
+  await tx.merchandiseOutflowItem.updateMany({
+    where: { sourceDeteriorItemId: { in: deteriorItemIds }, resolution: null },
+    data: { resolution: data.resolution, resolutionNote: data.note, resolvedAt: data.resolvedAt, resolvedById: data.resolvedById },
+  });
+}
+
+// Confirmado 2026-09-28: si el proveedor revisó la mercadería y RECHAZÓ, y
+// Jariel indicó que la devuelve, Daniel tiene que confirmar que regresó.
+export async function notifyInventoryLeadInspectionReturn(item: { declaredName: string; quantity: number; supplierName: string }): Promise<void> {
+  const leadId = await getInventoryLeadId();
+  if (!leadId) return;
+  await notifyOwner(leadId, {
+    title: "↩️ Mercadería regresa del proveedor",
+    body: `${item.declaredName} — ${item.quantity} un.: ${item.supplierName} la revisó y rechazó el reclamo, la devuelve. Confirma cuando llegue.`,
+    url: "/area/workspace?tab=egresos&otab=seguimiento",
+  }).catch(() => null);
+}
+
 // Confirmado 2026-08-25: correlativo propio de Registro de Egresos
 // (EG-0001, EG-0002...) — mismo patrón atómico que nextMerchandiseReentryNumber,
 // una sola numeración para todo el módulo sin importar el motivo.

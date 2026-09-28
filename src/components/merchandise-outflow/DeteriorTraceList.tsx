@@ -33,6 +33,10 @@ type TraceItem = {
   purchaseResolution: "REPLACED" | "CREDIT_ISSUED" | "REJECTED" | null;
   purchaseResolutionNote: string | null;
   rejectionProofUrl?: string | null;
+  supplierInspectionRequestedAt: string | null;
+  supplierInspectionNote: string | null;
+  inspectionReturnsToWarehouse: boolean | null;
+  inspectionReturnReceivedAt: string | null;
   purchaseResolvedAt: string | null;
   purchaseResolvedBy: Named;
   credit: { amount: number } | null;
@@ -80,7 +84,16 @@ function statusOf(i: TraceItem): Status {
     return { label: `Proveedor aceptó (${what}) · falta armar el paquete`, tone: "amber", open: true };
   }
   if (i.purchaseResolution === "REJECTED") {
+    // Confirmado 2026-09-28: lo revisó, lo rechazó y lo devuelve a bodega.
+    if (i.inspectionReturnsToWarehouse && !i.inspectionReturnReceivedAt) return { label: "Proveedor rechazó · regresa a bodega (falta confirmar)", tone: "amber", open: true };
+    if (i.inspectionReturnsToWarehouse) return { label: "Proveedor rechazó · regresó a bodega", tone: "red", open: false };
     return { label: i.purchaseExceptionDecision === "REJECTED" ? "Rechazado por admin" : "Proveedor rechazó", tone: "red", open: false };
+  }
+  // Confirmado 2026-09-28, pedido de Jariel: el proveedor quiere revisarla antes de decidir.
+  if (i.supplierInspectionRequestedAt) {
+    if (i.exchangeItem?.batch.submittedAt) return { label: `En revisión del proveedor · ${i.exchangeItem.batch.code}`, tone: "amber", open: true };
+    if (i.exchangeItem) return { label: `Paquete de revisión ${i.exchangeItem.batch.code} · falta dejarlo listo`, tone: "amber", open: true };
+    return { label: "Proveedor quiere revisarla · falta armar el paquete", tone: "amber", open: true };
   }
   if (i.purchaseNoMatchReportedAt && !i.purchaseExceptionDecision) return { label: "Esperando decisión del admin", tone: "amber", open: true };
   if (i.linkedPurchaseRequestId || i.purchaseExceptionDecision === "AUTHORIZED") return { label: "Jariel gestionando con el proveedor", tone: "amber", open: true };
@@ -105,7 +118,23 @@ function Step({ done, title, when, children }: { done: boolean; title: string; w
 const DECISION_LABEL = { SOLVED_ONSITE: "Solucionado ahí mismo", WRITE_OFF: "Dar de baja", ESCALATED_TO_PURCHASES: "Escalado a Compras (Jariel)" } as const;
 const EXCEPTION_LABEL = { DATA_CORRECTED: "corrigió el dato — Jariel vuelve a intentar", AUTHORIZED: "autorizó seguir sin compra registrada", REJECTED: "rechazó el reclamo" } as const;
 
-function Timeline({ i, canAct, onPack, canAdminDelete, onDeleted, hideMoney }: { i: TraceItem; canAct: boolean; onPack: () => void; canAdminDelete: boolean; onDeleted: () => void; hideMoney: boolean }) {
+function Timeline({
+  i,
+  canAct,
+  onPack,
+  canAdminDelete,
+  onDeleted,
+  onReturnConfirmed,
+  hideMoney,
+}: {
+  i: TraceItem;
+  canAct: boolean;
+  onPack: () => void;
+  canAdminDelete: boolean;
+  onDeleted: () => void;
+  onReturnConfirmed: () => void;
+  hideMoney: boolean;
+}) {
   const [packing, setPacking] = useState(false);
   const [packError, setPackError] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -140,6 +169,21 @@ function Timeline({ i, canAct, onPack, canAdminDelete, onDeleted, hideMoney }: {
       onPack();
     } catch (e) {
       setPackError(e instanceof Error ? e.message : "No se pudo armar el paquete.");
+    } finally {
+      setPacking(false);
+    }
+  }
+
+  async function confirmReturn() {
+    setPacking(true);
+    setPackError("");
+    try {
+      const res = await fetch(`/api/merchandise-outflow/items/${i.id}/inspection-return-received`, { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? "No se pudo guardar.");
+      onReturnConfirmed();
+    } catch (e) {
+      setPackError(e instanceof Error ? e.message : "No se pudo guardar.");
     } finally {
       setPacking(false);
     }
@@ -188,6 +232,38 @@ function Timeline({ i, canAct, onPack, canAdminDelete, onDeleted, hideMoney }: {
               {i.purchaseExceptionNote ?? i.purchaseNoMatchNote}
             </Step>
           )}
+          {i.supplierInspectionRequestedAt && (
+            <Step
+              done={!!i.exchangeItem?.batch.submittedAt}
+              title={
+                i.exchangeItem?.batch.submittedAt
+                  ? `Enviado al proveedor para revisión: ${i.exchangeItem.batch.code}`
+                  : i.exchangeItem
+                    ? `Paquete de revisión ${i.exchangeItem.batch.code} — falta la foto de la lista y dejarlo listo`
+                    : "El proveedor quiere revisarla primero — pendiente: armar el paquete"
+              }
+              when={i.exchangeItem?.batch.submittedAt ?? i.supplierInspectionRequestedAt}
+            >
+              {i.supplierInspectionNote}
+              {!i.exchangeItem && !i.purchaseResolution && canAct && (
+                <div className="mt-1.5">
+                  <button
+                    type="button"
+                    disabled={packing}
+                    className="inline-flex items-center gap-1.5 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                    onClick={pack}
+                  >
+                    <PackagePlus size={13} /> {packing ? "Armando…" : "Armar paquete para revisión"}
+                  </button>
+                  <div className="text-[10.5px] text-steel mt-1">Usa la misma guía de devolución. Cuando el proveedor responda, Jariel lo registra y no hay que armar otro paquete.</div>
+                  {packError && <div className="text-red text-[11px] mt-1">{packError}</div>}
+                </div>
+              )}
+              {i.exchangeItem && !i.exchangeItem.batch.submittedAt && canAct && (
+                <button type="button" className="mt-1 text-[11.5px] font-bold text-teal cursor-pointer" onClick={onPack}>Ir a &quot;Mercadería devuelta al proveedor&quot; →</button>
+              )}
+            </Step>
+          )}
           <Step
             done={!!i.purchaseResolution}
             title={
@@ -234,6 +310,34 @@ function Timeline({ i, canAct, onPack, canAdminDelete, onDeleted, hideMoney }: {
               )}
               {i.exchangeItem && !i.exchangeItem.batch.submittedAt && canAct && (
                 <button type="button" className="mt-1 text-[11.5px] font-bold text-teal cursor-pointer" onClick={onPack}>Ir a &quot;Mercadería devuelta al proveedor&quot; →</button>
+              )}
+            </Step>
+          )}
+          {i.purchaseResolution === "REJECTED" && i.inspectionReturnsToWarehouse !== null && (
+            <Step
+              done={!i.inspectionReturnsToWarehouse || !!i.inspectionReturnReceivedAt}
+              title={
+                !i.inspectionReturnsToWarehouse
+                  ? "La mercadería se quedó con el proveedor"
+                  : i.inspectionReturnReceivedAt
+                    ? "La mercadería regresó a bodega"
+                    : "Pendiente: que la mercadería regrese del proveedor"
+              }
+              when={i.inspectionReturnReceivedAt}
+            >
+              {i.inspectionReturnsToWarehouse && !i.inspectionReturnReceivedAt && canAct && (
+                <div className="mt-1.5">
+                  <button
+                    type="button"
+                    disabled={packing}
+                    className="inline-flex items-center gap-1.5 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                    onClick={confirmReturn}
+                  >
+                    {packing ? "Guardando…" : "Ya regresó a bodega"}
+                  </button>
+                  <div className="text-[10.5px] text-steel mt-1">Sigue siendo mercadería dañada: no vuelve al stock.</div>
+                  {packError && <div className="text-red text-[11px] mt-1">{packError}</div>}
+                </div>
               )}
             </Step>
           )}
@@ -293,7 +397,7 @@ function Timeline({ i, canAct, onPack, canAdminDelete, onDeleted, hideMoney }: {
 // (Jariel acaba de resolver algo arriba), y Jariel abre en "Todos".
 function lastActivity(i: TraceItem): number {
   return Math.max(
-    ...[i.batch.submittedAt ?? i.batch.createdAt, i.resolvedAt, i.purchaseNoMatchReportedAt, i.purchaseExceptionDecidedAt, i.purchaseResolvedAt, i.exchangeItem?.replacementReceivedAt]
+    ...[i.batch.submittedAt ?? i.batch.createdAt, i.resolvedAt, i.purchaseNoMatchReportedAt, i.purchaseExceptionDecidedAt, i.purchaseResolvedAt, i.exchangeItem?.replacementReceivedAt, i.supplierInspectionRequestedAt, i.inspectionReturnReceivedAt]
       .filter((d): d is string => !!d)
       .map((d) => new Date(d).getTime()),
   );
@@ -387,6 +491,9 @@ export function DeteriorTraceList({
                     onPack={() => onGoToExchange?.()}
                     canAdminDelete={canAdminDelete}
                     onDeleted={() => setItems((prev) => prev?.filter((x) => x.id !== i.id) ?? prev)}
+                    onReturnConfirmed={() =>
+                      setItems((prev) => prev?.map((x) => (x.id === i.id ? { ...x, inspectionReturnReceivedAt: new Date().toISOString() } : x)) ?? prev)
+                    }
                   />
                 )}
               </div>

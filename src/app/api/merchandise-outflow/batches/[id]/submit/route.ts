@@ -70,7 +70,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         supplier: { select: { name: true } },
         // Los que vienen de un deterioro ya entran resueltos (Jariel ya
         // negoció el cambio) — no se le avisa a nadie que los gestione.
-        items: { where: { resolution: null }, include: { catalogItem: { select: { name: true } }, linkedPurchaseRequest: { select: { requestedById: true } } } },
+        items: { where: { resolution: null, sourceDeteriorItemId: null }, include: { catalogItem: { select: { name: true } }, linkedPurchaseRequest: { select: { requestedById: true } } } },
       },
     });
     if (withDetails) await notifySupplierExchangeGestors(withDetails);

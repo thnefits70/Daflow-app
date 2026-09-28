@@ -3,7 +3,12 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageOutflowPurchaseGestion } from "@/lib/guards";
-import { notifyInventoryLeadDeteriorPurchaseResolved, outflowItemDisplayName } from "@/lib/merchandiseOutflow";
+import {
+  notifyInventoryLeadDeteriorPurchaseResolved,
+  notifyInventoryLeadInspectionReturn,
+  outflowItemDisplayName,
+  syncInspectionPackageResolution,
+} from "@/lib/merchandiseOutflow";
 import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.discriminatedUnion("resolution", [
@@ -22,6 +27,8 @@ const schema = z.discriminatedUnion("resolution", [
     resolution: z.literal("REJECTED"),
     note: z.string().trim().min(1, "Cuenta qué te dijo el proveedor."),
     proofUrl: z.string().url({ message: "Sube la captura donde el proveedor rechaza el reclamo." }),
+    // Solo si la mercadería ya se le envió para revisión (2026-09-28).
+    returnsToWarehouse: z.boolean().optional(),
   }),
 ]);
 
@@ -47,7 +54,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const item = await prisma.merchandiseOutflowItem.findUnique({
     where: { id },
-    include: { batch: { select: { reason: true } }, catalogItem: { select: { name: true } } },
+    include: {
+      batch: { select: { reason: true } },
+      catalogItem: { select: { name: true } },
+      purchaseGestionSupplier: { select: { name: true } },
+      exchangeItem: { select: { batch: { select: { submittedAt: true } } } },
+    },
   });
   if (!item) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (item.batch.reason !== "DETERIORO" || item.resolution !== "ESCALATED_TO_PURCHASES") {
@@ -60,6 +72,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const note = "note" in parsed.data ? parsed.data.note?.trim() || null : null;
   const now = new Date();
+
+  // Confirmado 2026-09-28 (pedido de Jariel, opción "depende" del usuario):
+  // si la mercadería ya se le envió al proveedor para revisión y la rechaza,
+  // Jariel indica si la devuelve a bodega o se queda allá.
+  const sentForInspection = !!item.exchangeItem?.batch.submittedAt;
+  const returnsToWarehouse = parsed.data.resolution === "REJECTED" && sentForInspection ? parsed.data.returnsToWarehouse : undefined;
+  if (parsed.data.resolution === "REJECTED" && sentForInspection && returnsToWarehouse === undefined) {
+    return NextResponse.json({ error: "Indica si el proveedor devuelve la mercadería a bodega o se queda allá." }, { status: 400 });
+  }
 
   // Confirmado 2026-09-23, revisión anti-fraude: un crédito menor que lo que
   // se pagó por esa mercadería necesita explicación y se le avisa al admin.
@@ -78,8 +99,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         purchaseResolvedAt: now,
         purchaseResolvedById: session.user.id,
         rejectionProofUrl: parsed.data.resolution === "REJECTED" ? parsed.data.proofUrl : null,
+        ...(returnsToWarehouse !== undefined ? { inspectionReturnsToWarehouse: returnsToWarehouse } : {}),
       },
     });
+    await syncInspectionPackageResolution(tx, [id], { resolution: parsed.data.resolution, note, resolvedAt: now, resolvedById: session.user.id });
 
     if (parsed.data.resolution === "CREDIT_ISSUED") {
       const supplierId = item.purchaseGestionSupplierId;
@@ -105,6 +128,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     resolution: parsed.data.resolution,
     creditAmount: parsed.data.resolution === "CREDIT_ISSUED" ? parsed.data.amount : null,
   });
+
+  if (returnsToWarehouse) {
+    await notifyInventoryLeadInspectionReturn({ declaredName: outflowItemDisplayName(item), quantity: item.quantity, supplierName: item.purchaseGestionSupplier?.name ?? "El proveedor" });
+  }
 
   if (parsed.data.resolution === "REJECTED" || creditBelowExpected) {
     await notifyOwner("admin", {

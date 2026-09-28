@@ -1449,7 +1449,9 @@ export async function getSupplierExchangeGestorCount(userId: string): Promise<nu
   if (marketingLeadId === userId) or.push({ linkedPurchaseRequestId: null });
 
   return prisma.merchandiseOutflowItem.count({
-    where: { batch: { reason: "CAMBIO_PROVEEDOR", submittedAt: { not: null } }, resolution: null, OR: or },
+    // Los de un paquete de revisión (deterioro) los resuelve Jariel desde el
+    // reclamo de deterioro, no quien compró — ver to-exchange/route.ts.
+    where: { batch: { reason: "CAMBIO_PROVEEDOR", submittedAt: { not: null } }, resolution: null, sourceDeteriorItemId: null, OR: or },
   });
 }
 
@@ -2262,6 +2264,34 @@ async function getDeteriorResolutionPendingItem(href: string): Promise<PendingIt
     label: "Deterioro en bodega — falta tu decisión",
     meta: `${rows.length === 1 ? "1 producto" : `${rows.length} productos`}${overdue ? " · atrasado" : ""}`,
     overdue,
+    href,
+  };
+}
+
+// Confirmado 2026-09-28, pedido de Jariel: el proveedor quiere revisar la
+// mercadería antes de decidir — Daniel tiene que armar el paquete de
+// revisión; y si tras revisarla la rechaza y la devuelve, confirmar que
+// regresó a bodega.
+async function getDeteriorInspectionPendingItem(href: string): Promise<PendingItem | null> {
+  const [toSend, toReceive] = await Promise.all([
+    prisma.merchandiseOutflowItem.count({
+      where: {
+        supplierInspectionRequestedAt: { not: null },
+        purchaseResolution: null,
+        OR: [{ exchangeItem: { is: null } }, { exchangeItem: { batch: { submittedAt: null } } }],
+      },
+    }),
+    prisma.merchandiseOutflowItem.count({
+      where: { purchaseResolution: "REJECTED", inspectionReturnsToWarehouse: true, inspectionReturnReceivedAt: null },
+    }),
+  ]);
+  if (toSend + toReceive === 0) return null;
+  return {
+    type: "egresos_deterioro_revision_proveedor",
+    icon: "📦",
+    label: toSend > 0 ? "Enviar mercadería para revisión del proveedor" : "Confirmar mercadería que regresa del proveedor",
+    meta: [toSend > 0 ? `${toSend} por enviar` : null, toReceive > 0 ? `${toReceive} por regresar` : null].filter(Boolean).join(" · "),
+    overdue: false,
     href,
   };
 }
@@ -3107,6 +3137,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (nichoBackfillItem) items.push(nichoBackfillItem);
     if (monthlyTopMoversItem) items.push(monthlyTopMoversItem);
     if (deteriorResolutionItem) items.push(deteriorResolutionItem);
+    const inspectionItem = await getDeteriorInspectionPendingItem("/area/workspace?tab=egresos&otab=seguimiento").catch(() => null);
+    if (inspectionItem) items.push(inspectionItem);
     const doubleRegItem = await getDamagedDoubleRegistrationPendingItem("/area/reingreso-mercaderia?tab=danos").catch(() => null);
     if (doubleRegItem) items.push(doubleRegItem);
     if (externalSaleDispatchItem) items.push(externalSaleDispatchItem);

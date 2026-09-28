@@ -3,7 +3,12 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canDecidePurchaseException, dbUserId, getPurchaseGestionManagerIds } from "@/lib/guards";
-import { notifyInventoryLeadDeteriorPurchaseResolved, notifyPurchaseExceptionDecided, outflowItemDisplayName } from "@/lib/merchandiseOutflow";
+import {
+  notifyInventoryLeadDeteriorPurchaseResolved,
+  notifyPurchaseExceptionDecided,
+  outflowItemDisplayName,
+  syncInspectionPackageResolution,
+} from "@/lib/merchandiseOutflow";
 
 const schema = z.object({
   decision: z.enum(["DATA_CORRECTED", "AUTHORIZED", "REJECTED"]),
@@ -37,6 +42,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const now = new Date();
   const notifyTargetId = item.purchaseNoMatchReportedById ?? (await getPurchaseGestionManagerIds())[0] ?? null;
+
+  // Si ya se había enviado para revisión del proveedor (2026-09-28), el
+  // producto del paquete también queda rechazado.
+  if (parsed.data.decision === "REJECTED") {
+    await prisma.$transaction((tx) =>
+      syncInspectionPackageResolution(tx, [id], { resolution: "REJECTED", note: parsed.data.note, resolvedAt: now, resolvedById: dbUserId(session.user.id) }),
+    );
+  }
 
   await prisma.merchandiseOutflowItem.update({
     where: { id },

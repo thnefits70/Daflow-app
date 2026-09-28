@@ -4,7 +4,12 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canDecidePurchaseException, dbUserId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
-import { notifyInventoryLeadDeteriorPurchaseResolved, outflowItemDisplayName } from "@/lib/merchandiseOutflow";
+import {
+  notifyInventoryLeadDeteriorPurchaseResolved,
+  notifyInventoryLeadInspectionReturn,
+  outflowItemDisplayName,
+  syncInspectionPackageResolution,
+} from "@/lib/merchandiseOutflow";
 
 const schema = z.object({
   approve: z.boolean(),
@@ -27,7 +32,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const note = parsed.data.note || null;
   if (!parsed.data.approve && !note) return NextResponse.json({ error: "Explica por qué lo devuelves." }, { status: 400 });
 
-  const item = await prisma.merchandiseOutflowItem.findUnique({ where: { id }, include: { catalogItem: { select: { name: true } } } });
+  const item = await prisma.merchandiseOutflowItem.findUnique({
+    where: { id },
+    include: { catalogItem: { select: { name: true } }, purchaseGestionSupplier: { select: { name: true } } },
+  });
   if (!item) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (!item.noProofRequestedAt || item.noProofDecidedAt) return NextResponse.json({ error: "Este pedido ya fue decidido." }, { status: 409 });
   if (item.purchaseResolution) return NextResponse.json({ error: "Este reclamo ya fue resuelto." }, { status: 409 });
@@ -55,6 +63,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           : {}),
       },
     });
+    if (parsed.data.approve) {
+      await syncInspectionPackageResolution(tx, [id], {
+        resolution,
+        note: `Sin captura (acordado por llamada o en persona): ${item.noProofNote}`,
+        resolvedAt: now,
+        resolvedById: item.noProofRequestedById,
+      });
+    }
     if (parsed.data.approve && resolution === "CREDIT_ISSUED") {
       if (!item.purchaseGestionSupplierId || !item.noProofAmount) throw new Error("Falta el proveedor o el monto.");
       await tx.supplierCredit.create({
@@ -86,6 +102,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       resolution,
       creditAmount: resolution === "CREDIT_ISSUED" ? item.noProofAmount : null,
     });
+    if (resolution === "REJECTED" && item.inspectionReturnsToWarehouse) {
+      await notifyInventoryLeadInspectionReturn({ declaredName: name, quantity: item.quantity, supplierName: item.purchaseGestionSupplier?.name ?? "El proveedor" });
+    }
   }
 
   return NextResponse.json({ ok: true });

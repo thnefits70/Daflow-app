@@ -175,7 +175,8 @@ export async function getSupplierClaimGaps() {
     }),
     // Paquete enviado al proveedor que nadie respondió todavía.
     prisma.merchandiseOutflowItem.count({
-      where: { resolution: null, batch: { reason: "CAMBIO_PROVEEDOR", submittedAt: { lt: daysAgo(CLAIM_GAP_DAYS.gestion) } } },
+      // Sin los del paquete de revisión: ya cuentan arriba como deterioro sin gestionar.
+      where: { resolution: null, sourceDeteriorItemId: null, batch: { reason: "CAMBIO_PROVEEDOR", submittedAt: { lt: daysAgo(CLAIM_GAP_DAYS.gestion) } } },
     }),
     // El proveedor ya aceptó (cambio o crédito) y el paquete no sale.
     prisma.merchandiseOutflowItem.count({

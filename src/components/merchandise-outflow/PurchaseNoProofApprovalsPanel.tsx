@@ -28,6 +28,7 @@ type ItemDTO = {
   noProofAmount: number | null;
   noProofNote: string;
   expectedCreditAmount: number | null;
+  inspectionReturnsToWarehouse: boolean | null;
   linkedPurchaseRequest: { requestedAt: string; unitCost: number } | null;
   otherClaims: OtherClaim[];
   previousCredits: PreviousCredit[];
@@ -130,6 +131,11 @@ export function PurchaseNoProofApprovalsPanel() {
                 )}
               </div>
               <span className="font-semibold">{item.noProofRequestedBy?.name ?? "—"}</span> ({formatDateTime(item.noProofRequestedAt)}): {item.noProofNote}
+              {item.noProofResolution === "REJECTED" && item.inspectionReturnsToWarehouse !== null && (
+                <div className="mt-1 text-steel">
+                  Ya la revisó: {item.inspectionReturnsToWarehouse ? "la devuelve a bodega" : "se queda con el proveedor"}.
+                </div>
+              )}
             </div>
 
             {repeated ? (

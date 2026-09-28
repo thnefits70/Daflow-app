@@ -28,6 +28,9 @@ type ItemDTO = {
   noProofApproved: boolean | null;
   noProofDecisionNote: string | null;
   noProofDecidedAt: string | null;
+  supplierInspectionRequestedAt: string | null;
+  supplierInspectionNote: string | null;
+  exchangeItem: { batch: { code: string; submittedAt: string | null } } | null;
   linkedPurchaseRequest: { requestNumber: number | null; requestedAt: string; quantity: number; unitCost: number } | null;
   unitCostAtExchange: number | null;
   expectedCreditAmount: number | null;
@@ -155,6 +158,9 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
   const [resolving, setResolving] = useState<"REPLACED" | "CREDIT_ISSUED" | "REJECTED" | null>(null);
   const [reportingNoMatch, setReportingNoMatch] = useState(false);
   const [noProofMode, setNoProofMode] = useState<"CREDIT_ISSUED" | "REJECTED" | null>(null);
+  const [askingInspection, setAskingInspection] = useState(false);
+  // Solo si ya se le mandó para revisión y la rechaza (2026-09-28).
+  const [returnsToWarehouse, setReturnsToWarehouse] = useState<boolean | null>(null);
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
   const [proofUrl, setProofUrl] = useState<string | null>(null);
@@ -235,7 +241,7 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
         resolving === "CREDIT_ISSUED"
           ? { resolution: "CREDIT_ISSUED", amount: Number(amount), proofUrl, note: note.trim() || undefined }
           : resolving === "REJECTED"
-            ? { resolution: "REJECTED", note: note.trim() || undefined, proofUrl }
+            ? { resolution: "REJECTED", note: note.trim() || undefined, proofUrl, returnsToWarehouse: returnsToWarehouse ?? undefined }
             : { resolution: resolving, note: note.trim() || undefined };
       await postJson(`/api/merchandise-outflow/items/${item.id}/purchase-resolve`, body);
       setResolving(null);
@@ -262,7 +268,7 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
       await postJson(`/api/merchandise-outflow/items/${item.id}/purchase-no-proof-request`, {
         resolution: noProofMode,
         note: note.trim(),
-        ...(noProofMode === "CREDIT_ISSUED" ? { amount: Number(amount) } : {}),
+        ...(noProofMode === "CREDIT_ISSUED" ? { amount: Number(amount) } : { returnsToWarehouse: returnsToWarehouse ?? undefined }),
       });
       setNoProofMode(null);
       setNote("");
@@ -275,6 +281,45 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
     }
   }
 
+  // Confirmado 2026-09-28, pedido de Jariel: los proveedores quieren revisar
+  // la mercadería antes de decidir — le avisa a Daniel para que la envíe.
+  async function submitInspection() {
+    setSaving(true);
+    setError("");
+    try {
+      await postJson(`/api/merchandise-outflow/items/${item.id}/purchase-inspection-request`, { note: note.trim() || undefined });
+      setAskingInspection(false);
+      setNote("");
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo enviar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const sentForInspection = !!item.exchangeItem?.batch.submittedAt;
+  const returnChoice = sentForInspection && (
+    <div className="mb-2">
+      <div className="text-[11.5px] font-semibold mb-1">El proveedor ya la revisó. ¿Qué pasa con la mercadería?</div>
+      <div className="flex gap-1.5">
+        {[
+          { v: true, label: "La devuelve a bodega" },
+          { v: false, label: "Se queda con el proveedor" },
+        ].map((o) => (
+          <button
+            key={String(o.v)}
+            type="button"
+            className={`flex-1 rounded border px-2 py-1.5 text-[11.5px] font-semibold cursor-pointer ${returnsToWarehouse === o.v ? "border-teal bg-teal text-navy" : "border-rule"}`}
+            onClick={() => setReturnsToWarehouse(o.v)}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+  const missingReturnChoice = sentForInspection && returnsToWarehouse === null;
   const isAnchored = !!item.linkedPurchaseRequest;
   const isAuthorizedException = item.purchaseExceptionDecision === "AUTHORIZED";
   const noProofPending = isNoProofPending(item);
@@ -396,6 +441,44 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
         </div>
       )}
 
+      {item.supplierInspectionRequestedAt && (
+        <div className="bg-blue/10 border border-blue/40 rounded-md p-2.5 mb-2.5 text-[11.5px]">
+          <span className="font-semibold text-blue">
+            {sentForInspection
+              ? `En revisión del proveedor — Daniel la envió (${item.exchangeItem!.batch.code}).`
+              : "Esperando que Daniel envíe la mercadería para revisión."}
+          </span>{" "}
+          {sentForInspection ? "Cuando el proveedor responda, registra el resultado abajo." : item.supplierInspectionNote}
+        </div>
+      )}
+
+      {item.purchaseGestionSupplier && !item.supplierInspectionRequestedAt && !noProofPending && !resolving && !noProofMode && !pickingAgain && (
+        askingInspection ? (
+          <div className="bg-cloud rounded-md p-2.5 mb-2">
+            <div className="text-[12px] font-semibold mb-1.5">El proveedor quiere revisarla primero — se le avisa a Daniel para que la envíe</div>
+            <textarea
+              className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px] mb-2"
+              rows={2}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Nota para Daniel (opcional): a dónde enviarla, con quién…"
+            />
+            <div className="flex gap-2">
+              <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => { setAskingInspection(false); setNote(""); setError(""); }}>
+                Cancelar
+              </button>
+              <button type="button" disabled={saving} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={submitInspection}>
+                {saving ? "Enviando…" : "Avisar a Daniel"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" className="block mb-2 text-[11.5px] font-semibold text-blue cursor-pointer" onClick={() => setAskingInspection(true)}>
+            📦 El proveedor quiere revisarla primero
+          </button>
+        )
+      )}
+
       {noProofPending && (
         <div className="bg-gold/10 border border-gold/40 rounded-md p-2.5 mb-2.5 text-[11.5px]">
           <div className="font-semibold mb-0.5" style={{ color: "var(--color-gold)" }}>
@@ -443,13 +526,14 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
             onChange={(e) => setNote(e.target.value)}
             placeholder="Breve: con quién hablaste, cuándo y qué acordaron…"
           />
+          {noProofMode === "REJECTED" && returnChoice}
           <div className="flex gap-2">
             <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => { setNoProofMode(null); setNote(""); setAmount(""); setError(""); }}>
               Cancelar
             </button>
             <button
               type="button"
-              disabled={saving || !note.trim() || (noProofMode === "CREDIT_ISSUED" && !(Number(amount) > 0))}
+              disabled={saving || !note.trim() || (noProofMode === "CREDIT_ISSUED" && !(Number(amount) > 0)) || (noProofMode === "REJECTED" && missingReturnChoice)}
               className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40"
               onClick={submitNoProof}
             >
@@ -488,6 +572,7 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
               </label>
             )
           )}
+          {resolving === "REJECTED" && returnChoice}
           {resolving === "REJECTED" && <div className="text-[11px] text-red mb-2">Esto le avisa al admin.</div>}
           {resolving === "CREDIT_ISSUED" && (
             <>
@@ -511,7 +596,7 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
             </button>
             <button
               type="button"
-              disabled={saving || (resolving === "CREDIT_ISSUED" && (!Number(amount) || !proofUrl)) || (resolving === "REJECTED" && (!note.trim() || !proofUrl))}
+              disabled={saving || (resolving === "CREDIT_ISSUED" && (!Number(amount) || !proofUrl)) || (resolving === "REJECTED" && (!note.trim() || !proofUrl || missingReturnChoice))}
               className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40"
               onClick={submitResolve}
             >

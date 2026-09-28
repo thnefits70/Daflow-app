@@ -20,6 +20,7 @@ type ItemDTO = {
   expectedCreditAmount: number | null;
   linkedPurchaseRequest: { requestNumber: number | null; requestedAt: string; requestedBy: { name: string } | null } | null;
   sourceDeteriorItem?: { batch: { code: string } } | null;
+  resolution?: string | null;
 };
 
 type BatchDTO = { id: string; code: string; documentPhotoUrls: string[]; supplier: SupplierOption | null; items: ItemDTO[] };
@@ -315,7 +316,11 @@ export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
                   </div>
                 </div>
                 {item.sourceDeteriorItem && (
-                  <div className="text-[11px] text-green font-semibold mt-1">Viene del deterioro {item.sourceDeteriorItem.batch.code} — el proveedor ya aceptó el cambio.</div>
+                  <div className="text-[11px] text-green font-semibold mt-1">
+                    Viene del deterioro {item.sourceDeteriorItem.batch.code} —{" "}
+                    {/* Sin resolución = va para que el proveedor la revise (2026-09-28). */}
+                    {item.resolution ? "el proveedor ya aceptó." : "va para revisión del proveedor; Jariel registra su respuesta."}
+                  </div>
                 )}
                 {item.sourceDeteriorItem ? null : item.expectedCreditAmount !== null ? (
                   <div className="text-[11px] text-steel mt-1">
