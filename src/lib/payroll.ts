@@ -506,6 +506,29 @@ export const SALARY_ADVANCE_MAX_AMOUNT = 200;
 // anticipos actuales se terminen de pagar (ver pendingSalaryAdvanceBalance).
 export const SALARY_ADVANCE_PENDING_CAP = 150;
 
+// Confirmado 2026-09-28: el colaborador confirma con un clic que le llegó
+// el anticipo. Pasadas 24 h desde que se aprobó (o desde que salió esta
+// función, lo que sea más tarde) se le obliga con una ventana que no se
+// cierra. Solo cuentan los aprobados desde el 20/9 — los anteriores ya
+// quedaron cobrados hace rato y no tiene sentido pedirlos ahora.
+const RECEIPT_CONFIRM_FROM = new Date("2026-09-20T05:00:00Z");
+const RECEIPT_CONFIRM_LAUNCH = new Date("2026-09-28T17:00:00Z");
+const RECEIPT_CONFIRM_GRACE_MS = 24 * 60 * 60 * 1000;
+
+type ReceiptFields = { status: string; approvedAt: Date | null; receiptConfirmedAt: Date | null; receiptIssueReportedAt: Date | null };
+
+export function salaryAdvanceNeedsReceipt(a: ReceiptFields) {
+  return a.status === "APPROVED" && !!a.approvedAt && a.approvedAt >= RECEIPT_CONFIRM_FROM && !a.receiptConfirmedAt;
+}
+
+// Vencido = hay que obligarlo. Si ya avisó que NO le llegó, no se lo
+// bloquea (queda en manos del admin), aunque puede confirmar después.
+export function salaryAdvanceReceiptOverdue(a: ReceiptFields, now = new Date()) {
+  if (!salaryAdvanceNeedsReceipt(a) || a.receiptIssueReportedAt) return false;
+  const start = Math.max(a.approvedAt!.getTime(), RECEIPT_CONFIRM_LAUNCH.getTime());
+  return now.getTime() - start >= RECEIPT_CONFIRM_GRACE_MS;
+}
+
 // Cuánto le queda pendiente de pago a un colaborador en anticipos: el total
 // de los PENDING (podrían aprobarse) más el saldo sin pagar de los APPROVED
 // — una cuota cuenta como pagada solo cuando su quincena Q1 correspondiente

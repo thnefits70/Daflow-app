@@ -5640,6 +5640,12 @@ model SalaryAdvance {
   firstPayoutMonth String? // resuelto al aprobar
   createdAt        DateTime @default(now())
 
+  // Confirmado 2026-09-28: el colaborador ve su comprobante y confirma con
+  // un clic que le llegó; pasadas 24 h sin confirmar se le obliga. Si dice
+  // que NO le llegó se avisa al admin y se le quita el bloqueo.
+  receiptConfirmedAt     DateTime?
+  receiptIssueReportedAt DateTime?
+
   @@index([employeeId])
 }
 

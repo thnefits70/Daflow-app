@@ -16,8 +16,23 @@ type HistoryAdvance = {
   id: string; amount: number; installments: number; status: "APPROVED" | "REJECTED";
   reason: "EMERGENCIA_FAMILIAR" | "OTRO" | null; createdAt: string; approvedAt: string | null; rejectedAt: string | null;
   firstPayoutMonth: string | null;
+  transferProofUrl: string | null;
+  receiptConfirmedAt: string | null; receiptIssueReportedAt: string | null;
   employee: { name: string };
 };
+
+// Confirmado 2026-09-28: solo se pide confirmación de recibido a los
+// aprobados desde el 20/9 (ver salaryAdvanceNeedsReceipt en payroll.ts).
+const RECEIPT_CONFIRM_FROM = new Date("2026-09-20T05:00:00Z");
+
+function ReceiptBadge({ a }: { a: HistoryAdvance }) {
+  if (a.status !== "APPROVED" || !a.approvedAt || new Date(a.approvedAt) < RECEIPT_CONFIRM_FROM) return null;
+  if (a.receiptConfirmedAt)
+    return <span className="text-[10.5px] font-semibold text-green" title={formatDateTime(a.receiptConfirmedAt)}>✓ Le llegó · {formatDateTime(a.receiptConfirmedAt)}</span>;
+  if (a.receiptIssueReportedAt)
+    return <span className="text-[10.5px] font-semibold text-red">⚠ Dice que NO le llegó · {formatDateTime(a.receiptIssueReportedAt)}</span>;
+  return <span className="text-[10.5px] font-semibold text-gold">Esperando que confirme que le llegó</span>;
+}
 
 const REASON_LABEL: Record<string, string> = { EMERGENCIA_FAMILIAR: "Emergencia familiar", OTRO: "Otro motivo" };
 
@@ -52,6 +67,10 @@ export function AdvanceHistoryPanel() {
             {a.installments > 1 && <span className="text-[11.5px] text-steel-dim">({a.installments} cuotas)</span>}
             <span className="text-[12px] text-steel">{a.employee.name}</span>
             {a.reason && <span className="text-[11px] text-steel-dim">{REASON_LABEL[a.reason] ?? a.reason}</span>}
+            <ReceiptBadge a={a} />
+            {a.transferProofUrl && (
+              <a href={a.transferProofUrl} target="_blank" rel="noreferrer" className="text-[11px] text-blue underline decoration-dotted">Comprobante</a>
+            )}
             <span className="ml-auto">
               {a.status === "APPROVED" ? (
                 <span className="text-[10.5px] font-semibold text-green bg-green/10 border border-green/30 rounded-full px-2 py-0.5">

@@ -6,6 +6,7 @@ import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
 import {
   pendingSalaryAdvanceBalance,
+  salaryAdvanceNeedsReceipt,
   SALARY_ADVANCE_MIN_AMOUNT,
   SALARY_ADVANCE_NO_JUSTIFICATION_MAX,
   SALARY_ADVANCE_MAX_AMOUNT,
@@ -21,7 +22,10 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
   const pendingTotal = await pendingSalaryAdvanceBalance(session.user.id);
-  return NextResponse.json({ items, pendingTotal });
+  return NextResponse.json({
+    items: items.map((a) => ({ ...a, needsReceipt: salaryAdvanceNeedsReceipt(a) })),
+    pendingTotal,
+  });
 }
 
 const schema = z

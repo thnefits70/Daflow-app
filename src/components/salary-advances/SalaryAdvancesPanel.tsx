@@ -5,6 +5,7 @@ import { Banknote, CheckCircle2, Circle, Plus, Trash2, TriangleAlert } from "luc
 import { installmentAmount } from "@/lib/payrollCalc";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { AdvanceProof, AdvanceReceiptButtons } from "@/components/salary-advances/SalaryAdvanceReceipt";
 
 type BankAccount = {
   id: string; bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string;
@@ -15,7 +16,8 @@ type Advance = {
   id: string; amount: number; installments: number; status: string;
   justification: string | null; reason: "EMERGENCIA_FAMILIAR" | "OTRO" | null;
   transferProofUrl: string | null; firstPayoutMonth: string | null;
-  createdAt: string;
+  createdAt: string; approvedAt: string | null;
+  receiptConfirmedAt: string | null; receiptIssueReportedAt: string | null; needsReceipt: boolean;
 };
 
 // Confirmado 2026-08-20 — reglas de anticipos: $20 mínimo, hasta $100 sin
@@ -414,6 +416,25 @@ export function SalaryAdvancesPanel() {
                   {a.status === "PENDING" && <> · El descuento en el rol empieza una vez que se apruebe, puede tardar</>}
                 </div>
                 {a.justification && <div className="text-[11.5px] text-steel-dim mt-0.5 italic">&ldquo;{a.justification}&rdquo;</div>}
+                {a.status === "APPROVED" && a.transferProofUrl && (
+                  <div className="mt-2">
+                    <div className="text-[10.5px] font-semibold uppercase tracking-wide text-steel mb-1">Comprobante de la transferencia</div>
+                    <AdvanceProof url={a.transferProofUrl} />
+                  </div>
+                )}
+                {a.receiptConfirmedAt && (
+                  <div className="text-[11.5px] text-green font-semibold mt-1.5">✓ Confirmaste que te llegó · {formatDateTime(a.receiptConfirmedAt)}</div>
+                )}
+                {a.needsReceipt && (
+                  <div className="mt-2 rounded-md border border-[#D9A441]/50 bg-[#D9A441]/10 px-3 py-2.5">
+                    <div className="text-[12px] text-ink mb-2">
+                      {a.receiptIssueReportedAt
+                        ? "Avisaste que no te llegó — el admin lo está revisando. Cuando te llegue, confirmalo acá."
+                        : "Revisá tu cuenta y confirmá que te llegó. Si no confirmás en 24 horas, la app te lo va a pedir obligatoriamente."}
+                    </div>
+                    <AdvanceReceiptButtons id={a.id} issueReported={!!a.receiptIssueReportedAt} onDone={load} />
+                  </div>
+                )}
               </div>
             );
           })}
