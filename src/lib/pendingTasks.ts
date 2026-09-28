@@ -452,6 +452,11 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_excedente_kardex: "Excedente de mercadería — confirmado, falta ingresarlo al Kardex",
   deterioro_compras_excepcion: "Deterioro sin compra que lo respalde — tu decisión",
   ajuste_stock_conteo: "Ajuste de stock por conteo físico — por aprobar",
+  catalogo_compras_borrado: "Solicitudes de borrar productos del catálogo de compras",
+  cuenta_proveedor_verificar: "Cuentas bancarias de proveedores por verificar",
+  caja_chica_excepcion_flete: "Caja Chica — excepción de flete por aprobar",
+  sueldo_nairoby_transferencia: "Transferencia del sueldo de Nairoby",
+  plan_mejora_admin: "Plan de Mejora que tú abriste — evaluación o etapa vencida",
   control_inventario: "Control de Inventario — captura mensual",
   combo_sugerencias_nicho_backfill: "Sugerencias de Combos — nichos por asignar (tope de gasto alcanzado)",
   monthly_top_movers: "KPIs Generales — productos ganadores del mes por subir",
@@ -1614,6 +1619,73 @@ async function getStockAdjustmentAdminPendingItem(href: string): Promise<Pending
   };
 }
 
+// Confirmado 2026-09-28 (revisión de avisos del admin): estas cuatro
+// decisiones eran exclusivas del admin pero nunca llegaban a su Inicio —
+// solo se veían si entraba justo a la pantalla correcta.
+// Borrar un producto del catálogo de compras: la solicitud solo aparecía
+// dentro del buscador de "Solicitar" al buscar ese producto, así que el
+// aviso nombra los productos para que sepa qué buscar.
+async function getPurchaseCatalogDeleteRequestAdminPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchaseCatalogItemDeleteRequest.findMany({
+    select: { item: { select: { name: true } } },
+    orderBy: { requestedAt: "asc" },
+  });
+  if (rows.length === 0) return null;
+  const names = rows.map((r) => r.item.name);
+  return {
+    type: "catalogo_compras_borrado",
+    icon: "🗑️",
+    label: "Piden borrar productos del catálogo de compras",
+    meta: `${names.slice(0, 3).join(", ")}${names.length > 3 ? ` y ${names.length - 3} más` : ""} · búscalos en Solicitar`,
+    overdue: false,
+    href,
+  };
+}
+
+// Anti-fraude (2026-09-23): una cuenta que agregó otra persona no se puede
+// pagar hasta que el admin la verifique con el proveedor.
+async function getSupplierBankAccountVerifyAdminPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.supplierBankAccount.findMany({
+    where: { verifiedAt: null },
+    select: { supplier: { select: { name: true } } },
+  });
+  if (rows.length === 0) return null;
+  const names = [...new Set(rows.map((r) => r.supplier.name))];
+  return {
+    type: "cuenta_proveedor_verificar",
+    icon: "🏦",
+    label: "Cuentas bancarias de proveedores por verificar",
+    meta: `${rows.length} cuenta${rows.length === 1 ? "" : "s"} · ${names.slice(0, 3).join(", ")}${names.length > 3 ? "…" : ""}`,
+    overdue: true,
+    href,
+  };
+}
+
+// Caja Chica: segundo pago de flete del mismo grupo — no se puede pagar
+// hasta que el admin apruebe la excepción.
+async function getPettyCashFreightExceptionAdminPendingItem(hrefBase: string): Promise<PendingItem | null> {
+  const count = await prisma.pettyCashFreightException.count({ where: { status: "pending" } });
+  if (count === 0) return null;
+  return {
+    type: "caja_chica_excepcion_flete",
+    icon: "🚚",
+    label: "Caja Chica — excepción de flete por aprobar",
+    meta: `${count} solicitud${count === 1 ? "" : "es"}`,
+    overdue: true,
+    href: `${hrefBase}?tab=cajachica`,
+  };
+}
+
+// Mismo criterio que nómina/IESS (getPayrollTransferKindPendingItem) para
+// la transferencia del sueldo de Nairoby, que también aprueba el admin.
+async function getPayrollNairobySalaryTransferPendingItem(forAdmin: boolean, href: string): Promise<PendingItem | null> {
+  const rows = await prisma.payrollNairobySalaryTransfer.findMany({
+    where: { status: { in: ["PENDING_APPROVAL", "REJECTED"] } },
+    include: { period: { select: { period: true } } },
+  });
+  return getPayrollTransferKindPendingItem({ forAdmin, href, noun: "sueldo de Nairoby", type: "sueldo_nairoby_transferencia", rows });
+}
+
 // Confirmado 2026-08-27, pedido explícito del usuario: si un proveedor
 // rechaza un cambio (ni cambia el producto ni da crédito), es una pérdida
 // real — admin ve un aviso urgente company-wide mientras falte la baja
@@ -2773,9 +2845,16 @@ async function getUpcomingBirthdayPendingItems(href: string, deptId?: string, ex
 // abrió, así que basta con mirar los planes de su propio departamento.
 const IMPROVEMENT_PLAN_REVIEW_OVERDUE_DAYS = 7;
 
-async function getImprovementPlanPendingItems(leaderDeptId: string, href: string): Promise<PendingItem[]> {
+// 2026-09-28: los planes que abrió el admin (leaderId=null, ver
+// canActOnImprovementPlan) solo los gestiona él — antes el recordatorio le
+// llegaba al líder del departamento (que puede ser la misma persona en el
+// plan) y nunca al admin. forAdmin=true trae solo esos.
+async function getImprovementPlanPendingItems(leaderDeptId: string | null, href: string): Promise<PendingItem[]> {
   const plans = await prisma.improvementPlan.findMany({
-    where: { deptId: leaderDeptId, stage: { not: "CERRADO" } },
+    where:
+      leaderDeptId === null
+        ? { leaderId: null, stage: { not: "CERRADO" } }
+        : { deptId: leaderDeptId, leaderId: { not: null }, stage: { not: "CERRADO" } },
     select: {
       stage: true,
       stageDeadline: true,
@@ -2889,6 +2968,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const invDept = await prisma.department.findUnique({ where: { code: "INV" }, select: { id: true } });
     const invEgresosHref = invDept ? `/admin/dept/${invDept.id}?tab=egresos&otab=proveedor` : "/admin";
     const invStockHref = invDept ? `/admin/dept/${invDept.id}?tab=stock-actual` : "/admin";
+    const comSolicitarHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=solicitar` : "/admin";
     const deterioroExcepcionesHref = "/admin/deterioro-excepciones";
     const nichoBackfillHref = "/admin/reingreso-mercaderia?tab=productos";
     const monthlyTopMoversHref = "/admin/kpis-generales";
@@ -2897,7 +2977,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
     const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseAwaitingCostItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems, purchaseExceptionItem, stockAdjustmentItem] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseAwaitingCostItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems, purchaseExceptionItem, stockAdjustmentItem, catalogDeleteItem, supplierAccountItem, freightExceptionItem, nairobySalaryItem, adminPlanItems] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -2926,6 +3006,11 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getImprovementPlanPendingClosureApprovalItems("/admin/plan-mejora"),
       getPurchaseExceptionAdminPendingItem(deterioroExcepcionesHref),
       getStockAdjustmentAdminPendingItem(invStockHref),
+      getPurchaseCatalogDeleteRequestAdminPendingItem(comSolicitarHref),
+      getSupplierBankAccountVerifyAdminPendingItem("/admin/proveedores"),
+      getPettyCashFreightExceptionAdminPendingItem(financeHref),
+      getPayrollNairobySalaryTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
+      getImprovementPlanPendingItems(null, "/admin/plan-mejora"),
     ]);
     const items = [
       ...feedbackItems,
@@ -2956,6 +3041,11 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(monthlyTopMoversItem ? [monthlyTopMoversItem] : []),
       ...(purchaseExceptionItem ? [purchaseExceptionItem] : []),
       ...(stockAdjustmentItem ? [stockAdjustmentItem] : []),
+      ...(catalogDeleteItem ? [catalogDeleteItem] : []),
+      ...(supplierAccountItem ? [supplierAccountItem] : []),
+      ...(freightExceptionItem ? [freightExceptionItem] : []),
+      ...(nairobySalaryItem ? [nairobySalaryItem] : []),
+      ...adminPlanItems.map((i) => ({ ...i, type: "plan_mejora_admin" })),
     ];
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
@@ -3262,7 +3352,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion", "ajuste_stock_conteo");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion", "ajuste_stock_conteo", "catalogo_compras_borrado", "cuenta_proveedor_verificar", "caja_chica_excepcion_flete", "sueldo_nairoby_transferencia", "plan_mejora_admin");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
