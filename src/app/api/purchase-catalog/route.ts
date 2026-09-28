@@ -102,6 +102,15 @@ const createSchema = z.object({
   photos: z.array(z.string().url()).min(3, "Agrega mínimo 3 fotos del producto.").max(3),
   description: z.string().trim().max(500).optional(),
   code: z.string().trim().max(100).optional(),
+  // Confirmado 2026-09-28, pedido del usuario: un producto creado desde
+  // Compras sale completo, igual que uno de Análisis de Mercado — marca e ID
+  // obligatorios. Si todavía no tiene ID de Dropi, no se crea aquí: se
+  // propone en Análisis de Mercado (Bryan aprueba con marca → Heidy pone el
+  // ID → Bryan libera al Kardex). Antes entraba sin nada y alguien tenía que
+  // completarlo a mano después (caso "Juego De Herramientas 94 Piezas").
+  // Suministros (papel, cinta…) usan su código interno como ID.
+  bodega: z.enum(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "MKT_SUMINISTROS"], { message: "Elige la marca." }),
+  justCode: z.string().trim().min(1, "Falta el ID de Dropi (o el código del suministro).").max(50),
 });
 
 export async function POST(req: NextRequest) {
@@ -128,6 +137,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const idTaken = await prisma.purchaseCatalogItem.findUnique({ where: { justCode: parsed.data.justCode }, select: { id: true, name: true } });
+  if (idTaken) {
+    return NextResponse.json(
+      { error: `El ID ${parsed.data.justCode} ya es de "${idTaken.name}" — selecciónalo en vez de crear uno nuevo.`, existingId: idTaken.id },
+      { status: 409 }
+    );
+  }
+
   const isAdmin = session.user.role === "admin";
   const item = await prisma.purchaseCatalogItem.create({
     data: {
@@ -135,6 +152,8 @@ export async function POST(req: NextRequest) {
       photos: parsed.data.photos,
       description: parsed.data.description || null,
       code: parsed.data.code || null,
+      bodega: parsed.data.bodega,
+      justCode: parsed.data.justCode,
       createdById: isAdmin ? null : session.user.id,
     },
   });

@@ -18,7 +18,18 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 // no es que se "perdiera" al restaurar, es que nunca se llegó a capturar.
 // Mismo patrón ya usado para `productQuery`/`onQueryChange`, extendido para
 // cubrir también este sub-formulario.
-export type CatalogCreateDraft = { creating: boolean; newName: string; newDescription: string; newCode: string; photos: string[] };
+export type CatalogCreateDraft = { creating: boolean; newName: string; newDescription: string; newCode: string; photos: string[]; newBodega?: CatalogMarca | ""; newJustCode?: string };
+
+// Confirmado 2026-09-28: marca e ID obligatorios al crear desde Compras (ver
+// createSchema en api/purchase-catalog/route.ts). Mismas 4 etiquetas que la
+// columna "Marca" de Stock Actual.
+export type CatalogMarca = "MKT_PROVEDIX" | "MKT_DAMIAN" | "MKT_SHANGHAI" | "MKT_SUMINISTROS";
+const CATALOG_MARCA_LABELS: Record<CatalogMarca, string> = {
+  MKT_PROVEDIX: "Provedix",
+  MKT_DAMIAN: "Importadora Damián",
+  MKT_SHANGHAI: "Importadora Shanghai",
+  MKT_SUMINISTROS: "Suministros",
+};
 
 export type CatalogItemDTO = {
   id: string;
@@ -89,6 +100,8 @@ export function PurchaseCatalogPicker({
   const [newName, setNewName] = useState(defaultCreateDraft?.newName ?? "");
   const [newDescription, setNewDescription] = useState(defaultCreateDraft?.newDescription ?? "");
   const [newCode, setNewCode] = useState(defaultCreateDraft?.newCode ?? "");
+  const [newBodega, setNewBodega] = useState<CatalogMarca | "">(defaultCreateDraft?.newBodega ?? "");
+  const [newJustCode, setNewJustCode] = useState(defaultCreateDraft?.newJustCode ?? "");
   const [photos, setPhotos] = useState<string[]>(defaultCreateDraft?.photos ?? []);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -103,15 +116,17 @@ export function PurchaseCatalogPicker({
   // ya no se queda ciego mientras alguien está a medio crear un producto
   // nuevo (ver comentario en CatalogCreateDraft).
   useEffect(() => {
-    onCreateDraftChange?.({ creating, newName, newDescription, newCode, photos });
+    onCreateDraftChange?.({ creating, newName, newDescription, newCode, photos, newBodega, newJustCode });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [creating, newName, newDescription, newCode, photos]);
+  }, [creating, newName, newDescription, newCode, photos, newBodega, newJustCode]);
 
   function resetCreateForm() {
     setCreating(false);
     setNewName("");
     setNewDescription("");
     setNewCode("");
+    setNewBodega("");
+    setNewJustCode("");
     setPhotos([]);
     setSimilarity(null);
     setConfirmStep(false);
@@ -144,6 +159,8 @@ export function PurchaseCatalogPicker({
     setNewName(query);
     setNewDescription("");
     setNewCode("");
+    setNewBodega("");
+    setNewJustCode("");
     setPhotos([]);
     setSimilarity(null);
     setConfirmStep(false);
@@ -178,6 +195,14 @@ export function PurchaseCatalogPicker({
     }
     if (photos.length < 3) {
       setErr("Agrega mínimo 3 fotos del producto.");
+      return;
+    }
+    if (!newBodega) {
+      setErr("Elige la marca.");
+      return;
+    }
+    if (!newJustCode.trim()) {
+      setErr("Escribe el ID de Dropi (o el código del suministro). Si todavía no tiene ID, propónlo en Análisis de Mercado.");
       return;
     }
     if (uploadingPhoto) {
@@ -227,7 +252,7 @@ export function PurchaseCatalogPicker({
       res = await fetch("/api/purchase-catalog", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), photos, description: newDescription.trim() || undefined, code: newCode.trim() || undefined }),
+        body: JSON.stringify({ name: newName.trim(), photos, description: newDescription.trim() || undefined, code: newCode.trim() || undefined, bodega: newBodega, justCode: newJustCode.trim() }),
       });
     } catch {
       setBusy(false);
@@ -426,6 +451,37 @@ export function PurchaseCatalogPicker({
             <div className="text-[11px] text-steel mb-3">
               Real si lo tienes físicamente; referencial del proveedor (misma foto de la cotización) si no — que se vea el producto exacto. Puedes arrastrar o seleccionar varias fotos a la vez.
             </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
+              <div>
+                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Marca</label>
+                <select
+                  className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
+                  value={newBodega}
+                  onChange={(e) => setNewBodega(e.target.value as CatalogMarca | "")}
+                >
+                  <option value="">Elige la marca…</option>
+                  {(Object.keys(CATALOG_MARCA_LABELS) as CatalogMarca[]).map((m) => (
+                    <option key={m} value={m}>{CATALOG_MARCA_LABELS[m]}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">ID de Dropi</label>
+                <input
+                  className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
+                  value={newJustCode}
+                  onChange={(e) => setNewJustCode(e.target.value)}
+                  placeholder={newBodega === "MKT_SUMINISTROS" ? "Código del suministro, ej. 00025" : "Ej. 187749"}
+                />
+              </div>
+            </div>
+            <div className="flex items-start gap-2 bg-blue/10 border border-blue/30 rounded-md p-2.5 mb-3 text-[11.5px] text-ink">
+              <AlertTriangle size={13} className="mt-0.5 shrink-0 text-blue" />
+              <span>
+                ¿Todavía no tiene ID de Dropi? No lo crees aquí:{" "}
+                <a href="/area/workspace?tab=analisis-mercado" className="font-semibold text-blue underline">propónlo en Análisis de Mercado</a>. Bryan lo aprueba con su marca y ya lo puedes comprar; Heidy le pone el ID después.
+              </span>
+            </div>
             <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
               Descripción <span className="text-steel-dim normal-case font-normal">(opcional)</span>
             </label>
@@ -470,6 +526,9 @@ export function PurchaseCatalogPicker({
             )}
             <div className="bg-cloud border border-rule rounded-md p-3 mb-3">
               <div className="text-[13px] font-semibold mb-1">{newName}</div>
+              <div className="text-[12px] text-steel mb-1">
+                ID {newJustCode.trim()} · {newBodega ? CATALOG_MARCA_LABELS[newBodega] : "—"}
+              </div>
               {newDescription.trim() && <div className="text-[12px] text-steel mb-2">{newDescription.trim()}</div>}
               <div className="flex gap-1.5">
                 {photos.map((p, i) => (
