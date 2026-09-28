@@ -418,6 +418,8 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
         });
       }
       for (const r of ignoreRows) {
+        // IDs provisionales de ALF: se omiten pero no se recuerdan (desaparecerán).
+        if (/-\s*ALF\s*$/i.test(r.name.trim())) continue;
         await tx.dropiIgnoredCode.upsert({ where: { code: r.code }, create: { code: r.code, label: r.name, createdById: userId }, update: { label: r.name } });
       }
       return tx.fulfillmentRequestBatch.create({

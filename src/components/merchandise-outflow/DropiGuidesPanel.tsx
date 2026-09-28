@@ -55,7 +55,13 @@ function RowCode({ code }: { code: string }) {
 // Garantía: qué sale de verdad (lo marca Yair, confirmado por el usuario).
 type WarrantyDecision = { mode: "COMPLETE" } | { mode: "PARTIAL"; catalogItemIds: string[] } | { mode: "PIECE"; catalogItemId: string; piece: string } | null;
 
+// Pedido del usuario 2026-09-28: los productos de ALF con ID provisional
+// (nombre termina en "- ALF") se omiten solos mientras esos IDs existan.
+// Solo si la app no los conoce; "Volver a incluir" los regresa a pendientes.
+const isProvisionalAlf = (name: string) => /-\s*ALF\s*$/i.test(name.trim());
+
 function initialDecision(r: Row): Decision {
+  if ((r.resolution.kind === "unknown" || r.resolution.kind === "comboNoRecipe") && isProvisionalAlf(r.name)) return { kind: "ignore" };
   switch (r.resolution.kind) {
     case "product":
       return { kind: "product", item: r.resolution.catalogItem };
@@ -563,7 +569,11 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
 
           {d?.kind === "ignore" && (
             <div className="flex items-center gap-2 text-steel">
-              <span>No es un producto — no se incluye{res.kind === "ignored" ? " (recordado)" : ""}.</span>
+              <span>
+                {res.kind !== "ignored" && isProvisionalAlf(r.name)
+                  ? "ID provisional de ALF — se omite solo."
+                  : `No es un producto — no se incluye${res.kind === "ignored" ? " (recordado)" : ""}.`}
+              </span>
               <button type="button" className="text-teal font-semibold cursor-pointer" onClick={() => includeAgain(r)}>
                 Volver a incluir
               </button>
