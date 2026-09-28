@@ -333,7 +333,7 @@ export function PurchaseControlPanel({
       {tab === "auditoria" && (
         <>
           <TabGuide storageKey="compras-auditoria">
-            Historial de solo lectura de todo lo recibido y facturado, para buscar o auditar algo pasado sin poder editarlo.
+            Historial de solo lectura de todo lo que llegó a bodega, para buscar o auditar algo pasado sin poder editarlo. En &quot;Todo lo que llegó&quot; también salen los pedidos que siguen abiertos (con lo que les falta); en &quot;Solo cerrado&quot;, solo los ya facturados y sin nada pendiente.
           </TabGuide>
           <PurchaseAuditPanel hideMoney={hideMoney} />
         </>

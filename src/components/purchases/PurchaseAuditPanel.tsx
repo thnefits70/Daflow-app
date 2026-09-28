@@ -19,6 +19,9 @@ type Row = Omit<OperationDocRow, "receipt"> & {
   invoicedAt: string | null;
   supplier: { id: string; name: string };
   urgentReports: { id: string }[];
+  // 2026-09-28: lo que todavía le falta a la operación para estar cerrada
+  // (vacío = cerrada del todo). Lo arma el servidor por grupo.
+  pendingReasons: string[];
   // Confirmado 2026-08-11: pedido explícito del usuario — solo visible acá
   // (Auditoría), nunca en Solicitar/Bandeja de aprobación/Finanzas.
   paymentProofReceiptNumber: string | null;
@@ -146,6 +149,9 @@ export function PurchaseAuditPanel({ hideMoney = false }: { hideMoney?: boolean 
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [query, setQuery] = useState("");
+  // Pedido de Daniel 2026-09-28: "poder ver todo lo que llegó" — por defecto
+  // se ve todo lo recibido; "Solo cerrado" es el criterio de siempre.
+  const [scope, setScope] = useState<"all" | "closed">("all");
   // Confirmado 2026-09-04: pedido explícito del usuario (Bryan) — el crédito
   // con el proveedor se descuenta recién al pagar (ver pay/route.ts), así que
   // el total de la cotización que se ve acá no era lo que de verdad se
@@ -189,10 +195,16 @@ export function PurchaseAuditPanel({ hideMoney = false }: { hideMoney?: boolean 
     setDateTo("");
   }
 
+  const openGroupIds = useMemo(
+    () => new Set((rows ?? []).filter((r) => r.pendingReasons.length > 0).map((r) => r.groupId)),
+    [rows]
+  );
+
   const groups = useMemo(() => {
     if (!rows) return [];
     const q = query.trim().toLowerCase();
     const filtered = rows.filter((r) => {
+      if (scope === "closed" && openGroupIds.has(r.groupId)) return false;
       const confirmedAt = r.receipt?.confirmedAt ?? null;
       if ((dateFrom || dateTo) && confirmedAt) {
         const d = confirmedAt.slice(0, 10);
@@ -208,14 +220,28 @@ export function PurchaseAuditPanel({ hideMoney = false }: { hideMoney?: boolean 
       );
     });
     return groupRows(filtered);
-  }, [rows, dateFrom, dateTo, query]);
+  }, [rows, dateFrom, dateTo, query, scope, openGroupIds]);
+  const scopeTotal = rows ? groupRows(scope === "closed" ? rows.filter((r) => !openGroupIds.has(r.groupId)) : rows).length : 0;
 
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
 
   return (
     <div>
       <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel mb-2.5">
-        <ShieldCheck size={13} /> Historial de lo ya recibido y saneado del todo — solo lectura
+        <ShieldCheck size={13} /> {scope === "all" ? "Historial de todo lo que llegó a bodega" : "Historial de lo ya recibido y saneado del todo"} — solo lectura
+      </div>
+
+      <div className="flex gap-1.5 mb-3 text-[12px]">
+        {([["all", "Todo lo que llegó"], ["closed", "Solo cerrado"]] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className={`rounded-full border px-3 py-1 font-semibold cursor-pointer ${scope === key ? "border-teal text-ink bg-teal/10" : "border-rule text-steel hover:text-ink"}`}
+            onClick={() => setScope(key)}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       <div className="flex items-center gap-2 mb-3 flex-wrap text-[12px]">
@@ -253,12 +279,14 @@ export function PurchaseAuditPanel({ hideMoney = false }: { hideMoney?: boolean 
         {(dateFrom || dateTo || query) && (
           <button type="button" className="text-steel underline cursor-pointer" onClick={() => { clearDateFilter(); setQuery(""); }}>Limpiar</button>
         )}
-        <span className="font-mono text-[10px] text-steel ml-auto">{groups.length} de {groupRows(rows).length}</span>
+        <span className="font-mono text-[10px] text-steel ml-auto">{groups.length} de {scopeTotal}</span>
       </div>
 
       {groups.length === 0 && (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">
-          {rows.length === 0 ? "Todavía no hay nada recibido y completamente saneado." : "Nada coincide con esa búsqueda o rango de fechas."}
+          {scopeTotal === 0
+            ? scope === "all" ? "Todavía no hay nada recibido." : "Todavía no hay nada recibido y completamente saneado."
+            : "Nada coincide con esa búsqueda o rango de fechas."}
         </div>
       )}
 
@@ -269,6 +297,7 @@ export function PurchaseAuditPanel({ hideMoney = false }: { hideMoney?: boolean 
           const r0 = g[0];
           const urgentCount = g.reduce((s, r) => s + r.urgentReports.length, 0);
           const timing = computeStageTimes(r0);
+          const pendingReasons = [...new Set(g.flatMap((r) => r.pendingReasons))];
           const appliedCreditTotal = (appliedCreditsByGroup[groupId] ?? []).reduce((s, c) => s + c.amount, 0);
           return (
             <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
@@ -339,7 +368,18 @@ export function PurchaseAuditPanel({ hideMoney = false }: { hideMoney?: boolean 
               )}
               {(hideMoney || !(r0.paymentProofReceiptNumber || r0.shippingPaymentProofReceiptNumber)) && <div className="mb-2.5" />}
 
-              {urgentCount > 0 && (
+              {pendingReasons.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
+                  <span className="text-[10.5px] font-semibold text-steel">Todavía abierta:</span>
+                  {pendingReasons.map((reason) => (
+                    <span key={reason} className="text-[10.5px] font-semibold rounded-full px-2 py-0.5 border" style={{ color: "var(--color-gold)", borderColor: "var(--color-gold)" }}>
+                      {reason}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {urgentCount > 0 && !pendingReasons.includes("Reporte urgente abierto") && (
                 <div className="flex items-center gap-1.5 bg-green/10 border border-green/30 rounded-md px-3 py-2 mb-2.5 text-[11.5px] text-green">
                   <CheckCircle2 size={13} /> {urgentCount} reporte{urgentCount === 1 ? "" : "s"} urgente{urgentCount === 1 ? "" : "s"} — ya resuelto{urgentCount === 1 ? "" : "s"} con el proveedor
                 </div>

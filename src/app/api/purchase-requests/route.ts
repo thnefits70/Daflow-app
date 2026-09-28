@@ -227,11 +227,17 @@ export async function GET(req: NextRequest) {
     // tampoco muestra una operación mientras Finanzas no la haya cerrado
     // (invoiceStatus sigue en PENDING), aunque Inventario ya haya confirmado
     // que llegó. Sigue viéndose en la bandeja de Finanzas hasta ese momento.
+    // Ampliado 2026-09-28, pedido de Daniel ("poder ver todo lo que llegó"):
+    // se devuelve TODO lo recibido, cada fila con pendingReasons (factura,
+    // reporte urgente abierto, flete sin pagar). El panel decide con un
+    // selector si muestra "Todo lo que llegó" o "Solo cerrado" (= el criterio
+    // de siempre: pendingReasons vacío en todo el grupo).
     const rows = await prisma.purchaseRequest.findMany({
-      where: { status: "RECEIVED", invoiceStatus: { not: "PENDING" } },
+      where: { status: "RECEIVED" },
       orderBy: { receipt: { confirmedAt: "desc" } },
       include: purchaseRequestInclude,
     });
+    const groupIdsPendingInvoice = new Set(rows.filter((r) => r.invoiceStatus === "PENDING").map((r) => r.groupId));
     // Confirmado 2026-08-12: pedido explícito del usuario — Auditoría es
     // "todo ya saneado", nunca algo que siga pendiente. Si CUALQUIER
     // producto de la cotización tiene un reporte urgente sin resolver del
@@ -261,7 +267,14 @@ export async function GET(req: NextRequest) {
         .map((r) => r.groupId)
     );
     return NextResponse.json(
-      rows.filter((r) => !groupIdsWithOpenReports.has(r.groupId) && !groupIdsWithPendingShipping.has(r.groupId))
+      rows.map((r) => ({
+        ...r,
+        pendingReasons: [
+          ...(groupIdsPendingInvoice.has(r.groupId) ? ["Falta cierre de Finanzas"] : []),
+          ...(groupIdsWithOpenReports.has(r.groupId) ? ["Reporte urgente abierto"] : []),
+          ...(groupIdsWithPendingShipping.has(r.groupId) ? ["Flete sin pagar"] : []),
+        ],
+      }))
     );
   }
 
