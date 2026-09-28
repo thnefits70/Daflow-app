@@ -3105,7 +3105,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPurchaseExceptionAdminPendingItem(deterioroExcepcionesHref),
       getStockAdjustmentAdminPendingItem(invStockHref),
       getPurchaseCatalogDeleteRequestAdminPendingItem(comSolicitarHref),
-      getSupplierBankAccountVerifyAdminPendingItem("/admin/proveedores"),
+      getSupplierBankAccountVerifyAdminPendingItem("/admin/proveedores?verificar=1"),
       getPettyCashFreightExceptionAdminPendingItem(financeHref),
       getPayrollNairobySalaryTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
       getImprovementPlanPendingItems(null, "/admin/plan-mejora"),

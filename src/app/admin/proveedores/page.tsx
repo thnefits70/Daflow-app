@@ -12,7 +12,8 @@ const supplierInclude = {
   bankAccounts: { orderBy: { createdAt: "asc" as const }, include: { createdBy: { select: { name: true } } } },
 };
 
-export default async function AdminProveedoresPage() {
+export default async function AdminProveedoresPage({ searchParams }: { searchParams: Promise<{ verificar?: string }> }) {
+  const { verificar } = await searchParams;
   const [suppliers, pending, canViewBankAccounts] = await Promise.all([
     prisma.supplier.findMany({ where: { status: "APPROVED" }, orderBy: { name: "asc" }, include: supplierInclude }),
     prisma.supplier.findMany({
@@ -34,6 +35,7 @@ export default async function AdminProveedoresPage() {
         canReview
         isAdmin
         canAddBankAccounts
+        initialOnlyUnverified={verificar === "1"}
       />
     </div>
   );

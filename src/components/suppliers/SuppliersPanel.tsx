@@ -50,6 +50,10 @@ export type SupplierDTO = {
   hasBankAccount?: boolean;
 };
 
+function hasUnverifiedAccount(s: SupplierDTO) {
+  return (s.bankAccounts ?? []).some((b) => !b.verifiedAt);
+}
+
 function maskAccountNumber(number: string) {
   const last4 = number.slice(-4);
   return `•••• ${last4}`;
@@ -135,6 +139,7 @@ export function SuppliersPanel({
   canReview,
   isAdmin,
   canAddBankAccounts = false,
+  initialOnlyUnverified = false,
 }: {
   suppliers: SupplierDTO[];
   pending: SupplierDTO[];
@@ -147,13 +152,23 @@ export function SuppliersPanel({
   // `isAdmin`, que sigue siendo lo único que da acceso a VER las ya
   // registradas de otros proveedores. isAdmin ya implica esto (true).
   canAddBankAccounts?: boolean;
+  // 2026-09-28: el "Ir →" del pendiente de Inicio llega con ?verificar=1 y
+  // abre la lista ya filtrada a las cuentas que faltan verificar.
+  initialOnlyUnverified?: boolean;
 }) {
   const router = useRouter();
   // Confirmado 2026-08-14: pedido explícito del usuario — separar los
   // transportistas del directorio de proveedores normales, y poder
   // registrarlos ahí mismo sin pasar por Solicitar. Viven en la misma tabla
   // (type=CARRIER), solo se filtran/etiquetan distinto en esta pantalla.
-  const [tab, setTab] = useState<"directorio" | "transportistas" | "pendientes">("directorio");
+  const [tab, setTab] = useState<"directorio" | "transportistas" | "pendientes">(() =>
+    initialOnlyUnverified &&
+    !suppliers.some((s) => s.type === "SUPPLIER" && hasUnverifiedAccount(s)) &&
+    suppliers.some((s) => s.type === "CARRIER" && hasUnverifiedAccount(s))
+      ? "transportistas"
+      : "directorio",
+  );
+  const [onlyUnverified, setOnlyUnverified] = useState(initialOnlyUnverified);
   const listType: SupplierType = tab === "transportistas" ? "CARRIER" : "SUPPLIER";
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -226,10 +241,12 @@ export function SuppliersPanel({
   };
 
   const listSuppliers = useMemo(() => suppliers.filter((s) => s.type === listType), [suppliers, listType]);
+  const unverifiedSuppliers = useMemo(() => listSuppliers.filter(hasUnverifiedAccount), [listSuppliers]);
   const sortedSuppliers = useMemo(() => {
-    if (!query.trim()) return listSuppliers;
-    return [...listSuppliers].sort((a, b) => relevanceScore(b, query) - relevanceScore(a, query));
-  }, [listSuppliers, query]);
+    const base = onlyUnverified ? unverifiedSuppliers : listSuppliers;
+    if (!query.trim()) return base;
+    return [...base].sort((a, b) => relevanceScore(b, query) - relevanceScore(a, query));
+  }, [listSuppliers, unverifiedSuppliers, onlyUnverified, query]);
 
   const startNew = () => {
     setEditingId(null);
@@ -494,15 +511,29 @@ export function SuppliersPanel({
           </div>
 
           {listSuppliers.length > 0 && (
-            <div className="relative mb-4">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-steel" />
-              <input
-                className="w-full rounded border border-rule pl-8.5 pr-3 py-2 text-[13px]"
-                placeholder={listType === "CARRIER" ? "Buscar transportista…" : "¿Qué necesitas? Ej. productos de cocina — ordena por probabilidad, no oculta a nadie"}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
+            <div className="flex items-center gap-2 mb-4">
+              <div className="relative flex-1 min-w-0">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-steel" />
+                <input
+                  className="w-full rounded border border-rule pl-8.5 pr-3 py-2 text-[13px]"
+                  placeholder={listType === "CARRIER" ? "Buscar transportista…" : "¿Qué necesitas? Ej. productos de cocina — ordena por probabilidad, no oculta a nadie"}
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </div>
+              {(unverifiedSuppliers.length > 0 || onlyUnverified) && (
+                <button
+                  type="button"
+                  className={`shrink-0 rounded border px-3 py-2 text-[12.5px] font-semibold cursor-pointer ${onlyUnverified ? "border-red bg-red text-white" : "border-red/50 text-red hover:bg-red/10"}`}
+                  onClick={() => setOnlyUnverified((v) => !v)}
+                >
+                  {onlyUnverified ? "✕ Ver todos" : `Por verificar (${unverifiedSuppliers.length})`}
+                </button>
+              )}
             </div>
+          )}
+          {onlyUnverified && unverifiedSuppliers.length === 0 && (
+            <div className="text-[13px] text-steel mb-4">No quedan cuentas por verificar aquí. ✓</div>
           )}
 
           {formOpen && (
