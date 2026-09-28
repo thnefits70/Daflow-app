@@ -244,7 +244,9 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
   // (RocketCodeMapping) — nunca toca el ID de Dropi del catálogo.
   const rocketRows = input.rows.filter((r) => isRocketCode(r.code) && r.decision.kind !== "ignore");
   const productRows = input.rows.filter((r) => r.decision.kind === "product" && !isRocketCode(r.code));
-  const comboCodes = [...new Set(input.rows.map(comboCodeOf).filter((c): c is string => !!c && !isRocketCode(c)))];
+  // Un combo que solo existe en Rocket se guarda con su código "R…" (ver
+  // api/fulfillment-requests/rocket-combo), así que también se busca.
+  const comboCodes = [...new Set(input.rows.map(comboCodeOf).filter((c): c is string => !!c))];
   // IDs provisionales de ALF (pedido del usuario 2026-09-28, temporal): no
   // tocan INVESTOCK, pero sí salen en el corte y en la hoja de despacho.
   const provisionalRows = input.rows.filter((r) => r.decision.kind === "ignore" && isProvisionalAlfName(r.name) && r.quantity > 0);

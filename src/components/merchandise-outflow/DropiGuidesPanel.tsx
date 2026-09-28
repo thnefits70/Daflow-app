@@ -610,6 +610,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                 />
               ) : registering === r.code && isRocket(r.code) ? (
                 <RocketComboLink
+                  rocketCode={r.code}
                   initialCode={res.kind === "comboNoRecipe" ? res.comboCode : ""}
                   label={r.name}
                   onLinked={(comboCode, components) => {
@@ -843,15 +844,19 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
   );
 }
 
-// Un ID de Rocket que es un combo: Yair escribe el código del combo en Dropi.
-// Si ya existe con su receta, se vincula; si no, registra la receta ahí mismo
-// (una sola vez) y queda vinculado.
+// Un ID de Rocket que es un combo (pedido del usuario 2026-09-28): igual que
+// en Dropi, Yair registra la receta — qué productos reales trae, con su ID de
+// INVESTOCK. El ID de Rocket siempre es distinto al de Dropi; si ya hay un
+// combo con la misma receta, la app lo usa sola. Si Yair ya sabe el ID de
+// Dropi del mismo combo, también puede escribirlo.
 function RocketComboLink({
+  rocketCode,
   initialCode,
   label,
   onLinked,
   onCancel,
 }: {
+  rocketCode: string;
   initialCode: string;
   label: string;
   onLinked: (comboCode: string, components: ComboPart[]) => void;
@@ -861,6 +866,19 @@ function RocketComboLink({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [register, setRegister] = useState(false);
+  const [byDropiId, setByDropiId] = useState(!!initialCode);
+
+  if (!byDropiId) {
+    return (
+      <div>
+        <RegisterComboForm initialCode={rocketCode} rocketCode={rocketCode} initialLabel={label} onRegistered={(c) => lookup(c.code)} onCancel={onCancel} />
+        {err && <div className="text-red text-[11px] mt-1">{err}</div>}
+        <button type="button" className="mt-1.5 text-[11px] text-teal cursor-pointer" onClick={() => setByDropiId(true)}>
+          Ya sé el ID de este combo en Dropi — escribirlo
+        </button>
+      </div>
+    );
+  }
 
   async function lookup(c: string) {
     setBusy(true);

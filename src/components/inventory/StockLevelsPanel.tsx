@@ -1197,11 +1197,12 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                         <Wrench size={12} />
                       </div>
                       <span className="text-[12.5px] flex items-center gap-1.5 min-w-0">
-                        <CopyableText value={combo.code} className="font-mono font-bold text-teal shrink-0" />
+                        {/* Combo que solo existe en Rocket: se guarda como "R…" y no tiene ID de Dropi. */}
+                        {!combo.code.startsWith("R") && <CopyableText value={combo.code} className="font-mono font-bold text-teal shrink-0" />}
                         {combo.label && <ExpandableName text={combo.label} className="text-steel" />}
                         {/* Pedido del usuario 2026-09-28: el ID de Rocket es solo referencia —
                             no existe en INVESTOCK; el stock se descuenta de los productos reales de la receta. */}
-                        {(combo.rocketCodes ?? []).map((r) => (
+                        {[...new Set([...(combo.code.startsWith("R") ? [combo.code.slice(1)] : []), ...(combo.rocketCodes ?? [])])].map((r) => (
                           <span
                             key={r}
                             className="shrink-0 inline-flex items-center gap-1 rounded-full border border-gold/60 px-2 py-0.5 text-[10.5px] text-gold"

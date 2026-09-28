@@ -16,11 +16,15 @@ export type RegisteredCombo = { id: string; code: string; label: string | null; 
 export function RegisterComboForm({
   initialCode,
   initialLabel = "",
+  rocketCode,
   onRegistered,
   onCancel,
 }: {
   initialCode: string;
   initialLabel?: string;
+  // Combo de Rocket (pedido del usuario 2026-09-28): misma receta que uno de
+  // Dropi, pero se guarda por su ID de Rocket — ver api/fulfillment-requests/rocket-combo.
+  rocketCode?: string;
   onRegistered: (combo: RegisteredCombo) => void;
   onCancel: () => void;
 }) {
@@ -34,10 +38,15 @@ export function RegisterComboForm({
   async function save() {
     setSaving(true);
     setErr("");
-    const res = await fetch("/api/fulfillment-requests/register-combo", {
+    const recipe = components.map((c) => ({ catalogItemId: c.catalogItem.id, quantity: c.quantity }));
+    const res = await fetch(rocketCode ? "/api/fulfillment-requests/rocket-combo" : "/api/fulfillment-requests/register-combo", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: code.trim(), label: label.trim() || undefined, components: components.map((c) => ({ catalogItemId: c.catalogItem.id, quantity: c.quantity })) }),
+      body: JSON.stringify(
+        rocketCode
+          ? { rocketCode, label: label.trim() || undefined, components: recipe }
+          : { code: code.trim(), label: label.trim() || undefined, components: recipe },
+      ),
     });
     const json = await res.json().catch(() => null);
     setSaving(false);
@@ -54,7 +63,7 @@ export function RegisterComboForm({
       <div className="bg-cloud rounded-md p-3">
         <div className="text-[12px] font-bold mb-2">Revisa antes de guardar</div>
         <div className="text-[11.5px] mb-2">
-          Código: <span className="font-mono font-semibold">{code}</span>
+          {rocketCode ? "ID de Rocket" : "Código"}: <span className="font-mono font-semibold">{rocketCode ? rocketCode.slice(1) : code}</span>
           {label && <span> — {label}</span>}
         </div>
         <div className="flex flex-col gap-1.5 mb-3">
@@ -94,11 +103,20 @@ export function RegisterComboForm({
       <div className="text-[12px] font-bold mb-2">Registrar receta de este combo</div>
       <div className="flex gap-2 mb-2">
         <div className="flex-1">
-          <div className="text-[10px] text-steel mb-0.5">Código del combo (Dropi)</div>
-          <div className="flex items-center gap-1">
-            <input type="text" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px] font-mono" value={code} onChange={(e) => setCode(e.target.value)} />
-            {code && <CatalogCode code={code} />}
-          </div>
+          {rocketCode ? (
+            <>
+              <div className="text-[10px] text-steel mb-0.5">ID del combo en Rocket (solo referencia)</div>
+              <div className="px-2.5 py-1.5 text-[12.5px] font-mono font-bold text-gold">Rocket {rocketCode.slice(1)}</div>
+            </>
+          ) : (
+            <>
+              <div className="text-[10px] text-steel mb-0.5">Código del combo (Dropi)</div>
+              <div className="flex items-center gap-1">
+                <input type="text" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px] font-mono" value={code} onChange={(e) => setCode(e.target.value)} />
+                {code && <CatalogCode code={code} />}
+              </div>
+            </>
+          )}
         </div>
         <div className="flex-1">
           <div className="text-[10px] text-steel mb-0.5">Nombre de referencia (opcional)</div>
@@ -111,7 +129,7 @@ export function RegisterComboForm({
       <div className="flex gap-2 mt-3">
         <button
           type="button"
-          disabled={!code.trim() || components.length === 0}
+          disabled={(!rocketCode && !code.trim()) || components.length === 0}
           className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-50"
           onClick={() => setReviewing(true)}
         >
