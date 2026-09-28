@@ -244,11 +244,23 @@ export function SuppliersPanel({
 
   const listSuppliers = useMemo(() => suppliers.filter((s) => s.type === listType), [suppliers, listType]);
   const unverifiedSuppliers = useMemo(() => listSuppliers.filter(hasUnverifiedAccount), [listSuppliers]);
+  // El filtro solo se aplica si en esta pestaña hay algo que mostrar — nunca
+  // deja la lista vacía (antes quedaba en blanco y el buscador no encontraba nada).
+  const filterActive = onlyUnverified && unverifiedSuppliers.length > 0;
+  // Dónde más hay cuentas por verificar, para mandar al admin directo ahí.
+  const unverifiedElsewhere = useMemo(() => {
+    const places: { tab: "directorio" | "transportistas" | "pendientes"; label: string; names: string[] }[] = [
+      { tab: "directorio", label: "Directorio", names: suppliers.filter((s) => s.type === "SUPPLIER" && hasUnverifiedAccount(s)).map((s) => s.name) },
+      { tab: "transportistas", label: "Transportistas", names: suppliers.filter((s) => s.type === "CARRIER" && hasUnverifiedAccount(s)).map((s) => s.name) },
+      { tab: "pendientes", label: "Pendientes", names: canReview ? pending.filter(hasUnverifiedAccount).map((s) => s.name) : [] },
+    ];
+    return places.filter((p) => p.tab !== tab && p.names.length > 0);
+  }, [suppliers, pending, canReview, tab]);
   const sortedSuppliers = useMemo(() => {
-    const base = onlyUnverified ? unverifiedSuppliers : listSuppliers;
+    const base = filterActive ? unverifiedSuppliers : listSuppliers;
     if (!query.trim()) return base;
     return [...base].sort((a, b) => relevanceScore(b, query) - relevanceScore(a, query));
-  }, [listSuppliers, unverifiedSuppliers, onlyUnverified, query]);
+  }, [listSuppliers, unverifiedSuppliers, filterActive, query]);
 
   const startNew = () => {
     setEditingId(null);
@@ -568,22 +580,46 @@ export function SuppliersPanel({
                   className="w-full rounded border border-rule pl-8.5 pr-3 py-2 text-[13px]"
                   placeholder={listType === "CARRIER" ? "Buscar transportista…" : "¿Qué necesitas? Ej. productos de cocina — ordena por probabilidad, no oculta a nadie"}
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    // Buscar siempre busca en todos, no solo en los por verificar.
+                    if (e.target.value.trim()) setOnlyUnverified(false);
+                  }}
                 />
               </div>
-              {(unverifiedSuppliers.length > 0 || onlyUnverified) && (
+              {unverifiedSuppliers.length > 0 && (
                 <button
                   type="button"
-                  className={`shrink-0 rounded border px-3 py-2 text-[12.5px] font-semibold cursor-pointer ${onlyUnverified ? "border-red bg-red text-white" : "border-red/50 text-red hover:bg-red/10"}`}
-                  onClick={() => setOnlyUnverified((v) => !v)}
+                  className={`shrink-0 rounded border px-3 py-2 text-[12.5px] font-semibold cursor-pointer ${filterActive ? "border-red bg-red text-white" : "border-red/50 text-red hover:bg-red/10"}`}
+                  onClick={() => {
+                    setOnlyUnverified(!filterActive);
+                    setQuery("");
+                  }}
                 >
-                  {onlyUnverified ? "✕ Ver todos" : `Por verificar (${unverifiedSuppliers.length})`}
+                  {filterActive ? "✕ Ver todos" : `Por verificar (${unverifiedSuppliers.length})`}
                 </button>
               )}
             </div>
           )}
-          {onlyUnverified && unverifiedSuppliers.length === 0 && (
-            <div className="text-[13px] text-steel mb-4">No quedan cuentas por verificar aquí. ✓</div>
+          {unverifiedElsewhere.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-red mb-4">
+              <span>Cuentas por verificar en otra pestaña:</span>
+              {unverifiedElsewhere.map((p) => (
+                <button
+                  key={p.tab}
+                  type="button"
+                  className="rounded border border-red/50 px-2.5 py-1 font-semibold cursor-pointer hover:bg-red/10"
+                  onClick={() => {
+                    setTab(p.tab);
+                    setOnlyUnverified(true);
+                    setQuery("");
+                  }}
+                >
+                  {p.label}: {p.names.slice(0, 3).join(", ")}
+                  {p.names.length > 3 ? "…" : ""} →
+                </button>
+              ))}
+            </div>
           )}
 
           {formOpen && (
