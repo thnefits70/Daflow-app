@@ -1569,12 +1569,23 @@ export async function getPurchaseExceptionsPendingCount(): Promise<number> {
 }
 
 async function getPurchaseExceptionAdminPendingItem(href: string): Promise<PendingItem | null> {
-  const count = await getPurchaseExceptionsPendingCount();
+  // Confirmado 2026-09-28: misma página suma los reclamos que Jariel pidió
+  // cerrar SIN captura con CHEN (esperando que admin los apruebe).
+  const [noMatchCount, noProofCount] = await Promise.all([
+    getPurchaseExceptionsPendingCount(),
+    prisma.merchandiseOutflowItem.count({ where: { noProofRequestedAt: { not: null }, noProofDecidedAt: null, purchaseResolution: null } }),
+  ]);
+  const count = noMatchCount + noProofCount;
   if (count === 0) return null;
   return {
     type: "deterioro_compras_excepcion",
     icon: "🚨",
-    label: "Reclamo de deterioro sin compra que lo respalde",
+    label:
+      noMatchCount > 0 && noProofCount > 0
+        ? "Reclamos de deterioro esperando tu decisión"
+        : noProofCount > 0
+          ? "Reclamo sin captura (Chen) por aprobar"
+          : "Reclamo de deterioro sin compra que lo respalde",
     meta: `${count} caso${count === 1 ? "" : "s"}`,
     overdue: true,
     href,

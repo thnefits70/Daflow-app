@@ -20,7 +20,14 @@ type ItemDTO = {
   damageReason: { name: string } | null;
   damageReasonOther: string | null;
   batch: { code: string; supplier: SupplierOption | null };
-  purchaseGestionSupplier: SupplierOption | null;
+  purchaseGestionSupplier: (SupplierOption & { paymentMode?: "PREPAGO" | "CREDITO" }) | null;
+  noProofResolution: "CREDIT_ISSUED" | "REJECTED" | null;
+  noProofAmount: number | null;
+  noProofNote: string | null;
+  noProofRequestedAt: string | null;
+  noProofApproved: boolean | null;
+  noProofDecisionNote: string | null;
+  noProofDecidedAt: string | null;
   linkedPurchaseRequest: { requestNumber: number | null; requestedAt: string; quantity: number; unitCost: number } | null;
   unitCostAtExchange: number | null;
   expectedCreditAmount: number | null;
@@ -43,8 +50,13 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
+// Pedido sin captura (solo CHEN) esperando que admin lo apruebe.
+function isNoProofPending(item: ItemDTO) {
+  return !!item.noProofRequestedAt && !item.noProofDecidedAt;
+}
+
 function isCreditable(item: ItemDTO) {
-  return !!item.purchaseGestionSupplier && (!!item.linkedPurchaseRequest || item.purchaseExceptionDecision === "AUTHORIZED");
+  return !!item.purchaseGestionSupplier && !isNoProofPending(item) && (!!item.linkedPurchaseRequest || item.purchaseExceptionDecision === "AUTHORIZED");
 }
 
 function toClaim(item: ItemDTO): CreditProofClaim {
@@ -142,6 +154,7 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
   const [error, setError] = useState("");
   const [resolving, setResolving] = useState<"REPLACED" | "CREDIT_ISSUED" | "REJECTED" | null>(null);
   const [reportingNoMatch, setReportingNoMatch] = useState(false);
+  const [noProofMode, setNoProofMode] = useState<"CREDIT_ISSUED" | "REJECTED" | null>(null);
   const [note, setNote] = useState("");
   const [amount, setAmount] = useState("");
   const [proofUrl, setProofUrl] = useState<string | null>(null);
@@ -237,9 +250,36 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
     }
   }
 
+  // Confirmado 2026-09-28, pedido explícito del usuario: CHEN no manda
+  // chats, arregla todo por llamada o en persona. Solo con proveedor a
+  // crédito, Jariel puede pedir cerrar el reclamo SIN captura con una
+  // explicación breve — no se cierra hasta que admin lo apruebe.
+  async function submitNoProof() {
+    if (!noProofMode || !note.trim()) return;
+    setSaving(true);
+    setError("");
+    try {
+      await postJson(`/api/merchandise-outflow/items/${item.id}/purchase-no-proof-request`, {
+        resolution: noProofMode,
+        note: note.trim(),
+        ...(noProofMode === "CREDIT_ISSUED" ? { amount: Number(amount) } : {}),
+      });
+      setNoProofMode(null);
+      setNote("");
+      setAmount("");
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo enviar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const isAnchored = !!item.linkedPurchaseRequest;
   const isAuthorizedException = item.purchaseExceptionDecision === "AUTHORIZED";
-  const canResolve = isAnchored || isAuthorizedException;
+  const noProofPending = isNoProofPending(item);
+  const canResolve = (isAnchored || isAuthorizedException) && !noProofPending;
+  const isCreditSupplier = item.purchaseGestionSupplier?.paymentMode === "CREDITO";
 
   return (
     <div className="bg-surface border border-rule rounded-md p-3.5">
@@ -356,9 +396,70 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
         </div>
       )}
 
+      {noProofPending && (
+        <div className="bg-gold/10 border border-gold/40 rounded-md p-2.5 mb-2.5 text-[11.5px]">
+          <div className="font-semibold mb-0.5" style={{ color: "var(--color-gold)" }}>
+            Esperando aprobación de admin — sin captura
+          </div>
+          {item.noProofResolution === "CREDIT_ISSUED" ? `Dio crédito de ${money(item.noProofAmount ?? 0)}` : "Rechazó el reclamo"}
+          {" · "}
+          {item.noProofNote}
+        </div>
+      )}
+
+      {item.noProofApproved === false && !noProofPending && (
+        <div className="bg-red/10 border border-red/40 rounded-md p-2.5 mb-2.5 text-[11.5px]">
+          <span className="font-semibold text-red">Admin te devolvió el pedido sin captura.</span> {item.noProofDecisionNote}
+        </div>
+      )}
+
       {error && <div className="text-red text-[11.5px] mb-1.5">{error}</div>}
 
-      {canResolve && !resolving && (
+      {canResolve && !resolving && !noProofMode && isCreditSupplier && (
+        <div className="text-[11px] text-steel mb-1.5">
+          ¿{item.purchaseGestionSupplier!.name} lo arregló por llamada o en persona?{" "}
+          <button type="button" className="font-semibold text-blue cursor-pointer" onClick={() => setNoProofMode("CREDIT_ISSUED")}>
+            Dio crédito sin captura
+          </button>
+          {" · "}
+          <button type="button" className="font-semibold text-red cursor-pointer" onClick={() => setNoProofMode("REJECTED")}>
+            Rechazó sin captura
+          </button>
+        </div>
+      )}
+
+      {noProofMode && (
+        <div className="bg-cloud rounded-md p-2.5 mb-2">
+          <div className="text-[12px] font-semibold mb-1.5">
+            {noProofMode === "CREDIT_ISSUED" ? "Crédito sin captura" : "Rechazo sin captura"} — lo aprueba admin
+          </div>
+          {noProofMode === "CREDIT_ISSUED" && (
+            <input type="number" min={0} step="0.01" placeholder="Monto del crédito" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px] mb-2" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          )}
+          <textarea
+            className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px] mb-2"
+            rows={2}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Breve: con quién hablaste, cuándo y qué acordaron…"
+          />
+          <div className="flex gap-2">
+            <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => { setNoProofMode(null); setNote(""); setAmount(""); setError(""); }}>
+              Cancelar
+            </button>
+            <button
+              type="button"
+              disabled={saving || !note.trim() || (noProofMode === "CREDIT_ISSUED" && !(Number(amount) > 0))}
+              className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40"
+              onClick={submitNoProof}
+            >
+              {saving ? "Enviando…" : "Enviar a admin"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {canResolve && !resolving && !noProofMode && (
         <div className="flex gap-1.5 flex-wrap">
           <button type="button" className="flex items-center gap-1 text-[11.5px] font-semibold border border-green/40 text-green rounded-full px-2.5 py-1 cursor-pointer" onClick={() => setResolving("REPLACED")}>
             <PackageCheck size={12} /> Mandó reemplazo

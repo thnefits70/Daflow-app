@@ -29,7 +29,7 @@ export async function GET() {
       catalogItem: { select: { name: true, photos: true, justCode: true } },
       damageReason: { select: { name: true } },
       batch: { select: { code: true, supplier: { select: { id: true, name: true } } } },
-      purchaseGestionSupplier: { select: { id: true, name: true } },
+      purchaseGestionSupplier: { select: { id: true, name: true, paymentMode: true } },
       linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true, quantity: true, unitCost: true } },
       resolvedBy: { select: { name: true } },
     },
