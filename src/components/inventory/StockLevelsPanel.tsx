@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, RefreshCw } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, RefreshCw, Copy } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { ExpandableName } from "@/components/ui/ExpandableName";
@@ -146,21 +146,25 @@ function CopyableAmount({ value, className, title }: { value: number | null | un
 }
 
 // Confirmado 2026-09-28, pedido del usuario: copiar el ID del combo con un
-// clic, oculto igual que los precios (sin ícono nuevo) — clic sobre el
-// número mismo, un instante "✓" y vuelve.
+// clic. Primero fue solo clic sobre el número (oculto) y el usuario no lo
+// encontró — ahora lleva el mismo iconito de copiar que los IDs de los
+// productos de abajo; clic en el número o en el ícono copia igual.
 function CopyableText({ value, className }: { value: string; className: string }) {
   const [copied, setCopied] = useState(false);
+  function copy(e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(value).catch(() => null);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1200);
+  }
   return (
-    <span
-      className={`${className} cursor-pointer hover:underline`}
-      title="Clic para copiar"
-      onClick={() => {
-        navigator.clipboard?.writeText(value).catch(() => null);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 900);
-      }}
-    >
-      {copied ? "✓" : value}
+    <span className="inline-flex items-center gap-1 shrink-0">
+      <span className={`${className} cursor-pointer hover:underline`} title="Clic para copiar" onClick={copy}>
+        {value}
+      </span>
+      <button type="button" title="Copiar ID del combo" className="text-steel hover:text-teal cursor-pointer shrink-0" onClick={copy}>
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+      </button>
     </span>
   );
 }
