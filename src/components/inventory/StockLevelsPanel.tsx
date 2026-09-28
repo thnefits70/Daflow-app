@@ -145,6 +145,26 @@ function CopyableAmount({ value, className, title }: { value: number | null | un
   );
 }
 
+// Confirmado 2026-09-28, pedido del usuario: copiar el ID del combo con un
+// clic, oculto igual que los precios (sin ícono nuevo) — clic sobre el
+// número mismo, un instante "✓" y vuelve.
+function CopyableText({ value, className }: { value: string; className: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span
+      className={`${className} cursor-pointer hover:underline`}
+      title="Clic para copiar"
+      onClick={() => {
+        navigator.clipboard?.writeText(value).catch(() => null);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 900);
+      }}
+    >
+      {copied ? "✓" : value}
+    </span>
+  );
+}
+
 // Confirmado 2026-09-21, pedido explícito del usuario (admin): desbloqueo
 // rápido para un producto que ya se movió en INVESTOCK pero cuyo costo
 // sigue en $0 (sale "Sin precio") — declara a mano el costo real para
@@ -1142,7 +1162,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                         <Wrench size={12} />
                       </div>
                       <span className="text-[12.5px] flex items-center gap-1.5 min-w-0">
-                        <span className="font-mono font-bold text-teal shrink-0">{combo.code}</span>
+                        <CopyableText value={combo.code} className="font-mono font-bold text-teal shrink-0" />
                         {combo.label && <ExpandableName text={combo.label} className="text-steel" />}
                       </span>
                       {/* La marca del combo la aprende la app del manifiesto en que viene; solo el admin corrige. */}
