@@ -329,7 +329,9 @@ function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuide
 
     const g = text.match(BARCODE_GUIDE_RE);
     if (!g) {
-      if (text.trim()) pagesWithoutGuide.push(pageIdx + 1);
+      // Hojas sueltas casi vacías (ej. solo "CORREOS", visto 2026-09-28) no
+      // son etiquetas: no se avisa.
+      if (text.replace(/\s/g, "").length > 20) pagesWithoutGuide.push(pageIdx + 1);
       continue;
     }
     const guide = g[1].toUpperCase();
