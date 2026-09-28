@@ -5,6 +5,7 @@ import { canPrintFulfillmentManifest, canViewFulfillmentRequests, dbUserId } fro
 import { getCompiledLot, manifestCode, markLotPrinted } from "@/lib/fulfillmentGuides";
 import { areaGroupCount, carrierLabel, lineBlock, newAreaGroup, sortByBlock } from "@/lib/carriers";
 import { areaLabel } from "@/lib/warehouseAreas";
+import { brandLabel, sortBrands } from "@/lib/brandLabels";
 import { PrintButton } from "./PrintButton";
 
 function fmtDay(day: string) {
@@ -176,6 +177,26 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
                 <td className="py-1.5 px-1.5 text-right font-mono">{Object.values(lot.guidesByCarrier).reduce((s, n) => s + n, 0)}</td>
                 <td />
               </tr>
+              {/* Pedido del usuario 2026-09-28: igual que en la app, cuántas
+                  guías trae el manifiesto de cada marca por transportadora. */}
+              {lot.guidesByBrand &&
+                sortBrands(Object.keys(lot.guidesByBrand)).map((b) => {
+                  const counts = lot.guidesByBrand![b];
+                  return (
+                    <tr key={b} className="text-[11.5px]">
+                      <td className="py-1 pr-2 pl-4" colSpan={2}>
+                        ↳ {brandLabel(b)}
+                      </td>
+                      {lot.carriers.map((c) => (
+                        <td key={c} className="py-1 px-1.5 text-right font-mono">
+                          {counts[c] ?? "–"}
+                        </td>
+                      ))}
+                      <td className="py-1 px-1.5 text-right font-mono font-semibold">{Object.values(counts).reduce((s, n) => s + n, 0)}</td>
+                      <td />
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         )}

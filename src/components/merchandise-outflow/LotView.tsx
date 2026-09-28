@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Package, Printer, X } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { areaGroupCount, carrierLabel, lineBlock, newAreaGroup, sortByBlock, sortCarriers } from "@/lib/carriers";
 import { areaLabel } from "@/lib/warehouseAreas";
+import { brandLabel, sortBrands } from "@/lib/brandLabels";
 import { BlockAssignee } from "./BlockAssignee";
 import { sourceLabel, type VariantNote } from "./fulfillmentRequestShared";
 import { PickingPanel } from "./PickingPanel";
@@ -512,16 +513,6 @@ function ProvisionalBox({ lines }: { lines: ProvisionalLotLine[] }) {
   );
 }
 
-const BRAND_ORDER = ["MKT_PROVEDIX", "MKT_DAMIAN", "MKT_SHANGHAI", "MKT_SUMINISTROS", "ROCKET", "SIN_MARCA"];
-const BRAND_LABEL: Record<string, string> = {
-  MKT_PROVEDIX: "Provedix",
-  MKT_DAMIAN: "Imp. Damián",
-  MKT_SHANGHAI: "Imp. Shanghai",
-  MKT_SUMINISTROS: "Suministros",
-  ROCKET: "Rocket",
-  SIN_MARCA: "Sin marca",
-};
-
 // Pedido de Daniel (2026-09-28): cuántas guías trae el manifiesto de cada
 // marca y transportadora, siempre a la vista (sin abrir el detalle) para que
 // el equipo lo vea al escanear sin preguntarle a Yair. Rocket va como su
@@ -530,9 +521,7 @@ function GuideCounts({ lot }: { lot: CompiledLot }) {
   const byBrand = lot.guidesByBrand;
   const sources = Object.keys(lot.guidesBySource ?? {}).sort();
   const rows: { label: string | null; counts: Record<string, number> }[] = byBrand
-    ? Object.keys(byBrand)
-        .sort((a, b) => BRAND_ORDER.indexOf(a) - BRAND_ORDER.indexOf(b))
-        .map((k) => ({ label: BRAND_LABEL[k] ?? k, counts: byBrand[k] }))
+    ? sortBrands(Object.keys(byBrand)).map((k) => ({ label: brandLabel(k), counts: byBrand[k] }))
     : sources.length > 1
       ? sources.map((s) => ({ label: sourceLabel(s), counts: lot.guidesBySource[s] }))
       : [{ label: null, counts: lot.guidesByCarrier }];
