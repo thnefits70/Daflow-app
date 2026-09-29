@@ -49,10 +49,43 @@ export async function uploadFile(file: File, folder: string, signUrl: string = "
     }
     const { token, path, publicUrl, fileName } = await signRes.json();
 
+    // Confirmado 2026-09-29: Yair vio "Failed to fetch" subiendo el PDF de
+    // guías de Dropi. Dos causas típicas: (1) el navegador lee el archivo del
+    // disco recién al enviarlo — si el PDF se acaba de descargar o Windows lo
+    // sigue tocando, Chrome corta la subida; (2) un microcorte de internet.
+    // Se copia el archivo a memoria antes de enviarlo y se reintenta hasta 3
+    // veces si la red falla.
+    let body: File;
+    try {
+      body = new File([await file.arrayBuffer()], file.name, { type: file.type });
+    } catch {
+      return { ok: false, error: `No se pudo leer "${file.name}" — si lo acabas de descargar, espera a que termine y vuelve a elegirlo.` };
+    }
+
     const supabase = getBrowserSupabase();
-    const { error } = await supabase.storage.from(BUCKET).uploadToSignedUrl(path, token, file);
-    if (error) {
-      return { ok: false, error: `No se pudo subir el archivo: ${error.message}. Intenta de nuevo o con otro archivo.` };
+    let lastError = "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 1500 * attempt));
+      try {
+        const { error } = await supabase.storage.from(BUCKET).uploadToSignedUrl(path, token, body);
+        if (!error) {
+          lastError = "";
+          break;
+        }
+        // Si el intento anterior sí llegó pero se perdió la respuesta, el
+        // archivo ya está guardado — eso cuenta como subido.
+        if (attempt > 0 && /exists|duplicate/i.test(error.message)) {
+          lastError = "";
+          break;
+        }
+        lastError = error.message;
+        if (!/fetch|network|load failed|timeout/i.test(error.message)) break;
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : "error de red";
+      }
+    }
+    if (lastError) {
+      return { ok: false, error: `No se pudo subir el archivo (${lastError}) — se intentó 3 veces. Revisa tu internet e intenta de nuevo.` };
     }
     // Fallback to signedUrl-derived data in case the server response shape
     // ever changes — publicUrl/fileName always come from the sign step.
