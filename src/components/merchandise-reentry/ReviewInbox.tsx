@@ -51,6 +51,23 @@ async function postJson(url: string, body?: unknown) {
   return data;
 }
 
+// Confirmado 2026-09-29, pedido de Daniel + usuario: el mismo producto dos
+// veces en un lote (Joel confirma "Es otra devolución" al agregarlo) se
+// marca "Repetido en este lote" para revisarlo de un vistazo.
+function repeatedCatalogIds(items: ItemDTO[]): Set<string> {
+  const seen = new Set<string>();
+  const rep = new Set<string>();
+  for (const i of items) {
+    const id = i.catalogItem?.id;
+    if (!id) continue;
+    if (seen.has(id)) rep.add(id);
+    seen.add(id);
+  }
+  return rep;
+}
+
+const REPEATED_BADGE = <span className="shrink-0 text-[9.5px] font-bold uppercase tracking-wide text-gold border border-gold/50 rounded-full px-1.5 py-0.5">Repetido en este lote</span>;
+
 export function ReviewInbox({ canAct }: { canAct: boolean }) {
   const [tab, setTab] = useState<"ready" | "review">("ready");
   const [ready, setReady] = useState<BatchDTO[]>([]);
@@ -202,6 +219,7 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
                       <ReadyItemRow
                         key={it.id}
                         item={it}
+                        repeated={!!it.catalogItem && repeatedCatalogIds(b.items).has(it.catalogItem.id)}
                         canAct={canAct}
                         onRequestRemove={() => { setConfirmDeleteId(it.id); setDeleteError(""); }}
                         onChanged={load}
@@ -228,7 +246,7 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
               </div>
               <div className="flex flex-col gap-2.5">
                 {b.items.map((item) => (
-                  <ReviewItemRow key={item.id} item={item} canAct={canAct} onChanged={load} onExpandPhoto={setLightboxUrl} />
+                  <ReviewItemRow key={item.id} item={item} repeated={!!item.catalogItem && repeatedCatalogIds(b.items).has(item.catalogItem.id)} canAct={canAct} onChanged={load} onExpandPhoto={setLightboxUrl} />
                 ))}
               </div>
             </div>
@@ -281,12 +299,14 @@ function useDeleteLegacyCatalogItem(catalogItemId: string, onDeleted: () => void
 
 function ReadyItemRow({
   item,
+  repeated,
   canAct,
   onRequestRemove,
   onChanged,
   onExpandPhoto,
 }: {
   item: ItemDTO;
+  repeated?: boolean;
   canAct: boolean;
   onRequestRemove: () => void;
   onChanged: () => void;
@@ -323,6 +343,7 @@ function ReadyItemRow({
         <div className="flex-1 text-[12px] flex items-center gap-1.5 min-w-0">
           {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
           <ExpandableName text={itemName(item)} />
+          {repeated && REPEATED_BADGE}
           {!item.approvedAt && canAct && !editingProduct && (
             <button type="button" title="Vincular con el producto correcto del catálogo" className="shrink-0 text-steel hover:text-teal cursor-pointer" onClick={() => setEditingProduct(true)}>
               <Pencil size={11} />
@@ -373,7 +394,7 @@ function ReadyItemRow({
   );
 }
 
-function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemDTO; canAct: boolean; onChanged: () => void; onExpandPhoto: (url: string) => void }) {
+function ReviewItemRow({ item, repeated, canAct, onChanged, onExpandPhoto }: { item: ItemDTO; repeated?: boolean; canAct: boolean; onChanged: () => void; onExpandPhoto: (url: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [solving, setSolving] = useState(false);
@@ -460,6 +481,7 @@ function ReviewItemRow({ item, canAct, onChanged, onExpandPhoto }: { item: ItemD
             <div className="flex items-center gap-1.5">
               {item.catalogItem && <CatalogCode code={item.catalogItem.justCode} />}
               <ExpandableName text={itemName(item)} className="text-[12.5px] font-semibold" />
+              {repeated && REPEATED_BADGE}
               {!item.approvedAt && canAct && !editingProduct && (
                 <button type="button" title="Corregir el producto vinculado" className="shrink-0 text-steel hover:text-teal cursor-pointer" onClick={() => setEditingProduct(true)}>
                   <Pencil size={11} />

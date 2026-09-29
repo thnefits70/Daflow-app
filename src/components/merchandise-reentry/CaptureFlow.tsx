@@ -22,6 +22,8 @@ function isAddItemDraftEmpty(d: AddItemDraftData) {
 
 type ItemDTO = {
   id: string;
+  catalogItemId: string | null;
+  createdAt: string;
   photoUrls: string[];
   catalogItem: { name: string; photos: string[]; justCode: string | null } | null;
   aiRecognized: boolean;
@@ -285,6 +287,7 @@ export function CaptureFlow() {
       {adding ? (
         <AddItemForm
           batchId={batch.id}
+          existingItems={batch.items}
           onAdded={() => {
             setAdding(false);
             loadDraft();
@@ -335,8 +338,13 @@ export function CaptureFlow() {
 // con la re-vinculación de Daniel en Revisión).
 // Confirmado 2026-09-29, pedido de Daniel + usuario: Joel solo elige el
 // producto y pone la cantidad (lo percha de inmediato) — ya no se toma foto.
-function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded: () => void; onCancel: () => void }) {
+function AddItemForm({ batchId, existingItems, onAdded, onCancel }: { batchId: string; existingItems: ItemDTO[]; onAdded: () => void; onCancel: () => void }) {
   const [selected, setSelected] = useState<MatchCatalogItem | null>(null);
+  // Confirmado 2026-09-29, pedido de Daniel + usuario: en lotes abiertos todo
+  // el día Joel a veces registraba el mismo producto dos veces (44 casos, con
+  // horas de diferencia). Si el producto ya está en este lote, se le pregunta
+  // antes de seguir — si no está repetido, no aparece nada.
+  const [repeatConfirmedFor, setRepeatConfirmedFor] = useState<string | null>(null);
 
   const [goodQty, setGoodQty] = useState("");
   const [damagedQty, setDamagedQty] = useState("");
@@ -372,7 +380,9 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const dQty = Number(damagedQty) || 0;
   const gQty = Number(goodQty) || 0;
   const hasDamageReason = dQty === 0 || !!damageReason;
-  const canSave = !!selected &&gQty + dQty > 0 && hasDamageReason && !saving;
+  const alreadyInBatch = selected ? existingItems.filter((i) => i.catalogItemId === selected.id) : [];
+  const needsRepeatAnswer = alreadyInBatch.length > 0 && repeatConfirmedFor !== selected?.id;
+  const canSave = !!selected && !needsRepeatAnswer && gQty + dQty > 0 && hasDamageReason && !saving;
   const finalName = selected?.name ?? "";
   const finalDamageReason = dQty > 0 ? (damageReason === "Otro" ? damageReasonOther.trim() || "Otro (sin describir)" : damageReason) : null;
 
@@ -468,7 +478,34 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
           )}
         </div>
 
-      {selected && (
+      {selected && needsRepeatAnswer && (
+        <div className="rounded-md border border-gold/50 bg-gold/10 p-3">
+          <div className="text-[12.5px] font-bold mb-1">⚠️ Ya registraste este producto en este lote</div>
+          <div className="text-[12px] text-steel mb-2.5">
+            {alreadyInBatch
+              .map((i) => `${i.goodQty + i.damagedQty} un. a las ${new Date(i.createdAt).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" })}`)
+              .join(" · ")}
+          </div>
+          <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              className="rounded border border-rule px-3 py-2 text-[12px] font-semibold cursor-pointer"
+              onClick={() => { clearAddItemDraft(); onCancel(); }}
+            >
+              Ya lo había registrado, no agregar
+            </button>
+            <button
+              type="button"
+              className="rounded border border-teal bg-teal px-3 py-2 text-[12px] font-bold text-navy cursor-pointer"
+              onClick={() => setRepeatConfirmedFor(selected.id)}
+            >
+              Es otra devolución, agregar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selected && !needsRepeatAnswer && (
         <div>
           <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">2 · Cantidades</label>
           <div className="flex gap-2.5">
