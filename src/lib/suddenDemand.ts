@@ -303,12 +303,20 @@ export async function getSuddenDemandPendingItems(userId: string) {
   const writesNote = hotIds.includes(userId);
   const names = active.slice(0, 2).map((a) => a.catalogItem.name).join(", ") + (active.length > 2 ? ` y ${active.length - 2} más` : "");
   const noteText = noNote === 0 ? "con nota de Jariel" : writesNote ? `${noNote} sin tu nota` : `${noNote} sin nota de Jariel`;
+  // Pedido de Daniel 2026-09-29: la nota de Jariel se lee en Inicio (no en otras pantallas).
+  const notes = active
+    .filter((a) => a.note)
+    .map((a) => {
+      const n = a.note!.trim();
+      return `${a.catalogItem.name}: "${n.length > 90 ? n.slice(0, 90) + "…" : n}"`;
+    });
+  const notesText = notes.length ? ` · Nota de Jariel — ${notes.join(" · ")}` : "";
   return [
     {
       type: SUDDEN_DEMAND_PENDING_TYPE,
       icon: "📈",
       label: active.length === 1 ? "Producto que despierta" : "Productos que despiertan",
-      meta: `${names} · ${noteText}`,
+      meta: `${names} · ${noteText}${notesText}`,
       overdue: writesNote && noNote > 0,
       href: SUDDEN_DEMAND_HREF,
     },

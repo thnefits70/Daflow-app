@@ -10,7 +10,6 @@ import { DropiComboManager } from "./DropiComboManager";
 import { StockLabelsPanel } from "./StockLabelsPanel";
 import { ExpirationLotsPanel } from "./ExpirationLotsPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
-import { SuddenDemandPanel } from "@/components/marketanalysis/SuddenDemandPanel";
 
 type Tab = "capturar" | "revision" | "danos" | "productos" | "historial";
 
@@ -126,9 +125,6 @@ export function MerchandiseReentryPanel({
                 <>Consulta acá el catálogo de productos de DAFLOW, en modo lectura. Editarlo es exclusivo de Daniel o admin.</>
               )}
             </TabGuide>
-            {/* Pedido de Daniel 2026-09-29: ver acá la nota de Jariel sobre
-                los productos que despiertan (solo sale si hay alguno activo). */}
-            <SuddenDemandPanel compact />
             <JustCatalogPanel canManage={canManageJustCatalog} />
             {canManageJustCatalog && <DropiComboManager />}
             {canManageJustCatalog && <ExpirationLotsPanel />}
