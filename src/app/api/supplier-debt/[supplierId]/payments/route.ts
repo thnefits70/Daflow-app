@@ -83,7 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sup
       });
       if (parsed.data.requestIds.length) {
         const claimed = await tx.purchaseRequest.updateMany({
-          where: { id: { in: parsed.data.requestIds }, supplierId, status: "RECEIVED", debtPaymentId: null },
+          where: { id: { in: parsed.data.requestIds }, supplierId, status: "RECEIVED", debtPaymentId: null, priceCorrections: { none: { status: "PENDING" } } },
           data: { debtPaymentId: payment.id },
         });
         if (claimed.count !== parsed.data.requestIds.length) throw new Error("CONFLICT");

@@ -453,6 +453,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_excedente_kardex: "Excedente de mercadería — confirmado, falta ingresarlo al Kardex",
   deterioro_compras_excepcion: "Deterioro sin compra que lo respalde — tu decisión",
   ajuste_stock_conteo: "Ajuste de stock por conteo físico — por aprobar",
+  correccion_precio_compra: "Corrección de precio de compra — por aprobar",
   catalogo_compras_borrado: "Solicitudes de borrar productos del catálogo de compras",
   cuenta_proveedor_verificar: "Cuentas bancarias de proveedores por verificar",
   caja_chica_excepcion_flete: "Caja Chica — excepción de flete por aprobar",
@@ -1683,6 +1684,26 @@ async function getPurchaseExceptionAdminPendingItem(href: string): Promise<Pendi
 // Inicio del admin, así que quedaban olvidadas. Exclusivo de admin. Cada
 // fila se borra al aprobar/rechazar (ver stockKardex.ts), así que contar
 // todas = contar las pendientes.
+// Confirmado 2026-09-29: corrección de precio de una compra ya aprobada
+// (Jariel/Bryan la piden con la captura del acuerdo) — solo el admin decide,
+// y mientras espera el pedido no se puede pagar.
+async function getPriceCorrectionAdminPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.purchasePriceCorrection.findMany({
+    where: { status: "PENDING" },
+    select: { request: { select: { catalogItem: { select: { name: true } } } } },
+  });
+  if (rows.length === 0) return null;
+  const names = [...new Set(rows.map((r) => r.request.catalogItem.name))];
+  return {
+    type: "correccion_precio_compra",
+    icon: "💲",
+    label: "Corrección de precio de compra — aprobar o rechazar",
+    meta: `${rows.length} pedido${rows.length === 1 ? "" : "s"} · ${names.slice(0, 3).join(", ")}${names.length > 3 ? "…" : ""} · no se paga hasta que decidas`,
+    overdue: true,
+    href,
+  };
+}
+
 async function getStockAdjustmentAdminPendingItem(href: string): Promise<PendingItem | null> {
   const count = await prisma.stockPhysicalCountAdjustmentRequest.count();
   if (count === 0) return null;
@@ -3067,6 +3088,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const invEgresosHref = invDept ? `/admin/dept/${invDept.id}?tab=egresos&otab=proveedor` : "/admin";
     const invStockHref = invDept ? `/admin/dept/${invDept.id}?tab=stock-actual` : "/admin";
     const comSolicitarHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=solicitar` : "/admin";
+    const comPriceCorrectionHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=precio` : "/admin";
     const deterioroExcepcionesHref = "/admin/deterioro-excepciones";
     const nichoBackfillHref = "/admin/reingreso-mercaderia?tab=productos";
     const monthlyTopMoversHref = "/admin/kpis-generales";
@@ -3075,7 +3097,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
     const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseAwaitingCostItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems, purchaseExceptionItem, stockAdjustmentItem, catalogDeleteItem, supplierAccountItem, freightExceptionItem, nairobySalaryItem, adminPlanItems] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseAwaitingCostItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems, purchaseExceptionItem, stockAdjustmentItem, catalogDeleteItem, supplierAccountItem, freightExceptionItem, nairobySalaryItem, adminPlanItems, priceCorrectionItem] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -3109,6 +3131,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPettyCashFreightExceptionAdminPendingItem(financeHref),
       getPayrollNairobySalaryTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
       getImprovementPlanPendingItems(null, "/admin/plan-mejora"),
+      getPriceCorrectionAdminPendingItem(comPriceCorrectionHref),
     ]);
     const items = [
       ...feedbackItems,
@@ -3139,6 +3162,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(monthlyTopMoversItem ? [monthlyTopMoversItem] : []),
       ...(purchaseExceptionItem ? [purchaseExceptionItem] : []),
       ...(stockAdjustmentItem ? [stockAdjustmentItem] : []),
+      ...(priceCorrectionItem ? [priceCorrectionItem] : []),
       ...(catalogDeleteItem ? [catalogDeleteItem] : []),
       ...(supplierAccountItem ? [supplierAccountItem] : []),
       ...(freightExceptionItem ? [freightExceptionItem] : []),
@@ -3459,7 +3483,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion", "ajuste_stock_conteo", "catalogo_compras_borrado", "cuenta_proveedor_verificar", "caja_chica_excepcion_flete", "sueldo_nairoby_transferencia", "plan_mejora_admin");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion", "ajuste_stock_conteo", "catalogo_compras_borrado", "cuenta_proveedor_verificar", "caja_chica_excepcion_flete", "sueldo_nairoby_transferencia", "plan_mejora_admin", "correccion_precio_compra");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },

@@ -9,6 +9,7 @@ import {
   canSubmitPurchaseRequests,
   canConfirmPurchaseReceiving,
   canRegisterPurchaseInvoices,
+  canActOnPurchaseApproval,
   canManageInventoryControl,
   canManagePettyCashPrincipal,
   canManagePettyCashSecundaria,
@@ -110,6 +111,11 @@ export async function POST(req: NextRequest) {
   }
   if (!allowed && session?.user.role === "employee" && PURCHASE_MODULE_FOLDERS.includes(folder)) {
     allowed = (await canSubmitPurchaseRequests()) || (await canConfirmPurchaseReceiving()) || (await canRegisterPurchaseInvoices());
+  }
+  // Confirmado 2026-09-29: captura del acuerdo de precio con el proveedor —
+  // la pide Jariel (compra) o Bryan (aprueba compras, sin canSubmit).
+  if (!allowed && session?.user.role === "employee" && folder === "purchase-price-corrections") {
+    allowed = (await canSubmitPurchaseRequests()) || (await canActOnPurchaseApproval());
   }
   // Confirmado 2026-08-05: mismo bug de nuevo — Control de Inventario y Caja
   // Chica se lanzaron con carpetas propias que nunca se agregaron aquí, así

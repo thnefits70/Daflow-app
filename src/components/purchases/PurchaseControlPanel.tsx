@@ -16,8 +16,9 @@ import { PurchaseDeteriorGestionPanel } from "@/components/merchandise-outflow/P
 import { DeteriorTraceList } from "@/components/merchandise-outflow/DeteriorTraceList";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { SupplierSheetNotesPanel } from "./SupplierSheetNotesPanel";
+import { PurchasePriceCorrectionPanel } from "./PurchasePriceCorrectionPanel";
 
-type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito" | "inventario" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "notas-chen" | "auditoria";
+type Tab = "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito" | "inventario" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "notas-chen" | "precio" | "auditoria";
 
 // Confirmado 2026-07-30: una sola pantalla para todo el módulo — las
 // pestañas que ve cada persona dependen de lo que puede hacer (admin ve
@@ -117,6 +118,9 @@ export function PurchaseControlPanel({
     // gente de CHEN en su hoja, pegado a cada pedido — para Compras,
     // Inventario, quien aprueba y el admin (a cada uno le avisa solo lo suyo).
     ...(isAdmin || canSubmit || canReview || canReceive || canManageGestion ? [{ key: "notas-chen" as Tab, label: "Notas de Chen" }] : []),
+    // Confirmado 2026-09-29, pedido del usuario: corregir el precio de una
+    // compra ya aprobada (lo piden Jariel/Bryan, solo el admin aprueba).
+    ...(isAdmin || canSubmit || canActOnApproval ? [{ key: "precio" as Tab, label: "Corregir precio" }] : []),
     ...(canReceive ? [{ key: "inventario" as Tab, label: "Inventario" }] : []),
     ...(canInvoice ? [{ key: "finanzas" as Tab, label: "Finanzas" }] : []),
     // Confirmado 2026-08-08 (ampliado 2026-08-12): historial de solo lectura
@@ -290,6 +294,16 @@ export function PurchaseControlPanel({
             Acá aparece lo que la gente de Chen escribe en su hoja de cálculo, cada nota pegada al pedido del que habla (producto, cantidad y estado actual). Te llega aviso solo de las que te tocan según la etapa del pedido; en &quot;Todas&quot; ves las de todos.
           </TabGuide>
           <SupplierSheetNotesPanel />
+        </>
+      )}
+      {tab === "precio" && (
+        <>
+          <TabGuide storageKey="compras-precio">
+            {isAdmin
+              ? <>Acá apruebas o rechazas los cambios de precio de compras ya aprobadas. Revisa la captura del acuerdo con el proveedor antes de aprobar. Al aprobar se actualiza solo la deuda, la hoja del proveedor y el Kardex.</>
+              : <>Si se negoció con el proveedor un precio distinto al de una compra ya aprobada, pídelo acá con la captura del acuerdo. El admin lo aprueba; mientras tanto esa compra no se puede pagar.</>}
+          </TabGuide>
+          <PurchasePriceCorrectionPanel />
         </>
       )}
       {tab === "inventario" && (

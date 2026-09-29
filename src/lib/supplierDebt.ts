@@ -220,6 +220,9 @@ export async function getSupplierDebtPendingItems(supplierId: string): Promise<S
       buyerDebtConfirmedAt: { not: null },
       requestedAt: sinceTrackingStart,
       receipt: { approvedAt: { lte: reviewCutoff() } },
+      // 2026-09-29: con una corrección de precio esperando al admin no se
+      // paga — se pagaría con el precio que se está corrigiendo.
+      priceCorrections: { none: { status: "PENDING" } },
     },
     include: {
       catalogItem: { select: { name: true, photos: true } },

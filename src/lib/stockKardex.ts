@@ -733,13 +733,25 @@ export async function getNegativeStockProducts(): Promise<StockAlertProduct[]> {
 // la app como "promedio vigente". Es seguro correr esto más de una vez:
 // siempre recalcula desde cero a partir de datos reales que no cambian
 // (PurchaseRequest.unitCost/shippingCostTotal), nunca acumula.
+// Línea PRICE_CORRECTION (ver purchasePriceCorrection.ts): quantity 0,
+// unitCost = diferencia por unidad; solo corrige las unidades de esa compra
+// que seguían en bodega (nunca más que el saldo de ese momento).
+export function applyPriceCorrection(balance: number, avgCost: number, deltaPerUnit: number, units: number): number {
+  const u = Math.max(0, Math.min(units, balance));
+  if (u === 0 || balance <= 0) return avgCost;
+  return Math.max(0, (balance * avgCost + u * deltaPerUnit) / balance);
+}
+
 type KardexReplayUpdate = { id: string; unitCost: number | null; avgCostAfter: number; balanceAfter: number };
 
 async function replayCatalogItemKardex(catalogItemId: string): Promise<{ updates: KardexReplayUpdate[]; oldAvgCost: number; newAvgCost: number } | null> {
   const entries = await prisma.stockKardexEntry.findMany({
     where: { catalogItemId },
     orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
-    include: { purchaseRequestReceipt: { include: { request: true } } },
+    include: {
+      purchaseRequestReceipt: { include: { request: { include: { priceCorrections: { where: { status: "APPROVED" }, orderBy: { reviewedAt: "asc" }, take: 1, select: { oldUnitCost: true } } } } } },
+      priceCorrection: { select: { kardexAdjustedUnits: true } },
+    },
   });
   if (entries.length === 0) return null;
 
@@ -765,8 +777,12 @@ async function replayCatalogItemKardex(catalogItemId: string): Promise<{ updates
       // no es una compra nueva, es mercadería que vuelve — reafirma el
       // promedio vigente, mismo comportamiento que ya tenía recordKardexEntry
       // con unitCost null.
+      // Si el precio se corrigió después (PurchasePriceCorrection), la
+      // entrada se valora con el precio ORIGINAL — la diferencia la pone su
+      // propia línea PRICE_CORRECTION más adelante, así no se cuenta dos veces.
+      const originalUnitCost = request?.priceCorrections[0]?.oldUnitCost ?? request?.unitCost ?? 0;
       const incomingCost = request
-        ? effectiveUnitCost({ unitCost: request.unitCost, quantity: request.quantity, shippingIncluded: request.shippingIncluded, shippingCostTotal: request.shippingCostTotal })
+        ? effectiveUnitCost({ unitCost: originalUnitCost, quantity: request.quantity, shippingIncluded: request.shippingIncluded, shippingCostTotal: request.shippingCostTotal })
         : avgCost;
       const newBalance = balance + e.quantity;
       const newAvgCost = newBalance > 0 && balance > 0 ? (balance * avgCost + e.quantity * incomingCost) / newBalance : incomingCost;
@@ -778,6 +794,9 @@ async function replayCatalogItemKardex(catalogItemId: string): Promise<{ updates
       // siempre 0, no hay flete que corregir, solo se re-arrastra el costo
       // declarado para que el recómputo no lo borre.
       avgCost = e.unitCost ?? avgCost;
+      updates.push({ id: e.id, unitCost: e.unitCost, avgCostAfter: avgCost, balanceAfter: balance });
+    } else if (e.type === "PRICE_CORRECTION") {
+      avgCost = applyPriceCorrection(balance, avgCost, e.unitCost ?? 0, e.priceCorrection?.kardexAdjustedUnits ?? 0);
       updates.push({ id: e.id, unitCost: e.unitCost, avgCostAfter: avgCost, balanceAfter: balance });
     } else {
       // OUT — Camino A: unitCost (el costo con el que se valoró esa salida
@@ -871,16 +890,20 @@ async function findMissingPersonalPurchaseKardexEntries(): Promise<PersonalPurch
 }
 
 type BackfillLine =
-  | { kind: "existing"; id: string; type: StockMovementType; quantity: number; unitCost: number | null; occurredAt: Date; createdAt: Date }
+  | { kind: "existing"; id: string; type: StockMovementType; quantity: number; unitCost: number | null; occurredAt: Date; createdAt: Date; priceCorrectionUnits: number }
   | { kind: "new"; merchandiseOutflowItemId: string; quantity: number; occurredAt: Date };
 
 async function replayCatalogItemWithBackfill(catalogItemId: string, missing: PersonalPurchaseBackfillCandidate[]) {
-  const existingEntries = await prisma.stockKardexEntry.findMany({ where: { catalogItemId }, orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }] });
+  const existingEntries = await prisma.stockKardexEntry.findMany({
+    where: { catalogItemId },
+    orderBy: [{ occurredAt: "asc" }, { createdAt: "asc" }],
+    include: { priceCorrection: { select: { kardexAdjustedUnits: true } } },
+  });
   const oldAvgCost = existingEntries.length > 0 ? existingEntries[existingEntries.length - 1].avgCostAfter : 0;
   const oldBalance = existingEntries.length > 0 ? existingEntries[existingEntries.length - 1].balanceAfter : 0;
 
   const lines: BackfillLine[] = [
-    ...existingEntries.map((e): BackfillLine => ({ kind: "existing", id: e.id, type: e.type, quantity: e.quantity, unitCost: e.unitCost, occurredAt: e.occurredAt, createdAt: e.createdAt })),
+    ...existingEntries.map((e): BackfillLine => ({ kind: "existing", id: e.id, type: e.type, quantity: e.quantity, unitCost: e.unitCost, occurredAt: e.occurredAt, createdAt: e.createdAt, priceCorrectionUnits: e.priceCorrection?.kardexAdjustedUnits ?? 0 })),
     ...missing.map((m): BackfillLine => ({ kind: "new", merchandiseOutflowItemId: m.merchandiseOutflowItemId, quantity: m.quantity, occurredAt: m.occurredAt })),
   ];
   // Orden real por fecha del movimiento — a igualdad de fecha, lo ya
@@ -919,6 +942,9 @@ async function replayCatalogItemWithBackfill(catalogItemId: string, missing: Per
       // siempre 0, nunca mueve el saldo, solo fija el costo promedio desde
       // ese punto en adelante.
       avgCost = line.unitCost ?? avgCost;
+      updates.push({ id: line.id, unitCost: line.unitCost, avgCostAfter: avgCost, balanceAfter: balance });
+    } else if (line.type === "PRICE_CORRECTION") {
+      avgCost = applyPriceCorrection(balance, avgCost, line.unitCost ?? 0, line.priceCorrectionUnits);
       updates.push({ id: line.id, unitCost: line.unitCost, avgCostAfter: avgCost, balanceAfter: balance });
     } else {
       // OUT ya existente — Camino A: su unitCost (valoración congelada el

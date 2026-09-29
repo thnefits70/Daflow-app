@@ -429,6 +429,7 @@ model User {
   purchaseCatalogItemsCreated                      PurchaseCatalogItem[]                 @relation("PurchaseCatalogItemCreatedBy")
   purchaseCatalogItemDeleteRequests                PurchaseCatalogItemDeleteRequest[]    @relation("PurchaseCatalogItemDeleteRequestedBy")
   stockPhysicalCountAdjustmentRequests             StockPhysicalCountAdjustmentRequest[] @relation("StockPhysicalCountAdjustmentRequestedBy")
+  purchasePriceCorrectionsRequested                PurchasePriceCorrection[]             @relation("PurchasePriceCorrectionRequestedBy")
   catalogMissingReportsReported                    CatalogMissingReport[]                @relation("CatalogMissingReportReportedBy")
   catalogMissingReportsResolved                    CatalogMissingReport[]                @relation("CatalogMissingReportResolvedBy")
   justCatalogImports                               JustCatalogImport[]                   @relation("JustCatalogImportImportedBy")
@@ -1050,6 +1051,14 @@ enum StockMovementType {
   // el admin aprueba o aplica un ajuste directo. quantity = la diferencia
   // real contra el saldo justo antes (puede ser positiva o negativa).
   PHYSICAL_COUNT_ADJUSTMENT
+  // Confirmado 2026-09-29, pedido del usuario (caso pistola de pintura:
+  // Bryan negoció $10, la solicitud decía $10.50): corrección de precio de
+  // una compra que YA entró al Kardex. quantity siempre 0 (no mueve el
+  // saldo); unitCost = la diferencia por unidad (nuevo − viejo). Solo
+  // corrige el costo de lo que sigue en bodega — las salidas ya hechas
+  // conservan el costo con el que se valoraron ese día. El detalle (antes,
+  // ahora, unidades corregidas, quién pidió) vive en PurchasePriceCorrection.
+  PRICE_CORRECTION
 }
 
 model StockKardexEntry {
@@ -1089,6 +1098,8 @@ model StockKardexEntry {
   // producto con caducidad, acá queda el detalle de de qué cohort(s) salió
   // — para trazabilidad, sin partir esta fila en varias.
   lotAllocations           StockKardexEntryLotAllocation[]
+  // Solo type=PRICE_CORRECTION: la corrección de precio que la originó.
+  priceCorrection          PurchasePriceCorrection?
 
   occurredAt DateTime
   createdAt  DateTime @default(now())
@@ -3128,6 +3139,7 @@ model PurchaseRequest {
   marketingFollowUp    PurchaseReceiptFollowUp?
   linkedByOutflowItems MerchandiseOutflowItem[]      @relation("OutflowItemLinkedPurchase")
   supplierSheetNotes   SupplierSheetNote[]
+  priceCorrections     PurchasePriceCorrection[]
 
   @@index([deptId])
   @@index([status])
@@ -3140,6 +3152,53 @@ model PurchaseRequest {
   @@index([shippingPaymentProofReceiptNumber])
   @@index([debtPaymentId])
   @@index([marketProductProposalId])
+}
+
+enum PurchasePriceCorrectionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Confirmado 2026-09-29, pedido del usuario (caso pistola de pintura: Bryan
+// negoció $10 con CHEN, pero la solicitud ya aprobada decía $10.50):
+// corregir el precio de una compra YA aprobada que todavía no se pagó.
+// Quien compra o aprueba (Jariel/Bryan) lo PIDE con la captura del acuerdo
+// con el proveedor; SOLO el admin lo aprueba — cambiar un precio después de
+// aprobado es una puerta de fraude, así que nunca se aplica solo. Al
+// aprobar se actualiza la solicitud (deuda y hoja de CHEN salen de ahí) y,
+// si la compra ya entró al Kardex, queda una línea PRICE_CORRECTION.
+// Mientras está PENDING, el pedido no se puede meter en una tanda de pago.
+model PurchasePriceCorrection {
+  id        String          @id @default(cuid())
+  requestId String
+  request   PurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  // Precio por unidad de la solicitud al pedir la corrección (se vuelve a
+  // tomar el vigente al aprobar, por si cambió mientras esperaba).
+  oldUnitCost Float
+  newUnitCost Float
+  reason      String
+  proofUrl    String
+  proofName   String?
+
+  status       PurchasePriceCorrectionStatus @default(PENDING)
+  rejectReason String?
+
+  requestedById String?
+  requestedBy   User?     @relation("PurchasePriceCorrectionRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedAt   DateTime  @default(now())
+  // Siempre el admin (su sesión no es un User real), por eso solo la fecha.
+  reviewedAt    DateTime?
+
+  // Solo si la compra ya estaba en el Kardex al aprobar: unidades que
+  // seguían en bodega y recibieron la corrección, y la línea creada.
+  kardexAdjustedUnits Int?
+  kardexEntryId       String?           @unique
+  kardexEntry         StockKardexEntry? @relation(fields: [kardexEntryId], references: [id], onDelete: SetNull)
+
+  @@index([requestId])
+  @@index([status])
 }
 
 // Inventario confirma que de verdad llegó — sin esto el ciclo no se cierra.

@@ -39,6 +39,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   if (rows.some((r) => r.status !== "APPROVED")) {
     return NextResponse.json({ error: "Solo se puede pagar una solicitud ya aprobada." }, { status: 409 });
   }
+  const pendingPriceCorrections = await prisma.purchasePriceCorrection.count({ where: { requestId: { in: rows.map((r) => r.id) }, status: "PENDING" } });
+  if (pendingPriceCorrections > 0) {
+    return NextResponse.json({ error: "Esta compra tiene una corrección de precio esperando la aprobación del admin — no se puede pagar hasta que se decida." }, { status: 409 });
+  }
   // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): un proveedor de
   // crédito (hoy solo CHEN) nunca se paga solicitud por solicitud — se
   // recibe primero, y el pago real ocurre después, agrupado en una tanda
