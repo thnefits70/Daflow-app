@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { canManageJustCatalog, dbUserId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
-import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
+import { autoResolveFoundMissingReports, isAlfQuery } from "@/lib/catalogMissingReports";
 
 const schema = z.object({
   query: z.string().trim().min(1),
@@ -25,6 +25,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
+
+  if (isAlfQuery(parsed.data.query)) {
+    return NextResponse.json({ error: "Los productos \"- ALF\" son provisionales: no se registran en el catálogo." }, { status: 400 });
+  }
 
   const report = await prisma.catalogMissingReport.create({
     data: { query: parsed.data.query, note: parsed.data.note || null, reportedById: dbUserId(session.user.id) },

@@ -9,6 +9,11 @@ import { notifyOwner } from "@/lib/notifications";
 // exacto con el nombre o el ID de un producto que ya existe se cierran solos
 // y se le avisa a quien reportó. Lo que no coincide exacto sigue a mano.
 
+// Los "- ALF" son IDs provisionales que nunca se crean en el catálogo (ver
+// isProvisionalAlfName en fulfillmentGuides.ts) — confirmado 2026-09-29 con el
+// usuario: ni se aceptan como aviso nuevo ni quedan abiertos los viejos.
+export const isAlfQuery = (q: string) => /\bALF\s*$/i.test(q.trim());
+
 export async function autoResolveFoundMissingReports(): Promise<void> {
   const open = await prisma.catalogMissingReport.findMany({
     where: { resolvedAt: null },
@@ -16,7 +21,13 @@ export async function autoResolveFoundMissingReports(): Promise<void> {
   });
   if (open.length === 0) return;
 
+  const alfIds = open.filter((r) => isAlfQuery(r.query)).map((r) => r.id);
+  if (alfIds.length > 0) {
+    await prisma.catalogMissingReport.updateMany({ where: { id: { in: alfIds }, resolvedAt: null }, data: { resolvedAt: new Date(), resolvedById: null } });
+  }
+
   for (const r of open) {
+    if (alfIds.includes(r.id)) continue;
     const q = r.query.trim().replace(/\s+/g, " ");
     const match = await prisma.purchaseCatalogItem.findFirst({
       where: { OR: [{ name: { equals: q, mode: "insensitive" } }, { justCode: q }] },

@@ -13,6 +13,12 @@ export type MatchCatalogItem = { id: string; name: string; photos: string[]; jus
 // producto elegido hasta que alguien agregue el producto real.
 export type ProductMatchResult = MatchCatalogItem;
 
+// Confirmado 2026-09-29, pedido del usuario: los "- ALF" son IDs
+// provisionales que nunca se crean en el catálogo (ver fulfillmentGuides.ts
+// isProvisionalAlfName) — un aviso de "falta" sobre ellos se quedaba abierto
+// para siempre. Mismo criterio que el servidor (catalog-missing-reports).
+const isAlfQuery = (q: string) => /\bALF\s*$/i.test(q.trim());
+
 // Compartido entre AddItemForm (agregar producto nuevo al lote), la edición
 // de un producto ya agregado (mientras el lote sigue en borrador) y la
 // re-vinculación de Daniel en Revisión — confirmado 2026-08-23 (pedido
@@ -112,12 +118,31 @@ export function ProductMatchPicker({
     );
   }
 
+  if (reporting && isAlfQuery(query)) {
+    return (
+      <div className="bg-cloud rounded-md p-3">
+        <div className="text-[12.5px] font-semibold mb-1">Los productos &quot;- ALF&quot; son provisionales</div>
+        <div className="text-[11.5px] text-steel mb-2">No se registran en el catálogo, así que no hace falta avisar que faltan.</div>
+        <div className="flex gap-1.5 flex-wrap">
+          <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => setReporting(false)}>
+            Buscar otro producto
+          </button>
+          {onCancel && (
+            <button type="button" className="text-[11px] text-steel cursor-pointer" onClick={onCancel}>
+              Cancelar
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (reporting) {
     if (reported) {
       return (
         <div className="bg-cloud rounded-md p-3">
           <div className="text-[12.5px] font-semibold text-teal mb-1">Le avisamos a quien administra el catálogo.</div>
-          <div className="text-[11.5px] text-steel mb-2">Te contactamos cuando "{query}" esté agregado — mientras tanto no podés continuar con este producto.</div>
+          <div className="text-[11.5px] text-steel mb-2">Te contactamos cuando &quot;{query}&quot; esté agregado — mientras tanto no podés continuar con este producto.</div>
           <button
             type="button"
             className="text-[11px] text-blue font-semibold cursor-pointer"
@@ -134,7 +159,7 @@ export function ProductMatchPicker({
     }
     return (
       <div className="bg-cloud rounded-md p-3">
-        <div className="text-[12px] font-semibold mb-1">No encontramos "{query}" en el catálogo</div>
+        <div className="text-[12px] font-semibold mb-1">No encontramos &quot;{query}&quot; en el catálogo</div>
         <div className="text-[11px] text-steel mb-2">Le avisamos a Daniel/admin para que lo agreguen — no se puede escribir el nombre a mano.</div>
         <textarea
           placeholder="Nota opcional (marca, dónde lo viste, etc.)"
