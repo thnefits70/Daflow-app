@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canActOnMarketProductReview } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
+import { suggestNichoIfMissing } from "@/lib/nichoAi";
 
 const schema = z.discriminatedUnion("decision", [
   z.object({
@@ -65,6 +66,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       },
     });
     catalogItemId = catalogItem.id;
+    // Fix 2026-09-29: este camino también crea productos y nunca pedía el
+    // nicho (solo Compras lo hacía) — le quedaban al admin en "Sugerir
+    // nichos faltantes". Misma sugerencia automática que purchase-catalog.
+    after(() => suggestNichoIfMissing(catalogItem.id));
   }
 
   const updated = await prisma.marketProductProposal.update({
