@@ -13,10 +13,22 @@ import { computeCostUsd } from "@/lib/aiPricing";
 // el costo estimado antes de que alguien confirme el POST.
 const ESTIMATED_INPUT_TOKENS_PER_ITEM = 400;
 const ESTIMATED_OUTPUT_TOKENS_PER_ITEM = 20;
+const AUTO_BACKFILL_MAX = 20;
 
 export async function GET() {
   if (!(await canManageJustCatalog())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const missingCount = await prisma.purchaseCatalogItem.count({ where: { nicho: null } });
+  // Fix 2026-09-29, pedido del usuario ("¿por qué debo hacer clic?"): si son
+  // pocos (sobrantes de algún camino que no lo pidió), se completan solos al
+  // abrir la pantalla — cuestan centavos. El botón con costo queda solo para
+  // una cantidad grande, donde sí vale la pena confirmar antes de gastar.
+  if (missingCount > 0 && missingCount <= AUTO_BACKFILL_MAX) {
+    const missing = await prisma.purchaseCatalogItem.findMany({ where: { nicho: null }, select: { id: true } });
+    after(async () => {
+      await Promise.allSettled(missing.map((i) => suggestNichoIfMissing(i.id)));
+    });
+    return NextResponse.json({ missingCount: 0, estimatedCostUsd: 0 });
+  }
   const estimatedCostUsd = missingCount * computeCostUsd(NICHO_AI_MODEL, ESTIMATED_INPUT_TOKENS_PER_ITEM, ESTIMATED_OUTPUT_TOKENS_PER_ITEM);
   return NextResponse.json({ missingCount, estimatedCostUsd });
 }
