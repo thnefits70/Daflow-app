@@ -12,7 +12,9 @@ const FIXED_DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manch
 
 const schema = z
   .object({
-    photoUrls: z.array(z.string().url()).min(1),
+    // Confirmado 2026-09-29, pedido de Daniel + usuario: Joel solo elige el
+    // producto y pone la cantidad — la foto ya no se pide.
+    photoUrls: z.array(z.string().url()).default([]),
     catalogItemId: z.string().optional(),
     aiRecognized: z.boolean().default(false),
     declaredName: z.string().trim().max(200).optional(),

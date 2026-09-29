@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, Check, Pencil, Plus, Send, Trash2, X } from "lucide-react";
-import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
+import { Check, Pencil, Plus, Send, Trash2, X } from "lucide-react";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "./ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
@@ -11,8 +10,6 @@ import { ExpandableName } from "@/components/ui/ExpandableName";
 const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
 
 type AddItemDraftData = {
-  photoUrl: string | null;
-  photoUrl2: string | null;
   selected: MatchCatalogItem | null;
   goodQty: string;
   damagedQty: string;
@@ -20,7 +17,7 @@ type AddItemDraftData = {
   damageReasonOther: string;
 };
 function isAddItemDraftEmpty(d: AddItemDraftData) {
-  return !d.photoUrl && !d.selected && !d.goodQty.trim() && !d.damagedQty.trim();
+  return !d.selected &&!d.goodQty.trim() && !d.damagedQty.trim();
 }
 
 type ItemDTO = {
@@ -336,12 +333,9 @@ export function CaptureFlow() {
 // busca a mano contra el catálogo ya cargado, vía ProductMatchPicker
 // (mismo componente compartido con la edición de un producto ya agregado y
 // con la re-vinculación de Daniel en Revisión).
+// Confirmado 2026-09-29, pedido de Daniel + usuario: Joel solo elige el
+// producto y pone la cantidad (lo percha de inmediato) — ya no se toma foto.
 function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded: () => void; onCancel: () => void }) {
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [photoUrl2, setPhotoUrl2] = useState<string | null>(null);
-  const [taking, setTaking] = useState(false);
-  const [taking2, setTaking2] = useState(false);
-
   const [selected, setSelected] = useState<MatchCatalogItem | null>(null);
 
   const [goodQty, setGoodQty] = useState("");
@@ -354,14 +348,12 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const [confirmingAdd, setConfirmingAdd] = useState(false);
 
   // Guardado automático: si sale a revisar otra cosa antes de terminar de
-  // agregar este producto al lote, al volver no hay que tomar la foto ni
-  // buscar el producto de nuevo.
+  // agregar este producto al lote, al volver no hay que buscar el producto
+  // de nuevo.
   const { clearDraft: clearAddItemDraft } = useFormDraft<AddItemDraftData>(
     `reentry-add-item:${batchId}`,
-    { photoUrl, photoUrl2, selected, goodQty, damagedQty, damageReason, damageReasonOther },
+    { selected, goodQty, damagedQty, damageReason, damageReasonOther },
     (d) => {
-      setPhotoUrl(d.photoUrl);
-      setPhotoUrl2(d.photoUrl2);
       setSelected(d.selected);
       setGoodQty(d.goodQty);
       setDamagedQty(d.damagedQty);
@@ -373,16 +365,6 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
     "/area/workspace?tab=reingreso"
   );
 
-  function onCaptured(url: string) {
-    setPhotoUrl(url);
-    setTaking(false);
-  }
-
-  function onCaptured2(url: string) {
-    setPhotoUrl2(url);
-    setTaking2(false);
-  }
-
   function onMatchConfirmed(result: ProductMatchResult) {
     setSelected(result);
   }
@@ -390,7 +372,7 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
   const dQty = Number(damagedQty) || 0;
   const gQty = Number(goodQty) || 0;
   const hasDamageReason = dQty === 0 || !!damageReason;
-  const canSave = !!photoUrl && !!selected && gQty + dQty > 0 && hasDamageReason && !saving;
+  const canSave = !!selected &&gQty + dQty > 0 && hasDamageReason && !saving;
   const finalName = selected?.name ?? "";
   const finalDamageReason = dQty > 0 ? (damageReason === "Otro" ? damageReasonOther.trim() || "Otro (sin describir)" : damageReason) : null;
 
@@ -398,13 +380,13 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
     // Guard con ref (no solo state) porque un doble-tap táctil dispara dos
     // onClick antes de que React re-renderice el botón con disabled=true,
     // creando dos POST y un producto duplicado en el lote.
-    if (!photoUrl || !selected || savingRef.current) return;
+    if (!selected || savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     setError("");
     try {
       await postJson(`/api/merchandise-reentry/batches/${batchId}/items`, {
-        photoUrls: photoUrl2 ? [photoUrl, photoUrl2] : [photoUrl],
+        photoUrls: [],
         catalogItemId: selected.id,
         aiRecognized: true,
         goodQty: gQty,
@@ -427,16 +409,6 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
       {confirmingAdd ? (
         <div>
           <div className="font-display font-bold text-[14px] mb-2.5">Revisa antes de agregar</div>
-          <div className="flex items-center gap-2 mb-3">
-            {photoUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={photoUrl} alt="Foto del producto" className="w-16 h-16 object-cover rounded-md border border-rule" />
-            )}
-            {photoUrl2 && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={photoUrl2} alt="Segunda foto del producto" className="w-16 h-16 object-cover rounded-md border border-rule" />
-            )}
-          </div>
           <div className="flex flex-col gap-2 text-[12.5px]">
             <div className="flex items-start justify-between gap-3">
               <span className="text-steel shrink-0">Producto</span>
@@ -473,67 +445,14 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
         </div>
       ) : (
         <>
-      <div>
-        <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">1 · Foto del producto</label>
-        {photoUrl ? (
-          <div className="flex items-center gap-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photoUrl} alt="Foto del producto" className="w-20 h-20 object-cover rounded-md border border-rule" />
-            <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => { setPhotoUrl(null); setTaking(true); }}>
-              Volver a tomar
-            </button>
-          </div>
-        ) : taking ? (
-          <LiveCameraCapture folder="merchandise-reentry-photos" onCaptured={onCaptured} onCancel={() => setTaking(false)} />
-        ) : (
-          <button type="button" className="flex items-center gap-1.5 text-[12.5px] font-bold border-[1.5px] border-rule rounded-md px-3.5 py-2 cursor-pointer" onClick={() => setTaking(true)}>
-            <Camera size={14} /> Tomar foto en vivo
-          </button>
-        )}
-        <div className="text-[10.5px] text-steel mt-1.5">Solo cámara en vivo — no se permite subir fotos guardadas.</div>
-      </div>
-
-      {photoUrl && (
         <div>
-          <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">2 · Segunda foto (opcional)</label>
-          {photoUrl2 ? (
-            <div className="flex items-center gap-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoUrl2} alt="Segunda foto del producto" className="w-20 h-20 object-cover rounded-md border border-rule" />
-              <div className="flex flex-col items-start gap-1">
-                <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => { setPhotoUrl2(null); setTaking2(true); }}>
-                  Volver a tomar
-                </button>
-                <button type="button" className="text-[11.5px] text-steel font-semibold cursor-pointer" onClick={() => setPhotoUrl2(null)}>
-                  Quitar
-                </button>
-              </div>
-            </div>
-          ) : taking2 ? (
-            <LiveCameraCapture folder="merchandise-reentry-photos" onCaptured={onCaptured2} onCancel={() => setTaking2(false)} />
-          ) : (
-            <button type="button" className="flex items-center gap-1.5 text-[12.5px] font-semibold border-[1.5px] border-dashed border-rule rounded-md px-3.5 py-2 cursor-pointer" onClick={() => setTaking2(true)}>
-              <Camera size={14} /> Agregar segunda foto
-            </button>
-          )}
-          <div className="text-[10.5px] text-steel mt-1.5">Útil como evidencia extra, por ejemplo si son varias unidades del mismo producto.</div>
-        </div>
-      )}
-
-      {photoUrl && (
-        <div>
-          <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">3 · Producto</label>
+          <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">1 · Producto</label>
           {selected ? (
             <div className="flex flex-col gap-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-steel">Tu foto vs. la del catálogo</div>
-              <div className="flex items-center gap-2.5">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photoUrl} alt="Foto tomada" className="w-16 h-16 object-cover rounded-md border border-rule" />
-                {selected.photos[0] && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={selected.photos[0]} alt={selected.name} className="w-16 h-16 object-cover rounded-md border border-green/40" />
-                )}
-              </div>
+              {selected.photos[0] && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={selected.photos[0]} alt={selected.name} className="w-16 h-16 object-cover rounded-md border border-green/40" />
+              )}
               <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
                 <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
                   <CatalogCode code={selected.justCode} />
@@ -545,14 +464,13 @@ function AddItemForm({ batchId, onAdded, onCancel }: { batchId: string; onAdded:
               </div>
             </div>
           ) : (
-            <ProductMatchPicker referencePhotoUrl={photoUrl} onConfirm={onMatchConfirmed} />
+            <ProductMatchPicker referencePhotoUrl={null} onConfirm={onMatchConfirmed} />
           )}
         </div>
-      )}
 
-      {photoUrl && (
+      {selected && (
         <div>
-          <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">4 · Cantidades</label>
+          <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">2 · Cantidades</label>
           <div className="flex gap-2.5">
             <div className="flex-1">
               <div className="text-[11px] text-steel mb-1">Unidades buenas</div>
