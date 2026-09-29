@@ -435,6 +435,23 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                   {variantsOf(p.catalogItemId).map((v) => `${v.label} ${v.quantity}`).join(" · ")}
                 </div>
               )}
+              {/* Pedido de Daniel 2026-09-29 (opción B): el producto se sigue
+                  sacando completo en un solo bloque, pero si va por varias
+                  transportadoras se ve cuántas van por cada una (Laar/Urbano
+                  casi nunca tienen bloque propio) para separarlas al empacar. */}
+              {Object.keys(byCarrierOf(p.catalogItemId)).length > 1 && (
+                <div className="text-[11px] text-steel mt-0.5">
+                  Va por:{" "}
+                  {sortCarriers(Object.keys(byCarrierOf(p.catalogItemId))).map((c, i) => (
+                    <Fragment key={c}>
+                      {i > 0 && " · "}
+                      <span className={c === p.block ? "" : "font-semibold text-ink"}>
+                        {carrierLabel(c)} {byCarrierOf(p.catalogItemId)[c]}
+                      </span>
+                    </Fragment>
+                  ))}
+                </div>
+              )}
               {p.pickedByName && p.pickedAt && st !== "confirmed" && (
                 <div className="text-[10.5px] text-steel mt-0.5">
                   Registró {p.pickedByName} a las {fmtTime(p.pickedAt)}
