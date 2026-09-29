@@ -14,6 +14,9 @@ import { sendPushToOwner } from "@/lib/webPush";
 import { sendSupplierShippingDailyReminders } from "@/lib/supplierShippingPush";
 import { runNichoAutoBackfill } from "@/lib/nichoAi";
 import { runInventoryAutoFlows } from "@/lib/inventoryAutoFlows";
+import { getPurchaseSuggestionPushes } from "@/lib/purchaseSuggestions";
+
+const PURCHASE_SUGGESTION_TYPES = new Set(["compras_calientes", "compras_frias", "compras_urgentes_sin_atender"]);
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
 // CRON_SECRET para que nadie más pueda llamarlo desde afuera y disparar
@@ -51,7 +54,9 @@ export async function GET(req: NextRequest) {
     // Pendientes dentro de DAFLOW debe seguir mostrando todo siempre; la
     // preferencia solo decide qué se manda como notificación externa.
     const disabled = await getDisabledTypes(ownerId);
-    const notifiable = tasks.items.filter((i) => MANDATORY_PUSH_TYPES.has(i.type) || !disabled.has(i.type));
+    // "Qué comprar" tiene su propio aviso con el detalle (más abajo), no se
+    // repite en este resumen.
+    const notifiable = tasks.items.filter((i) => !PURCHASE_SUGGESTION_TYPES.has(i.type) && (MANDATORY_PUSH_TYPES.has(i.type) || !disabled.has(i.type)));
     if (notifiable.length === 0) continue;
 
     const first = notifiable[0];
@@ -65,6 +70,15 @@ export async function GET(req: NextRequest) {
       body,
       url: first.href,
     });
+    notified++;
+  }
+
+  // Qué comprar (confirmado 2026-09-29, idea de Daniel): resumen diario de
+  // compras calientes a Jariel, frías a Nairoby, y a Daniel los urgentes que
+  // llevan 3+ días sin comprarse.
+  for (const r of await getPurchaseSuggestionPushes()) {
+    if ((await getDisabledTypes(r.ownerId)).has(r.type)) continue;
+    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }
 

@@ -15,6 +15,7 @@ import { getCompiledLot } from "@/lib/fulfillmentGuides";
 import { carrierLabel } from "@/lib/carriers";
 import { isAutoStockoutWeek } from "@/lib/autoStockout";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
+import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -472,6 +473,9 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_sin_id: "Productos de Compras sin ID de Dropi",
   fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
   fulfillment_bloque_asignado: "Bloque del corte asignado — sacar de bodega",
+  compras_calientes: "Compras calientes (30 unidades o menos)",
+  compras_frias: "Compras frías (31 a 60 unidades)",
+  compras_urgentes_sin_atender: "Compras urgentes sin atender (3+ días)",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -3284,6 +3288,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       const excessConfirmItem = await getPurchaseExcessPendingItem("confirmar", "/area/workspace?tab=compras&ptab=urgentes");
       if (excessConfirmItem) teamItems.push(excessConfirmItem);
     }
+    // Confirmado 2026-09-29 (idea de Daniel): "Qué comprar" — Jariel ve sus
+    // compras calientes aunque no lidere ningún departamento.
+    teamItems.unshift(...(await getPurchaseSuggestionPendingItems(actor.userId)));
     if (teamItems.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: me.department?.code === "INV" ? "En Inventario" : "Para ti", items: teamItems };
   }
@@ -3457,6 +3464,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (excessConfirmItem) items.push(excessConfirmItem);
   }
 
+  // Confirmado 2026-09-29 (idea de Daniel): compras frías a Nairoby, y a
+  // Daniel los urgentes que llevan 3+ días sin comprarse.
+  items.unshift(...(await getPurchaseSuggestionPendingItems(actor.userId)));
+
   if (items.length === 0) return null;
   return {
     title: monthly ? "Pendientes de este mes" : "Pendientes de esta semana",
@@ -3515,12 +3526,15 @@ export async function getPossiblePendingTypesForActor(
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
       if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id");
       if (me.department?.code === "INV" || me.department?.code === "FUL") types.push("fulfillment_bloque_asignado");
+      if (me.canManagePurchases && me.department?.code === "MKT") types.push("compras_calientes");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }
 
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
     if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id");
+    if (me.leadsDept.code === "FIN") types.push("compras_frias");
+    if (me.leadsDept.code === "INV") types.push("compras_urgentes_sin_atender");
     if (me.leadsDept.code === "FIN") {
       types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia", "reclamos_proveedor_atrasados");
     }
