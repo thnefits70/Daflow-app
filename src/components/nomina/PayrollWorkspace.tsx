@@ -167,10 +167,15 @@ export function PayrollWorkspace({
               <>Pon el precio en dólares de cada compra personal que Daniel ya confirmó (costo y Dropi según corresponda, en las cuotas que decidas). Una vez que el admin confirme que llegó el pago, cierra la operación desde acá para habilitar el retiro.</>
             )}
           </TabGuide>
+          {/* Confirmado 2026-09-29: pedido del usuario — "Transferencias por
+              confirmar" (lo único que el admin tiene que hacer acá) quedaba al
+              final, debajo de la lista de cuotas por mes que no para de crecer.
+              Para el admin va arriba de todo; Nairoby conserva su orden. */}
+          {isAdmin && <PersonalPurchasesTransferPanel isAdmin />}
           <PersonalPurchasesPaymentWatchPanel canReopenPrice={!isAdmin} />
           <PersonalPurchasesPaymentLedgerPanel />
           <PersonalPurchasesFinancePanel isAdmin={isAdmin} />
-          <PersonalPurchasesTransferPanel isAdmin={isAdmin} />
+          {!isAdmin && <PersonalPurchasesTransferPanel isAdmin={false} />}
           <PersonalPurchasesHistoryPanel />
         </div>
       )}
