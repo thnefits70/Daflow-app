@@ -421,7 +421,38 @@ export async function parseDropiGuidesPdf(bytes: Uint8Array): Promise<ParsedGuid
   return parseDropiPages(await extractPages(bytes));
 }
 
-function parseDropiPages(pages: PdfLine[][], warrantyFile = false): ParsedGuidesPdf {
+// Dropi a veces reimprime una guía dentro del mismo PDF (caso real
+// 2026-09-29, Manifiesto_25-09-2026_Provedix: la garantía V4003117191 venía
+// dos veces completa — relación, tabla y etiqueta — y salía 2 veces). Cada
+// bloque = páginas "Guia:" + su tabla + sus etiquetas; si TODAS las guías de
+// un bloque ya salieron antes en el PDF, el bloque entero se ignora.
+function dropRepeatedDropiBlocks(pages: PdfLine[][]): { pages: PdfLine[][]; repeated: string[] } {
+  const guidesOf = (lines: PdfLine[]) => lines.map((l) => l.text.match(GUIDE_RE)?.[1].toUpperCase()).filter((g): g is string => !!g);
+  const blocks: PdfLine[][][] = [];
+  let prevHadGuides = false;
+  for (const lines of pages) {
+    const has = guidesOf(lines).length > 0;
+    if (blocks.length === 0 || (has && !prevHadGuides)) blocks.push([]);
+    blocks[blocks.length - 1].push(lines);
+    prevHadGuides = has;
+  }
+  const seen = new Set<string>();
+  const kept: PdfLine[][] = [];
+  const repeated: string[] = [];
+  for (const block of blocks) {
+    const gs = block.flatMap(guidesOf);
+    if (gs.length > 0 && gs.every((g) => seen.has(g))) {
+      repeated.push(...new Set(gs));
+      continue;
+    }
+    for (const g of gs) seen.add(g);
+    kept.push(...block);
+  }
+  return { pages: kept, repeated };
+}
+
+function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGuidesPdf {
+  const { pages, repeated } = dropRepeatedDropiBlocks(allPages);
 
   let manifestDate: string | null = null;
   let carrier = "";
@@ -652,6 +683,11 @@ function parseDropiPages(pages: PdfLine[][], warrantyFile = false): ParsedGuides
   const readWarranty = new Set(warranty.map((w) => w.guide));
 
   const warnings: string[] = [];
+  if (repeated.length > 0) {
+    warnings.push(
+      `${repeated.length === 1 ? "La guía" : `${repeated.length} guías`} ${repeated.slice(0, 5).join(", ")} ${repeated.length === 1 ? "venía" : "venían"} repetida(s) en el PDF. Por qué: Dropi la imprimió dos veces en el mismo manifiesto. Qué hacer: nada — se contó una sola vez.`
+    );
+  }
   if (warrantyFile && conRecaudo.length > 0) {
     warnings.push(
       `⚠ Marcaste este PDF como Garantías, pero ${conRecaudo.length} guía(s) se cobran al entregar (ej. ${conRecaudo.slice(0, 3).join(", ")}) — las garantías nunca se cobran. ¿Es el PDF de pedidos? Si es así, cámbialo a "Pedidos" y vuelve a leer.`
