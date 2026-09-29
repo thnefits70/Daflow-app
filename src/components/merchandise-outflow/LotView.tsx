@@ -13,7 +13,7 @@ import { GuideHoldsBox } from "./GuideHoldsBox";
 import { LotComboRecipe, type LotComboRecipe as ComboRecipe } from "./LotComboRecipe";
 
 type ItemView = { catalogItemId: string; name: string; photos: string[]; justCode: string | null; area?: string | null };
-export type LotLine = ItemView & { quantity: number; byCarrier: Record<string, number>; fromCombos: { code: string; quantity: number }[]; variants: VariantNote[] };
+export type LotLine = ItemView & { quantity: number; byCarrier: Record<string, number>; fromCombos: { code: string; quantity: number }[]; variants: (VariantNote & { byCarrier?: Record<string, number> })[] };
 export type LotWarrantyLine = ItemView & {
   itemId: string;
   guide: string;

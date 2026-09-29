@@ -4,7 +4,7 @@ import { Fragment, useState } from "react";
 import { AlertTriangle, ArrowUp, CheckCircle2, ChevronDown, ChevronUp, Package, RefreshCw, ScanLine, UserRound } from "lucide-react";
 import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { CatalogCode } from "@/components/shared/CatalogCode";
-import { carrierLabel, sortCarriers } from "@/lib/carriers";
+import { carrierLabel, sortCarriers, VARIANT_CARRIER_UNKNOWN } from "@/lib/carriers";
 import { areaLabel } from "@/lib/warehouseAreas";
 import type { CompiledLot, LotPickLine } from "./LotView";
 import { BlockAssignee } from "./BlockAssignee";
@@ -107,6 +107,29 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   // Variantes (color/talla/paquete): antes solo salían en la hoja impresa,
   // y ahora imprimir es opcional — se sacan desde el celular.
   const variantsOf = (id: string) => lot.lines.find((l) => l.catalogItemId === id)?.variants ?? [];
+  // Pedido de Daniel 2026-09-29: si el producto va por varias
+  // transportadoras, cada variante dice cuántas van por cuál
+  // ("Servientrega 6 · Gintracom 1"). Vacío si va por una sola.
+  const variantCarriers = (id: string, v: { byCarrier?: Record<string, number> }) => {
+    if (Object.keys(byCarrierOf(id)).length <= 1 || !v.byCarrier) return "";
+    const known = sortCarriers(Object.keys(v.byCarrier).filter((c) => c !== VARIANT_CARRIER_UNKNOWN));
+    // Corte viejo sin ningún dato: se ve como antes, sin reparto.
+    if (known.length === 0) return "";
+    const parts = known.map((c) => `${carrierLabel(c)} ${v.byCarrier![c]}`);
+    const unknown = v.byCarrier[VARIANT_CARRIER_UNKNOWN] ?? 0;
+    if (unknown > 0) parts.push(`${unknown} sin dato de transportadora`);
+    return parts.join(" · ");
+  };
+  const variantChips = (id: string) => (
+    <div className="flex flex-col gap-1">
+      {variantsOf(id).map((v) => (
+        <div key={v.label} className="text-[11.5px] bg-teal/10 border border-teal/30 rounded-lg px-2 py-0.5 self-start">
+          {v.label} <b className="font-mono">{v.quantity}</b>
+          {variantCarriers(id, v) && <div className="text-[11px] text-steel">{variantCarriers(id, v)}</div>}
+        </div>
+      ))}
+    </div>
+  );
   const pieces = lot.warranty.filter((w) => w.mode === "PIECE");
   const goesBy = (p: LotPickLine, c: string) => (byCarrierOf(p.catalogItemId)[c] ?? 0) > 0;
   const isTaken = (p: LotPickLine) => p.picked !== null || !!p.confirmedAt;
@@ -242,12 +265,8 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                     ))}
                   </div>
                   {variantsOf(p.catalogItemId).length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {variantsOf(p.catalogItemId).map((v) => (
-                        <span key={v.label} className="text-[11.5px] bg-teal/10 border border-teal/30 rounded-full px-2 py-0.5">
-                          {v.label} <b className="font-mono">{v.quantity}</b>
-                        </span>
-                      ))}
+                    <div className="mt-2">
+                      {variantChips(p.catalogItemId)}
                     </div>
                   )}
                   <div className="text-[11px] text-steel mt-1.5">
@@ -438,12 +457,8 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                   .join(" · ")}
               </div>
               {variantsOf(current.catalogItemId).length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-2">
-                  {variantsOf(current.catalogItemId).map((v) => (
-                    <span key={v.label} className="text-[11.5px] bg-teal/10 border border-teal/30 rounded-full px-2 py-0.5">
-                      {v.label} <b className="font-mono">{v.quantity}</b>
-                    </span>
-                  ))}
+                <div className="mb-2">
+                  {variantChips(current.catalogItemId)}
                 </div>
               )}
               {myBlocks.length > 0 && !myBlocks.includes(current.block) && (

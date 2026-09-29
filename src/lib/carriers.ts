@@ -8,6 +8,9 @@ import { areaRank } from "./warehouseAreas";
 
 export const CARRIER_ORDER = ["VELOCES", "URBANO", "GINTRACOM", "LAAR", "SERVIENTREGA"];
 export const NO_CARRIER = "SIN TRANSPORTADORA";
+// Variante de un corte subido antes del 2026-09-29 cuyo PDF mezclaba
+// transportadoras: no se sabe por cuál va (ver getCompiledLot).
+export const VARIANT_CARRIER_UNKNOWN = "?";
 
 const LABELS: Record<string, string> = {
   VELOCES: "Veloces",

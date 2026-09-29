@@ -2771,6 +2771,10 @@ model FulfillmentRequestVariantNote {
   catalogItemId String
   catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
 
+  // Transportadora de las guías de esta variante (2026-09-29). null en
+  // notas viejas y en las que se escriben a mano (Rocket).
+  carrier String?
+
   // Texto libre tal como Yair lo escribe (ej. "Rojo", "Talla M") — no hay
   // catálogo de variantes, es la misma libertad que tenía a mano en papel.
   label    String

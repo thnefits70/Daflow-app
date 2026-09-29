@@ -4,7 +4,7 @@ import { findSimilarUnlinkedItem, significantWords } from "@/lib/justCatalog";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId } from "@/lib/guards";
-import { lineBlock, NO_CARRIER, sortCarriers } from "@/lib/carriers";
+import { lineBlock, NO_CARRIER, sortCarriers, VARIANT_CARRIER_UNKNOWN } from "@/lib/carriers";
 import { areaRank } from "@/lib/warehouseAreas";
 
 export const NO_BRAND = "SIN_MARCA";
@@ -390,21 +390,33 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
   // variantes; las demás filas del mismo producto entran como "Sin
   // variante" para que la suma cuadre con el total.
   // Las garantías no entran: se ven aparte, con lo que Yair marcó.
+  // Pedido de Daniel 2026-09-29: cada nota guarda también su transportadora
+  // (un mismo PDF trae varias), para ver "Hombre 7 → Servientrega 6 ·
+  // Gintracom 1" al sacar. El relleno "Sin variante" se calcula por
+  // transportadora.
   const normalRows = itemRows.filter((r) => !r.warrantyGuide);
-  const notesByItem = new Map<string, Map<string, number>>();
+  const notesByItem = new Map<string, Map<string, Map<string, number>>>();
   const itemsWithVariants = new Set(normalRows.filter((r) => r.breakdown.length > 0).map((r) => r.catalogItemId));
-  const totalByItem = new Map<string, number>();
-  for (const r of normalRows) totalByItem.set(r.catalogItemId, (totalByItem.get(r.catalogItemId) ?? 0) + r.quantity);
+  const totalByItem = new Map<string, Map<string, number>>();
   for (const r of normalRows) {
     if (!itemsWithVariants.has(r.catalogItemId)) continue;
-    let m = notesByItem.get(r.catalogItemId);
-    if (!m) notesByItem.set(r.catalogItemId, (m = new Map()));
+    const carrier = r.carrier ?? NO_CARRIER;
+    let t = totalByItem.get(r.catalogItemId);
+    if (!t) totalByItem.set(r.catalogItemId, (t = new Map()));
+    t.set(carrier, (t.get(carrier) ?? 0) + r.quantity);
+    let byCarrier = notesByItem.get(r.catalogItemId);
+    if (!byCarrier) notesByItem.set(r.catalogItemId, (byCarrier = new Map()));
+    let m = byCarrier.get(carrier);
+    if (!m) byCarrier.set(carrier, (m = new Map()));
     for (const p of r.breakdown) m.set(p.label, (m.get(p.label) ?? 0) + p.quantity);
   }
-  for (const [itemId, m] of notesByItem) {
-    const noted = [...m.values()].reduce((a, b) => a + b, 0);
-    const total = totalByItem.get(itemId) ?? 0;
-    if (noted < total) m.set("Sin variante", (m.get("Sin variante") ?? 0) + total - noted);
+  for (const [itemId, byCarrier] of notesByItem) {
+    for (const [carrier, total] of totalByItem.get(itemId) ?? []) {
+      let m = byCarrier.get(carrier);
+      if (!m) byCarrier.set(carrier, (m = new Map()));
+      const noted = [...m.values()].reduce((a, b) => a + b, 0);
+      if (noted < total) m.set("Sin variante", (m.get("Sin variante") ?? 0) + total - noted);
+    }
   }
 
   const lot = await getOrCreateOpenLot();
@@ -461,8 +473,10 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
           guides: { create: input.guides.map((g) => ({ guideNumber: g.number, carrier: g.carrier, codes: g.codes ?? [] })) },
           provisionalLines: { create: provisionalLines },
           variantNotes: {
-            create: [...notesByItem.entries()].flatMap(([catalogItemId, m]) =>
-              [...m.entries()].map(([label, quantity]) => ({ catalogItemId, label, quantity, createdById: userId }))
+            create: [...notesByItem.entries()].flatMap(([catalogItemId, byCarrier]) =>
+              [...byCarrier.entries()].flatMap(([carrier, m]) =>
+                [...m.entries()].map(([label, quantity]) => ({ catalogItemId, carrier: carrier === NO_CARRIER ? null : carrier, label, quantity, createdById: userId }))
+              )
             ),
           },
         },
@@ -490,7 +504,8 @@ export type LotLine = ItemView & {
   // 2026-09-25: de qué combos salen estas unidades, para que Yair vea si una
   // receta mal armada le está sumando de más.
   fromCombos: { code: string; quantity: number }[];
-  variants: { label: string; quantity: number }[];
+  // byCarrier: cuántas de esa variante van por cada transportadora.
+  variants: { label: string; quantity: number; byCarrier: Record<string, number> }[];
 };
 // Producto con ID provisional de ALF: no está en INVESTOCK (sin foto, sin QR).
 export type ProvisionalLotLine = { code: string; name: string; quantity: number; byCarrier: Record<string, number>; variants: string[] };
@@ -567,7 +582,7 @@ export async function getCompiledLot(lotId: string) {
         include: {
           requestedBy: { select: { name: true } },
           items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true, warehouseArea: true, bodega: true } } } },
-          variantNotes: { select: { catalogItemId: true, label: true, quantity: true } },
+          variantNotes: { select: { catalogItemId: true, carrier: true, label: true, quantity: true } },
           guides: { select: { guideNumber: true, carrier: true, codes: true } },
           provisionalLines: true,
         },
@@ -581,7 +596,7 @@ export async function getCompiledLot(lotId: string) {
   const people = await prisma.user.findMany({ where: { id: { in: [...new Set(personIds)] } }, select: { id: true, name: true } });
   const nameOf = (id: string | null) => (id ? people.find((p) => p.id === id)?.name ?? "—" : null);
 
-  const lines = new Map<string, LotLine & { variantMap: Map<string, number> }>();
+  const lines = new Map<string, LotLine & { variantMap: Map<string, { quantity: number; byCarrier: Record<string, number> }> }>();
   const warranty: LotWarrantyLine[] = [];
   const carriers = new Set<string>();
   for (const b of lot.batches) {
@@ -616,7 +631,19 @@ export async function getCompiledLot(lotId: string) {
     }
     for (const v of b.variantNotes) {
       const line = lines.get(v.catalogItemId);
-      if (line) line.variantMap.set(v.label, (line.variantMap.get(v.label) ?? 0) + v.quantity);
+      if (!line) continue;
+      // Notas guardadas antes del 2026-09-29 no traen transportadora: si en
+      // ese PDF el producto iba por una sola, es esa; si iba por varias, no
+      // se sabe (VARIANT_CARRIER_UNKNOWN).
+      let carrier = v.carrier;
+      if (!carrier) {
+        const cs = new Set(b.items.filter((i) => i.catalogItemId === v.catalogItemId && !i.warrantyGuide).map((i) => i.carrier ?? NO_CARRIER));
+        carrier = cs.size === 1 ? [...cs][0] : VARIANT_CARRIER_UNKNOWN;
+      }
+      let entry = line.variantMap.get(v.label);
+      if (!entry) line.variantMap.set(v.label, (entry = { quantity: 0, byCarrier: {} }));
+      entry.quantity += v.quantity;
+      entry.byCarrier[carrier] = (entry.byCarrier[carrier] ?? 0) + v.quantity;
     }
   }
 
@@ -676,7 +703,7 @@ export async function getCompiledLot(lotId: string) {
   }
 
   const lineList: LotLine[] = [...lines.values()].map(({ variantMap, ...l }) => {
-    const variants = [...variantMap.entries()].filter(([label]) => label !== "Sin variante" || variantMap.size > 1).map(([label, quantity]) => ({ label, quantity }));
+    const variants = [...variantMap.entries()].filter(([label]) => label !== "Sin variante" || variantMap.size > 1).map(([label, v]) => ({ label, ...v }));
     return { ...l, variants: variants.sort((a, b) => b.quantity - a.quantity) };
   });
 
@@ -1022,27 +1049,42 @@ export async function correctComboRecipeFromLot(params: {
     const affected = [...new Set([...before.components.map((c) => c.catalogItemId), ...ids])];
     for (const batchId of touchedBatches) {
       const notes = await tx.fulfillmentRequestVariantNote.findMany({ where: { batchId, label: { startsWith: prefix } } });
-      const perLabel = new Map<string, number>();
+      // Pedidos por variante Y transportadora (desde 2026-09-29 cada nota
+      // guarda la suya; las viejas quedan con null).
+      const perLabel = new Map<string, { label: string; carrier: string | null; orders: number }>();
       for (const n of notes) {
         const per = oldPerUnit.get(n.catalogItemId);
-        if (per && !perLabel.has(n.label)) perLabel.set(n.label, Math.round(n.quantity / per));
+        const key = `${n.label}\u0000${n.carrier ?? ""}`;
+        if (per && !perLabel.has(key)) perLabel.set(key, { label: n.label, carrier: n.carrier, orders: Math.round(n.quantity / per) });
       }
       await tx.fulfillmentRequestVariantNote.deleteMany({ where: { id: { in: notes.map((n) => n.id) } } });
       if (perLabel.size > 0) {
         await tx.fulfillmentRequestVariantNote.createMany({
-          data: params.components.flatMap((c) => [...perLabel.entries()].map(([label, orders]) => ({ batchId, catalogItemId: c.catalogItemId, label, quantity: orders * c.quantity }))),
+          data: params.components.flatMap((c) => [...perLabel.values()].map(({ label, carrier, orders }) => ({ batchId, catalogItemId: c.catalogItemId, carrier, label, quantity: orders * c.quantity }))),
         });
       }
       for (const catalogItemId of affected) {
-        const [total, allNotes] = await Promise.all([
-          tx.fulfillmentRequestItem.aggregate({ where: { batchId, catalogItemId, warrantyGuide: null }, _sum: { quantity: true } }),
+        const [items, allNotes] = await Promise.all([
+          tx.fulfillmentRequestItem.findMany({ where: { batchId, catalogItemId, warrantyGuide: null }, select: { carrier: true, quantity: true } }),
           tx.fulfillmentRequestVariantNote.findMany({ where: { batchId, catalogItemId } }),
         ]);
         const filler = allNotes.filter((n) => n.label === "Sin variante");
-        const noted = allNotes.filter((n) => n.label !== "Sin variante").reduce((a, n) => a + n.quantity, 0);
+        const real = allNotes.filter((n) => n.label !== "Sin variante");
         await tx.fulfillmentRequestVariantNote.deleteMany({ where: { id: { in: filler.map((f) => f.id) } } });
-        const gap = (total._sum.quantity ?? 0) - noted;
-        if (noted > 0 && gap > 0) await tx.fulfillmentRequestVariantNote.create({ data: { batchId, catalogItemId, label: "Sin variante", quantity: gap } });
+        if (real.length === 0) continue;
+        // Notas con transportadora: relleno por transportadora. Notas viejas
+        // (sin transportadora): un solo relleno como antes.
+        const withCarrier = real.some((n) => n.carrier);
+        const totals = new Map<string | null, number>();
+        for (const it of items) {
+          const k = withCarrier ? it.carrier : null;
+          totals.set(k, (totals.get(k) ?? 0) + it.quantity);
+        }
+        for (const [carrier, total] of totals) {
+          const noted = real.filter((n) => !withCarrier || n.carrier === carrier).reduce((a, n) => a + n.quantity, 0);
+          const gap = total - noted;
+          if (gap > 0) await tx.fulfillmentRequestVariantNote.create({ data: { batchId, catalogItemId, carrier, label: "Sin variante", quantity: gap } });
+        }
       }
     }
   });
