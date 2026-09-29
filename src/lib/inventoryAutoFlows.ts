@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { recordKardexEntry } from "@/lib/stockKardex";
-import { maybeMarkBatchClosed, notifyFinanceLeadWeeklyBatchReady } from "@/lib/merchandiseReentry";
+import { autoApproveReadyReentryItems, maybeMarkBatchClosed, notifyFinanceLeadWeeklyBatchReady } from "@/lib/merchandiseReentry";
 
 // Confirmado 2026-09-23, pedido explícito del usuario: "de ahora en adelante
 // ya solo trabajaremos con INVESTOCK" + "todo debe quedar automatizado, el
@@ -145,6 +145,7 @@ export async function autoWriteOffApprovedLateClaims(reportId?: string): Promise
 // haya disparado la entrada (ej. filas que ya estaban esperando antes de
 // este cambio).
 export async function runInventoryAutoFlows(): Promise<void> {
+  await autoApproveReadyReentryItems().catch((err) => console.error("[runInventoryAutoFlows] reingreso automático:", err));
   await autoRestockApprovedReentryItems().catch((err) => console.error("[runInventoryAutoFlows] reingreso:", err));
   await autoReingresoReadyCancelledGuides().catch((err) => console.error("[runInventoryAutoFlows] guías canceladas:", err));
   await autoCloseFinishedWeeklyWriteOffBatches().catch((err) => console.error("[runInventoryAutoFlows] dañados semanales:", err));

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canApproveMerchandiseReentry } from "@/lib/guards";
-import { itemNeedsReview } from "@/lib/merchandiseReentry";
+import { autoApproveReadyReentryItems, itemNeedsReview } from "@/lib/merchandiseReentry";
 
 const ITEM_INCLUDE = {
   catalogItem: { select: { id: true, name: true, photos: true, justCode: true, createdBy: { select: { department: { select: { code: true } } } } } },
@@ -50,6 +50,9 @@ function toItemDTO(item: RawItem) {
 export async function GET() {
   if (!(await canApproveMerchandiseReentry())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
+  // 2026-09-29: lo listo ya no espera a Daniel (autoApproveReadyReentryItems) —
+  // si quedó alguno de antes del cambio, se procesa al abrir la pantalla.
+  await autoApproveReadyReentryItems().catch((err) => console.error("[reentry review] aprobación automática:", err));
   const batches = await fetchBatches();
 
   const ready = batches.filter((b) => b.items.every((i) => !itemNeedsReview(i))).map((b) => ({ ...b, items: b.items.map(toItemDTO) }));

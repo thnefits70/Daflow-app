@@ -106,6 +106,29 @@ export async function maybeMarkBatchApproved(batchId: string) {
   await autoRestockApprovedReentryItems(batchId).catch((err) => console.error("[maybeMarkBatchApproved] No se pudo reingresar al inventario:", err));
 }
 
+// Confirmado 2026-09-29, pedido de Daniel + usuario: Joel selecciona el
+// producto, pone la cantidad y lo percha de inmediato — la aprobación de
+// Daniel solo atrasaba el stock (RM-0034 esperó 3 días con 115 productos ya
+// en percha). Apenas se envía el lote, todo lo identificado y sin daño se
+// aprueba solo (approvedById null = automático) y entra a INVESTOCK. Lo que
+// tenga algo dañado o sin identificar sigue esperando a Daniel. Se llama al
+// enviar (submit/route.ts) y en runInventoryAutoFlows para lotes que ya
+// estaban esperando.
+export async function autoApproveReadyReentryItems(batchId?: string): Promise<number> {
+  const items = await prisma.merchandiseReentryItem.findMany({
+    where: { approvedAt: null, batch: { submittedAt: { not: null }, danielApprovedAt: null, ...(batchId ? { id: batchId } : {}) } },
+    select: { id: true, batchId: true, aiRecognized: true, damagedQty: true, correctedName: true, damageConfirmed: true },
+  });
+  const ready = items.filter((i) => !itemNeedsReview(i));
+  if (ready.length === 0) return 0;
+  await prisma.merchandiseReentryItem.updateMany({
+    where: { id: { in: ready.map((i) => i.id) }, approvedAt: null },
+    data: { approvedAt: new Date(), approvedById: null },
+  });
+  for (const id of new Set(ready.map((i) => i.batchId))) await maybeMarkBatchApproved(id);
+  return ready.length;
+}
+
 export type MerchandiseReentryItemForGrouping = {
   id: string;
   batchId: string;

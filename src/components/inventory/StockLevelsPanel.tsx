@@ -82,6 +82,8 @@ type StockRow = {
   b2cPrice1Unit?: number;
   b2cPrice2to11?: number;
   pendingAdjustmentQuantity?: number | null;
+  notPurchasedYet?: boolean;
+  pendingDropiId?: string | null;
 };
 type SortKey = "name" | "balance" | "proveedor" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
 // Confirmado 2026-09-21, pedido explícito del usuario: además de ordenar
@@ -1089,9 +1091,27 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                 ) : (
                   <div className="w-8 h-8 rounded border border-dashed border-rule shrink-0" />
                 )}
-                <span className="text-[12.5px] flex items-center gap-1.5 min-w-0">
-                  <CatalogCode code={r.justCode} />
-                  <ExpandableName text={r.name} />
+                <span className="text-[12.5px] flex flex-col min-w-0">
+                  <span className="flex items-center gap-1.5 min-w-0">
+                    <CatalogCode code={r.justCode} />
+                    <ExpandableName text={r.name} />
+                  </span>
+                  {/* Confirmado 2026-09-29, pedido de Daniel + usuario (opción A):
+                      aprobado en Análisis de Mercado pero nunca comprado — no
+                      es un producto que "tuvimos y se acabó". */}
+                  {r.notPurchasedYet && (
+                    <span className="text-[10.5px] font-semibold text-gold mt-0.5">
+                      Aún no comprado{r.pendingDropiId ? ` · ID ${r.pendingDropiId} por liberar (Bryan)` : ""}
+                    </span>
+                  )}
+                  {!r.notPurchasedYet && r.pendingDropiId && (
+                    <span className="text-[10.5px] font-semibold text-gold mt-0.5">ID {r.pendingDropiId} por liberar (Bryan)</span>
+                  )}
+                  {/* Comprado sin ID (ej. Guante De Acero, de Compras antes de
+                      exigir el ID): lo pone Heidy en "Publicar en Dropi". */}
+                  {!r.notPurchasedYet && !r.justCode && !r.pendingDropiId && r.bodega !== "MKT_SUMINISTROS" && (
+                    <span className="text-[10.5px] font-semibold text-gold mt-0.5">Sin ID · lo pone Heidy</span>
+                  )}
                 </span>
                 {/* Desde 2026-09-28: la marca viene de Análisis de Mercado / Control de Compras; solo el admin corrige. */}
                 <MarcaSelect value={r.bodega} onChange={(v) => updateProductMarca(r.catalogItemId, v)} readOnly={!isAdmin} />

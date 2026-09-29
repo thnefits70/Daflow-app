@@ -345,6 +345,13 @@ export type CurrentStockRow = {
   // declareManualCost (admin lo escribió a mano, no de una compra real) —
   // para que Stock Actual lo marque distinto de un costo real de Kardex.
   costDeclaredManually: boolean;
+  // Confirmado 2026-09-29, pedido de Daniel + usuario (opción A): producto
+  // que existe en el catálogo (ej. aprobado en Análisis de Mercado) pero que
+  // todavía nunca se compró ni entró a bodega — Stock Actual lo rotula en vez
+  // de mostrarlo como un producto más en 0. pendingDropiId: el ID que Heidy ya
+  // confirmó y que Bryan todavía no libera (catálogo sin justCode).
+  notPurchasedYet: boolean;
+  pendingDropiId: string | null;
 };
 
 // Confirmado 2026-09-10 (pedido explícito del usuario): pantalla "Stock
@@ -394,7 +401,19 @@ export async function getInvestockValueByMonthEnd(periods: string[]): Promise<Ma
 
 export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
   const [items, latestPerItem] = await Promise.all([
-    prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, justCode: true, photos: true, bodega: true, warehouseArea: true }, orderBy: { name: "asc" } }),
+    prisma.purchaseCatalogItem.findMany({
+      select: {
+        id: true,
+        name: true,
+        justCode: true,
+        photos: true,
+        bodega: true,
+        warehouseArea: true,
+        _count: { select: { requests: { where: { status: { notIn: ["PENDING_APPROVAL", "REJECTED"] } } } } },
+        marketProductProposal: { select: { dropiProductId: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
     prisma.stockKardexEntry.findMany({
       distinct: ["catalogItemId"],
       orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
@@ -414,6 +433,8 @@ export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
       bodega: i.bodega,
       warehouseArea: i.warehouseArea,
       costDeclaredManually: latest?.type === "COST_DECLARATION",
+      notPurchasedYet: !latest && i._count.requests === 0,
+      pendingDropiId: i.justCode ? null : i.marketProductProposal?.dropiProductId ?? null,
     };
   });
 }
