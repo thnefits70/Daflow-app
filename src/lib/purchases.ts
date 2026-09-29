@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import type { PurchaseRequestStatus } from "@/generated/prisma/client";
+import type { Prisma, PurchaseRequestStatus } from "@/generated/prisma/client";
 import { getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 
 // Estados que cuentan como "compra real" para el historial de precio — no
@@ -29,12 +29,31 @@ export function formatPurchaseRequestCode(requestNumber: number): string {
 // Solicitud de compra todavía en camino (no rechazada, no ingresada al Kardex).
 export const OPEN_PURCHASE_STATUSES = ["PENDING_APPROVAL", "APPROVED", "PAID", "RECEIVED_PENDING_REVIEW"] as const;
 
-const OPEN_STATUS_TEXT: Record<(typeof OPEN_PURCHASE_STATUSES)[number], string> = {
+const OPEN_STATUS_TEXT: Record<string, string> = {
   PENDING_APPROVAL: "esperando aprobación",
   APPROVED: "aprobada",
   PAID: "pagada, en camino",
   RECEIVED_PENDING_REVIEW: "llegó, en revisión",
+  RECEIVED: "llegó, falta que entre al Kardex",
 };
+
+// Las compras recibidas antes de esto no tienen línea propia en el Kardex:
+// su stock entró con el saldo inicial de INVESTOCK (verificado 2026-09-29,
+// la primera compra en el Kardex es del 2026-09-09 a las 20:01 UTC).
+const KARDEX_PURCHASES_START = new Date("2026-09-09T20:00:00Z");
+
+// Confirmado 2026-09-29, pedido del usuario: una compra sigue "abierta"
+// hasta que su stock entra de verdad al Kardex — también si ya se recibió
+// pero todavía no entró (ej. producto nuevo esperando su ID de Dropi). Si no,
+// el producto parece sin stock y otra persona lo compraría otra vez.
+export function openPurchaseWhere(): Prisma.PurchaseRequestWhereInput {
+  return {
+    OR: [
+      { status: { in: [...OPEN_PURCHASE_STATUSES] } },
+      { status: "RECEIVED", receipt: { approvedAt: { gte: KARDEX_PURCHASES_START }, stockKardexEntry: null } },
+    ],
+  };
+}
 
 export type OtherOpenPurchase = { catalogItemId: string; itemName: string; code: string; quantity: number; requesterName: string; statusText: string; createdAt: string };
 
@@ -48,8 +67,7 @@ export async function findOpenPurchasesByOthers(catalogItemIds: string[], reques
   const rows = await prisma.purchaseRequest.findMany({
     where: {
       catalogItemId: { in: catalogItemIds },
-      status: { in: [...OPEN_PURCHASE_STATUSES] },
-      ...(requesterId ? { OR: [{ requestedById: null }, { requestedById: { not: requesterId } }] } : {}),
+      AND: [openPurchaseWhere(), ...(requesterId ? [{ OR: [{ requestedById: null }, { requestedById: { not: requesterId } }] }] : [])],
     },
     orderBy: { createdAt: "desc" },
     select: {
@@ -68,7 +86,7 @@ export async function findOpenPurchasesByOthers(catalogItemIds: string[], reques
     code: r.requestNumber ? formatPurchaseRequestCode(r.requestNumber) : "sin código",
     quantity: r.quantity,
     requesterName: r.requestedBy?.name ?? "el admin",
-    statusText: OPEN_STATUS_TEXT[r.status as (typeof OPEN_PURCHASE_STATUSES)[number]] ?? "abierta",
+    statusText: OPEN_STATUS_TEXT[r.status] ?? "abierta",
     createdAt: r.createdAt.toISOString(),
   }));
 }

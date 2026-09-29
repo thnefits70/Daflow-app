@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getFinanceLeadId, getInventoryLeadId } from "@/lib/guards";
-import { formatPurchaseRequestCode, OPEN_PURCHASE_STATUSES } from "@/lib/purchases";
+import { formatPurchaseRequestCode, OPEN_PURCHASE_STATUSES, openPurchaseWhere } from "@/lib/purchases";
 import { getReadyToBuyPendingProposalIds } from "@/lib/marketProduct";
 
 // Confirmado 2026-09-29, idea de Daniel aprobada por el usuario: "Qué
@@ -94,7 +94,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       _sum: { quantity: true },
     }),
     prisma.purchaseRequest.findMany({
-      where: { status: { in: [...OPEN_PURCHASE_STATUSES] } },
+      where: openPurchaseWhere(),
       select: { catalogItemId: true, requestNumber: true, quantity: true },
       orderBy: { createdAt: "desc" },
     }),

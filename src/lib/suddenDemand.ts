@@ -2,8 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { getFinanceLeadId, getFulfilmentLeadId, getInventoryLeadId, getSupplierStockoutResolverIds } from "@/lib/guards";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
 import { notifyOwner } from "@/lib/notifications";
-import { formatPurchaseRequestCode } from "@/lib/purchases";
-import { COLD_MAX, HOT_MAX, OPEN_PURCHASE_STATUSES, getHotBuyerIds } from "@/lib/purchaseSuggestions";
+import { formatPurchaseRequestCode, openPurchaseWhere } from "@/lib/purchases";
+import { COLD_MAX, HOT_MAX, getHotBuyerIds } from "@/lib/purchaseSuggestions";
 
 // "Producto que despierta" — pedido de Daniel, regla aprobada por él y por el
 // usuario 2026-09-29. Un producto que salió 10 o menos en los 30 días
@@ -209,7 +209,7 @@ export async function getSuddenDemandCards(opts: { historyDays?: number } = {}):
     salesByItemDay(oldestDay, ids),
     currentStock(ids),
     prisma.purchaseRequest.findMany({
-      where: { catalogItemId: { in: ids }, status: { in: [...OPEN_PURCHASE_STATUSES] } },
+      where: { catalogItemId: { in: ids }, ...openPurchaseWhere() },
       select: { catalogItemId: true, requestNumber: true, quantity: true },
       orderBy: { createdAt: "desc" },
     }),
