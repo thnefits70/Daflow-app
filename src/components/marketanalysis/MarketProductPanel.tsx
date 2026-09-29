@@ -730,6 +730,8 @@ type MissingIdItem = { id: string; name: string; photos: string[]; bodega: strin
 function CatalogMissingIdQueue() {
   const [rows, setRows] = useState<MissingIdItem[]>([]);
   const [dropiId, setDropiId] = useState<Record<string, string>>({});
+  const [dropiPrice, setDropiPrice] = useState<Record<string, string>>({});
+  const [errId, setErrId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
@@ -743,11 +745,11 @@ function CatalogMissingIdQueue() {
     setErr(""); setBusy(id);
     const res = await fetch("/api/market-products/catalog-missing-id", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ catalogItemId: id, dropiProductId: dropiId[id]?.trim() ?? "" }),
+      body: JSON.stringify({ catalogItemId: id, dropiProductId: dropiId[id]?.trim() ?? "", dropiPrice: Number(dropiPrice[id]) }),
     });
     setBusy(null);
     setConfirmingId(null);
-    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo guardar."); return; }
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo guardar."); setErrId(id); return; }
     load();
   }
 
@@ -757,7 +759,6 @@ function CatalogMissingIdQueue() {
     <div className="mb-6">
       <div className="text-[13.5px] font-bold mb-1">Productos de Compras sin ID de Dropi</div>
       <div className="text-[12px] text-steel mb-3">Se crearon en Compras antes de que se pidiera el ID. Escribe el ID que tiene en Dropi (si todavía no está publicado, publícalo primero).</div>
-      {err && <div className="text-red text-[12.5px] mb-2">{err}</div>}
       <div className="flex flex-col gap-3">
         {rows.map((p) => (
           <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
@@ -768,11 +769,12 @@ function CatalogMissingIdQueue() {
                 <div className="text-[12px] text-steel">Bodega: {BODEGA_LABELS[p.bodega ?? ""] ?? "—"} · Creado por {p.createdBy?.name ?? "—"}</div>
               </div>
             </div>
+            {err && errId === p.id && <div className="text-red text-[12.5px] mb-2">{err}</div>}
             {confirmingId === p.id ? (
               <div className="bg-inset rounded-md p-3">
                 <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
                 <div className="text-[12px] text-steel mb-2.5">
-                  Vas a guardar el ID <b className="text-ink">{dropiId[p.id]}</b> para <b className="text-ink">{p.name}</b> — verifica que sea esta foto.
+                  Vas a guardar el ID <b className="text-ink">{dropiId[p.id]}</b> con precio en Dropi <b className="text-ink">${Number(dropiPrice[p.id]).toFixed(2)}</b> para <b className="text-ink">{p.name}</b> — verifica que sea esta foto.
                 </div>
                 <div className="flex items-center gap-2">
                   <button type="button" disabled={busy === p.id} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => save(p.id)}>
@@ -785,12 +787,13 @@ function CatalogMissingIdQueue() {
               </div>
             ) : (
               <div className="flex gap-2">
-                <input className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="ID que tiene en Dropi" value={dropiId[p.id] ?? ""} onChange={(e) => setDropiId((s) => ({ ...s, [p.id]: e.target.value }))} />
+                <input className="flex-1 min-w-0 rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="ID que tiene en Dropi" value={dropiId[p.id] ?? ""} onChange={(e) => setDropiId((s) => ({ ...s, [p.id]: e.target.value }))} />
+                <input className="w-32 rounded border border-rule px-2.5 py-1.5 text-[13px]" type="number" inputMode="decimal" step="0.01" min="0" placeholder="Precio en Dropi $" value={dropiPrice[p.id] ?? ""} onChange={(e) => setDropiPrice((s) => ({ ...s, [p.id]: e.target.value }))} />
                 <button
                   type="button"
                   className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-                  disabled={!dropiId[p.id]?.trim()}
-                  onClick={() => { setErr(""); setConfirmingId(p.id); }}
+                  disabled={!dropiId[p.id]?.trim() || !(Number(dropiPrice[p.id]) > 0)}
+                  onClick={() => { setErr(""); setErrId(null); setConfirmingId(p.id); }}
                 >
                   Guardar ID
                 </button>
@@ -806,6 +809,8 @@ function CatalogMissingIdQueue() {
 function PublishQueue() {
   const [rows, setRows] = useState<Proposal[] | null>(null);
   const [dropiId, setDropiId] = useState<Record<string, string>>({});
+  const [dropiPrice, setDropiPrice] = useState<Record<string, string>>({});
+  const [errId, setErrId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
   // Confirmado 2026-09-18, pedido explícito del usuario: doble confirmación
@@ -825,11 +830,11 @@ function PublishQueue() {
     setErr(""); setBusy(id);
     const res = await fetch(`/api/market-products/${id}/publish`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dropiProductId: dropiId[id].trim(), quantity: 100 }),
+      body: JSON.stringify({ dropiProductId: dropiId[id].trim(), dropiPrice: Number(dropiPrice[id]), quantity: 100 }),
     });
     setBusy(null);
     setConfirmingId(null);
-    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo publicar."); return; }
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo publicar."); setErrId(id); return; }
     load();
   }
 
@@ -838,7 +843,7 @@ function PublishQueue() {
 
   return (
     <div className="flex flex-col gap-3">
-      {err && <div className="text-red text-[12.5px]">{err}</div>}
+      {err && !errId && <div className="text-red text-[12.5px]">{err}</div>}
       {rows.map((p) => (
         <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-start gap-3 mb-2">
@@ -850,13 +855,14 @@ function PublishQueue() {
             </div>
           </div>
           <PublishPriceGuide p={p} />
+          {err && errId === p.id && <div className="text-red text-[12.5px] mb-2">{err}</div>}
           {confirmingId === p.id ? (
             <div className="bg-inset rounded-md p-3">
               <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
               <div className="flex items-center gap-2.5 mb-2.5">
                 <img src={p.referenceImageUrl} alt="" className="w-12 h-12 rounded object-cover border border-rule shrink-0" />
                 <div className="text-[12px] text-steel">
-                  Vas a guardar el ID <b className="text-ink">{dropiId[p.id]}</b> para <b className="text-ink">{p.productName}</b> — verifica que sea esta foto y no la de otro producto que estés subiendo al mismo tiempo.
+                  Vas a guardar el ID <b className="text-ink">{dropiId[p.id]}</b> con precio en Dropi <b className="text-ink">${Number(dropiPrice[p.id]).toFixed(2)}</b> para <b className="text-ink">{p.productName}</b> — verifica que sea esta foto y no la de otro producto que estés subiendo al mismo tiempo.
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -870,12 +876,13 @@ function PublishQueue() {
             </div>
           ) : (
             <div className="flex gap-2">
-              <input className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="ID que te dio Dropi" value={dropiId[p.id] ?? ""} onChange={(e) => setDropiId((s) => ({ ...s, [p.id]: e.target.value }))} />
+              <input className="flex-1 min-w-0 rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="ID que te dio Dropi" value={dropiId[p.id] ?? ""} onChange={(e) => setDropiId((s) => ({ ...s, [p.id]: e.target.value }))} />
+              <input className="w-32 rounded border border-rule px-2.5 py-1.5 text-[13px]" type="number" inputMode="decimal" step="0.01" min="0" placeholder="Precio en Dropi $" value={dropiPrice[p.id] ?? ""} onChange={(e) => setDropiPrice((s) => ({ ...s, [p.id]: e.target.value }))} />
               <button
                 type="button"
                 className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-                disabled={!dropiId[p.id]?.trim()}
-                onClick={() => { setErr(""); setConfirmingId(p.id); }}
+                disabled={!dropiId[p.id]?.trim() || !(Number(dropiPrice[p.id]) > 0)}
+                onClick={() => { setErr(""); setErrId(null); setConfirmingId(p.id); }}
               >
                 Confirmar publicado
               </button>

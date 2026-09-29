@@ -5,10 +5,12 @@ import { auth } from "@/auth";
 import { canPublishMarketProduct } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { getNewIdBrandingActorIds } from "@/lib/newIdBranding";
+import { dropiPriceLossMessage, pickPrimarySupplierPrice } from "@/lib/marketProduct";
 
 const schema = z.object({
   quantity: z.number().int().positive().default(100),
   dropiProductId: z.string().trim().min(1, "Falta el ID de Dropi."),
+  dropiPrice: z.number({ error: "Falta el precio que pusiste en Dropi." }).positive("Falta el precio que pusiste en Dropi."),
 });
 
 // Confirmado 2026-09-09 (Fase 2, Análisis de Mercado): Heidy publica el
@@ -29,6 +31,24 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (existing.status !== "APPROVED") return NextResponse.json({ error: "Este producto todavía no está aprobado." }, { status: 409 });
   if (existing.publishedAt) return NextResponse.json({ error: "Ya está publicado." }, { status: 409 });
+
+  // Ver dropiPriceLossMessage — con el costo de la calculadora de Jariel.
+  const supplier = pickPrimarySupplierPrice(await prisma.marketProductSupplierPrice.findMany({ where: { proposalId: id } }));
+  if (supplier) {
+    const lossMsg = dropiPriceLossMessage(
+      {
+        batchCost: supplier.batchCost,
+        batchUnits: supplier.batchUnits,
+        freightCost: supplier.freightCost,
+        insuranceRatePercent: existing.insuranceRatePercent,
+        fulfillmentCost: existing.fulfillmentCost,
+        costSource: "proposal",
+      },
+      parsed.data.dropiPrice,
+      existing.calculatedSalePrice
+    );
+    if (lossMsg) return NextResponse.json({ error: lossMsg }, { status: 400 });
+  }
 
   const updated = await prisma.marketProductProposal.update({
     where: { id },

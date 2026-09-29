@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canPublishMarketProduct } from "@/lib/guards";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
 import { productIdUsedByCombo } from "@/lib/comboBrand";
+import { DROPI_MARGIN_DEFAULT, computeMarketProductSalePrice, dropiPriceLossMessage, resolveCostBasisForCatalogItems } from "@/lib/marketProduct";
 
 // Ver catalogMissingDropiId.ts — lista para Heidy de productos del catálogo
 // sin ID de Dropi que no vienen de una propuesta de Análisis de Mercado.
@@ -20,6 +21,7 @@ export async function GET() {
 const schema = z.object({
   catalogItemId: z.string().min(1),
   dropiProductId: z.string().trim().min(1, "Falta el ID de Dropi.").max(50),
+  dropiPrice: z.number({ error: "Falta el precio que tiene en Dropi." }).positive("Falta el precio que tiene en Dropi."),
 });
 
 // El stock de estos productos ya está en el Kardex (se compraron sin
@@ -38,6 +40,13 @@ export async function POST(req: NextRequest) {
   if (taken) return NextResponse.json({ error: `El ID ${dropiProductId} ya es de "${taken.name}".` }, { status: 409 });
   const comboClash = await productIdUsedByCombo(dropiProductId);
   if (comboClash) return NextResponse.json({ error: comboClash }, { status: 409 });
+
+  // Ver dropiPriceLossMessage — acá el costo sale del Kardex (se compraron por Compras).
+  const basis = (await resolveCostBasisForCatalogItems([catalogItemId])).get(catalogItemId);
+  if (basis) {
+    const lossMsg = dropiPriceLossMessage(basis, parsed.data.dropiPrice, computeMarketProductSalePrice({ ...basis, marginPercent: DROPI_MARGIN_DEFAULT }));
+    if (lossMsg) return NextResponse.json({ error: lossMsg }, { status: 400 });
+  }
 
   const updated = await prisma.purchaseCatalogItem.update({
     where: { id: catalogItemId },

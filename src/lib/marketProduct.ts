@@ -397,3 +397,18 @@ export async function linkReadyToBuyProposalsToGroup(groupId: string): Promise<v
     if (req) await prisma.purchaseRequest.update({ where: { id: req.id }, data: { marketProductProposalId: p.id } });
   }
 }
+
+// Confirmado 2026-09-29, pedido del usuario (caso Casco de Gateo, subido a
+// Dropi a $7 cuando costaba $8.45): al confirmar el ID de Dropi, Heidy
+// también escribe el precio que puso en Dropi. Si ese precio no cubre lo que
+// nos cuesta el producto (costo puesto en bodega + seguro + fulfillment, es
+// decir, el Precio Dropi con margen 0), no se deja confirmar — lo corrige
+// ella en Dropi en el momento, sin pasar por el dueño. Sin costo conocido
+// (producto sin propuesta ni Kardex) no se puede comparar y se deja pasar.
+export function dropiPriceLossMessage(basis: CostBasis, dropiPrice: number, recommendedPrice: number | null): string | null {
+  const breakEven = computeMarketProductSalePrice({ ...basis, marginPercent: 0 });
+  if (dropiPrice >= breakEven - 0.005) return null;
+  const loss = breakEven - dropiPrice;
+  const rec = recommendedPrice && recommendedPrice > breakEven ? ` (lo recomendado es $${recommendedPrice.toFixed(2)})` : "";
+  return `Con $${dropiPrice.toFixed(2)} perdemos $${loss.toFixed(2)} por unidad: nos cuesta $${breakEven.toFixed(2)}. Súbelo en Dropi a mínimo $${breakEven.toFixed(2)}${rec} y escribe el precio nuevo.`;
+}
