@@ -1191,6 +1191,25 @@ function MyProposalsView() {
                   )}
                 </div>
               )}
+              {/* Pedido de Jariel 2026-09-29: también el precio de Dropi y con
+                  qué ID de la competencia se comparó (si lo anotó). */}
+              {p.platform !== "ROCKET" && (
+                <div className="text-[12.5px] mb-2 flex flex-col gap-0.5 text-steel">
+                  <div>
+                    Precio de Dropi: <span className="text-ink font-bold">{money(p.calculatedSalePrice)}</span> <span className="text-[11px]">({p.marginPercent}%)</span>
+                    {p.dropiProductId && <> · ID de Dropi: <span className="text-ink font-semibold">{p.dropiProductId}</span></>}
+                  </div>
+                  {p.noCompetitorData ? (
+                    <div>Competencia: sin datos ({p.discoverySourceNote || "recomendado por proveedor"})</div>
+                  ) : p.competitorId || p.competitorPrice ? (
+                    <div>
+                      Comparado con ID competencia: <span className="text-ink font-semibold">{p.competitorId || "—"}</span>
+                      {p.competitorPrice ? <> · <span className="text-ink font-semibold">{money(p.competitorPrice)}</span></> : null}
+                      {p.competitorBodegaName ? <> ({p.competitorBodegaName})</> : null}
+                    </div>
+                  ) : null}
+                </div>
+              )}
               {p.status === "REJECTED" && p.rejectReason && (
                 <div className="text-[12px] text-red mb-2">Motivo: {p.rejectReason}</div>
               )}
