@@ -305,10 +305,18 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setLines((ls) => ls.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
   }
 
+  // Confirmado 2026-09-29, pedido del usuario: si otra persona ya está
+  // comprando este producto, se avisa apenas se elige (el servidor igual lo
+  // frena al enviar). No se guarda en el borrador.
+  const [blockedByLine, setBlockedByLine] = useState<Record<number, string | null>>({});
+
   function fetchLineStats(idx: number, catalogItemId: string) {
     fetch(`/api/purchase-catalog/${catalogItemId}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data) => updateLine(idx, { stats: data?.stats ?? null }))
+      .then((data) => {
+        updateLine(idx, { stats: data?.stats ?? null });
+        setBlockedByLine((m) => ({ ...m, [idx]: data?.blockedBy ?? null }));
+      })
       .catch(() => updateLine(idx, { stats: null }));
   }
 
@@ -322,6 +330,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   function setLineCatalogItem(idx: number, item: CatalogItemDTO | null) {
     updateLine(idx, { catalogItem: item, productQuery: "", createDraft: null, stats: null });
     setSupplierComparisons((m) => { const next = { ...m }; delete next[idx]; return next; });
+    setBlockedByLine((m) => ({ ...m, [idx]: null }));
     if (!item) return;
     fetchLineStats(idx, item.id);
     fetchSupplierComparison(idx, item.id);
@@ -953,6 +962,12 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
               )}
             </div>
 
+            {line.catalogItem && blockedByLine[idx] && (
+              <div className="bg-red/10 border border-red/35 rounded-md px-3 py-2 mb-2.5 text-[12.5px] text-red">
+                <AlertTriangle size={14} className="inline mr-1.5 -mt-0.5" />
+                {blockedByLine[idx]}
+              </div>
+            )}
             {line.stats && line.stats.count > 0 && (
               <div className="grid grid-cols-3 gap-2 mb-2.5">
                 <div className="bg-cloud border border-rule rounded p-2 text-center">

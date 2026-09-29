@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
-import { checkPurchaseSubmission, purchaseSubmissionSchema, purchaseRequestInclude } from "@/lib/purchases";
+import { checkPurchaseSubmission, purchaseSubmissionSchema, purchaseRequestInclude, findOpenPurchasesByOthers, otherOpenPurchaseMessage } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup } from "@/lib/supplierCredits";
 
@@ -40,6 +40,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   const isAdmin = session.user.role === "admin";
   const owns = isAdmin ? r0.requestedById === null : r0.requestedById === session.user.id;
   if (!owns) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+
+  // Mismo freno que al crear (2026-09-29): si mientras estaba rechazada otra
+  // persona empezó a comprar el producto, no se reenvía.
+  if (!isAdmin) {
+    const others = await findOpenPurchasesByOthers(d.items.map((it) => it.catalogItemId), session.user.id);
+    if (others.length > 0) return NextResponse.json({ error: otherOpenPurchaseMessage(others[0]) }, { status: 409 });
+  }
 
   const check = await checkPurchaseSubmission(d);
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });

@@ -26,6 +26,58 @@ export function formatPurchaseRequestCode(requestNumber: number): string {
   return `SC-${String(requestNumber).padStart(3, "0")}`;
 }
 
+// Solicitud de compra todavía en camino (no rechazada, no ingresada al Kardex).
+export const OPEN_PURCHASE_STATUSES = ["PENDING_APPROVAL", "APPROVED", "PAID", "RECEIVED_PENDING_REVIEW"] as const;
+
+const OPEN_STATUS_TEXT: Record<(typeof OPEN_PURCHASE_STATUSES)[number], string> = {
+  PENDING_APPROVAL: "esperando aprobación",
+  APPROVED: "aprobada",
+  PAID: "pagada, en camino",
+  RECEIVED_PENDING_REVIEW: "llegó, en revisión",
+};
+
+export type OtherOpenPurchase = { catalogItemId: string; itemName: string; code: string; quantity: number; requesterName: string; statusText: string; createdAt: string };
+
+// Confirmado 2026-09-29, pedido del usuario: evitar que Jariel y Nairoby
+// compren el mismo producto sin saber que el otro ya lo está comprando.
+// Mientras haya una compra abierta de un producto, solo quien la pidió puede
+// pedir más de ese producto; cualquier otra persona queda frenada y ve quién
+// lo está comprando. El admin no se frena.
+export async function findOpenPurchasesByOthers(catalogItemIds: string[], requesterId: string | null): Promise<OtherOpenPurchase[]> {
+  if (catalogItemIds.length === 0) return [];
+  const rows = await prisma.purchaseRequest.findMany({
+    where: {
+      catalogItemId: { in: catalogItemIds },
+      status: { in: [...OPEN_PURCHASE_STATUSES] },
+      ...(requesterId ? { OR: [{ requestedById: null }, { requestedById: { not: requesterId } }] } : {}),
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      catalogItemId: true,
+      requestNumber: true,
+      quantity: true,
+      status: true,
+      createdAt: true,
+      catalogItem: { select: { name: true } },
+      requestedBy: { select: { name: true } },
+    },
+  });
+  return rows.map((r) => ({
+    catalogItemId: r.catalogItemId,
+    itemName: r.catalogItem.name,
+    code: r.requestNumber ? formatPurchaseRequestCode(r.requestNumber) : "sin código",
+    quantity: r.quantity,
+    requesterName: r.requestedBy?.name ?? "el admin",
+    statusText: OPEN_STATUS_TEXT[r.status as (typeof OPEN_PURCHASE_STATUSES)[number]] ?? "abierta",
+    createdAt: r.createdAt.toISOString(),
+  }));
+}
+
+export function otherOpenPurchaseMessage(p: OtherOpenPurchase): string {
+  const day = new Date(p.createdAt).toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" });
+  return `${p.requesterName} ya está comprando "${p.itemName}": ${p.code}, ${p.quantity} u., pedida el ${day} (${p.statusText}). Solo ${p.requesterName} puede pedir más de este producto mientras esa compra siga abierta. Si hace falta más, habla con esa persona.`;
+}
+
 // Confirmado 2026-08-11: pedido explícito del usuario — cada comprobante de
 // pago (mercadería o flete) debe pertenecer a UNA sola solicitud. Antes de
 // dar por pagado, se busca si ese mismo N° de comprobante ya quedó guardado

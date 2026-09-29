@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
-import { getCatalogItemPriceStats } from "@/lib/purchases";
+import { findOpenPurchasesByOthers, getCatalogItemPriceStats, otherOpenPurchaseMessage } from "@/lib/purchases";
 
 const OWN_DELETE_WINDOW_MS = 2 * 60 * 60 * 1000;
 
@@ -55,8 +55,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const item = await prisma.purchaseCatalogItem.findUnique({ where: { id } });
   if (!item) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
 
-  const stats = await getCatalogItemPriceStats(id);
-  return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats });
+  const session = await auth();
+  const isAdmin = session?.user.role === "admin";
+  const [stats, others] = await Promise.all([
+    getCatalogItemPriceStats(id),
+    // Aviso apenas se elige el producto (2026-09-29): otra persona ya lo está comprando.
+    isAdmin || !session ? Promise.resolve([]) : findOpenPurchasesByOthers([id], session.user.id),
+  ]);
+  const blockedBy = others.length > 0 ? otherOpenPurchaseMessage(others[0]) : null;
+  return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats, blockedBy });
 }
 
 // Confirmado 2026-08-03/06: admin puede eliminar cualquier producto/

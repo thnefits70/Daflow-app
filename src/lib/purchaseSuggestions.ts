@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getFinanceLeadId, getInventoryLeadId } from "@/lib/guards";
-import { formatPurchaseRequestCode } from "@/lib/purchases";
+import { formatPurchaseRequestCode, OPEN_PURCHASE_STATUSES } from "@/lib/purchases";
 import { getReadyToBuyPendingProposalIds } from "@/lib/marketProduct";
 
 // Confirmado 2026-09-29, idea de Daniel aprobada por el usuario: "Qué
@@ -18,8 +18,8 @@ export const ESCALATE_DAYS = 3;
 const WINDOW_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-// Solicitud de compra todavía en camino (no rechazada, no ingresada al Kardex).
-export const OPEN_PURCHASE_STATUSES =["PENDING_APPROVAL", "APPROVED", "PAID", "RECEIVED_PENDING_REVIEW"] as const;
+// Solicitud de compra todavía en camino — definido en purchases.ts.
+export { OPEN_PURCHASE_STATUSES };
 
 export type SuggestionStatus = "urgente" | "pronto" | "no_sale" | "en_compra";
 

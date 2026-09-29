@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { linkReadyToBuyProposalsToGroup } from "@/lib/marketProduct";
 import { canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
-import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude } from "@/lib/purchases";
+import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, otherOpenPurchaseMessage } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
@@ -353,6 +353,14 @@ export async function POST(req: NextRequest) {
   const effectiveDeptId = session.user.deptId ?? (isAdmin ? d.deptId ?? null : null);
   if (!effectiveDeptId) {
     return NextResponse.json({ error: "No se pudo determinar el departamento de la solicitud — vuelve a intentarlo desde Control de Compras." }, { status: 400 });
+  }
+
+  // Confirmado 2026-09-29, pedido del usuario: nadie compra un producto que
+  // otra persona ya está comprando (ej. Jariel y Nairoby sin saberlo). Solo
+  // quien pidió la compra abierta puede pedir más; el admin no se frena.
+  if (!isAdmin) {
+    const others = await findOpenPurchasesByOthers(d.items.map((it) => it.catalogItemId), session.user.id);
+    if (others.length > 0) return NextResponse.json({ error: otherOpenPurchaseMessage(others[0]) }, { status: 409 });
   }
 
   const check = await checkPurchaseSubmission(d);
