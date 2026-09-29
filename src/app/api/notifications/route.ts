@@ -14,5 +14,15 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
     take: 30,
   });
-  return NextResponse.json(notifications);
+  // Pedido de Jariel 2026-09-29: los avisos viejos de "Stock insuficiente
+  // para despachar" se guardaron apuntando al corte de Fulfillment (que
+  // Compras no ve). Se corrigen al mostrarlos, sin tocar la base; los nuevos
+  // ya se crean con Qué comprar (ver sendLotToInventory).
+  return NextResponse.json(
+    notifications.map((n) =>
+      n.title === "Stock insuficiente para despachar" && n.url?.includes("tab=egresos")
+        ? { ...n, url: "/area/workspace?tab=compras&ptab=que-comprar" }
+        : n
+    )
+  );
 }
