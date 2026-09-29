@@ -7,6 +7,9 @@ import { canActOnPurchaseReceiving } from "@/lib/guards";
 const schema = z.object({
   missingQty: z.number().int().nonnegative(),
   note: z.string().trim().min(1, "Explica cómo se resolvió internamente."),
+  // Confirmado 2026-09-29: pedido de Daniel — foto opcional de lo que llegó
+  // después (ej. primero 60, luego las 240 restantes); se suma a mediaUrls.
+  photoUrls: z.array(z.string().url()).max(20).optional(),
 });
 
 // Confirmado 2026-09-08: pedido explícito de Daniel — cuando lo faltante de
@@ -57,6 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         resolvedInternallyById: isAdmin ? null : session.user.id,
         resolvedInternallyAt: now,
         resolvedInternallyNote: parsed.data.note,
+        ...(parsed.data.photoUrls?.length ? { mediaUrls: { push: parsed.data.photoUrls } } : {}),
       },
     }),
     ...(existing.request.receipt

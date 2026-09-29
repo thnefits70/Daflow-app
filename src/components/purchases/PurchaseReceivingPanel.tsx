@@ -308,6 +308,11 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // mismo patrón de doble confirmación que el envío a Compras.
   const [internalNoteEdits, setInternalNoteEdits] = useState<Record<string, string>>({});
   const [confirmingInternalId, setConfirmingInternalId] = useState<string | null>(null);
+  // Confirmado 2026-09-29: pedido de Daniel (caso 172035: llegaron 60, luego
+  // las 240 restantes, y solo constaba la foto de las 60) — foto opcional de
+  // lo que llegó después; se suma a las evidencias del reporte (mediaUrls).
+  const [internalPhotoUrls, setInternalPhotoUrls] = useState<Record<string, string[]>>({});
+  const [takingInternalPhotoId, setTakingInternalPhotoId] = useState<string | null>(null);
 
   // Confirmado 2026-09-08: pedido explícito de Daniel (caso real: resolvió
   // un "Informar urgente" pero la cantidad declarada del recibo se quedó
@@ -791,7 +796,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     const res = await fetch(`/api/purchase-requests/urgent-reports/${id}/resolve-internal`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ missingQty, note }),
+      body: JSON.stringify({ missingQty, note, photoUrls: internalPhotoUrls[id] ?? [] }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
@@ -806,6 +811,11 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       return next;
     });
     setInternalNoteEdits((m) => {
+      const next = { ...m };
+      delete next[id];
+      return next;
+    });
+    setInternalPhotoUrls((m) => {
       const next = { ...m };
       delete next[id];
       return next;
@@ -1116,6 +1126,44 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         value={internalNoteEdits[pr.id] ?? ""}
                         onChange={(e) => setInternalNoteEdits((m) => ({ ...m, [pr.id]: e.target.value }))}
                       />
+                      {(internalPhotoUrls[pr.id] ?? []).length > 0 && (
+                        <div className="grid grid-cols-4 gap-2 mt-2">
+                          {(internalPhotoUrls[pr.id] ?? []).map((url, i) => (
+                            <div key={i} className="relative bg-navy rounded border border-rule flex items-center justify-center h-24">
+                              <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                              <button
+                                type="button"
+                                className="absolute top-1 right-1 bg-navy/80 rounded-full p-0.5 cursor-pointer"
+                                onClick={() => setInternalPhotoUrls((m) => ({ ...m, [pr.id]: (m[pr.id] ?? []).filter((_, j) => j !== i) }))}
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {takingInternalPhotoId === pr.id ? (
+                        <div className="mt-2">
+                          <LiveCameraCapture
+                            folder="purchase-request-receipts"
+                            onCaptured={(url) => {
+                              setInternalPhotoUrls((m) => ({ ...m, [pr.id]: [...(m[pr.id] ?? []), url] }));
+                              setTakingInternalPhotoId(null);
+                            }}
+                            onCancel={() => setTakingInternalPhotoId(null)}
+                          />
+                        </div>
+                      ) : (
+                        canApprove && (
+                          <button
+                            type="button"
+                            className="flex items-center gap-1.5 text-[12px] font-semibold border-[1.5px] border-dashed border-rule rounded-md px-3 py-2 cursor-pointer hover:border-teal mt-2"
+                            onClick={() => setTakingInternalPhotoId(pr.id)}
+                          >
+                            <Camera size={14} /> Tomar foto (opcional) — ej. de lo que llegó después
+                          </button>
+                        )
+                      )}
                     </div>
                   )}
                   {err && <div className="text-red text-[12px] mb-2">{err}</div>}
