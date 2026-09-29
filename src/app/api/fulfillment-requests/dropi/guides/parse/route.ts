@@ -6,10 +6,11 @@ import { learnBrandsFromManifest } from "@/lib/manifestBrand";
 import { findAlreadyUploadedGuides, resolveGuideLines } from "@/lib/fulfillmentGuides";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 
-// Un PDF de ~280 páginas tarda ~2-3 s en leerse; margen de sobra.
-export const maxDuration = 60;
+// Un PDF de ~280 páginas tarda ~2-3 s en leerse; con 40 PDF hace falta más
+// de un minuto (pedido de Yair 2026-09-29: subir más de 20 de una vez).
+export const maxDuration = 300;
 
-const MAX_FILES = 10;
+const MAX_FILES = 40;
 // warrantyFileUrls: los PDFs que Yair marcó como "Garantías" (Dropi los
 // descarga en su propia sección, mismo formato — confirmado 2026-09-25).
 const schema = z.object({ fileUrls: z.array(z.string().url()).min(1).max(MAX_FILES), warrantyFileUrls: z.array(z.string().url()).max(MAX_FILES).optional() });
@@ -40,14 +41,23 @@ export async function POST(req: NextRequest) {
   let manifestDate: string | null = null;
   const emptyFiles: number[] = [];
 
+  // Se descargan todos a la vez (con muchos PDF, uno por uno tardaba demasiado);
+  // la lectura sigue en orden para que los avisos digan "PDF #n" correcto.
+  const downloads = await Promise.all(
+    parsed.data.fileUrls.map(async (url) => {
+      const res = await fetch(url).catch(() => null);
+      return res?.ok ? new Uint8Array(await res.arrayBuffer()) : null;
+    })
+  );
+
   for (const [idx, url] of parsed.data.fileUrls.entries()) {
-    const res = await fetch(url);
-    if (!res.ok) return NextResponse.json({ error: `No se pudo abrir el PDF #${idx + 1}.` }, { status: 400 });
+    const bytes = downloads[idx];
+    if (!bytes) return NextResponse.json({ error: `No se pudo abrir el PDF #${idx + 1}.` }, { status: 400 });
     let result;
     try {
       // Dropi o Rocket — se reconoce solo (confirmado 2026-09-25: Yair sube
       // solo PDFs, también las etiquetas de Rocket en vez del Excel).
-      result = await parseGuidesPdf(new Uint8Array(await res.arrayBuffer()), { warrantyFile: parsed.data.warrantyFileUrls?.includes(url) ?? false });
+      result = await parseGuidesPdf(bytes,{ warrantyFile: parsed.data.warrantyFileUrls?.includes(url) ?? false });
     } catch {
       return NextResponse.json({ error: `El archivo #${idx + 1} no parece un PDF válido.` }, { status: 400 });
     }

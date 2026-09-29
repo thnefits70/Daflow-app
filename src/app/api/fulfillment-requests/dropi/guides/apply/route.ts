@@ -8,12 +8,12 @@ import { detectSuddenDemand } from "@/lib/suddenDemand";
 
 const variantSchema = z.object({ label: z.string().trim().min(1).max(120), quantity: z.number().int().positive() });
 const schema = z.object({
-  fileUrls: z.array(z.string().url()).min(1).max(10),
+  fileUrls: z.array(z.string().url()).min(1).max(40),
   manifestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
   // Manifiesto atrasado: va al corte del día que dice el PDF (manifestDate).
   backfill: z.boolean().optional(),
-  parseWarnings: z.array(z.string().max(1000)).max(100).optional(),
-  guides: z.array(z.object({ number: z.string().trim().min(1).max(40), carrier: z.string().max(40), codes: z.array(z.string().max(120)).max(50).optional() })).max(3000),
+  parseWarnings: z.array(z.string().max(1000)).max(400).optional(),
+  guides: z.array(z.object({ number: z.string().trim().min(1).max(40), carrier: z.string().max(40), codes: z.array(z.string().max(120)).max(50).optional() })).max(12000),
   rows: z
     .array(
       z.object({
@@ -47,7 +47,7 @@ const schema = z.object({
         ]),
       })
     )
-    .max(500),
+    .max(2000),
 });
 
 // Guarda la lectura del PDF de guías ya revisada por Yair en el corte
