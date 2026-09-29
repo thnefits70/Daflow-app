@@ -287,8 +287,8 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     return true;
   }
   const pendingWarranty = warranty.filter((w, i) => !warrantyReady(i, w)).length;
-  // Solo se ofrece si el PDF es de un día anterior (el servidor revisa el límite de días).
-  const canBackfill = !!data?.manifestDate && data.manifestDate < today;
+  // Solo por esta vez (pedido del usuario): solo aparece para manifiestos del 21 al 25/09.
+  const canBackfill = !!data?.manifestDate && data.manifestDate >= "2026-09-21" && data.manifestDate <= "2026-09-25";
   const backfillDayLabel = data?.manifestDate ? data.manifestDate.split("-").reverse().join("/") : "";
 
   async function apply() {

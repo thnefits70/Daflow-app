@@ -167,18 +167,22 @@ export async function getOrCreateOpenLot(): Promise<{ id: string; corte: number 
 // confirma de un clic ("ya salió todo") — sin escanear, porque la
 // mercadería ya no está en bodega. Se reconoce sin columna nueva: un corte
 // atrasado es uno creado después de su día.
-export const BACKFILL_MAX_DAYS = 30;
+// El usuario pidió que sea SOLO por esta vez: la opción existe únicamente
+// para los manifiestos del 21 al 25/09. Cualquier otro día no la ve.
+export const BACKFILL_FROM_DAY = "2026-09-21";
+export const BACKFILL_TO_DAY = "2026-09-25";
+
+export function isBackfillDay(day: string): boolean {
+  return day >= BACKFILL_FROM_DAY && day <= BACKFILL_TO_DAY;
+}
 
 export function isBackfillLot(lot: { day: string; createdAt: Date }): boolean {
   return ecuadorDay(lot.createdAt) > lot.day;
 }
 
 export function backfillDayError(day: string): string | null {
-  const today = ecuadorDay(new Date());
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return "No se pudo leer la fecha del manifiesto.";
-  if (day >= today) return "Un manifiesto atrasado tiene que ser de un día anterior a hoy.";
-  const oldest = ecuadorDay(new Date(Date.now() - BACKFILL_MAX_DAYS * 86400000));
-  if (day < oldest) return `Solo se pueden cargar manifiestos atrasados de los últimos ${BACKFILL_MAX_DAYS} días.`;
+  if (!isBackfillDay(day)) return "Solo los manifiestos del 21 al 25 de septiembre se pueden cargar como atrasados.";
   return null;
 }
 
