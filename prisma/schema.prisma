@@ -1944,6 +1944,39 @@ model PurchaseCatalogItem {
   supplierStockoutReports        SupplierStockoutReport[]
   // Confirmado 2026-09-23: brandeo del ID (ver NewIdBranding).
   newIdBranding                  NewIdBranding?
+  // Confirmado 2026-09-29: avisos de "Producto que despierta" (ver SuddenDemandAlert).
+  suddenDemandAlerts             SuddenDemandAlert[]
+}
+
+// Confirmado 2026-09-29 (pedido de Daniel, sí del usuario): un producto que
+// casi no salía (10 o menos en los 30 días anteriores) y de pronto sale 4 o
+// más en un día, según los manifiestos que sube Yair. Una fila por salto —
+// mientras está activa (7 días) no se vuelve a avisar del mismo producto;
+// la tarjeta muestra lo que va saliendo. Jariel deja una nota libre ("ya
+// pedí 50", "lo tengo en cuenta") que ven los demás, incluido Daniel en
+// Base de datos de productos.
+model SuddenDemandAlert {
+  id            String              @id @default(cuid())
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  // Día del salto en Ecuador (YYYY-MM-DD), el día en que Yair subió el manifiesto.
+  day           String
+  // Lo que salió en los 30 días anteriores y lo que salió ese día.
+  baselineUnits Int
+  dayUnits      Int
+  // Stock en INVESTOCK cuando se detectó.
+  stockAtAlert  Int
+
+  note       String?
+  noteById   String?
+  noteByName String?
+  noteAt     DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([catalogItemId, day])
+  @@index([day])
 }
 
 enum AtomRentabilityStatus {
@@ -3181,11 +3214,11 @@ model PurchasePriceCorrection {
 
   // Precio por unidad de la solicitud al pedir la corrección (se vuelve a
   // tomar el vigente al aprobar, por si cambió mientras esperaba).
-  oldUnitCost Float
-  newUnitCost Float
-  reason      String
-  proofUrl    String
-  proofName   String?
+  oldUnitCost       Float
+  newUnitCost       Float
+  reason            String
+  proofUrl          String
+  proofName         String?
   // Confirmado 2026-09-29, pedido del usuario: la IA lee la captura una vez
   // (¿es del proveedor? ¿dice el precio nuevo y el producto?) y se compara
   // la huella de la imagen contra capturas ya usadas. Si algo no cuadra, no

@@ -19,7 +19,7 @@ const WINDOW_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Solicitud de compra todavía en camino (no rechazada, no ingresada al Kardex).
-const OPEN_PURCHASE_STATUSES = ["PENDING_APPROVAL", "APPROVED", "PAID", "RECEIVED_PENDING_REVIEW"] as const;
+export const OPEN_PURCHASE_STATUSES =["PENDING_APPROVAL", "APPROVED", "PAID", "RECEIVED_PENDING_REVIEW"] as const;
 
 export type SuggestionStatus = "urgente" | "pronto" | "no_sale" | "en_compra";
 

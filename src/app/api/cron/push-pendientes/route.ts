@@ -15,8 +15,11 @@ import { sendSupplierShippingDailyReminders } from "@/lib/supplierShippingPush";
 import { runNichoAutoBackfill } from "@/lib/nichoAi";
 import { runInventoryAutoFlows } from "@/lib/inventoryAutoFlows";
 import { getPurchaseSuggestionPushes } from "@/lib/purchaseSuggestions";
+import { detectSuddenDemand, SUDDEN_DEMAND_PENDING_TYPE } from "@/lib/suddenDemand";
 
-const PURCHASE_SUGGESTION_TYPES = new Set(["compras_calientes", "compras_frias", "compras_urgentes_sin_atender"]);
+// Estos tienen su propio aviso (Qué comprar a las 8:00; Producto que despierta
+// en el momento en que se detecta), no se repiten en el resumen diario.
+const PURCHASE_SUGGESTION_TYPES = new Set(["compras_calientes", "compras_frias", "compras_urgentes_sin_atender", SUDDEN_DEMAND_PENDING_TYPE]);
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
 // CRON_SECRET para que nadie más pueda llamarlo desde afuera y disparar
@@ -40,6 +43,9 @@ export async function GET(req: NextRequest) {
   // semanas de dañados terminadas, reclamos aprobados) — ver
   // inventoryAutoFlows.ts.
   await runInventoryAutoFlows();
+  // Producto que despierta: normalmente se detecta al subir el manifiesto;
+  // esto es el respaldo por si esa revisión falló.
+  await detectSuddenDemand().catch(() => null);
 
   const actors = await getAllPendingTasksActors();
   let notified = 0;

@@ -10,6 +10,7 @@ import { useFormDraft } from "@/lib/useFormDraft";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 import { SupplierStockoutPanel } from "@/components/marketanalysis/SupplierStockoutPanel";
+import { SuddenDemandPanel } from "@/components/marketanalysis/SuddenDemandPanel";
 import { MaxPurchasePrice } from "@/components/marketanalysis/MaxPurchasePrice";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
@@ -98,7 +99,7 @@ function computeCompetitorComparison(batchCost: number, batchUnits: number, frei
   };
 }
 
-type Tab = "proponer" | "ganadores" | "sinstock" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "trazabilidad";
+type Tab = "proponer" | "ganadores" | "sinstock" | "despiertan" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "trazabilidad";
 
 export function MarketProductPanel({
   canPropose,
@@ -134,6 +135,9 @@ export function MarketProductPanel({
     // cualquier proveedor. Visible para todo el equipo (mismo criterio que
     // Ganadores); reportar/resolver quedan gateados aparte, dentro del panel.
     ...(canPropose || canResolveStockout ? [{ key: "sinstock" as Tab, label: "Sin stock de proveedor" }] : []),
+    // Confirmado 2026-09-29, pedido de Daniel: productos que casi no salían y
+    // de pronto salen 4 o más en un día (Jariel deja su nota ahí).
+    ...(canPropose || canResolveStockout || canReview ? [{ key: "despiertan" as Tab, label: "Productos que despiertan" }] : []),
     // Confirmado 2026-09-10, pedido de Jariel: seguimiento de sus propios
     // productos propuestos (en qué van, quién los aprobó/rechazó, etc.) —
     // antes GET ?view=mine existía en la API pero ninguna pantalla lo
@@ -197,6 +201,7 @@ export function MarketProductPanel({
         />
       )}
       {tab === "sinstock" && <SupplierStockoutPanel canReport={canReportStockout} canResolve={canResolveStockout} />}
+      {tab === "despiertan" && <SuddenDemandPanel />}
       {tab === "mispropuestas" && <MyProposalsView />}
       {tab === "listoparacomprar" && <ReadyToBuyQueue />}
       {tab === "consulta" && <PricingConsultaTable />}

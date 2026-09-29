@@ -227,6 +227,9 @@ export async function mergeCatalogItems(params: {
       await tx.rocketCodeMapping.updateMany({ where: { catalogItemId: R }, data: { catalogItemId: O } });
       await tx.atomProductStatus.updateMany({ where: { matchedCatalogItemId: R }, data: { matchedCatalogItemId: O } });
       await tx.supplierStockoutReport.updateMany({ where: { catalogItemId: R }, data: { catalogItemId: O } });
+      // Producto que despierta: pasan con su nota, salvo el mismo día (único por producto y día).
+      const officialAlertDays = (await tx.suddenDemandAlert.findMany({ where: { catalogItemId: O }, select: { day: true } })).map((a) => a.day);
+      await tx.suddenDemandAlert.updateMany({ where: { catalogItemId: R, day: { notIn: officialAlertDays } }, data: { catalogItemId: O } });
 
       // Combos: si un mismo combo ya traía los dos productos, se suman las
       // unidades en una sola línea en vez de dejar dos líneas del mismo producto.

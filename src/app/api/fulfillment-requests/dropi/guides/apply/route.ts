@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { canSubmitFulfillmentRequest, dbUserId } from "@/lib/guards";
 import { applyGuidesImport } from "@/lib/fulfillmentGuides";
+import { detectSuddenDemand } from "@/lib/suddenDemand";
 
 const variantSchema = z.object({ label: z.string().trim().min(1).max(120), quantity: z.number().int().positive() });
 const schema = z.object({
@@ -60,5 +61,9 @@ export async function POST(req: NextRequest) {
 
   const result = await applyGuidesImport(parsed.data, dbUserId(session.user.id));
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  // Producto que despierta (pedido de Daniel 2026-09-29): se avisa el mismo
+  // día en que sube el manifiesto. Si falla, la subida igual queda hecha y el
+  // cron diario lo vuelve a revisar.
+  await detectSuddenDemand().catch(() => null);
   return NextResponse.json({ ok: true, batchId: result.batchId, lotId: result.lotId });
 }
