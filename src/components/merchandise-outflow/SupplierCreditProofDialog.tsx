@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X, Sparkles, AlertTriangle, CheckCircle2, Brain } from "lucide-react";
 import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
+import { usePasteFile } from "@/lib/usePasteFile";
 import { computeCreditProofWarnings, type CreditDuplicateWarning, type CreditProofClaim, type CreditProofRead } from "@/lib/supplierCreditProofShared";
 
 function money(n: number) {
@@ -47,6 +48,10 @@ export function SupplierCreditProofDialog({
 
   async function onFile(file: File) {
     setError("");
+    if (file.type !== "application/pdf" && !file.type.startsWith("image/")) {
+      setError("Solo se aceptan imágenes o PDF.");
+      return;
+    }
     setUploading(true);
     const compressed = file.type === "application/pdf" ? file : await compressImage(file);
     const up = await uploadFile(compressed, "merchandise-outflow-photos");
@@ -81,6 +86,32 @@ export function SupplierCreditProofDialog({
       setReading(false);
     }
   }
+
+  // Pedido de Jariel 2026-09-29: arrastrar la captura a la caja o pegarla
+  // con Ctrl+V, sin tener que buscar el archivo. Mientras no haya comprobante,
+  // Ctrl+V en cualquier parte de la ventana lo toma (salvo que esté
+  // escribiendo en un campo).
+  const { onDragOver, onDragLeave, onDrop, onTapPaste, tapHint, isDragOver } = usePasteFile(onFile);
+  const waitingProof = !proofUrl && !uploading;
+  useEffect(() => {
+    if (!waitingProof) return;
+    function handlePaste(e: ClipboardEvent) {
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) return;
+      for (const item of e.clipboardData?.items ?? []) {
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            onFile(file);
+            return;
+          }
+        }
+      }
+    }
+    document.addEventListener("paste", handlePaste);
+    return () => document.removeEventListener("paste", handlePaste);
+  });
 
   // Lectura con las correcciones de Jariel aplicadas (mismo cálculo que hace el servidor).
   const effectiveRead = useMemo<CreditProofRead | null>(() => {
@@ -143,11 +174,25 @@ export function SupplierCreditProofDialog({
         </div>
 
         {!proofUrl ? (
-          <label className="block rounded-md border border-dashed border-rule p-4 text-center cursor-pointer hover:bg-cloud">
-            <div className="text-[12.5px] font-semibold text-blue">{uploading ? "Subiendo…" : "Subir comprobante del proveedor"}</div>
-            <div className="text-[11px] text-steel mt-0.5">Captura del chat o documento donde acepta el crédito. La IA lo lee y marca sola los productos.</div>
-            <input type="file" accept="image/*,application/pdf" className="hidden" disabled={uploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
-          </label>
+          <>
+            <label
+              className={`block rounded-md border border-dashed p-4 text-center cursor-pointer hover:bg-cloud transition-colors ${isDragOver ? "border-teal bg-teal/5" : "border-rule"}`}
+              onDragOver={onDragOver}
+              onDragLeave={onDragLeave}
+              onDrop={(e) => { if (uploading) e.preventDefault(); else onDrop(e); }}
+            >
+              <div className="text-[12.5px] font-semibold text-blue">{uploading ? "Subiendo…" : isDragOver ? "Suelta la imagen aquí" : "Subir comprobante del proveedor"}</div>
+              <div className="text-[11px] text-steel mt-0.5">Arrastra la captura aquí, pégala con Ctrl+V o haz clic para elegirla.</div>
+              <div className="text-[11px] text-steel mt-0.5">Captura del chat o documento donde acepta el crédito. La IA lo lee y marca sola los productos.</div>
+              <input type="file" accept="image/*,application/pdf" className="hidden" disabled={uploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ""; }} />
+            </label>
+            {!uploading && (
+              <button type="button" className="mt-1.5 text-[11px] text-steel underline cursor-pointer [@media(hover:hover)]:hidden" onClick={onTapPaste}>
+                Pegar imagen copiada
+              </button>
+            )}
+            {tapHint && <div className="text-[11px] text-steel mt-1">{tapHint}</div>}
+          </>
         ) : reading ? (
           <div className="flex items-center gap-2 text-[12.5px] text-steel p-3"><Sparkles size={14} className="text-blue animate-pulse" /> Leyendo el comprobante…</div>
         ) : (
