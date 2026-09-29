@@ -3181,6 +3181,13 @@ model PurchasePriceCorrection {
   reason      String
   proofUrl    String
   proofName   String?
+  // Confirmado 2026-09-29, pedido del usuario: la IA lee la captura una vez
+  // (¿es del proveedor? ¿dice el precio nuevo y el producto?) y se compara
+  // la huella de la imagen contra capturas ya usadas. Si algo no cuadra, no
+  // bloquea: quien pide escribe la explicación y el admin la ve en rojo.
+  proofHash         String?
+  proofAiCheck      Json?
+  proofMismatchNote String?
 
   status       PurchasePriceCorrectionStatus @default(PENDING)
   rejectReason String?
@@ -3199,6 +3206,7 @@ model PurchasePriceCorrection {
 
   @@index([requestId])
   @@index([status])
+  @@index([proofHash])
 }
 
 // Inventario confirma que de verdad llegó — sin esto el ciclo no se cierra.

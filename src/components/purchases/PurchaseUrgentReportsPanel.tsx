@@ -72,7 +72,7 @@ type Resolution = {
   refundAiMatch: boolean | null;
   refundAiNote: string | null;
   bankConfirmedAt: string | null;
-  credit: { id: string; amount: number; status: "AVAILABLE" | "APPLIED" | "REFUNDED" | "CANCELLED"; proofUrl: string | null; proofName: string | null } | null;
+  credit: { id: string; amount: number; status: "AVAILABLE" | "APPLIED" | "REFUNDED" | "CANCELLED"; proofUrl: string | null; proofName: string | null; proofMismatchNote?: string | null } | null;
   createdBy: { name: string } | null;
   createdAt: string;
   cancelledAt: string | null;
@@ -241,6 +241,12 @@ export function PurchaseUrgentReportsPanel({
   const [resProofUrl, setResProofUrl] = useState("");
   const [resProofName, setResProofName] = useState("");
   const [resProofUploading, setResProofUploading] = useState(false);
+  // Confirmado 2026-09-29, pedido del usuario: la IA revisa la captura
+  // (¿es del proveedor, del producto, dice que no lo manda / no lo cobra?)
+  // para la cantidad escrita. Si no cuadra, hay que explicar — no bloquea.
+  const [proofCheck, setProofCheck] = useState<{ read: unknown; signature: string; warnings: string[]; qty: number; url: string } | null>(null);
+  const [proofChecking, setProofChecking] = useState(false);
+  const [proofNote, setProofNote] = useState("");
 
   const [refundUploadingFor, setRefundUploadingFor] = useState<string | null>(null);
   const [confirmBankId, setConfirmBankId] = useState<string | null>(null);
@@ -317,7 +323,24 @@ export function PurchaseUrgentReportsPanel({
     setResNote("");
     setResProofUrl("");
     setResProofName("");
+    setProofCheck(null);
+    setProofNote("");
     setErr("");
+  }
+
+  async function checkCreditProof(reportId: string, url: string, qty: number) {
+    if (!url || !qty || qty <= 0) return;
+    setProofChecking(true);
+    setErr("");
+    const res = await fetch("/api/claim-proof/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "no_envio", proofUrl: url, reportId, quantity: qty }),
+    });
+    setProofChecking(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo revisar la captura."); return; }
+    setProofCheck({ read: data.read, signature: data.signature, warnings: data.warnings ?? [], qty, url });
   }
 
   async function uploadCreditProof(file: File) {
@@ -329,6 +352,9 @@ export function PurchaseUrgentReportsPanel({
     if (!uploaded.ok) { setErr(uploaded.error); return; }
     setResProofUrl(uploaded.url);
     setResProofName(file.name);
+    setProofCheck(null);
+    setProofNote("");
+    if (openReportId) await checkCreditProof(openReportId, uploaded.url, Number(resQty));
   }
 
   async function submitResolution(reportId: string) {
@@ -337,12 +363,21 @@ export function PurchaseUrgentReportsPanel({
     if ((resType === "REPLACEMENT" || resType === "MISSING_DELIVERY") && !resDueDate) { setErr("Elige la fecha máxima de entrega."); return; }
     if (resType === "WRITE_OFF" && !resNote.trim()) { setErr("Explica por qué no se recupera."); return; }
     if (resType === "CREDIT" && !resProofUrl) { setErr("Sube el comprobante del proveedor."); return; }
+    const proofReady = proofCheck && proofCheck.url === resProofUrl && proofCheck.qty === qty;
+    if (resType === "CREDIT" && !proofReady) { setErr("Falta que la IA revise la captura con esta cantidad."); return; }
+    if (resType === "CREDIT" && proofCheck && proofCheck.warnings.length > 0 && !proofNote.trim()) { setErr("La captura no cuadra del todo — explica por qué."); return; }
     setBusy(true);
     setErr("");
     const body: Record<string, unknown> = { type: resType === "MISSING_DELIVERY" ? "REPLACEMENT" : resType, quantity: qty };
     if (resType === "REPLACEMENT" || resType === "MISSING_DELIVERY") { body.dueDate = resDueDate; body.missingDelivery = resType === "MISSING_DELIVERY"; }
     if (resType === "WRITE_OFF") body.note = resNote.trim();
-    if (resType === "CREDIT") { body.proofUrl = resProofUrl; body.proofName = resProofName; }
+    if (resType === "CREDIT") {
+      body.proofUrl = resProofUrl;
+      body.proofName = resProofName;
+      body.proofRead = proofCheck?.read ?? null;
+      body.proofSignature = proofCheck?.signature;
+      if (proofNote.trim()) body.proofMismatchNote = proofNote.trim();
+    }
     const res = await fetch(`/api/purchase-requests/urgent-reports/${reportId}/resolutions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -684,6 +719,31 @@ export function PurchaseUrgentReportsPanel({
                               </label>
                             </div>
                           )}
+                          {resProofUrl && (
+                            proofChecking ? (
+                              <div className="text-[11.5px] text-steel mt-1.5">🤖 Revisando la captura…</div>
+                            ) : !proofCheck || proofCheck.url !== resProofUrl || proofCheck.qty !== Number(resQty) ? (
+                              <button type="button" className="text-[11.5px] font-semibold text-teal underline mt-1.5 cursor-pointer" onClick={() => checkCreditProof(r.id, resProofUrl, Number(resQty))}>
+                                {proofCheck ? "Cambiaste la cantidad — revisar la captura de nuevo" : "Revisar la captura con IA"}
+                              </button>
+                            ) : proofCheck.warnings.length === 0 ? (
+                              <div className="text-[11.5px] text-green mt-1.5 flex items-center gap-1"><CheckCircle2 size={12} /> 🤖 La captura cuadra con lo que se registra.</div>
+                            ) : (
+                              <div className="bg-surface border border-red/40 rounded-md p-2.5 mt-2">
+                                <div className="text-[11.5px] font-semibold text-red mb-1">🤖 La captura no cuadra del todo:</div>
+                                <ul className="list-disc pl-4 text-[11.5px] text-red mb-2">
+                                  {proofCheck.warnings.map((w) => <li key={w}>{w}</li>)}
+                                </ul>
+                                <textarea
+                                  className="w-full rounded border border-rule px-2.5 py-2 text-[12px]"
+                                  rows={2}
+                                  placeholder="Explica por qué igual se registra (el admin lo va a ver)…"
+                                  value={proofNote}
+                                  onChange={(e) => setProofNote(e.target.value)}
+                                />
+                              </div>
+                            )
+                          )}
                         </div>
                       )}
                       {resQty && Number(resQty) > 0 && (
@@ -782,6 +842,9 @@ function ResolutionRow({
           <div className="text-steel">{res.credit.status === "AVAILABLE" ? (creditSupplier ? "No se paga — se descuenta de este pedido al armar la tanda" : "Disponible para la próxima compra a este proveedor") : res.credit.status === "APPLIED" ? (creditSupplier ? "Descontado en la tanda de pago" : "Ya aplicado a una compra") : res.credit.status === "CANCELLED" ? "Crédito anulado" : "Reembolsado"}</div>
           {res.credit.proofUrl && (
             <div className="mt-1.5"><ProofPreview url={res.credit.proofUrl} size={36} filename={res.credit.proofName ?? "comprobante-credito"} /></div>
+          )}
+          {res.credit.proofMismatchNote && (
+            <div className="text-red mt-1 whitespace-pre-line">⚠️ {res.credit.proofMismatchNote}</div>
           )}
         </div>
       )}

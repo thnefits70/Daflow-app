@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { totalReportedQty, claimedQty } from "@/lib/purchaseUrgent";
+import { checkClaimProofForSave } from "@/lib/claimProofCheck";
 
 const schema = z.discriminatedUnion("type", [
   // Confirmado 2026-08-25: pedido explícito del usuario — el comprobante que
@@ -12,7 +13,17 @@ const schema = z.discriminatedUnion("type", [
   // crédito desde que se registra, para trazabilidad de punta a punta —
   // mismo campo (SupplierCredit.proofUrl/proofName) que ya usan los créditos
   // manuales, ahora también en los automáticos que salen de un reporte.
-  z.object({ type: z.literal("CREDIT"), quantity: z.number().int().positive(), proofUrl: z.string().url("Sube el comprobante del proveedor."), proofName: z.string().trim().optional() }),
+  // Confirmado 2026-09-29: la IA revisa la captura antes de guardar (ver
+  // claimProofCheck.ts) — la lectura firmada y, si no cuadra, la explicación.
+  z.object({
+    type: z.literal("CREDIT"),
+    quantity: z.number().int().positive(),
+    proofUrl: z.string().url("Sube el comprobante del proveedor."),
+    proofName: z.string().trim().optional(),
+    proofRead: z.unknown().optional(),
+    proofSignature: z.string().optional(),
+    proofMismatchNote: z.string().optional(),
+  }),
   z.object({ type: z.literal("REPLACEMENT"), quantity: z.number().int().positive(), dueDate: z.string(), missingDelivery: z.boolean().optional() }),
   z.object({ type: z.literal("REFUND"), quantity: z.number().int().positive() }),
   z.object({ type: z.literal("WRITE_OFF"), quantity: z.number().int().positive(), note: z.string().trim().min(1, "Explica por qué no se recupera.") }),
@@ -83,6 +94,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // incierto usa el costo promedio (estimatedUnitCost) en vez del unitCost
   // puntual de la solicitud elegida — mismo criterio que ya se le mostró a
   // Inventario al reportar.
+  let proofCheck: Awaited<ReturnType<typeof checkClaimProofForSave>> | null = null;
+  if (parsed.data.type === "CREDIT") {
+    proofCheck = await checkClaimProofForSave({
+      target: { kind: "no_envio", reportId: id, quantity: parsed.data.quantity },
+      proofUrl: parsed.data.proofUrl,
+      input: { read: parsed.data.proofRead, signature: parsed.data.proofSignature, mismatchNote: parsed.data.proofMismatchNote },
+    });
+    if (!proofCheck.ok) return NextResponse.json({ error: proofCheck.error }, { status: 400 });
+  }
+
   const effectiveUnitCost = report.isLateClaim && report.originUncertain && report.estimatedUnitCost != null ? report.estimatedUnitCost : report.request.unitCost;
   const amount = parsed.data.quantity * effectiveUnitCost;
   const createdById = isAdmin ? null : session.user.id;
@@ -104,6 +125,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             createdById,
             proofUrl: parsed.data.proofUrl,
             proofName: parsed.data.proofName || null,
+            proofHash: proofCheck?.ok ? proofCheck.proofHash : null,
+            proofAiCheck: proofCheck?.ok && proofCheck.read ? JSON.parse(JSON.stringify(proofCheck.read)) : undefined,
+            proofMismatchNote: proofCheck?.ok ? proofCheck.mismatchNote : null,
           },
         });
         return res;
@@ -131,6 +155,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     console.error("[urgent-reports resolutions] falló al crear la resolución", err);
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: `No se pudo registrar: ${message}` }, { status: 500 });
+  }
+
+  if (proofCheck?.ok && proofCheck.mismatchNote && !isAdmin) {
+    await notifyOwner("admin", {
+      title: "⚠️ Captura que no cuadra",
+      body: `${report.request.catalogItem.name} (${report.request.supplier.name}) — ${parsed.data.quantity} un. sin pagar · $${amount.toFixed(2)}. ${proofCheck.mismatchNote}`,
+      url: "/admin",
+    }).catch(() => null);
   }
 
   if (parsed.data.type === "WRITE_OFF" && !isAdmin) {

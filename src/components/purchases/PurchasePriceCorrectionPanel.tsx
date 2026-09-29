@@ -28,6 +28,7 @@ type Correction = {
   reason: string;
   proofUrl: string;
   proofName: string | null;
+  proofMismatchNote: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED";
   rejectReason: string | null;
   requestedByName: string | null;
@@ -65,6 +66,12 @@ export function PurchasePriceCorrectionPanel() {
   const [msg, setMsg] = useState("");
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  // Confirmado 2026-09-29, pedido del usuario: la IA revisa la captura
+  // (¿es del proveedor, del producto, dice el precio pedido?). Si no cuadra,
+  // hay que explicar — no bloquea, el admin lo ve en rojo.
+  const [proofCheck, setProofCheck] = useState<{ read: unknown; signature: string; warnings: string[]; key: string } | null>(null);
+  const [proofChecking, setProofChecking] = useState(false);
+  const [proofNote, setProofNote] = useState("");
 
   function load() {
     fetch("/api/purchase-price-corrections")
@@ -76,6 +83,24 @@ export function PurchasePriceCorrectionPanel() {
   const selected = data?.eligible.find((e) => e.id === selectedId) ?? null;
   const parsedPrice = Number(newPrice.replace(",", "."));
   const priceOk = newPrice.trim() !== "" && Number.isFinite(parsedPrice) && parsedPrice > 0;
+  const checkKey = selected && proof && priceOk ? `${selected.id}|${proof.url}|${parsedPrice.toFixed(4)}` : "";
+  const proofReady = !!proofCheck && proofCheck.key === checkKey;
+
+  async function checkProof() {
+    if (!selected || !proof || !priceOk) return;
+    const key = checkKey;
+    setProofChecking(true);
+    setErr("");
+    const res = await fetch("/api/claim-proof/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind: "precio", proofUrl: proof.url, requestId: selected.id, newUnitCost: Math.round(parsedPrice * 10000) / 10000 }),
+    });
+    setProofChecking(false);
+    const d = await res.json().catch(() => null);
+    if (!res.ok) { setErr(d?.error ?? "No se pudo revisar la captura."); return; }
+    setProofCheck({ read: d.read, signature: d.signature, warnings: d.warnings ?? [], key });
+  }
 
   async function uploadProof(file: File) {
     setUploading(true);
@@ -92,12 +117,23 @@ export function PurchasePriceCorrectionPanel() {
     if (!priceOk) { setErr("Escribe el precio nuevo por unidad."); return; }
     if (!reason.trim()) { setErr("Explica qué se negoció con el proveedor."); return; }
     if (!proof) { setErr("Sube la captura del acuerdo con el proveedor."); return; }
+    if (!proofReady || !proofCheck) { setErr("Falta que la IA revise la captura con este precio."); return; }
+    if (proofCheck.warnings.length > 0 && !proofNote.trim()) { setErr("La captura no cuadra del todo — explica por qué."); return; }
     setBusy(true);
     setErr("");
     const res = await fetch("/api/purchase-price-corrections", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ requestId: selected.id, newUnitCost: parsedPrice, reason: reason.trim(), proofUrl: proof.url, proofName: proof.name }),
+      body: JSON.stringify({
+        requestId: selected.id,
+        newUnitCost: Math.round(parsedPrice * 10000) / 10000,
+        reason: reason.trim(),
+        proofUrl: proof.url,
+        proofName: proof.name,
+        proofRead: proofCheck.read ?? null,
+        proofSignature: proofCheck.signature,
+        proofMismatchNote: proofNote.trim() || undefined,
+      }),
     });
     setBusy(false);
     if (!res.ok) { setErr((await res.json().catch(() => null))?.error ?? "No se pudo enviar."); return; }
@@ -106,6 +142,8 @@ export function PurchasePriceCorrectionPanel() {
     setNewPrice("");
     setReason("");
     setProof(null);
+    setProofCheck(null);
+    setProofNote("");
     setSearch("");
     load();
   }
@@ -221,12 +259,37 @@ export function PurchasePriceCorrectionPanel() {
             ) : (
               <div className="flex items-center gap-2">
                 <ProofPreview url={proof.url} size={40} filename={proof.name} />
-                <button type="button" className="text-[12px] text-steel cursor-pointer" onClick={() => setProof(null)}>Quitar</button>
+                <button type="button" className="text-[12px] text-steel cursor-pointer" onClick={() => { setProof(null); setProofCheck(null); setProofNote(""); }}>Quitar</button>
               </div>
+            )}
+            {proof && priceOk && (
+              proofChecking ? (
+                <div className="text-[12px] text-steel">🤖 Revisando la captura…</div>
+              ) : !proofReady ? (
+                <button type="button" className="self-start text-[12px] font-semibold text-teal underline cursor-pointer" onClick={checkProof}>
+                  {proofCheck ? "Cambiaste el precio o la captura — revisar de nuevo" : "Revisar la captura con IA"}
+                </button>
+              ) : proofCheck && proofCheck.warnings.length === 0 ? (
+                <div className="text-[12px] text-green">🤖 La captura cuadra: es del proveedor y dice este precio.</div>
+              ) : (
+                <div className="border border-red/40 rounded-md p-2.5">
+                  <div className="text-[12px] font-semibold text-red mb-1">🤖 La captura no cuadra del todo:</div>
+                  <ul className="list-disc pl-4 text-[12px] text-red mb-2">
+                    {proofCheck?.warnings.map((w) => <li key={w}>{w}</li>)}
+                  </ul>
+                  <textarea
+                    className="w-full text-[12.5px] rounded border border-rule bg-cloud px-2.5 py-2"
+                    rows={2}
+                    placeholder="Explica por qué igual se pide (el admin lo va a ver)…"
+                    value={proofNote}
+                    onChange={(e) => setProofNote(e.target.value)}
+                  />
+                </div>
+              )
             )}
             <button
               type="button"
-              disabled={busy || uploading || !priceOk || !reason.trim() || !proof}
+              disabled={busy || uploading || proofChecking || !priceOk || !reason.trim() || !proof || !proofReady || (!!proofCheck && proofCheck.warnings.length > 0 && !proofNote.trim())}
               className="self-start text-[12.5px] font-bold bg-teal text-white rounded px-3.5 py-2 cursor-pointer disabled:opacity-50"
               onClick={submit}
             >
@@ -323,6 +386,7 @@ function CorrectionCard({ c, children }: { c: Correction; children?: ReactNode }
           {c.status === "APPROVED" && c.kardexAdjustedUnits != null && <> · Kardex: ajuste sobre {c.kardexAdjustedUnits} un. en bodega</>}
         </div>
       </div>
+      {c.proofMismatchNote && <div className="text-[12px] text-red mt-1 whitespace-pre-line">⚠️ {c.proofMismatchNote}</div>}
       {c.status === "REJECTED" && c.rejectReason && <div className="text-[12px] text-red mt-1">Motivo: {c.rejectReason}</div>}
       {children}
     </div>

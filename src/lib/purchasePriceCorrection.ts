@@ -75,6 +75,9 @@ export async function submitPriceCorrection(params: {
   proofUrl: string;
   proofName: string | null;
   requestedById: string | null;
+  proofHash: string | null;
+  proofAiCheck: unknown;
+  proofMismatchNote: string | null;
 }) {
   if (!(params.newUnitCost > 0)) throw new Error("El precio nuevo debe ser mayor a 0.");
   const reason = params.reason.trim();
@@ -98,6 +101,9 @@ export async function submitPriceCorrection(params: {
       reason,
       proofUrl: params.proofUrl,
       proofName: params.proofName,
+      proofHash: params.proofHash,
+      proofAiCheck: params.proofAiCheck ? JSON.parse(JSON.stringify(params.proofAiCheck)) : undefined,
+      proofMismatchNote: params.proofMismatchNote,
       requestedById: params.requestedById,
     },
   });
@@ -116,6 +122,7 @@ export type PriceCorrectionRow = {
   reason: string;
   proofUrl: string;
   proofName: string | null;
+  proofMismatchNote: string | null;
   status: "PENDING" | "APPROVED" | "REJECTED";
   rejectReason: string | null;
   requestedByName: string | null;
@@ -154,6 +161,7 @@ export async function getPriceCorrections(): Promise<PriceCorrectionRow[]> {
     reason: c.reason,
     proofUrl: c.proofUrl,
     proofName: c.proofName,
+    proofMismatchNote: c.proofMismatchNote,
     status: c.status,
     rejectReason: c.rejectReason,
     requestedByName: c.requestedBy?.name ?? null,
