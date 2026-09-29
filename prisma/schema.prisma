@@ -476,6 +476,7 @@ model User {
   purchaseRequestUrgentReports                     PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportedBy")
   purchaseRequestUrgentReportsReviewed             PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportReviewedByLead")
   purchaseRequestUrgentReportsRejected             PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportRejectedBy")
+  purchaseRequestUrgentReportsSupplierStockout     PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportSupplierStockoutBy")
   purchaseRequestUrgentReportsJustConfirmed        PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportJustConfirmedBy")
   purchaseRequestUrgentReportsResolvedInternally   PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportResolvedInternallyBy")
   purchaseRequestUrgentReportsExcessGestion        PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportExcessGestionBy")
@@ -3526,6 +3527,13 @@ model PurchaseRequestUrgentReport {
   rejectedById    String?
   rejectedBy      User?     @relation("PurchaseRequestUrgentReportRejectedBy", fields: [rejectedById], references: [id], onDelete: SetNull)
   rejectionReason String?
+
+  // Confirmado 2026-09-29, pedido de Daniel + usuario: lo faltante NUNCA va a
+  // llegar porque el proveedor se quedó sin stock. Daniel solo lo marca; el
+  // descuento (CHEN) o devolución lo registra Compras con captura.
+  supplierStockoutAt   DateTime?
+  supplierStockoutById String?
+  supplierStockoutBy   User?     @relation("PurchaseRequestUrgentReportSupplierStockoutBy", fields: [supplierStockoutById], references: [id], onDelete: SetNull)
 
   // Dar de baja en Just — DAFLOW no tiene integración con Just (nunca se
   // toca directamente), así que esto es una confirmación humana reforzada:

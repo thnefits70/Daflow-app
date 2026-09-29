@@ -196,6 +196,12 @@ function summarize(r: RequestRow): OrderSummary {
   const replacementsDone = reports.flatMap((u) => u.resolutions).filter((res) => res.type === "REPLACEMENT" && res.status === "COMPLETED");
   const replacedQty = replacementsDone.reduce((s, res) => s + (res.replacementReceivedQty ?? res.quantity), 0);
   const excessQty = reports.filter((u) => u.excessConfirmedAt && u.excessQty > 0).reduce((s, u) => s + u.excessQty, 0);
+  // Confirmado 2026-09-29, pedido de Daniel + usuario: lo que CHEN no tiene
+  // y nunca va a llegar (supplierStockoutAt, lo marca Daniel). Solo dice "no
+  // se cobran" cuando Jariel ya registró el descuento con la captura (el
+  // reporte dejó de retener el pago); antes, "pendiente de acordar".
+  const stockoutQty = reports.filter((u) => u.supplierStockoutAt).reduce((s, u) => s + u.missingQty, 0);
+  const stockoutText = stockoutQty ? `${stockoutQty} no llegaron (ustedes no tienen stock)` : "";
   const receiptQty = Math.min(r.receipt?.receivedQuantity ?? 0, r.quantity);
   const goodQty = arrivedAt ? receiptQty + replacedQty + excessQty : 0;
   const total = Math.round(goodQty * r.unitCost * 100) / 100;
@@ -226,16 +232,19 @@ function summarize(r: RequestRow): OrderSummary {
     stage = "en_camino";
     complete = "—";
   } else if (blocking.length > 0) {
-    const sum = (k: "damagedQty" | "missingQty" | "incompleteQty" | "differentQty") => blocking.reduce((s, u) => s + u[k], 0);
+    const sum = (k: "damagedQty" | "missingQty" | "incompleteQty" | "differentQty") =>
+      blocking.reduce((s, u) => s + (k === "missingQty" && u.supplierStockoutAt ? 0 : u[k]), 0);
     const parts = [
       sum("damagedQty") ? `${sum("damagedQty")} dañadas` : "",
       sum("missingQty") ? `faltan ${sum("missingQty")}` : "",
+      stockoutText,
       sum("incompleteQty") ? `${sum("incompleteQty")} incompletas` : "",
       sum("differentQty") ? `${sum("differentQty")} distintas` : "",
     ].filter(Boolean);
     const pendingRepl = blocking.flatMap((u) => u.resolutions).filter((res) => res.type === "REPLACEMENT" && res.status === "PENDING");
     let step = "por reponer";
     if (blocking.some((u) => !u.reviewedByLeadAt)) step = "en revisión en bodega";
+    else if (blocking.every((u) => u.supplierStockoutAt && u.damagedQty + u.incompleteQty + u.differentQty === 0)) step = "pendiente de acordar";
     else if (pendingRepl.some((res) => res.replacementSubmittedAt)) step = "reposición recibida, en revisión";
     else if (pendingRepl.some((res) => res.supplierShippedAt)) step = "reposición enviada por ustedes";
     else {
@@ -260,9 +269,13 @@ function summarize(r: RequestRow): OrderSummary {
       parts.push(`${replacedQty} repuestas${lastDone ? ` el ${fmtDate(lastDone)}` : ""} ✓`);
     }
     if (excessQty) parts.push(`llegaron ${excessQty} de más`);
-    statusText = parts.join(" — ");
-    statusTone = inReview ? "gray" : "green";
-    complete = "Sí";
+    // Acá ya no retiene: Jariel registró el descuento con la captura.
+    const settledStockout = stockoutText ? `${stockoutText} — no se cobran` : "";
+    if (settledStockout) parts.push(settledStockout);
+    // No llegó nada bueno: no hay nada en revisión, solo lo que no tenían.
+    statusText = stockoutQty && goodQty === 0 ? settledStockout : parts.join(" — ");
+    statusTone = stockoutQty ? "amber" : inReview ? "gray" : "green";
+    complete = stockoutQty ? "No" : "Sí";
     stage = inReview ? "en_revision" : !r.debtPayment ? "por_pagar" : r.debtPayment.closedAt ? "pagado" : "pago_en_proceso";
   }
 
