@@ -189,7 +189,10 @@ export type ParsedGuidesPdf = {
 };
 
 const SUMMARY_RE = /\(ID:\s*(\d+)\)\s*-\s*\(SKU:[^)]*\)\s*-\s*(.+?)\s+(\d+)\s*$/;
-const GUIDE_RE = /Nro:\s*\d+\s+Guia:\s*([A-Z0-9-]+)/i;
+// 2026-09-29 (manifiestos del 22–25/09): algunas relaciones de Dropi vienen
+// con el número pegado a "Ciudad Destino" ("D002047127Ciudad Destino") — sin
+// el corte, la guía quedaba como "D002047127CIUDAD" y no se hallaba su etiqueta.
+const GUIDE_RE = /Nro:\s*\d+\s+Guia:\s*([A-Z0-9-]+?)(?=\s|Ciudad|$)/i;
 const CARRIER_RE = /TRANSPORTADORA:\s*([A-Z0-9 ]+?)\s*$/i;
 const DATE_RE = /FECHA MANIFIESTO \(DD\/MM\/YYYY\):\s*(\d{2})-(\d{2})-(\d{4})/;
 // Greedy a propósito: "(103511)CUATRO ALMOHADAS X4 X1" → la cantidad es el

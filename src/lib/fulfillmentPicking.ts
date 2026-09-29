@@ -3,7 +3,7 @@ import { recordKardexEntry } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
 import { getFulfilmentLeadId } from "@/lib/guards";
 import { formatMerchandiseOutflowCode, nextMerchandiseOutflowNumber } from "@/lib/merchandiseOutflow";
-import { getCompiledLot, manifestCode, purchaseDeciderIds } from "@/lib/fulfillmentGuides";
+import { getCompiledLot, isBackfillLot, manifestCode, purchaseDeciderIds } from "@/lib/fulfillmentGuides";
 import { recomputeAutoFillRate } from "@/lib/autoFillRate";
 import { carrierLabel } from "@/lib/carriers";
 import { computeGuideHolds, holdSummary } from "@/lib/fulfillmentHolds";
@@ -21,12 +21,15 @@ import { computeGuideHolds, holdSummary } from "@/lib/fulfillmentHolds";
 
 type Result = { ok: true } | { ok: false; error: string };
 
+const BACKFILL_NO_SCAN = "Este es un manifiesto atrasado: esa mercadería ya salió. No se escanea — Daniel lo confirma de una vez.";
+
 const LOT_URL = "/area/workspace?tab=egresos&otab=solicitud";
 
 export async function recordPick(params: { lotId: string; catalogItemId: string; quantity: number; userId: string | null; onlyAssigned?: boolean }): Promise<Result> {
   const lot = await getCompiledLot(params.lotId);
   if (!lot) return { ok: false, error: "No encontrado." };
   if (lot.status !== "SENT") return { ok: false, error: lot.status === "DRAFT" ? "Yair todavía no envía este corte." : "Este corte ya se cerró." };
+  if (lot.backfill) return { ok: false, error: BACKFILL_NO_SCAN };
   const line = lot.picking.find((p) => p.catalogItemId === params.catalogItemId);
   if (!line) return { ok: false, error: "Este producto no está en el manifiesto de este corte." };
   if (line.confirmedAt) return { ok: false, error: "Daniel ya confirmó este producto — ya no se puede cambiar." };
@@ -97,6 +100,7 @@ export async function confirmPicks(params: { lotId: string; catalogItemIds: stri
   const lot = await getCompiledLot(params.lotId);
   if (!lot) return { ok: false, error: "No encontrado." };
   if (lot.status !== "SENT") return { ok: false, error: "Este corte no está abierto para confirmar." };
+  if (lot.backfill) return { ok: false, error: BACKFILL_NO_SCAN };
 
   let confirmed = 0;
   const confirmedNow: string[] = [];
@@ -158,16 +162,82 @@ export async function confirmPicks(params: { lotId: string; catalogItemIds: stri
   return { ok: true, confirmed };
 }
 
+// Manifiesto atrasado (pedido del usuario 2026-09-29): la mercadería ya
+// salió hace días, así que Daniel confirma todo de una vez — cada producto
+// como "salió todo lo pedido", sin escanear. Se descuenta del Kardex igual
+// que un corte normal (Egreso de DESPACHO / GARANTIA), con la fecha de hoy
+// (el Kardex va en orden y meter una salida en el pasado descuadraría los
+// saldos que vinieron después). Los productos con conteo físico posterior
+// al manifiesto se confirman sin descontar (ver countedAfter). No se manda
+// ningún aviso de faltantes ni de guías a retener: ya se despachó.
+export async function confirmBackfillLot(params: { lotId: string; userId: string | null }): Promise<Result & { discounted?: number; skipped?: number }> {
+  const lot = await getCompiledLot(params.lotId);
+  if (!lot) return { ok: false, error: "No encontrado." };
+  if (!lot.backfill) return { ok: false, error: "Este corte no es un manifiesto atrasado." };
+  if (lot.status !== "SENT") return { ok: false, error: "Este corte ya se cerró." };
+
+  const counted = new Set(lot.countedAfter.map((c) => c.catalogItemId));
+  let discounted = 0;
+  let skipped = 0;
+  for (const line of lot.picking) {
+    if (line.confirmedAt) continue;
+    await prisma.fulfillmentLotPick.upsert({
+      where: { lotId_catalogItemId: { lotId: params.lotId, catalogItemId: line.catalogItemId } },
+      create: { lotId: params.lotId, catalogItemId: line.catalogItemId, pickedQty: line.needed, pickedById: params.userId },
+      update: {},
+    });
+    const claimed = await prisma.fulfillmentLotPick.updateMany({
+      where: { lotId: params.lotId, catalogItemId: line.catalogItemId, confirmedAt: null },
+      data: { pickedQty: line.needed, confirmedQty: line.needed, confirmedAt: new Date(), confirmedById: params.userId },
+    });
+    if (claimed.count === 0) continue;
+    if (counted.has(line.catalogItemId)) {
+      skipped++;
+      continue;
+    }
+    try {
+      await discount({ lotId: params.lotId, reason: "DESPACHO", catalogItemId: line.catalogItemId, name: line.name, quantity: line.normalNeeded, userId: params.userId });
+    } catch (e) {
+      console.error("[fulfillment backfill] No se pudo descontar del Kardex:", e);
+      await prisma.fulfillmentLotPick.updateMany({ where: { lotId: params.lotId, catalogItemId: line.catalogItemId }, data: { confirmedQty: null, confirmedAt: null, confirmedById: null } });
+      return { ok: false, error: `No se pudo descontar "${line.name}" del Kardex — vuelve a intentarlo (lo ya descontado no se repite).` };
+    }
+    try {
+      await discount({ lotId: params.lotId, reason: "GARANTIA", catalogItemId: line.catalogItemId, name: line.name, quantity: line.warrantyNeeded, userId: params.userId });
+    } catch (e) {
+      console.error("[fulfillment backfill] No se pudo descontar la garantía del Kardex:", e);
+      return { ok: false, error: `"${line.name}": se descontó el despacho pero no la parte de garantía (${line.warrantyNeeded}). Avísale al administrador.` };
+    }
+    discounted++;
+  }
+
+  // Garantías de solo una pieza: salen de repuestos, igual que en un corte normal.
+  for (const w of lot.warranty) {
+    if (w.mode !== "PIECE" || w.pieceConfirmedAt) continue;
+    const claimed = await prisma.fulfillmentRequestItem.updateMany({ where: { id: w.itemId, pieceConfirmedAt: null }, data: { pieceConfirmedAt: new Date(), pieceConfirmedById: params.userId } });
+    if (claimed.count === 0) continue;
+    const batchId = await outflowBatchFor(params.lotId, "GARANTIA", params.userId);
+    await prisma.merchandiseOutflowItem.create({
+      data: { batchId, catalogItemId: null, declaredName: `Pieza "${w.piece}" de ${w.name} (guía ${w.guide})`, quantity: w.quantity },
+    });
+  }
+
+  await prisma.fulfillmentLot.updateMany({ where: { id: params.lotId, status: "SENT" }, data: { status: "CLOSED", closedAt: new Date() } });
+  await recomputeAutoFillRate(lot.day).catch((e) => console.error("[fill rate auto]", e));
+  return { ok: true, discounted, skipped };
+}
+
 // Garantía de solo una pieza: sale del stock de repuestos (confirmado por
 // el usuario) — queda registrada en el Egreso de GARANTIA sin producto
 // vinculado, así nunca descuenta el Kardex del producto.
 export async function confirmWarrantyPiece(params: { lotId: string; itemId: string; userId: string | null }): Promise<Result> {
   const item = await prisma.fulfillmentRequestItem.findUnique({
     where: { id: params.itemId },
-    select: { quantity: true, warrantyMode: true, warrantyPiece: true, warrantyGuide: true, pieceConfirmedAt: true, catalogItem: { select: { name: true } }, batch: { select: { lotId: true, lot: { select: { status: true } } } } },
+    select: { quantity: true, warrantyMode: true, warrantyPiece: true, warrantyGuide: true, pieceConfirmedAt: true, catalogItem: { select: { name: true } }, batch: { select: { lotId: true, lot: { select: { status: true, day: true, createdAt: true } } } } },
   });
   if (!item || item.batch.lotId !== params.lotId || item.warrantyMode !== "PIECE") return { ok: false, error: "No encontrado." };
   if (item.batch.lot?.status !== "SENT") return { ok: false, error: "Este corte no está abierto para confirmar." };
+  if (item.batch.lot && isBackfillLot(item.batch.lot)) return { ok: false, error: BACKFILL_NO_SCAN };
   const claimed = await prisma.fulfillmentRequestItem.updateMany({ where: { id: params.itemId, pieceConfirmedAt: null }, data: { pieceConfirmedAt: new Date(), pieceConfirmedById: params.userId } });
   if (claimed.count > 0) {
     const batchId = await outflowBatchFor(params.lotId, "GARANTIA", params.userId);
@@ -256,6 +326,7 @@ export async function assignBlock(params: { lotId: string; carrier: string; assi
   const lot = await getCompiledLot(params.lotId);
   if (!lot) return { ok: false, error: "No encontrado." };
   if (lot.status !== "SENT") return { ok: false, error: lot.status === "DRAFT" ? "Yair todavía no envía este corte." : "Este corte ya se cerró." };
+  if (lot.backfill) return { ok: false, error: BACKFILL_NO_SCAN };
   if (!lot.blocks.some((b) => b.carrier === params.carrier)) return { ok: false, error: "Ese bloque no está en este corte." };
 
   if (!params.assigneeId) {

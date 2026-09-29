@@ -160,6 +160,49 @@ export async function getOrCreateOpenLot(): Promise<{ id: string; corte: number 
   throw new Error("No se pudo abrir el corte de hoy — vuelve a intentar.");
 }
 
+// ---- Manifiesto atrasado (pedido del usuario 2026-09-29) -------------------
+// Manifiestos de días pasados que nunca se cargaron (la semana del 21/09,
+// cuando recién se probaba). Yair los sube con la fecha real del manifiesto:
+// quedan en un corte de ESE día, ya enviado a Inventario, y Daniel los
+// confirma de un clic ("ya salió todo") — sin escanear, porque la
+// mercadería ya no está en bodega. Se reconoce sin columna nueva: un corte
+// atrasado es uno creado después de su día.
+export const BACKFILL_MAX_DAYS = 30;
+
+export function isBackfillLot(lot: { day: string; createdAt: Date }): boolean {
+  return ecuadorDay(lot.createdAt) > lot.day;
+}
+
+export function backfillDayError(day: string): string | null {
+  const today = ecuadorDay(new Date());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return "No se pudo leer la fecha del manifiesto.";
+  if (day >= today) return "Un manifiesto atrasado tiene que ser de un día anterior a hoy.";
+  const oldest = ecuadorDay(new Date(Date.now() - BACKFILL_MAX_DAYS * 86400000));
+  if (day < oldest) return `Solo se pueden cargar manifiestos atrasados de los últimos ${BACKFILL_MAX_DAYS} días.`;
+  return null;
+}
+
+// Si ese día ya tiene un corte atrasado sin confirmar, la nueva subida se
+// suma ahí; si no, se abre el siguiente número de corte de ese día.
+async function getOrCreateBackfillLot(day: string, userId: string | null): Promise<{ id: string; corte: number }> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const open = await prisma.fulfillmentLot.findMany({
+      where: { day, status: "SENT", picks: { none: { confirmedAt: { not: null } } } },
+      orderBy: { corte: "desc" },
+      select: { id: true, corte: true, day: true, createdAt: true },
+    });
+    const reuse = open.find(isBackfillLot);
+    if (reuse) return { id: reuse.id, corte: reuse.corte };
+    const last = await prisma.fulfillmentLot.findFirst({ where: { day }, orderBy: { corte: "desc" }, select: { corte: true } });
+    try {
+      return await prisma.fulfillmentLot.create({ data: { day, corte: (last?.corte ?? 0) + 1, status: "SENT", sentAt: new Date(), sentById: userId }, select: { id: true, corte: true } });
+    } catch {
+      // Dos subidas al mismo tiempo — se reintenta.
+    }
+  }
+  throw new Error("No se pudo abrir el corte atrasado — vuelve a intentar.");
+}
+
 // ---- Guardar la lectura del PDF -----------------------------------------
 
 // comboCode: el combo de Dropi que corresponde. Para un código de Dropi es
@@ -194,6 +237,8 @@ export type GuidesApplyInput = {
   guides: { number: string; carrier: string; codes?: string[] }[];
   rows: GuidesApplyRow[];
   warranty: GuidesApplyWarranty[];
+  // Manifiesto atrasado: el día real del manifiesto (ver getOrCreateBackfillLot).
+  backfillDay?: string | null;
 };
 
 export type GuidesApplyResult = { ok: true; batchId: string; lotId: string } | { ok: false; error: string };
@@ -419,12 +464,18 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
     }
   }
 
-  const lot = await getOrCreateOpenLot();
+  const backfillDay = input.backfillDay ?? null;
+  if (backfillDay) {
+    const dayErr = backfillDayError(backfillDay);
+    if (dayErr) return { ok: false, error: dayErr };
+  }
+  const lot = backfillDay ? await getOrCreateBackfillLot(backfillDay, userId) : await getOrCreateOpenLot();
 
   try {
     const batch = await prisma.$transaction(async (tx) => {
-      const fresh = await tx.fulfillmentLot.findUnique({ where: { id: lot.id }, select: { status: true } });
-      if (fresh?.status !== "DRAFT") throw new Error("LOT_CLOSED");
+      const fresh = await tx.fulfillmentLot.findUnique({ where: { id: lot.id }, select: { status: true, picks: { where: { confirmedAt: { not: null } }, select: { id: true }, take: 1 } } });
+      const stillOpen = backfillDay ? fresh?.status === "SENT" && fresh.picks.length === 0 : fresh?.status === "DRAFT";
+      if (!stillOpen) throw new Error("LOT_CLOSED");
       for (const a of assignCode) {
         await tx.purchaseCatalogItem.update({ where: { id: a.itemId }, data: { justCode: a.code } });
       }
@@ -485,6 +536,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
     return { ok: true, batchId: batch.id, lotId: lot.id };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";
+    if (msg === "LOT_CLOSED" && backfillDay) return { ok: false, error: "Daniel acaba de confirmar ese corte atrasado — vuelve a guardar y entrará en uno nuevo del mismo día." };
     if (msg === "LOT_CLOSED") return { ok: false, error: "El corte se acaba de enviar a Inventario — vuelve a guardar y entrará al corte siguiente." };
     if (msg.includes("Unique constraint")) {
       return { ok: false, error: "Otra persona acaba de subir alguna de estas guías o de registrar uno de estos códigos — vuelve a leer el PDF." };
@@ -754,6 +806,28 @@ export async function getCompiledLot(lotId: string) {
     const a = lot.blocks.find((b) => b.carrier === carrier);
     return { carrier, assigneeId: a?.assigneeId ?? null, assigneeName: a ? nameOf(a.assigneeId) : null, assignedAt: a?.assignedAt ?? null };
   });
+  // Manifiesto atrasado: si a un producto se le hizo un conteo físico DESPUÉS
+  // del día del manifiesto (y antes de confirmarlo), ese conteo ya vio la
+  // bodega sin esa mercadería — descontarla otra vez la restaría dos veces.
+  // Esos productos se confirman sin tocar el Kardex (confirmBackfillLot).
+  const backfill = isBackfillLot(lot);
+  const countedAfter: (ItemView & { countedAt: Date })[] = [];
+  if (backfill) {
+    const counts = await prisma.stockKardexEntry.findMany({
+      where: {
+        type: "PHYSICAL_COUNT_ADJUSTMENT",
+        catalogItemId: { in: [...needed.keys()] },
+        occurredAt: { gt: new Date(`${lot.day}T23:59:59.999-05:00`), ...(lot.closedAt ? { lte: lot.closedAt } : {}) },
+      },
+      orderBy: { occurredAt: "desc" },
+      select: { catalogItemId: true, occurredAt: true },
+    });
+    for (const c of counts) {
+      if (countedAfter.some((x) => x.catalogItemId === c.catalogItemId)) continue;
+      const view = needed.get(c.catalogItemId)!.view;
+      countedAfter.push({ catalogItemId: view.catalogItemId, name: view.name, photos: view.photos, justCode: view.justCode, countedAt: c.occurredAt });
+    }
+  }
   const comboCodes = [...new Set(lot.batches.flatMap((b) => b.items.map((i) => i.fromComboCode)).filter((c): c is string => !!c))];
   const combos = await getComboRecipes(comboCodes);
   const stock = await getCurrentStockByItemIds([...needed.keys()]);
@@ -788,6 +862,8 @@ export async function getCompiledLot(lotId: string) {
     printedAt: lot.printedAt,
     printedByName: nameOf(lot.printedById),
     closedAt: lot.closedAt,
+    backfill,
+    countedAfter,
     carriers: sortCarriers([...carriers]),
     guidesByCarrier,
     guidesBySource,
@@ -829,7 +905,8 @@ export async function listRecentLots() {
   const flags = new Map<string, { unassignedBlocks: number; unscanned: number }>();
   await Promise.all(
     lots
-      .filter((l) => l.status === "SENT")
+      // Un manifiesto atrasado no se escanea ni se asigna: ya salió.
+      .filter((l) => l.status === "SENT" && !isBackfillLot(l))
       .map(async (l) => {
         const c = await getCompiledLot(l.id);
         if (!c) return;
@@ -845,6 +922,7 @@ export async function listRecentLots() {
     corte: l.corte,
     status: l.status,
     createdAt: l.createdAt,
+    backfill: isBackfillLot(l),
     sentAt: l.sentAt,
     uploads: l.batches.length,
     guides: l.batches.reduce((s, b) => s + b._count.guides, 0),

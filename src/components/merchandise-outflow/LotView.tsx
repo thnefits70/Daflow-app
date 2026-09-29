@@ -66,12 +66,16 @@ export type CompiledLot = {
   printedAt: string | null;
   printedByName: string | null;
   closedAt: string | null;
+  // Manifiesto atrasado (2026-09-29): ya salió, Daniel lo confirma de una vez.
+  backfill?: boolean;
+  // Productos con conteo físico después del día del manifiesto: no se descuentan.
+  countedAfter?: (ItemView & { countedAt: string })[];
   picking: LotPickLine[];
   blocks: LotBlock[];
   // team: solo le llega a Daniel (para asignar bloques).
   viewer?: { canPrint: boolean; canPick: boolean; pickScope?: "ALL" | "ASSIGNED" | null; canConfirm: boolean; userId: string | null; team?: { id: string; name: string }[] };
 };
-export type LotListItem = { id: string; day: string; corte: number; status: LotStatus; createdAt: string; sentAt: string | null; uploads: number; guides: number; unassignedBlocks: number; unscanned: number };
+export type LotListItem = { id: string; day: string; corte: number; status: LotStatus; createdAt: string; backfill?: boolean; sentAt: string | null; uploads: number; guides: number; unassignedBlocks: number; unscanned: number };
 
 export function fmtDay(day: string) {
   // Mediodía UTC: evita que la zona horaria del navegador corra la fecha un día.
@@ -80,6 +84,10 @@ export function fmtDay(day: string) {
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" });
+}
+
+function fmtDateShort(iso: string) {
+  return new Date(iso).toLocaleDateString("es-EC", { day: "2-digit", month: "2-digit", timeZone: "America/Guayaquil" });
 }
 
 const STATUS_LABEL: Record<LotStatus, string> = { DRAFT: "En preparación", SENT: "Enviado a Inventario", CLOSED: "Cerrado" };
@@ -152,7 +160,7 @@ export function LotView({
   const taken = new Set(lot.picking.filter((p) => p.picked !== null || p.confirmedAt).map((p) => p.catalogItemId));
   const carrierDone = (c: string) => {
     const rows = lot.lines.filter((l) => (l.byCarrier[c] ?? 0) > 0);
-    return lot.status !== "DRAFT" && rows.length > 0 && rows.every((l) => taken.has(l.catalogItemId));
+    return lot.status !== "DRAFT" && !lot.backfill && rows.length > 0 && rows.every((l) => taken.has(l.catalogItemId));
   };
   const upLines = upCarrier ? lines.filter((l) => (l.byCarrier[upCarrier] ?? 0) > 0).sort((a, b) => (b.byCarrier[upCarrier] ?? 0) - (a.byCarrier[upCarrier] ?? 0)) : [];
   const shownLines = upCarrier ? [...upLines, ...lines.filter((l) => !((l.byCarrier[upCarrier] ?? 0) > 0))] : lines;
@@ -215,9 +223,10 @@ export function LotView({
         <span className="font-display font-bold text-[14.5px]">
           Corte {lot.corte} · <span className="capitalize">{fmtDay(lot.day)}</span>
         </span>
-        <span className={`font-mono text-[9.5px] font-bold uppercase rounded-full px-2 py-0.5 border ${STATUS_STYLE[lot.status]}`}>{STATUS_LABEL[lot.status]}</span>
+        <span className={`font-mono text-[9.5px] font-bold uppercase rounded-full px-2 py-0.5 border ${STATUS_STYLE[lot.status]}`}>{lot.backfill && lot.status === "SENT" ? "Por confirmar" : STATUS_LABEL[lot.status]}</span>
+        {lot.backfill && <span className="font-mono text-[9.5px] font-bold uppercase rounded-full px-2 py-0.5 border bg-gold/15 border-gold/40">Manifiesto atrasado</span>}
         {lot.manifestNumber && <span className="font-mono text-[11px] font-bold">{manifestCode(lot.manifestNumber)}</span>}
-        {lot.status !== "DRAFT" && lot.viewer?.canPrint && (
+        {lot.status !== "DRAFT" && !lot.backfill && lot.viewer?.canPrint && (
           // Opcional desde 2026-09-26 (pedido de Daniel): se saca desde el celular.
           <button type="button" className="ml-auto flex items-center gap-1.5 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold text-steel hover:text-teal cursor-pointer" onClick={print}>
             <Printer size={13} /> {lot.printedAt ? "Reimprimir hoja" : "Imprimir hoja (opcional)"}
@@ -229,7 +238,7 @@ export function LotView({
         {lot.lines.length} productos · {units} unidades
         {lot.warranty.length > 0 ? ` · ${lot.warranty.length} garantía(s)` : ""}
         {provisional.length > 0 ? ` · ${provisional.length} con ID provisional` : ""}
-        {lot.sentAt ? ` · enviado ${fmtTime(lot.sentAt)}${lot.sentByName ? ` por ${lot.sentByName}` : ""}` : ""}
+        {lot.sentAt ? ` · ${lot.backfill ? "cargado" : "enviado"} ${lot.backfill ? fmtDateShort(lot.sentAt) + " " : ""}${fmtTime(lot.sentAt)}${lot.sentByName ? ` por ${lot.sentByName}` : ""}` : ""}
         {lot.printedAt ? ` · impreso ${fmtTime(lot.printedAt)}${lot.printedByName ? ` por ${lot.printedByName}` : ""}` : ""}
       </div>
 
@@ -271,9 +280,11 @@ export function LotView({
             </div>
           ))}
           <div className="text-[10.5px] text-steel mt-1">
-            {lot.status === "DRAFT"
-              ? "Al enviar el corte, Daniel recibe este aviso; a Bryan Ríos y Jariel solo les llega lo que falta aun contando las devoluciones sin ingresar."
-              : "Daniel ya recibió este aviso; a Bryan Ríos y Jariel les llegó solo lo que falta de verdad."}
+            {lot.backfill
+              ? "Manifiesto atrasado: al confirmarlo, estos productos quedan con menos de 0 en INVESTOCK. Conviene revisar si falta ingresar alguna compra o devolución."
+              : lot.status === "DRAFT"
+                ? "Al enviar el corte, Daniel recibe este aviso; a Bryan Ríos y Jariel solo les llega lo que falta aun contando las devoluciones sin ingresar."
+                : "Daniel ya recibió este aviso; a Bryan Ríos y Jariel les llegó solo lo que falta de verdad."}
           </div>
         </div>
       )}
@@ -330,7 +341,7 @@ export function LotView({
                           {i === 0 && (
                             <span className="text-[10.5px] text-steel">
                               {upLines.length} productos · {upLines.reduce((s, x) => s + (x.byCarrier[upCarrier] ?? 0), 0)} u
-                              {lot.status !== "DRAFT" ? ` · ${upLines.filter((x) => taken.has(x.catalogItemId)).length}/${upLines.length} sacados` : ""}
+                              {lot.status !== "DRAFT" && !lot.backfill ? ` · ${upLines.filter((x) => taken.has(x.catalogItemId)).length}/${upLines.length} sacados` : ""}
                             </span>
                           )}
                           {i === 0 && (
@@ -353,7 +364,7 @@ export function LotView({
                             {lines.filter((x) => lineBlock(x.byCarrier) === lineBlock(l.byCarrier)).length} productos ·{" "}
                             {lines.filter((x) => lineBlock(x.byCarrier) === lineBlock(l.byCarrier)).reduce((s, x) => s + x.quantity, 0)} u
                           </span>
-                          {lot.status !== "DRAFT" && <BlockAssignee lot={lot} carrier={lineBlock(l.byCarrier)} onChanged={onChanged} />}
+                          {lot.status !== "DRAFT" && !lot.backfill && <BlockAssignee lot={lot} carrier={lineBlock(l.byCarrier)} onChanged={onChanged} />}
                         </div>
                       </td>
                     </tr>
@@ -476,8 +487,9 @@ export function LotView({
         </div>
       )}
 
-      {lot.status !== "DRAFT" && <GuideHoldsBox lot={lot} />}
-      {lot.status !== "DRAFT" && <PickingPanel lot={lot} onChanged={onChanged} />}
+      {lot.backfill && lot.status !== "DRAFT" && <BackfillConfirmBox lot={lot} onChanged={onChanged} />}
+      {lot.status !== "DRAFT" && !lot.backfill && <GuideHoldsBox lot={lot} />}
+      {lot.status !== "DRAFT" && !lot.backfill && <PickingPanel lot={lot} onChanged={onChanged} />}
 
       {editable && !confirming && (
         <button
@@ -630,6 +642,86 @@ export function LotHistoryList({ lots, onView, defaultOpen = false }: { lots: Lo
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Manifiesto atrasado (pedido del usuario 2026-09-29): la mercadería ya
+// salió, así que no se escanea. Daniel confirma de una vez (doble
+// confirmación) y se descuenta del stock todo lo pedido, menos lo que ya
+// entró en un conteo físico hecho después de ese día.
+function BackfillConfirmBox({ lot, onChanged }: { lot: CompiledLot; onChanged: () => void }) {
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const counted = lot.countedAfter ?? [];
+  const units = lot.picking.reduce((s, p) => s + p.needed, 0);
+  const countedUnits = lot.picking.filter((p) => counted.some((c) => c.catalogItemId === p.catalogItemId)).reduce((s, p) => s + p.needed, 0);
+  const canConfirm = !!lot.viewer?.canConfirm;
+
+  async function confirm() {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/fulfillment-lots/${lot.id}/confirm-backfill`, { method: "POST" });
+    const json = await res.json().catch(() => null);
+    setBusy(false);
+    setAsking(false);
+    if (!res.ok) {
+      setErr(json?.error ?? "No se pudo confirmar.");
+      return;
+    }
+    onChanged();
+  }
+
+  const countedList = counted.length > 0 && (
+    <div className="mt-2">
+      <div className="font-semibold mb-0.5">
+        {lot.status === "CLOSED" ? "No se descontaron" : "No se van a descontar"} ({counted.length}) — ya estaban en un conteo físico hecho después de ese día:
+      </div>
+      {counted.map((c) => (
+        <div key={c.catalogItemId} className="flex items-center gap-1.5 pl-2">
+          <CatalogCode code={c.justCode} />
+          <span className="flex-1 min-w-0">{c.name}</span>
+          <span className="font-mono text-[10.5px] text-steel">conteo {fmtDateShort(c.countedAt)}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  if (lot.status === "CLOSED") {
+    return (
+      <div className="text-[12px] bg-teal/10 border border-teal/30 rounded-md p-2.5 mb-3">
+        <div className="font-semibold text-teal">Manifiesto atrasado confirmado — se descontó del stock{lot.closedAt ? ` el ${fmtDateShort(lot.closedAt)}` : ""}.</div>
+        {countedList}
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-[12px] bg-gold/10 border border-gold/40 rounded-md p-3 mb-3">
+      <div className="font-semibold mb-1">Esta mercadería ya salió el {fmtDay(lot.day)} — no hay que sacar ni escanear nada.</div>
+      <div className="text-steel mb-1">
+        Al confirmar se descuentan del stock las {units - countedUnits} unidades de este manifiesto, igual que un corte normal (queda como Egreso de despacho).
+      </div>
+      {countedList}
+      {err && <div className="text-red mt-2">{err}</div>}
+      {!canConfirm ? (
+        <div className="text-steel mt-2">Daniel lo confirma desde aquí.</div>
+      ) : !asking ? (
+        <button type="button" className="mt-2 rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer" onClick={() => setAsking(true)}>
+          Ya salió todo — descontar del stock
+        </button>
+      ) : (
+        <div className="mt-2 flex items-center gap-2.5 flex-wrap">
+          <span className="font-semibold">¿Estás seguro? Se descuentan {units - countedUnits} unidades y no se puede deshacer.</span>
+          <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={confirm}>
+            {busy ? "Descontando…" : "Sí, confirmar"}
+          </button>
+          <button type="button" disabled={busy} className="text-steel text-[12.5px] cursor-pointer" onClick={() => setAsking(false)}>
+            Cancelar
+          </button>
         </div>
       )}
     </div>

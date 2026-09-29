@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { canSubmitFulfillmentRequest, dbUserId } from "@/lib/guards";
+import { canSubmitFulfillmentRequest, dbUserId, getInventoryLeadId } from "@/lib/guards";
 import { applyGuidesImport } from "@/lib/fulfillmentGuides";
+import { notifyOwner } from "@/lib/notifications";
 import { detectSuddenDemand } from "@/lib/suddenDemand";
 
 const variantSchema = z.object({ label: z.string().trim().min(1).max(120), quantity: z.number().int().positive() });
 const schema = z.object({
   fileUrls: z.array(z.string().url()).min(1).max(10),
   manifestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+  // Manifiesto atrasado: va al corte del día que dice el PDF (manifestDate).
+  backfill: z.boolean().optional(),
   parseWarnings: z.array(z.string().max(1000)).max(100).optional(),
   guides: z.array(z.object({ number: z.string().trim().min(1).max(40), carrier: z.string().max(40), codes: z.array(z.string().max(120)).max(50).optional() })).max(3000),
   rows: z
@@ -59,8 +62,23 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
 
-  const result = await applyGuidesImport(parsed.data, dbUserId(session.user.id));
+  const { backfill, ...input } = parsed.data;
+  if (backfill && !input.manifestDate) return NextResponse.json({ error: "No se pudo leer la fecha del manifiesto en el PDF." }, { status: 400 });
+  const result = await applyGuidesImport({ ...input, backfillDay: backfill ? input.manifestDate : null }, dbUserId(session.user.id));
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  if (backfill) {
+    // Ya salió: no hay nada que sacar de bodega, solo que Daniel lo confirme.
+    const danielId = await getInventoryLeadId();
+    const day = input.manifestDate!.split("-").reverse().join("/");
+    if (danielId) {
+      await notifyOwner(danielId, {
+        title: "Manifiesto atrasado por confirmar",
+        body: `Yair cargó el manifiesto del ${day}, que ya se despachó. No hay que sacar nada: entra al corte y confirma que salió todo para descontarlo del stock.`,
+        url: "/area/workspace?tab=egresos&otab=solicitud",
+      }).catch(() => null);
+    }
+    return NextResponse.json({ ok: true, batchId: result.batchId, lotId: result.lotId });
+  }
   // Producto que despierta (pedido de Daniel 2026-09-29): se avisa el mismo
   // día en que sube el manifiesto. Si falla, la subida igual queda hecha y el
   // cron diario lo vuelve a revisar.

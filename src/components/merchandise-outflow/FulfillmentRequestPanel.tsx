@@ -67,10 +67,15 @@ export function FulfillmentRequestPanel({ canSubmit }: { canSubmit: boolean }) {
     // historial (pedido del usuario 2026-09-26).
     const opened = openId ? list.find((l) => l.id === openId) : undefined;
     if (opened?.status === "CLOSED" && prevStatus && prevStatus !== "CLOSED") {
-      setJustClosed(`Corte ${opened.corte} cerrado — ya se descontó del Kardex lo que salió. Quedó guardado en el historial.`);
+      setJustClosed(
+        opened.backfill
+          ? `Manifiesto atrasado del ${opened.day.split("-").reverse().join("/")} confirmado — ya se descontó del stock. Quedó guardado en el historial.`
+          : `Corte ${opened.corte} cerrado — ya se descontó del Kardex lo que salió. Quedó guardado en el historial.`,
+      );
       openId = null;
     }
-    const pending = canSubmit ? list.find((l) => l.status !== "CLOSED") : list.find((l) => l.status === "SENT");
+    // Un manifiesto atrasado (ya salió) no le quita el lugar a un corte por sacar.
+    const pending = canSubmit ? list.find((l) => l.status !== "CLOSED") : (list.find((l) => l.status === "SENT" && !l.backfill) ?? list.find((l) => l.status === "SENT"));
     const target = openId ?? pending?.id ?? null;
     if (target) await showLot(target);
     else setLot(null);
@@ -103,11 +108,11 @@ export function FulfillmentRequestPanel({ canSubmit }: { canSubmit: boolean }) {
           {otherPending.map((l) => {
             // Rojo: productos sin escanear o con menos de lo pedido. Amarillo:
             // falta asignar algún bloque. Si pasan las dos, manda el rojo.
-            const tone = l.unscanned > 0 ? "border-red/60 bg-red/10 text-red hover:border-red" : l.unassignedBlocks > 0 ? "border-gold/60 bg-gold/15 text-gold hover:border-gold" : "border-teal/50 text-teal hover:border-teal";
+            const tone = l.backfill ? "border-gold/60 bg-gold/15 text-gold hover:border-gold" : l.unscanned > 0 ? "border-red/60 bg-red/10 text-red hover:border-red" : l.unassignedBlocks > 0 ? "border-gold/60 bg-gold/15 text-gold hover:border-gold" : "border-teal/50 text-teal hover:border-teal";
             const notes = [l.unscanned > 0 && `${l.unscanned} ${l.unscanned === 1 ? "producto" : "productos"} sin escanear completo`, l.unassignedBlocks > 0 && `${l.unassignedBlocks} ${l.unassignedBlocks === 1 ? "bloque" : "bloques"} sin asignar`].filter(Boolean);
             return (
               <button key={l.id} type="button" className={`text-[10.5px] rounded-full border px-2 py-0.5 cursor-pointer ${tone}`} onClick={() => showLot(l.id)}>
-                {fmtDay(l.day)} · Corte {l.corte} · {l.status === "DRAFT" ? "En preparación" : "Enviado"} · {l.guides} guías
+                {fmtDay(l.day)} · Corte {l.corte} · {l.backfill ? "Manifiesto atrasado · por confirmar" : l.status === "DRAFT" ? "En preparación" : "Enviado"} · {l.guides} guías
                 {notes.length > 0 && <span className="font-semibold"> · {notes.join(" · ")}</span>}
               </button>
             );

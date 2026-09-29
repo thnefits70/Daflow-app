@@ -108,6 +108,10 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
   const [registering, setRegistering] = useState<string | null>(null);
   const [warrantyDecisions, setWarrantyDecisions] = useState<Record<number, WarrantyDecision>>({});
   const [err, setErr] = useState("");
+  // Manifiesto atrasado (pedido del usuario 2026-09-29): un PDF de un día
+  // pasado que nunca se cargó. Yair lo marca y va al corte de ESE día, que
+  // Daniel confirma de una vez — sin escanear.
+  const [backfill, setBackfill] = useState(false);
 
   // Pedido del usuario 2026-09-25: al recargar la página se perdía todo lo
   // que Yair ya había elegido (productos, combos vinculados, garantías)
@@ -205,6 +209,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     setPhase("idle");
     setErr("");
     setDraftDay(today);
+    setBackfill(false);
   }
 
   // Confirmado 2026-09-25: en Gintracom/Laar/Urbano todavía no sabemos cómo
@@ -282,6 +287,9 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     return true;
   }
   const pendingWarranty = warranty.filter((w, i) => !warrantyReady(i, w)).length;
+  // Solo se ofrece si el PDF es de un día anterior (el servidor revisa el límite de días).
+  const canBackfill = !!data?.manifestDate && data.manifestDate < today;
+  const backfillDayLabel = data?.manifestDate ? data.manifestDate.split("-").reverse().join("/") : "";
 
   async function apply() {
     if (!data || pending.length > 0 || pendingWarranty > 0) return;
@@ -293,6 +301,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
       body: JSON.stringify({
         fileUrls: files.map((f) => f.url),
         manifestDate: data.manifestDate,
+        backfill: canBackfill && backfill,
         parseWarnings: data.warnings,
         guides: data.guides.map((g) => ({ number: g.number, carrier: g.carrier, codes: g.codes ?? [] })),
         rows: rows.map((r) => {
@@ -807,6 +816,21 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             ))}
           </div>
 
+          {canBackfill && (
+            <div className="text-[12px] bg-gold/10 border border-gold/40 rounded-md p-2.5 mb-3">
+              <div className="font-semibold mb-1 flex items-center gap-1.5" style={{ color: "var(--color-gold)" }}>
+                <AlertTriangle size={13} /> Este manifiesto es del {backfillDayLabel}, no de hoy
+              </div>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input type="checkbox" className="mt-0.5" checked={backfill} onChange={(e) => setBackfill(e.target.checked)} disabled={phase === "applying"} />
+                <span>
+                  <b>Es un manifiesto atrasado: esa mercadería ya salió.</b> Se guarda en un corte del {backfillDayLabel}, nadie tiene que sacar ni escanear nada, y Daniel confirma de una vez que salió todo para descontarlo del stock.
+                </span>
+              </label>
+              <div className="text-[10.5px] text-steel mt-1 pl-5">Si esta mercadería todavía está en bodega y sale hoy, deja esto sin marcar.</div>
+            </div>
+          )}
+
           <div className="flex items-center gap-2.5 flex-wrap">
             <button
               type="button"
@@ -814,7 +838,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
               className="rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
               onClick={apply}
             >
-              {phase === "applying" ? "Guardando…" : "Guardar en el corte de hoy"}
+              {phase === "applying" ? "Guardando…" : canBackfill && backfill ? `Guardar como manifiesto atrasado del ${backfillDayLabel}` : "Guardar en el corte de hoy"}
             </button>
             <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => read(true)} disabled={phase === "applying"}>
               Volver a leer

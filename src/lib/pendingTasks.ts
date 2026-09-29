@@ -11,7 +11,7 @@ import { NICHO_AUTO_MONTHLY_BUDGET_USD } from "@/lib/nichoAi";
 import { getReadyToBuyPendingProposalIds } from "@/lib/marketProduct";
 import { getNewIdBrandingBoard } from "@/lib/newIdBranding";
 import { CLAIM_GAP_DAYS, findPossibleDoubleRegistrations, getSupplierClaimGaps } from "@/lib/reentrySupplierClaim";
-import { getCompiledLot } from "@/lib/fulfillmentGuides";
+import { getCompiledLot, isBackfillLot } from "@/lib/fulfillmentGuides";
 import { carrierLabel } from "@/lib/carriers";
 import { isAutoStockoutWeek } from "@/lib/autoStockout";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
@@ -2406,7 +2406,7 @@ async function getMyBankAccountPendingItem(userId: string, href: string): Promis
 async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingItem[]> {
   const rows = await prisma.fulfillmentLot.findMany({
     where: { status: "SENT" },
-    select: { day: true, corte: true, sentAt: true },
+    select: { day: true, corte: true, sentAt: true, createdAt: true },
     orderBy: [{ day: "asc" }, { corte: "asc" }],
   });
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -2414,6 +2414,17 @@ async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingI
     const [, m, d] = r.day.split("-");
     const overdue = (r.sentAt ?? new Date()) < cutoff;
     const where = `Corte ${r.corte} del ${d}/${m}`;
+    // Manifiesto atrasado (2026-09-29): ya salió, solo falta confirmarlo.
+    if (isBackfillLot(r)) {
+      return {
+        type: "fulfillment_corte_enviado",
+        icon: "🚚",
+        label: "Manifiesto atrasado por confirmar",
+        meta: `${where} · ya salió, confirma de una vez para descontarlo del stock${overdue ? " · atrasado" : ""}`,
+        overdue,
+        href,
+      };
+    }
     return {
       type: "fulfillment_corte_enviado",
       icon: "🚚",
