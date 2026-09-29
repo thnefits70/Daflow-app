@@ -17,6 +17,7 @@ import { isAutoStockoutWeek } from "@/lib/autoStockout";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
 import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
+import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -1815,6 +1816,7 @@ async function getPayrollNairobySalaryTransferPendingItem(forAdmin: boolean, hre
 // producto no está en el catálogo, antes no le salía a nadie en Inicio —
 // lo resuelve Daniel (JustCatalogPanel → MissingReportsQueue).
 async function getCatalogMissingReportPendingItem(href: string): Promise<PendingItem | null> {
+  await autoResolveFoundMissingReports();
   const rows = await prisma.catalogMissingReport.findMany({
     where: { resolvedAt: null },
     select: { query: true },

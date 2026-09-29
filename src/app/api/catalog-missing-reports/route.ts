@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { canManageJustCatalog, dbUserId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { actorName } from "@/lib/actorName";
+import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
 
 const schema = z.object({
   query: z.string().trim().min(1),
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
 // Solo quien administra el catálogo ve la cola de reportes pendientes.
 export async function GET() {
   if (!(await canManageJustCatalog())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  await autoResolveFoundMissingReports();
 
   const reports = await prisma.catalogMissingReport.findMany({
     where: { resolvedAt: null },
