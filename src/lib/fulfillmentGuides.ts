@@ -824,8 +824,8 @@ export async function listRecentLots() {
   });
   // Pedido del usuario 2026-09-29: en "Otros cortes pendientes" Daniel ve de
   // un vistazo qué corte enviado quedó a medias — amarillo si falta asignar
-  // algún bloque, rojo si hay productos sin escanear (no se bajaron). Solo
-  // se calcula para los enviados, que son pocos.
+  // algún bloque, rojo si hay productos sin escanear o con menos de lo pedido
+  // (no se bajó todo). Solo se calcula para los enviados, que son pocos.
   const flags = new Map<string, { unassignedBlocks: number; unscanned: number }>();
   await Promise.all(
     lots
@@ -835,7 +835,7 @@ export async function listRecentLots() {
         if (!c) return;
         flags.set(l.id, {
           unassignedBlocks: c.blocks.filter((b) => !b.assigneeId).length,
-          unscanned: c.picking.filter((p) => p.picked == null).length,
+          unscanned: c.picking.filter((p) => (p.picked ?? 0) < p.needed).length,
         });
       }),
   );
