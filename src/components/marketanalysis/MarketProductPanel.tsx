@@ -1141,7 +1141,7 @@ const PROPOSAL_STATUS_LABEL: Record<Proposal["status"], { text: string; color: s
 // TraceabilityView, adaptado para mostrar también lo pendiente y lo
 // rechazado, no solo lo ya aprobado.
 function MyProposalsView() {
-  const [rows, setRows] = useState<Proposal[] | null>(null);
+  const [rows, setRows] = useState<(Proposal & { b2bPriceDefault?: number | null })[] | null>(null);
 
   useEffect(() => {
     fetch("/api/market-products?view=mine").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
@@ -1162,6 +1162,23 @@ function MyProposalsView() {
                 <span className="font-semibold text-[13.5px]">{p.code} — {p.productName}</span>
                 <span className={`text-[11px] font-semibold ${status.color}`}>{status.text}</span>
               </div>
+              {/* Pedido de Jariel 2026-09-29: con qué proveedor lo propuso, a
+                  cuánto se lo vende el proveedor y el precio B2B (20%). */}
+              {p.supplierPrices.length > 0 && (
+                <div className="text-[12.5px] mb-2 flex flex-col gap-0.5">
+                  {[...p.supplierPrices].sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary)).map((sp) => (
+                    <div key={sp.id} className="text-steel">
+                      Proveedor{p.supplierPrices.length > 1 ? (sp.isPrimary ? " 1°" : " 2°") : ""}: <span className="text-ink font-semibold">{sp.supplier.name}</span> · <span className="text-ink font-semibold">{money(sp.batchCost)}</span> c/u
+                      {sp.freightCost ? <> + flete {money(sp.freightCost)}</> : null}
+                    </div>
+                  ))}
+                  {p.b2bPriceDefault != null && (
+                    <div className="text-steel">
+                      Precio B2B: <span className="text-teal font-bold">{money(p.b2bPriceDefault)}</span> <span className="text-[11px]">(20%)</span>
+                    </div>
+                  )}
+                </div>
+              )}
               {p.status === "REJECTED" && p.rejectReason && (
                 <div className="text-[12px] text-red mb-2">Motivo: {p.rejectReason}</div>
               )}

@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type Status = "urgente" | "pronto" | "no_sale" | "en_compra";
 type Row = {
   catalogItemId: string;
   name: string;
+  justCode: string | null;
   photo: string | null;
   stock: number;
   sold: number;
@@ -16,7 +18,7 @@ type Row = {
   escalated: boolean;
 };
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
-type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[] };
+type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean };
 
 const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = [
   { status: "urgente", title: "🔴 Urgente", hint: "Se acaba en 7 días o menos", tone: "text-red" },
@@ -38,7 +40,13 @@ function fmtDaysLeft(d: number | null) {
   return `alcanza para ${n} día${n === 1 ? "" : "s"}`;
 }
 
-function RowLine({ r }: { r: Row }) {
+// Pedido de Jariel 2026-09-29: si ningún proveedor lo tiene, un clic lo lleva
+// a Análisis de Mercado → Sin stock de proveedor con el producto ya elegido.
+function stockoutUrl(catalogItemId: string) {
+  return `${window.location.pathname}?tab=analisis-mercado&ptab=sinstock&reportItem=${catalogItemId}`;
+}
+
+function RowLine({ r, canReportStockout }: { r: Row; canReportStockout: boolean }) {
   const days = fmtDaysLeft(r.daysLeft);
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 border-b border-rule last:border-b-0">
@@ -50,6 +58,12 @@ function RowLine({ r }: { r: Row }) {
       )}
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-semibold text-ink truncate">{r.name}</div>
+        {/* Pedido de Jariel 2026-09-29: el ID para buscarlo más rápido. */}
+        {r.justCode && (
+          <div className="flex items-center gap-1 text-[12px] text-steel">
+            ID <CatalogCode code={r.justCode} size="text-[12px]" />
+          </div>
+        )}
         <div className="text-[12px] text-steel">
           Quedan <b className="text-ink">{r.stock}</b> · {fmtPerDay(r.perDay)}
           {days && r.status !== "en_compra" ? (
@@ -61,11 +75,19 @@ function RowLine({ r }: { r: Row }) {
         </div>
         {r.escalated && <div className="text-[11.5px] text-red font-semibold mt-0.5">Urgente hace 3 días o más sin comprar — ya se avisó a Daniel</div>}
       </div>
+      {canReportStockout && r.status !== "en_compra" && (
+        <a
+          href={stockoutUrl(r.catalogItemId)}
+          className="shrink-0 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold text-steel hover:text-ink hover:border-teal"
+        >
+          Ningún proveedor lo tiene
+        </a>
+      )}
     </div>
   );
 }
 
-function List({ title, sub, rows, newProducts, open }: { title: string; sub: string; rows: Row[]; newProducts?: NewProduct[]; open: boolean }) {
+function List({ title, sub, rows, newProducts, open, canReportStockout }: { title: string; sub: string; rows: Row[]; newProducts?: NewProduct[]; open: boolean; canReportStockout: boolean }) {
   const [showNoSale, setShowNoSale] = useState(false);
   return (
     <details open={open} className="bg-surface border border-rule rounded-md mb-4">
@@ -93,7 +115,7 @@ function List({ title, sub, rows, newProducts, open }: { title: string; sub: str
               {!collapsed && (
                 <div className="bg-surface2 border border-rule rounded-md">
                   {list.map((r) => (
-                    <RowLine key={r.catalogItemId} r={r} />
+                    <RowLine key={r.catalogItemId} r={r} canReportStockout={canReportStockout} />
                   ))}
                 </div>
               )}
@@ -154,8 +176,8 @@ export function PurchaseSuggestionsPanel() {
   const onlyCold = data.audiences.includes("cold") && !data.audiences.includes("hot");
   const onlyHot = data.audiences.includes("hot") && !data.audiences.includes("cold");
   const hotFirst = !onlyCold;
-  const hot = <List key="hot" title="🔥 Compras calientes" sub="30 unidades o menos · Jariel" rows={data.hot} newProducts={data.newProducts} open={!onlyCold} />;
-  const cold = <List key="cold" title="❄️ Compras frías" sub="31 a 60 unidades · Nairoby" rows={data.cold} open={!onlyHot} />;
+  const hot = <List key="hot" title="🔥 Compras calientes" sub="30 unidades o menos · Jariel" rows={data.hot} newProducts={data.newProducts} open={!onlyCold} canReportStockout={data.canReportStockout} />;
+  const cold = <List key="cold" title="❄️ Compras frías" sub="31 a 60 unidades · Nairoby" rows={data.cold} open={!onlyHot} canReportStockout={data.canReportStockout} />;
 
   return (
     <div>

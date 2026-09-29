@@ -913,7 +913,9 @@ export async function sendLotToInventory(lotId: string, userId: string | null): 
       .join("; ");
     const more = realShort.length > 6 ? ` y ${realShort.length - 6} más` : "";
     for (const id of await purchaseDeciderIds()) {
-      await notifyOwner(id, { title: "Stock insuficiente para despachar", body: `${label}: ${list}${more}.`, url: LOT_URL });
+      // Pedido de Jariel 2026-09-29: el aviso abría el corte de Fulfillment
+      // (pestaña que Compras no tiene) — ahora abre Qué comprar.
+      await notifyOwner(id, { title: "Stock insuficiente para despachar", body: `${label}: ${list}${more}.`, url: "/area/workspace?tab=compras&ptab=que-comprar" });
     }
   }
   return { ok: true };

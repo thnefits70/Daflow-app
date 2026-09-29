@@ -57,6 +57,24 @@ export function SupplierStockoutPanel({ canReport, canResolve }: { canReport: bo
   }
   useEffect(load, []);
 
+  // Pedido de Jariel 2026-09-29: desde "Qué comprar" el botón "Ningún
+  // proveedor lo tiene" llega con ?reportItem=<id> y abre el reporte con ese
+  // producto ya elegido — solo falta escribir la nota.
+  useEffect(() => {
+    if (!canReport) return;
+    const id = new URLSearchParams(window.location.search).get("reportItem");
+    if (!id) return;
+    fetch("/api/supplier-stockout-reports/catalog-search")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((items: MatchCatalogItem[]) => {
+        const item = items.find((i) => i.id === id);
+        if (!item) return;
+        setReporting(true);
+        setSelected(item);
+      })
+      .catch(() => {});
+  }, [canReport]);
+
   function resetForm() {
     setReporting(false);
     setSelected(null);

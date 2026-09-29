@@ -180,7 +180,19 @@ export async function GET(req: NextRequest) {
       include: includeFull,
       orderBy: { proposedAt: "desc" },
     });
-    return NextResponse.json(rows);
+    // Pedido de Jariel 2026-09-29: en Mis propuestas ver también el precio
+    // B2B (20%) calculado con el proveedor con el que se propuso.
+    return NextResponse.json(
+      rows.map((p) => {
+        const sp = pickPrimarySupplierPrice(p.supplierPrices);
+        return {
+          ...p,
+          b2bPriceDefault: sp
+            ? computeB2BPrice({ batchCost: sp.batchCost, batchUnits: sp.batchUnits, freightCost: sp.freightCost, insuranceRatePercent: p.insuranceRatePercent, marginPercent: B2B_MARGIN_DEFAULT })
+            : null,
+        };
+      })
+    );
   }
 
   if (view === "review") {

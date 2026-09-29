@@ -26,6 +26,7 @@ export type SuggestionStatus = "urgente" | "pronto" | "no_sale" | "en_compra";
 export type SuggestionRow = {
   catalogItemId: string;
   name: string;
+  justCode: string | null;
   photo: string | null;
   stock: number;
   sold: number;
@@ -117,7 +118,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   const candidateIds = [...balances.entries()].filter(([, bal]) => bal <= COLD_MAX).map(([id]) => id);
   const items = await prisma.purchaseCatalogItem.findMany({
     where: { id: { in: candidateIds }, awaitingDropiId: false },
-    select: { id: true, name: true, photos: true },
+    select: { id: true, name: true, photos: true, justCode: true },
   });
 
   const hot: SuggestionRow[] = [];
@@ -135,6 +136,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
     const row: SuggestionRow = {
       catalogItemId: item.id,
       name: item.name,
+      justCode: item.justCode,
       photo: item.photos[0] ?? null,
       stock,
       sold: units,
