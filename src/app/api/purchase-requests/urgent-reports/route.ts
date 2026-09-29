@@ -74,6 +74,7 @@ export async function GET(_req: NextRequest) {
       reportedBy: { select: { name: true } },
       excessGestionBy: { select: { name: true } },
       excessConfirmedBy: { select: { name: true } },
+      supplierStockoutBy: { select: { name: true } },
       resolutions: {
         orderBy: { createdAt: "asc" },
         include: {

@@ -124,6 +124,10 @@ type Report = {
   originUncertain: boolean;
   estimatedUnitCost: number | null;
   stockStatus: "IN_STOCK" | "SOLD" | null;
+  // Confirmado 2026-09-29, pedido de Bryan: Jariel marca que el proveedor no
+  // tiene stock (ver supplier-stockout/route.ts).
+  supplierStockoutAt: string | null;
+  supplierStockoutBy: { name: string } | null;
 };
 
 // Confirmado 2026-09-29, pedido del usuario (antifraude): con un proveedor
@@ -252,6 +256,7 @@ export function PurchaseUrgentReportsPanel({
   const [confirmBankId, setConfirmBankId] = useState<string | null>(null);
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const [confirmingStockoutId, setConfirmingStockoutId] = useState<string | null>(null);
 
   // Guardado automático: si sale a revisar otro reclamo antes de terminar
   // de coordinar la resolución, al volver la encuentra tal como la había
@@ -293,6 +298,17 @@ export function PurchaseUrgentReportsPanel({
     setExcessGestionNoteInput("");
     load();
     router.refresh();
+  }
+
+  async function markSupplierStockout(reportId: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-reports/${reportId}/supplier-stockout`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo marcar."); return; }
+    setConfirmingStockoutId(null);
+    load();
   }
 
   async function confirmExcess(reportId: string) {
@@ -608,6 +624,44 @@ export function PurchaseUrgentReportsPanel({
                     {hideMoney ? `${totalReported(r)} un. en disputa` : `$${(totalReported(r) * claimUnitCost(r)).toFixed(2)} en disputa`}
                   </div>
                   <div className="text-[12px] mb-2">{r.description}</div>
+
+                  {/* Confirmado 2026-09-29, pedido de Bryan: Daniel solo avisa
+                      que no llegó; Jariel, que habla con el proveedor, marca
+                      que no tiene stock. Avisa solo a Marketing; el descuento
+                      se registra aparte, con captura. */}
+                  {r.supplierStockoutAt ? (
+                    <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-amber mb-2">
+                      🚫 Proveedor sin stock — marcado por {actorName(r.supplierStockoutBy?.name)} · {new Date(r.supplierStockoutAt).toLocaleString("es-MX")} · Marketing ya fue avisado
+                    </div>
+                  ) : (
+                    canAct && !r.isLateClaim && r.missingQty > 0 && remaining > 0 && (
+                      confirmingStockoutId === r.id ? (
+                        <div className="bg-inset rounded-md p-3 mb-2">
+                          <div className="text-[12.5px] font-bold mb-1">¿El proveedor confirmó que no tiene stock?</div>
+                          <div className="text-[11.5px] text-steel mb-2.5">
+                            Las {r.missingQty} un. quedan marcadas como que nunca van a llegar y se avisa a Marketing para cerrar el ID o bajar el stock. No se descuenta nada: registra abajo {r.request.supplier.paymentMode === "CREDITO" ? `"${CREDIT_SUPPLIER_CREDIT_LABEL}"` : "la devolución o el crédito"} con la captura del proveedor.
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button type="button" disabled={busy} className="rounded border border-amber bg-amber px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => markSupplierStockout(r.id)}>
+                              Sí, no tiene stock
+                            </button>
+                            <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setConfirmingStockoutId(null); setErr(""); }}>
+                              Cancelar
+                            </button>
+                          </div>
+                          {err && <div className="text-red text-[11.5px] mt-1.5">{err}</div>}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded border border-amber/60 text-amber px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer mb-2"
+                          onClick={() => { setConfirmingStockoutId(r.id); setErr(""); }}
+                        >
+                          🚫 El proveedor no tiene stock (no va a llegar)
+                        </button>
+                      )
+                    )
+                  )}
 
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {r.mediaUrls.map((url, i) =>

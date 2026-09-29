@@ -112,7 +112,7 @@ type PendingUrgentReport = {
     unitCost: number;
     totalCost: number;
     catalogItem: { name: string; photos: string[]; justCode: string | null };
-    supplier: { name: string; paymentMode: string };
+    supplier: { name: string };
   };
 };
 
@@ -313,10 +313,6 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // lo que llegó después; se suma a las evidencias del reporte (mediaUrls).
   const [internalPhotoUrls, setInternalPhotoUrls] = useState<Record<string, string[]>>({});
   const [takingInternalPhotoId, setTakingInternalPhotoId] = useState<string | null>(null);
-  // Confirmado 2026-09-29, pedido de Daniel + usuario: "El proveedor no tiene"
-  // — ver urgent-reports/[id]/supplier-stockout/route.ts. Misma doble
-  // confirmación que los otros dos caminos.
-  const [confirmingStockoutId, setConfirmingStockoutId] = useState<string | null>(null);
 
   // Confirmado 2026-09-08: pedido explícito de Daniel (caso real: resolvió
   // un "Informar urgente" pero la cantidad declarada del recibo se quedó
@@ -794,30 +790,6 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     setExcessReceiveId(null);
   }
 
-  async function markSupplierStockout(id: string, missingQty: number) {
-    setBusy(true);
-    setErr("");
-    const res = await fetch(`/api/purchase-requests/urgent-reports/${id}/supplier-stockout`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ missingQty }),
-    });
-    setBusy(false);
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setErr(data?.error ?? "No se pudo marcar.");
-      return;
-    }
-    setPendingUrgentReports((rs) => rs.filter((r) => r.id !== id));
-    setMissingQtyEdits((m) => {
-      const next = { ...m };
-      delete next[id];
-      return next;
-    });
-    setConfirmingStockoutId(null);
-    load();
-  }
-
   async function resolveUrgentReportInternally(id: string, missingQty: number, note: string) {
     setBusy(true);
     setErr("");
@@ -1142,7 +1114,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       se resuelve hablando con su propio equipo (sin nada dañado/incompleto/
                       diferente en el mismo reporte), puede cerrarlo sin mandarlo a Compras.
                       Nota obligatoria para dejar rastro de qué pasó. */}
-                  {flaggedQty === 0 && confirmingMissingId !== pr.id && confirmingInternalId !== pr.id && confirmingStockoutId !== pr.id && (
+                  {flaggedQty === 0 && confirmingMissingId !== pr.id && confirmingInternalId !== pr.id && (
                     <div className="mb-2.5">
                       <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
                         Nota (solo si lo resuelves internamente, sin enviar a Compras)
@@ -1242,28 +1214,6 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         </button>
                       </div>
                     </div>
-                  ) : confirmingStockoutId === pr.id ? (
-                    <div className="bg-inset rounded-md p-3">
-                      <div className="text-[13px] font-bold mb-1.5">¿Seguro que el proveedor no tiene y nunca va a llegar?</div>
-                      <div className="text-[12px] text-steel mb-3">
-                        {pr.request.supplier.paymentMode === "CREDITO"
-                          ? `Se le avisa a Compras que ${pr.request.supplier.name} no tiene las ${missingNum} un. — Jariel registra el descuento con la captura de ${pr.request.supplier.name}. Marketing recibe aviso para cerrar el ID o bajar el stock.`
-                          : `Se le avisa a Compras que ${pr.request.supplier.name} no tiene las ${missingNum} un. ($${(missingNum * pr.request.unitCost).toFixed(2)}) para que pida devolución o crédito. Marketing recibe aviso para cerrar el ID o bajar el stock.`}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={busy}
-                          className="rounded border border-amber bg-amber px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
-                          onClick={() => markSupplierStockout(pr.id, missingNum)}
-                        >
-                          Sí, no va a llegar
-                        </button>
-                        <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setConfirmingStockoutId(null)}>
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
                   ) : (
                     <div className="flex items-center gap-2 flex-wrap">
                       <button
@@ -1275,17 +1225,6 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       >
                         ✓ Revisar y enviar a Compras
                       </button>
-                      {pr.excessQty === 0 && missingNum > 0 && (
-                        <button
-                          type="button"
-                          disabled={!canApprove || busy || overLimit}
-                          title={!canApprove ? "Exclusivo del líder de Inventario" : "El proveedor se quedó sin stock: lo que falta nunca va a llegar"}
-                          className="rounded border border-amber px-3.5 py-1.5 text-[12px] font-semibold text-amber cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                          onClick={() => setConfirmingStockoutId(pr.id)}
-                        >
-                          🚫 El proveedor no tiene (no va a llegar)
-                        </button>
-                      )}
                       {flaggedQty === 0 && (
                         <button
                           type="button"
