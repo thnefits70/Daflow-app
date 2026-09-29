@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Package, RefreshCw, ScanLine, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowUp, CheckCircle2, ChevronDown, ChevronUp, Package, RefreshCw, ScanLine, UserRound } from "lucide-react";
 import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { carrierLabel, sortCarriers } from "@/lib/carriers";
@@ -97,6 +97,10 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   const [onlyMine, setOnlyMine] = useState(true);
   const showOnlyMine = onlyMine && myBlocks.length > 0 && !canConfirm;
   const blockInfo = (carrier: string) => lot.blocks.find((b) => b.carrier === carrier);
+  // Pedido del equipo vía Daniel 2026-09-29: tocar una transportadora sube
+  // arriba todos los productos que van por ella (sin bajar toda la lista) y
+  // cada una muestra cuántos ya se sacaron, para saber cuáles están completas.
+  const [carrierFilter, setCarrierFilter] = useState<string | null>(null);
 
   const matching = lot.picking.filter((p) => rowState(p) === "match");
   const byCarrierOf = (id: string) => lot.lines.find((l) => l.catalogItemId === id)?.byCarrier ?? {};
@@ -104,6 +108,19 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   // y ahora imprimir es opcional — se sacan desde el celular.
   const variantsOf = (id: string) => lot.lines.find((l) => l.catalogItemId === id)?.variants ?? [];
   const pieces = lot.warranty.filter((w) => w.mode === "PIECE");
+  const goesBy = (p: LotPickLine, c: string) => (byCarrierOf(p.catalogItemId)[c] ?? 0) > 0;
+  const isTaken = (p: LotPickLine) => p.picked !== null || !!p.confirmedAt;
+  const visible = lot.picking.filter((p) => !showOnlyMine || myBlocks.includes(p.block));
+  const carrierProgress = lot.carriers
+    .map((c) => {
+      const rows = visible.filter((p) => goesBy(p, c));
+      return { c, n: rows.length, taken: rows.filter(isTaken).length };
+    })
+    .filter((x) => x.n > 0);
+  const activeFilter = carrierFilter && carrierProgress.some((x) => x.c === carrierFilter) ? carrierFilter : null;
+  // Arriba lo que falta sacar; lo ya registrado queda al final.
+  const filteredRows = activeFilter ? visible.filter((p) => goesBy(p, activeFilter)).sort((a, b) => Number(isTaken(a)) - Number(isTaken(b))) : [];
+  const filteredIds = new Set(filteredRows.map((p) => p.catalogItemId));
 
   function openCode(raw: string) {
     const code = raw.trim();
@@ -180,6 +197,130 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
       return;
     }
     onChanged();
+  }
+
+  function renderRow(p: LotPickLine) {
+    const st = rowState(p);
+    const qtyToConfirm = Math.min(p.picked ?? 0, p.needed);
+    return (
+            <div
+              className={`rounded-md px-3 py-2 text-[12px] cursor-pointer ${ROW_STYLE[st]}`}
+              onClick={(e) => {
+                // Los botones de adentro (copiar ID, confirmar) no abren el detalle.
+                if ((e.target as HTMLElement).closest("button, input, a")) return;
+                toggleRow(p.catalogItemId);
+              }}
+            >
+              <div className="flex items-center gap-2 flex-wrap">
+                <Thumb url={p.photos[0]} small />
+                <CatalogCode code={p.justCode} />
+                <span className="flex-1 min-w-0">{p.name}</span>
+                <span className="font-mono text-[11.5px]">
+                  pedido <b>{p.needed}</b> · sacado <b>{p.picked ?? "—"}</b>
+                  {st === "confirmed" && (
+                    <>
+                      {" "}
+                      · confirmado <b>{p.confirmedQty}</b>
+                    </>
+                  )}
+                </span>
+                {st === "confirmed" && <CheckCircle2 size={14} className="text-teal shrink-0" />}
+                {openRows.has(p.catalogItemId) ? <ChevronUp size={14} className="text-steel shrink-0" /> : <ChevronDown size={14} className="text-steel shrink-0" />}
+              </div>
+              {openRows.has(p.catalogItemId) && (
+                <div className="mt-2 bg-surface border border-rule rounded-md p-2.5 text-[12px]">
+                  <div className="font-semibold mb-1">
+                    Son <b className="font-mono">{p.needed}</b> {p.needed === 1 ? "unidad" : "unidades"} en total
+                    {p.warrantyNeeded > 0 ? ` (incluye ${p.warrantyNeeded} de garantía)` : ""}:
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {sortCarriers(Object.keys(byCarrierOf(p.catalogItemId))).map((c) => (
+                      <div key={c} className="flex items-center gap-2">
+                        <span className="flex-1">{carrierLabel(c)}</span>
+                        <b className="font-mono text-[13px]">{byCarrierOf(p.catalogItemId)[c]}</b>
+                      </div>
+                    ))}
+                  </div>
+                  {variantsOf(p.catalogItemId).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {variantsOf(p.catalogItemId).map((v) => (
+                        <span key={v.label} className="text-[11.5px] bg-teal/10 border border-teal/30 rounded-full px-2 py-0.5">
+                          {v.label} <b className="font-mono">{v.quantity}</b>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="text-[11px] text-steel mt-1.5">
+                    {areaLabel(p.area)} · se saca completo en el bloque {carrierLabel(p.block)}
+                    {blockInfo(p.block)?.assigneeName ? ` (le toca a ${blockInfo(p.block)?.assigneeName})` : ""}.
+                  </div>
+                </div>
+              )}
+              {variantsOf(p.catalogItemId).length > 0 && (
+                <div className="text-[11px] text-teal mt-0.5">
+                  {variantsOf(p.catalogItemId).map((v) => `${v.label} ${v.quantity}`).join(" · ")}
+                </div>
+              )}
+              {/* Pedido de Daniel 2026-09-29 (opción B): el producto se sigue
+                  sacando completo en un solo bloque, pero si va por varias
+                  transportadoras se ve cuántas van por cada una (Laar/Urbano
+                  casi nunca tienen bloque propio) para separarlas al empacar. */}
+              {Object.keys(byCarrierOf(p.catalogItemId)).length > 1 && (
+                <div className="text-[11px] text-steel mt-0.5">
+                  Va por:{" "}
+                  {sortCarriers(Object.keys(byCarrierOf(p.catalogItemId))).map((c, i) => (
+                    <Fragment key={c}>
+                      {i > 0 && " · "}
+                      <span className={c === p.block ? "" : "font-semibold text-ink"}>
+                        {carrierLabel(c)} {byCarrierOf(p.catalogItemId)[c]}
+                      </span>
+                    </Fragment>
+                  ))}
+                </div>
+              )}
+              {p.pickedByName && p.pickedAt && st !== "confirmed" && (
+                <div className="text-[10.5px] text-steel mt-0.5">
+                  Registró {p.pickedByName} a las {fmtTime(p.pickedAt)}
+                </div>
+              )}
+              {st === "confirmed" && p.confirmedQty !== null && p.confirmedQty < p.needed && (
+                <div className="text-[10.5px] text-red mt-0.5">Faltaron {p.needed - p.confirmedQty}</div>
+              )}
+              {canConfirm && (st === "mismatch" || st === "pending") && (
+                <div className="mt-1.5">
+                  {confirming === p.catalogItemId ? (
+                    <div className="bg-surface border border-red/40 rounded-md p-2.5">
+                      <div className="text-[12px] font-bold mb-1">
+                        {qtyToConfirm === 0 ? "¿Confirmar que NO salió ninguno?" : `¿Confirmar que salieron ${qtyToConfirm}?`}
+                      </div>
+                      <div className="text-[11px] mb-2">
+                        {(p.picked ?? 0) > p.needed
+                          ? `Sacaron ${p.picked}, pero se pidieron ${p.needed}: se confirman ${p.needed} y los ${(p.picked ?? 0) - p.needed} de más vuelven a la percha.`
+                          : `Se pidieron ${p.needed}: faltan ${p.needed - qtyToConfirm}. Se descuenta del Kardex solo lo que salió y se avisa a Yair y Bryan Ríos al cerrar el corte.`}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          className="rounded border border-teal bg-teal px-3 py-1 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                          onClick={() => confirm([p.catalogItemId], false)}
+                        >
+                          {busy ? "Confirmando…" : `Sí, confirmar ${qtyToConfirm}`}
+                        </button>
+                        <button type="button" className="rounded border border-rule px-3 py-1 text-[12px] font-semibold cursor-pointer" onClick={() => setConfirming(null)}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="text-[11.5px] font-semibold text-red cursor-pointer" onClick={() => setConfirming(p.catalogItemId)}>
+                      {st === "pending" ? "Nadie lo registró — confirmar igual…" : "No cuadra — confirmar lo que salió…"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+    );
   }
 
   const done = lot.picking.filter((p) => p.confirmedAt).length;
@@ -392,14 +533,67 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
         </div>
       )}
 
+      {carrierProgress.length > 0 && (
+        <div className="mb-2">
+          <div className="text-[11px] text-steel mb-1">Toca una transportadora para subir sus productos arriba:</div>
+          <div className="flex flex-wrap gap-1.5">
+            {carrierProgress.map((x) => {
+              const complete = x.taken === x.n;
+              const on = activeFilter === x.c;
+              return (
+                <button
+                  key={x.c}
+                  type="button"
+                  aria-pressed={on}
+                  className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] font-semibold cursor-pointer ${
+                    on ? "bg-teal border-teal text-navy" : complete ? "border-green bg-green/15" : "border-rule bg-surface hover:border-teal"
+                  }`}
+                  onClick={() => setCarrierFilter(on ? null : x.c)}
+                >
+                  {on ? <ArrowUp size={12} /> : complete ? <CheckCircle2 size={12} className="text-green" /> : null}
+                  {carrierLabel(x.c)}
+                  <span className="font-mono text-[11px]">{complete ? "todo sacado" : `${x.taken}/${x.n}`}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {activeFilter && (
+        <div className="flex flex-col gap-1.5 mb-2 rounded-md border border-teal/60 p-2">
+          <div className="flex items-center gap-2 flex-wrap pb-1 border-b border-teal">
+            <span className="text-[11.5px] font-bold uppercase tracking-wider">Van por {carrierLabel(activeFilter)}</span>
+            <span className="text-[11px] text-steel">
+              {filteredRows.length} productos · {filteredRows.filter(isTaken).length}/{filteredRows.length} registrados
+            </span>
+            <button type="button" className="ml-auto text-[11.5px] font-semibold text-steel hover:text-teal cursor-pointer" onClick={() => setCarrierFilter(null)}>
+              Quitar filtro
+            </button>
+          </div>
+          {filteredRows.map((p) => (
+            <Fragment key={p.catalogItemId}>
+              <div className="text-[10.5px] text-steel -mb-1">
+                {carrierLabel(activeFilter)}: <b className="font-mono text-ink">{byCarrierOf(p.catalogItemId)[activeFilter]}</b> · {areaLabel(p.area)}
+                {p.block !== activeFilter ? ` · se saca en el bloque ${carrierLabel(p.block)}` : ""}
+              </div>
+              {renderRow(p)}
+            </Fragment>
+          ))}
+        </div>
+      )}
+
       <div className="flex flex-col gap-1.5">
         {lot.blocks
           .filter((b) => !showOnlyMine || myBlocks.includes(b.carrier))
           .map((b) => {
-            const rows = lot.picking.filter((p) => p.block === b.carrier);
-            const n = rows.length;
-            const reg = rows.filter((p) => p.picked !== null || p.confirmedAt).length;
-            const bad = rows.filter((p) => rowState(p) === "mismatch").length;
+            const allRows = lot.picking.filter((p) => p.block === b.carrier);
+            // Lo que ya subió arriba con el filtro no se repite aquí.
+            const rows = allRows.filter((p) => !filteredIds.has(p.catalogItemId));
+            if (rows.length === 0) return null;
+            const n = allRows.length;
+            const reg = allRows.filter(isTaken).length;
+            const bad = allRows.filter((p) => rowState(p) === "mismatch").length;
             const mine = !!myId && b.assigneeId === myId;
             return (
               <div key={b.carrier} className="flex flex-col gap-1.5">
@@ -408,14 +602,13 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                     {lot.blocks.indexOf(b) + 1}° · Lleva {carrierLabel(b.carrier)}
                   </span>
                   <span className="text-[11px] text-steel">
-                    {n} productos · {rows.reduce((s, p) => s + p.needed, 0)} u · {reg}/{n} registrados
+                    {n} productos · {allRows.reduce((s, p) => s + p.needed, 0)} u · {reg}/{n} registrados
+                    {activeFilter && rows.length < n ? ` · ${n - rows.length} arriba en ${carrierLabel(activeFilter)}` : ""}
                     {bad > 0 && <span className="text-red font-semibold"> · {bad} no cuadran</span>}
                   </span>
                   <BlockAssignee lot={lot} carrier={b.carrier} onChanged={onChanged} />
                 </div>
         {rows.map((p, idx) => {
-          const st = rowState(p);
-          const qtyToConfirm = Math.min(p.picked ?? 0, p.needed);
           // Pedido del usuario 2026-09-26: dentro del bloque, agrupado por
           // área de la bodega para sacar junto lo del mismo lugar.
           const areaStart = idx === 0 || (rows[idx - 1].area ?? null) !== (p.area ?? null);
@@ -426,123 +619,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                 {areaLabel(p.area)} · {rows.filter((x) => (x.area ?? null) === (p.area ?? null)).length} productos
               </div>
             )}
-            <div
-              className={`rounded-md px-3 py-2 text-[12px] cursor-pointer ${ROW_STYLE[st]}`}
-              onClick={(e) => {
-                // Los botones de adentro (copiar ID, confirmar) no abren el detalle.
-                if ((e.target as HTMLElement).closest("button, input, a")) return;
-                toggleRow(p.catalogItemId);
-              }}
-            >
-              <div className="flex items-center gap-2 flex-wrap">
-                <Thumb url={p.photos[0]} small />
-                <CatalogCode code={p.justCode} />
-                <span className="flex-1 min-w-0">{p.name}</span>
-                <span className="font-mono text-[11.5px]">
-                  pedido <b>{p.needed}</b> · sacado <b>{p.picked ?? "—"}</b>
-                  {st === "confirmed" && (
-                    <>
-                      {" "}
-                      · confirmado <b>{p.confirmedQty}</b>
-                    </>
-                  )}
-                </span>
-                {st === "confirmed" && <CheckCircle2 size={14} className="text-teal shrink-0" />}
-                {openRows.has(p.catalogItemId) ? <ChevronUp size={14} className="text-steel shrink-0" /> : <ChevronDown size={14} className="text-steel shrink-0" />}
-              </div>
-              {openRows.has(p.catalogItemId) && (
-                <div className="mt-2 bg-surface border border-rule rounded-md p-2.5 text-[12px]">
-                  <div className="font-semibold mb-1">
-                    Son <b className="font-mono">{p.needed}</b> {p.needed === 1 ? "unidad" : "unidades"} en total
-                    {p.warrantyNeeded > 0 ? ` (incluye ${p.warrantyNeeded} de garantía)` : ""}:
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    {sortCarriers(Object.keys(byCarrierOf(p.catalogItemId))).map((c) => (
-                      <div key={c} className="flex items-center gap-2">
-                        <span className="flex-1">{carrierLabel(c)}</span>
-                        <b className="font-mono text-[13px]">{byCarrierOf(p.catalogItemId)[c]}</b>
-                      </div>
-                    ))}
-                  </div>
-                  {variantsOf(p.catalogItemId).length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {variantsOf(p.catalogItemId).map((v) => (
-                        <span key={v.label} className="text-[11.5px] bg-teal/10 border border-teal/30 rounded-full px-2 py-0.5">
-                          {v.label} <b className="font-mono">{v.quantity}</b>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="text-[11px] text-steel mt-1.5">
-                    {areaLabel(p.area)} · se saca completo en el bloque {carrierLabel(p.block)}
-                    {blockInfo(p.block)?.assigneeName ? ` (le toca a ${blockInfo(p.block)?.assigneeName})` : ""}.
-                  </div>
-                </div>
-              )}
-              {variantsOf(p.catalogItemId).length > 0 && (
-                <div className="text-[11px] text-teal mt-0.5">
-                  {variantsOf(p.catalogItemId).map((v) => `${v.label} ${v.quantity}`).join(" · ")}
-                </div>
-              )}
-              {/* Pedido de Daniel 2026-09-29 (opción B): el producto se sigue
-                  sacando completo en un solo bloque, pero si va por varias
-                  transportadoras se ve cuántas van por cada una (Laar/Urbano
-                  casi nunca tienen bloque propio) para separarlas al empacar. */}
-              {Object.keys(byCarrierOf(p.catalogItemId)).length > 1 && (
-                <div className="text-[11px] text-steel mt-0.5">
-                  Va por:{" "}
-                  {sortCarriers(Object.keys(byCarrierOf(p.catalogItemId))).map((c, i) => (
-                    <Fragment key={c}>
-                      {i > 0 && " · "}
-                      <span className={c === p.block ? "" : "font-semibold text-ink"}>
-                        {carrierLabel(c)} {byCarrierOf(p.catalogItemId)[c]}
-                      </span>
-                    </Fragment>
-                  ))}
-                </div>
-              )}
-              {p.pickedByName && p.pickedAt && st !== "confirmed" && (
-                <div className="text-[10.5px] text-steel mt-0.5">
-                  Registró {p.pickedByName} a las {fmtTime(p.pickedAt)}
-                </div>
-              )}
-              {st === "confirmed" && p.confirmedQty !== null && p.confirmedQty < p.needed && (
-                <div className="text-[10.5px] text-red mt-0.5">Faltaron {p.needed - p.confirmedQty}</div>
-              )}
-              {canConfirm && (st === "mismatch" || st === "pending") && (
-                <div className="mt-1.5">
-                  {confirming === p.catalogItemId ? (
-                    <div className="bg-surface border border-red/40 rounded-md p-2.5">
-                      <div className="text-[12px] font-bold mb-1">
-                        {qtyToConfirm === 0 ? "¿Confirmar que NO salió ninguno?" : `¿Confirmar que salieron ${qtyToConfirm}?`}
-                      </div>
-                      <div className="text-[11px] mb-2">
-                        {(p.picked ?? 0) > p.needed
-                          ? `Sacaron ${p.picked}, pero se pidieron ${p.needed}: se confirman ${p.needed} y los ${(p.picked ?? 0) - p.needed} de más vuelven a la percha.`
-                          : `Se pidieron ${p.needed}: faltan ${p.needed - qtyToConfirm}. Se descuenta del Kardex solo lo que salió y se avisa a Yair y Bryan Ríos al cerrar el corte.`}
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          disabled={busy}
-                          className="rounded border border-teal bg-teal px-3 py-1 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
-                          onClick={() => confirm([p.catalogItemId], false)}
-                        >
-                          {busy ? "Confirmando…" : `Sí, confirmar ${qtyToConfirm}`}
-                        </button>
-                        <button type="button" className="rounded border border-rule px-3 py-1 text-[12px] font-semibold cursor-pointer" onClick={() => setConfirming(null)}>
-                          Cancelar
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button type="button" className="text-[11.5px] font-semibold text-red cursor-pointer" onClick={() => setConfirming(p.catalogItemId)}>
-                      {st === "pending" ? "Nadie lo registró — confirmar igual…" : "No cuadra — confirmar lo que salió…"}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+            {renderRow(p)}
             </Fragment>
           );
         })}

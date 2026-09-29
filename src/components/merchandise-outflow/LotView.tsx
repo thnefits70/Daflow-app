@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { ChevronDown, ChevronUp, Package, Printer, X } from "lucide-react";
+import { ArrowUp, CheckCircle2, ChevronDown, ChevronUp, ChevronsUpDown, Package, Printer, X } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { areaGroupCount, carrierLabel, lineBlock, newAreaGroup, sortByBlock, sortCarriers } from "@/lib/carriers";
 import { areaLabel } from "@/lib/warehouseAreas";
@@ -145,6 +145,17 @@ export function LotView({
   // se va primero) y dentro de cada uno de mayor a menor.
   const lines = sortByBlock(lot.lines);
   const blockOrder = [...new Set(lines.map((l) => lineBlock(l.byCarrier)))];
+  // Pedido del equipo vía Daniel 2026-09-29: la flecha junto a cada
+  // transportadora sube arriba todos sus productos; el ✓ dice que de esa
+  // transportadora ya se sacó todo (lo registrado en "Sacar y confirmar").
+  const [upCarrier, setUpCarrier] = useState<string | null>(null);
+  const taken = new Set(lot.picking.filter((p) => p.picked !== null || p.confirmedAt).map((p) => p.catalogItemId));
+  const carrierDone = (c: string) => {
+    const rows = lot.lines.filter((l) => (l.byCarrier[c] ?? 0) > 0);
+    return lot.status !== "DRAFT" && rows.length > 0 && rows.every((l) => taken.has(l.catalogItemId));
+  };
+  const upLines = upCarrier ? lines.filter((l) => (l.byCarrier[upCarrier] ?? 0) > 0).sort((a, b) => (b.byCarrier[upCarrier] ?? 0) - (a.byCarrier[upCarrier] ?? 0)) : [];
+  const shownLines = upCarrier ? [...upLines, ...lines.filter((l) => !((l.byCarrier[upCarrier] ?? 0) > 0))] : lines;
 
   async function removeBatch(id: string) {
     if (!window.confirm("¿Quitar esta subida del corte? Sus guías quedan libres para volver a subirlas.")) return;
@@ -290,16 +301,48 @@ export function LotView({
                 <th className="py-1 pr-2 font-semibold">Producto</th>
                 {lot.carriers.map((c) => (
                   <th key={c} className="py-1 px-1.5 font-semibold text-right whitespace-nowrap">
-                    {carrierLabel(c)}
+                    <button
+                      type="button"
+                      aria-pressed={upCarrier === c}
+                      title={`Subir arriba los productos de ${carrierLabel(c)}`}
+                      className={`inline-flex items-center gap-0.5 rounded px-1 py-0.5 cursor-pointer ${upCarrier === c ? "bg-teal text-navy" : "hover:text-teal"}`}
+                      onClick={() => setUpCarrier((u) => (u === c ? null : c))}
+                    >
+                      {carrierDone(c) && <CheckCircle2 size={11} className={upCarrier === c ? "" : "text-green"} />}
+                      {carrierLabel(c)}
+                      {upCarrier === c ? <ArrowUp size={11} /> : <ChevronsUpDown size={11} className="opacity-60" />}
+                    </button>
                   </th>
                 ))}
                 <th className="py-1 pl-1.5 font-semibold text-right">Total</th>
               </tr>
             </thead>
             <tbody>
-              {lines.map((l, i) => (
+              {shownLines.map((l, i) => (
                 <Fragment key={l.catalogItemId}>
-                  {(i === 0 || lineBlock(lines[i - 1].byCarrier) !== lineBlock(l.byCarrier)) && (
+                  {upCarrier && (i === 0 || i === upLines.length) && (
+                    <tr>
+                      <td colSpan={lot.carriers.length + 3} className="pt-3 pb-1 border-b border-teal/50">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[11px] font-bold uppercase tracking-wider">
+                            {i === 0 ? `Van por ${carrierLabel(upCarrier)}` : "Resto del corte"}
+                          </span>
+                          {i === 0 && (
+                            <span className="text-[10.5px] text-steel">
+                              {upLines.length} productos · {upLines.reduce((s, x) => s + (x.byCarrier[upCarrier] ?? 0), 0)} u
+                              {lot.status !== "DRAFT" ? ` · ${upLines.filter((x) => taken.has(x.catalogItemId)).length}/${upLines.length} sacados` : ""}
+                            </span>
+                          )}
+                          {i === 0 && (
+                            <button type="button" className="ml-auto text-[10.5px] font-semibold text-steel hover:text-teal cursor-pointer" onClick={() => setUpCarrier(null)}>
+                              Quitar filtro
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {!upCarrier && (i === 0 || lineBlock(lines[i - 1].byCarrier) !== lineBlock(l.byCarrier)) && (
                     <tr>
                       <td colSpan={lot.carriers.length + 3} className="pt-3 pb-1 border-b border-teal/50">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -315,7 +358,7 @@ export function LotView({
                       </td>
                     </tr>
                   )}
-                  {newAreaGroup(lines, i) && (
+                  {!upCarrier && newAreaGroup(lines, i) && (
                     <tr>
                       <td colSpan={lot.carriers.length + 3} className="pt-2 pb-0.5 text-[10.5px] font-bold text-gold">
                         {areaLabel(l.area)} · {areaGroupCount(lines, i)} productos
@@ -328,7 +371,10 @@ export function LotView({
                     <div className="flex items-start gap-2">
                       <Thumb url={l.photos[0]} />
                       <div className="min-w-0">
-                        <div>{l.name}</div>
+                        <div>
+                          {l.name}
+                          {taken.has(l.catalogItemId) && <CheckCircle2 size={11} className="inline ml-1 text-green align-[-1px]" aria-label="ya sacado" />}
+                        </div>
                         {l.variants.length > 0 && <div className="text-[10.5px] text-steel">{l.variants.map((v) => `${v.label} ${v.quantity}`).join(" · ")}</div>}
                         {l.fromCombos.length > 0 && (
                           // Toca un combo para ver (y corregir) su receta.
