@@ -100,11 +100,18 @@ export function FulfillmentRequestPanel({ canSubmit }: { canSubmit: boolean }) {
       {otherPending.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 mb-3">
           <span className="text-[11px] font-semibold text-steel">Otros cortes pendientes:</span>
-          {otherPending.map((l) => (
-            <button key={l.id} type="button" className="text-[10.5px] rounded-full border border-teal/50 px-2 py-0.5 text-teal hover:border-teal cursor-pointer" onClick={() => showLot(l.id)}>
-              {fmtDay(l.day)} · Corte {l.corte} · {l.status === "DRAFT" ? "En preparación" : "Enviado"} · {l.guides} guías
-            </button>
-          ))}
+          {otherPending.map((l) => {
+            // Rojo: quedaron productos sin escanear (no se bajaron). Amarillo:
+            // falta asignar algún bloque. Si pasan las dos, manda el rojo.
+            const tone = l.unscanned > 0 ? "border-red/60 bg-red/10 text-red hover:border-red" : l.unassignedBlocks > 0 ? "border-gold/60 bg-gold/15 text-gold hover:border-gold" : "border-teal/50 text-teal hover:border-teal";
+            const notes = [l.unscanned > 0 && `${l.unscanned} sin escanear`, l.unassignedBlocks > 0 && `${l.unassignedBlocks} ${l.unassignedBlocks === 1 ? "bloque" : "bloques"} sin asignar`].filter(Boolean);
+            return (
+              <button key={l.id} type="button" className={`text-[10.5px] rounded-full border px-2 py-0.5 cursor-pointer ${tone}`} onClick={() => showLot(l.id)}>
+                {fmtDay(l.day)} · Corte {l.corte} · {l.status === "DRAFT" ? "En preparación" : "Enviado"} · {l.guides} guías
+                {notes.length > 0 && <span className="font-semibold"> · {notes.join(" · ")}</span>}
+              </button>
+            );
+          })}
         </div>
       )}
       {justClosed && (

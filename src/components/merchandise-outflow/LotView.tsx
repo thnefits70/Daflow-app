@@ -71,7 +71,7 @@ export type CompiledLot = {
   // team: solo le llega a Daniel (para asignar bloques).
   viewer?: { canPrint: boolean; canPick: boolean; pickScope?: "ALL" | "ASSIGNED" | null; canConfirm: boolean; userId: string | null; team?: { id: string; name: string }[] };
 };
-export type LotListItem = { id: string; day: string; corte: number; status: LotStatus; createdAt: string; sentAt: string | null; uploads: number; guides: number };
+export type LotListItem = { id: string; day: string; corte: number; status: LotStatus; createdAt: string; sentAt: string | null; uploads: number; guides: number; unassignedBlocks: number; unscanned: number };
 
 export function fmtDay(day: string) {
   // Mediodía UTC: evita que la zona horaria del navegador corra la fecha un día.

@@ -822,6 +822,23 @@ export async function listRecentLots() {
     take: 60,
     include: { batches: { select: { _count: { select: { guides: true } } } } },
   });
+  // Pedido del usuario 2026-09-29: en "Otros cortes pendientes" Daniel ve de
+  // un vistazo qué corte enviado quedó a medias — amarillo si falta asignar
+  // algún bloque, rojo si hay productos sin escanear (no se bajaron). Solo
+  // se calcula para los enviados, que son pocos.
+  const flags = new Map<string, { unassignedBlocks: number; unscanned: number }>();
+  await Promise.all(
+    lots
+      .filter((l) => l.status === "SENT")
+      .map(async (l) => {
+        const c = await getCompiledLot(l.id);
+        if (!c) return;
+        flags.set(l.id, {
+          unassignedBlocks: c.blocks.filter((b) => !b.assigneeId).length,
+          unscanned: c.picking.filter((p) => p.picked == null).length,
+        });
+      }),
+  );
   return lots.map((l) => ({
     id: l.id,
     day: l.day,
@@ -831,6 +848,8 @@ export async function listRecentLots() {
     sentAt: l.sentAt,
     uploads: l.batches.length,
     guides: l.batches.reduce((s, b) => s + b._count.guides, 0),
+    unassignedBlocks: flags.get(l.id)?.unassignedBlocks ?? 0,
+    unscanned: flags.get(l.id)?.unscanned ?? 0,
   }));
 }
 
