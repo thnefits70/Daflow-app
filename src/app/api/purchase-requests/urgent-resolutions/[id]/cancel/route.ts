@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { dbUserId } from "@/lib/guards";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ reason: z.string().trim().min(1, "Explica por qué se cancela.") });
 
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const resolution = await prisma.purchaseUrgentResolution.findUnique({
     where: { id },
-    include: { credit: true },
+    include: { credit: true, report: { select: { request: { select: { catalogItem: { select: { name: true } } } } } } },
   });
   if (!resolution) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (resolution.status === "CANCELLED") return NextResponse.json({ error: "Ya está cancelada." }, { status: 409 });
@@ -56,6 +57,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: { status: "CANCELLED", cancelledAt: new Date(), cancelledById: dbUserId(session.user.id), cancelReason: parsed.data.reason.trim() },
     });
   });
+
+  // Rechazo de una pérdida que esperaba al admin: avisar a quien la pidió.
+  if (resolution.type === "WRITE_OFF" && resolution.status === "PENDING" && resolution.createdById) {
+    await notifyOwner(resolution.createdById, {
+      title: "Pérdida rechazada por el admin",
+      body: `${resolution.report.request.catalogItem.name}: ${parsed.data.reason.trim()} — resuélvela con crédito o entrega de faltante.`,
+      url: "/area/workspace",
+    }).catch(() => null);
+  }
 
   return NextResponse.json(updated);
 }

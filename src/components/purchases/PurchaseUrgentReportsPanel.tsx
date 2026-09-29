@@ -115,7 +115,7 @@ type Report = {
   excessGestionAt: string | null;
   excessConfirmedBy: { name: string } | null;
   excessConfirmedAt: string | null;
-  request: { quantity: number; unitCost: number; totalCost: number; catalogItem: { name: string; justCode: string | null }; supplier: { id: string; name: string } };
+  request: { quantity: number; unitCost: number; totalCost: number; catalogItem: { name: string; justCode: string | null }; supplier: { id: string; name: string; paymentMode?: string } };
   // Confirmado 2026-08-25: "Reclamo posterior al cierre" — mismo modelo,
   // isLateClaim distingue este camino del "Informar urgente" normal. Ya
   // solo llega acá una vez que Daniel confirmó la baja en Just.
@@ -125,6 +125,17 @@ type Report = {
   estimatedUnitCost: number | null;
   stockStatus: "IN_STOCK" | "SOLD" | null;
 };
+
+// Confirmado 2026-09-29, pedido del usuario (antifraude): con un proveedor
+// a crédito (hoy CHEN), "Pérdida" no se ofrece para lo FALTANTE — haría que
+// se le pague mercadería que nunca llegó. Solo cabe para lo dañado,
+// incompleto o distinto. Espeja la validación real del servidor
+// (urgent-reports/[id]/resolutions).
+function writeOffAllowedQty(r: Report): number | null {
+  if (r.request.supplier.paymentMode !== "CREDITO") return null;
+  const used = r.resolutions.filter((x) => x.type === "WRITE_OFF" && x.status !== "CANCELLED").reduce((s, x) => s + x.quantity, 0);
+  return Math.max(0, r.damagedQty + r.incompleteQty + r.differentQty - used);
+}
 
 function claimUnitCost(r: Report) {
   return r.isLateClaim && r.originUncertain && r.estimatedUnitCost != null ? r.estimatedUnitCost : r.request.unitCost;
@@ -164,8 +175,15 @@ const RESOLUTION_LABEL: Record<UiResolutionType, string> = {
 // El proveedor manda lo que faltó del pedido en vez de dar crédito/reembolso
 // — no es un cambio de producto dañado/distinto, así que se rotula distinto
 // aunque use el mismo mecanismo de verificación que "Cambio de mercadería".
-function resolutionLabel(res: Resolution): string {
+// Confirmado 2026-09-29, aclaración del usuario: a un proveedor a crédito
+// (hoy CHEN) no se le paga por adelantado — "crédito futuro" no tiene
+// sentido ahí. Por dentro es el mismo CREDIT, pero se descuenta del MISMO
+// pedido al armar la tanda (ver availableCreditsForDebt en supplierDebt.ts):
+// en la práctica, esas unidades no se pagan.
+const CREDIT_SUPPLIER_CREDIT_LABEL = "No se paga (se descuenta en la tanda)";
+function resolutionLabel(res: Resolution, creditSupplier = false): string {
   if (res.type === "REPLACEMENT" && res.replacementIsMissingDelivery) return RESOLUTION_LABEL.MISSING_DELIVERY;
+  if (res.type === "CREDIT" && creditSupplier) return CREDIT_SUPPLIER_CREDIT_LABEL;
   return RESOLUTION_LABEL[res.type];
 }
 
@@ -372,6 +390,17 @@ export function PurchaseUrgentReportsPanel({
     router.refresh();
   }
 
+  async function approveWriteOff(resolutionId: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-resolutions/${resolutionId}/approve-write-off`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo aprobar."); return; }
+    load();
+    router.refresh();
+  }
+
   async function cancelResolution(resolutionId: string) {
     if (!cancelReason.trim()) { setErr("Explica por qué se cancela."); return; }
     setBusy(true);
@@ -570,6 +599,7 @@ export function PurchaseUrgentReportsPanel({
                         <ResolutionRow
                           key={res.id}
                           res={res}
+                          creditSupplier={r.request.supplier.paymentMode === "CREDITO"}
                           isAdmin={isAdmin}
                           canAct={canAct}
                           refundUploadingFor={refundUploadingFor}
@@ -583,6 +613,7 @@ export function PurchaseUrgentReportsPanel({
                           cancelReason={cancelReason}
                           setCancelReason={setCancelReason}
                           onCancel={() => cancelResolution(res.id)}
+                          onApproveWriteOff={() => approveWriteOff(res.id)}
                           cancelErr={cancelId === res.id ? err : ""}
                           hideMoney={hideMoney}
                         />
@@ -605,9 +636,9 @@ export function PurchaseUrgentReportsPanel({
                   ) : openReportId === r.id ? (
                     <div className="bg-cloud rounded-md p-3">
                       <div className="flex gap-1.5 mb-2.5 flex-wrap">
-                        {(["CREDIT", "REPLACEMENT", "MISSING_DELIVERY", "REFUND", "WRITE_OFF"] as const).map((t) => (
+                        {(["CREDIT", "REPLACEMENT", "MISSING_DELIVERY", "REFUND", "WRITE_OFF"] as const).filter((t) => t !== "WRITE_OFF" || writeOffAllowedQty(r) !== 0).map((t) => (
                           <button key={t} type="button" className={`rounded border px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer ${resType === t ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`} onClick={() => setResType(t)}>
-                            {RESOLUTION_LABEL[t]}
+                            {t === "CREDIT" && r.request.supplier.paymentMode === "CREDITO" ? CREDIT_SUPPLIER_CREDIT_LABEL : RESOLUTION_LABEL[t]}
                           </button>
                         ))}
                       </div>
@@ -624,7 +655,18 @@ export function PurchaseUrgentReportsPanel({
                         )}
                       </div>
                       {resType === "WRITE_OFF" && (
+                        <div className="text-[11px] mb-1.5" style={{ color: "var(--color-gold)" }}>
+                          ⚠️ Pérdida = se le paga al proveedor aunque no se recupere nada.{isAdmin ? "" : " Queda esperando la aprobación del admin y, mientras tanto, este pedido no se paga."}
+                          {writeOffAllowedQty(r) != null && <> Con un proveedor a crédito solo vale para lo dañado, incompleto o distinto (máx. {writeOffAllowedQty(r)} un.) — lo faltante va con &quot;No se paga&quot;.</>}
+                        </div>
+                      )}
+                      {resType === "WRITE_OFF" && (
                         <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2.5" rows={2} placeholder="¿Por qué no se recupera?" value={resNote} onChange={(e) => setResNote(e.target.value)} />
+                      )}
+                      {resType === "CREDIT" && r.request.supplier.paymentMode === "CREDITO" && (
+                        <div className="text-[11px] text-steel mb-1.5">
+                          A {r.request.supplier.name} no se le paga por adelantado: estas unidades simplemente no se le pagan — se descuentan de este pedido cuando se arme la tanda. Sube la captura donde el proveedor lo acepta.
+                        </div>
                       )}
                       {resType === "CREDIT" && (
                         <div className="mb-2.5">
@@ -685,7 +727,7 @@ export function PurchaseUrgentReportsPanel({
                 </div>
                 <div className="flex flex-col gap-1 mt-1.5">
                   {r.resolutions.map((res) => (
-                    <div key={res.id} className={res.status === "CANCELLED" ? "text-red line-through" : "text-steel"}>{resolutionLabel(res)} — {res.quantity} un.{hideMoney ? "" : ` · ${money(res.amount)}`}{res.status === "CANCELLED" ? " (anulado)" : ""}</div>
+                    <div key={res.id} className={res.status === "CANCELLED" ? "text-red line-through" : "text-steel"}>{resolutionLabel(res, r.request.supplier.paymentMode === "CREDITO")} — {res.quantity} un.{hideMoney ? "" : ` · ${money(res.amount)}`}{res.status === "CANCELLED" ? " (anulado)" : ""}</div>
                   ))}
                 </div>
               </div>
@@ -699,8 +741,10 @@ export function PurchaseUrgentReportsPanel({
 
 function ResolutionRow({
   res, isAdmin, canAct, refundUploadingFor, confirmBankId, setConfirmBankId, onFileRefund, onConfirmBank, busy,
-  cancelId, setCancelId, cancelReason, setCancelReason, onCancel, cancelErr, hideMoney,
+  cancelId, setCancelId, cancelReason, setCancelReason, onCancel, cancelErr, hideMoney, onApproveWriteOff, creditSupplier,
 }: {
+  onApproveWriteOff: () => void;
+  creditSupplier: boolean;
   res: Resolution;
   hideMoney: boolean;
   isAdmin: boolean;
@@ -718,12 +762,13 @@ function ResolutionRow({
   onCancel: () => void;
   cancelErr: string;
 }) {
-  const statusLabel = res.status === "COMPLETED" ? "Listo" : res.status === "CANCELLED" ? "Anulado" : "En curso";
+  const writeOffWaiting = res.type === "WRITE_OFF" && res.status === "PENDING";
+  const statusLabel = res.status === "COMPLETED" ? "Listo" : res.status === "CANCELLED" ? "Anulado" : writeOffWaiting ? "Espera al admin" : "En curso";
   const statusColor = res.status === "COMPLETED" ? "text-green" : res.status === "CANCELLED" ? "text-red" : "text-steel";
   return (
     <div className="bg-cloud rounded px-3 py-2 text-[11.5px]">
       <div className="flex items-center justify-between gap-2">
-        <span className={`font-semibold ${res.status === "CANCELLED" ? "line-through text-steel" : ""}`}>{resolutionLabel(res)} — {res.quantity} un.{hideMoney ? "" : ` · ${money(res.amount)}`}</span>
+        <span className={`font-semibold ${res.status === "CANCELLED" ? "line-through text-steel" : ""}`}>{resolutionLabel(res, creditSupplier)} — {res.quantity} un.{hideMoney ? "" : ` · ${money(res.amount)}`}</span>
         <span className={`text-[10px] font-bold uppercase ${statusColor}`}>{statusLabel}</span>
       </div>
       <div className="text-steel-dim text-[10px] mt-0.5">Registrado por {actorName(res.createdBy?.name)} · {formatDateTime(res.createdAt)}</div>
@@ -734,7 +779,7 @@ function ResolutionRow({
 
       {res.type === "CREDIT" && res.credit && (
         <div className="mt-0.5">
-          <div className="text-steel">{res.credit.status === "AVAILABLE" ? "Disponible para la próxima compra a este proveedor" : res.credit.status === "APPLIED" ? "Ya aplicado a una compra" : res.credit.status === "CANCELLED" ? "Crédito anulado" : "Reembolsado"}</div>
+          <div className="text-steel">{res.credit.status === "AVAILABLE" ? (creditSupplier ? "No se paga — se descuenta de este pedido al armar la tanda" : "Disponible para la próxima compra a este proveedor") : res.credit.status === "APPLIED" ? (creditSupplier ? "Descontado en la tanda de pago" : "Ya aplicado a una compra") : res.credit.status === "CANCELLED" ? "Crédito anulado" : "Reembolsado"}</div>
           {res.credit.proofUrl && (
             <div className="mt-1.5"><ProofPreview url={res.credit.proofUrl} size={36} filename={res.credit.proofName ?? "comprobante-credito"} /></div>
           )}
@@ -742,6 +787,18 @@ function ResolutionRow({
       )}
 
       {res.type === "WRITE_OFF" && res.note && <div className="text-steel mt-0.5">{res.note}</div>}
+      {writeOffWaiting && (
+        <div className="mt-1" style={{ color: "var(--color-gold)" }}>
+          {isAdmin ? "Si la apruebas, el proveedor cobra estas unidades aunque no se recuperen. Si no, anúlala con el motivo." : "Esperando aprobación del admin — mientras tanto este pedido no se paga."}
+          {isAdmin && (
+            <div className="mt-1.5">
+              <button type="button" disabled={busy} className="rounded border border-green bg-green px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={onApproveWriteOff}>
+                Aprobar pérdida
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {res.type === "REPLACEMENT" && (
         <div className="text-steel mt-0.5">

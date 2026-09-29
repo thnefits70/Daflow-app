@@ -91,7 +91,7 @@ export async function GET(_req: NextRequest) {
           totalCost: true,
           paidAt: true,
           catalogItem: { select: { name: true, justCode: true } },
-          supplier: { select: { id: true, name: true } },
+          supplier: { select: { id: true, name: true, paymentMode: true } },
         },
       },
     },

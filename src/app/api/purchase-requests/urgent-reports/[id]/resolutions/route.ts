@@ -39,8 +39,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const report = await prisma.purchaseRequestUrgentReport.findUnique({
     where: { id },
     include: {
-      resolutions: { select: { quantity: true, status: true } },
-      request: { select: { unitCost: true, supplierId: true, catalogItem: { select: { name: true } } } },
+      resolutions: { select: { quantity: true, status: true, type: true } },
+      request: { select: { unitCost: true, supplierId: true, catalogItem: { select: { name: true } }, supplier: { select: { name: true, paymentMode: true } } } },
     },
   });
   if (!report) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
@@ -55,6 +55,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const remaining = totalReportedQty(report) - claimedQty(report.resolutions);
   if (parsed.data.quantity > remaining) {
     return NextResponse.json({ error: `Solo quedan ${remaining} un. sin resolver en este reporte.` }, { status: 409 });
+  }
+
+  // Confirmado 2026-09-29, pedido del usuario (antifraude): "Pérdida" hace
+  // que el proveedor de crédito cobre el 100% aunque la mercadería nunca
+  // llegó. Con un proveedor de CRÉDITO (hoy CHEN) no se puede usar para
+  // unidades FALTANTES — ahí solo va "Crédito futuro" o "Entrega de
+  // faltante". Solo cabe para lo dañado/incompleto/distinto que sí llegó.
+  if (parsed.data.type === "WRITE_OFF" && report.request.supplier.paymentMode === "CREDITO") {
+    const nonMissing = report.damagedQty + report.incompleteQty + report.differentQty;
+    const writeOffUsed = report.resolutions.filter((r) => r.type === "WRITE_OFF" && r.status !== "CANCELLED").reduce((s, r) => s + r.quantity, 0);
+    const allowed = Math.max(0, nonMissing - writeOffUsed);
+    if (allowed === 0) {
+      return NextResponse.json({ error: `A ${report.request.supplier.name} (proveedor a crédito) no se le puede declarar "Pérdida" por mercadería faltante — si no la va a mandar, usa "No se paga (se descuenta en la tanda)".` }, { status: 409 });
+    }
+    if (parsed.data.quantity > allowed) {
+      return NextResponse.json({ error: `Con un proveedor a crédito, "Pérdida" solo cabe para lo dañado, incompleto o distinto (máximo ${allowed} un.). Lo faltante va con "No se paga (se descuenta en la tanda)".` }, { status: 409 });
+    }
+  }
+  // Nunca la misma persona en los dos pasos: quien reportó o confirmó el
+  // problema en bodega no puede ser quien declara la pérdida.
+  if (parsed.data.type === "WRITE_OFF" && !isAdmin && (report.reportedById === session.user.id || report.reviewedByLeadId === session.user.id)) {
+    return NextResponse.json({ error: "Tú reportaste o confirmaste este problema en bodega — la pérdida la tiene que pedir otra persona de Compras." }, { status: 403 });
   }
 
   // Confirmado 2026-08-25: un "Reclamo posterior al cierre" con origen
@@ -96,14 +118,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           data: { reportId: id, type: "REFUND", quantity: parsed.data.quantity, amount, status: "PENDING", createdById },
         });
       }
+      // Confirmado 2026-09-29 (antifraude): una pérdida que pide Compras
+      // queda PENDING hasta que el admin la apruebe (ver
+      // urgent-resolutions/[id]/review-write-off) — mientras tanto el
+      // reporte sigue abierto y el pedido no se paga. Solo la del admin
+      // queda cerrada de una.
       return tx.purchaseUrgentResolution.create({
-        data: { reportId: id, type: "WRITE_OFF", quantity: parsed.data.quantity, amount, status: "COMPLETED", note: parsed.data.note, createdById },
+        data: { reportId: id, type: "WRITE_OFF", quantity: parsed.data.quantity, amount, status: isAdmin ? "COMPLETED" : "PENDING", note: parsed.data.note, createdById },
       });
     });
   } catch (err) {
     console.error("[urgent-reports resolutions] falló al crear la resolución", err);
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: `No se pudo registrar: ${message}` }, { status: 500 });
+  }
+
+  if (parsed.data.type === "WRITE_OFF" && !isAdmin) {
+    await notifyOwner("admin", {
+      title: "⚠️ Pérdida por aprobar",
+      body: `${report.request.catalogItem.name} (${report.request.supplier.name}) — ${parsed.data.quantity} un. · $${amount.toFixed(2)} · pedida por ${session.user.name ?? "Compras"}: "${parsed.data.note}"`,
+      url: "/admin",
+    }).catch(() => null);
   }
 
   if (parsed.data.type === "REPLACEMENT") {
