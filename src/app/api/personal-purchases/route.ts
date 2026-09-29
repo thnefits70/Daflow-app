@@ -33,6 +33,7 @@ export async function GET() {
       transferProofUrl: true,
       transferProofName: true,
       transferAiMatch: true,
+      transferAiNote: true,
       pickedUpAt: true,
       items: {
         select: {

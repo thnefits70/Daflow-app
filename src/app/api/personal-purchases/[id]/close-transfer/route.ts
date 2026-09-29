@@ -8,18 +8,24 @@ import { notifyOwner } from "@/lib/notifications";
 // explícito del usuario (el admin puede ver esta cola pero no cerrarla).
 // A propósito NUNCA toca firstPayoutMonth: esa orden ya quedó pagada por
 // transferencia, no debe generar ningún descuento en rol.
+//
+// Confirmado 2026-09-29: desde ahora confirm-transfer cierra solo, así que
+// este paso queda únicamente para los pedidos que ya esperaban en
+// PENDING_NAIROBY_CLOSE antes del cambio — y el admin también los puede
+// cerrar (pedido del usuario: no demorar el cierre).
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await canClosePersonalPurchaseTransfer())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const session = await auth();
+  const isAdmin = session?.user.role === "admin";
+  if (!isAdmin && !(await canClosePersonalPurchaseTransfer())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const order = await prisma.personalPurchaseOrder.findUnique({ where: { id } });
   if (!order) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (order.status !== "PENDING_NAIROBY_CLOSE") return NextResponse.json({ error: "Todavía no está confirmada." }, { status: 409 });
 
-  const session = await auth();
   const updated = await prisma.personalPurchaseOrder.update({
     where: { id },
-    data: { status: "APPROVED", transferClosedAt: new Date(), transferClosedById: session!.user.id },
+    data: { status: "APPROVED", transferClosedAt: new Date(), transferClosedById: isAdmin ? null : session!.user.id },
   });
 
   await notifyOwner(order.employeeId, {

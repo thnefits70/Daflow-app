@@ -37,6 +37,7 @@ type OrderHistory = {
   transferProofUrl: string | null;
   transferProofName: string | null;
   transferAiMatch: boolean | null;
+  transferAiNote: string | null;
   pickedUpAt: string | null;
   items: { employeeProductName: string; confirmedProductName: string | null; quantity: number; catalogItem: { justCode: string | null } | null; confirmedCatalogItem: { justCode: string | null } | null }[];
 };
@@ -549,6 +550,11 @@ export function PersonalPurchasesPanel() {
 
                 {o.status === "PENDING_TRANSFER_PROOF" && (
                   <div className="mt-2.5">
+                    {o.transferAiNote && (
+                      <div className="text-[11.5px] font-semibold mb-2" style={{ color: "#D9A441" }}>
+                        Tu comprobante anterior no pasó: {o.transferAiNote} Sube uno que diga exactamente {o.totalAmount != null ? money(o.totalAmount) : "el total"}.
+                      </div>
+                    )}
                     {o.transferDeadlineAt && <div className="text-[10.5px] text-steel-dim mb-1.5">Plazo: hasta el {deadlineText(o.transferDeadlineAt)}.</div>}
                     {bankAccount?.bankAccountNumber ? (
                       <div className="bg-cloud border-[1.5px] border-dashed border-teal rounded-md p-3 mb-2.5">

@@ -63,6 +63,14 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
     load();
   }
 
+  async function rejectProof(id: string) {
+    setBusy(true);
+    await fetch(`/api/personal-purchases/${id}/reject-transfer-proof`, { method: "POST" });
+    setBusy(false);
+    setConfirming(null);
+    load();
+  }
+
   async function closeTransfer(id: string) {
     setBusy(true);
     await fetch(`/api/personal-purchases/${id}/close-transfer`, { method: "POST" });
@@ -108,10 +116,33 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
                   </span>
                 )}
 
-                {confirming === o.id ? (
+                {/* Confirmado 2026-09-29: confirmar ya cierra la operación, así
+                    que solo se permite si la IA leyó el monto exacto. Si no,
+                    el admin le pide otro comprobante al colaborador. */}
+                {o.transferAiMatch !== true ? (
+                  <div className="mt-3">
+                    <p className="text-[11.5px] text-steel-dim mb-2">
+                      No se puede confirmar: el comprobante tiene que decir exactamente <b>{money(o.totalAmount)}</b>.
+                    </p>
+                    {confirming === o.id ? (
+                      <div className="flex gap-2">
+                        <button type="button" disabled={busy} className="text-[12px] font-bold bg-ink text-bg rounded px-3.5 py-1.5 cursor-pointer disabled:opacity-50" onClick={() => rejectProof(o.id)}>
+                          Sí, pedir otro comprobante
+                        </button>
+                        <button type="button" className="text-[12px] text-steel cursor-pointer" onClick={() => setConfirming(null)}>
+                          Volver
+                        </button>
+                      </div>
+                    ) : (
+                      <button type="button" disabled={busy} className="text-[12px] font-bold border-[1.5px] border-rule text-ink rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => setConfirming(o.id)}>
+                        Pedir otro comprobante
+                      </button>
+                    )}
+                  </div>
+                ) : confirming === o.id ? (
                   <div className="mt-3 pt-3 border-t border-rule">
                     <p className="text-[12.5px] mb-2.5">
-                      ¿Confirmás que revisaste tu cuenta y ya te llegaron <b>{money(o.totalAmount)}</b> de <b>{o.employee.name}</b>?
+                      ¿Confirmás que revisaste tu cuenta y ya te llegaron <b>{money(o.totalAmount)}</b> de <b>{o.employee.name}</b>? Al confirmar, la compra queda cerrada.
                     </p>
                     <div className="flex gap-2">
                       <button type="button" disabled={busy} className="text-[12px] font-bold bg-green text-white rounded px-3.5 py-1.5 cursor-pointer disabled:opacity-50" onClick={() => confirmTransfer(o.id)}>
@@ -146,13 +177,9 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
                     <div className="font-bold text-[13px]">{o.employee.name}</div>
                     <div className="text-[12px] text-steel-dim tabular-nums">{money(o.totalAmount)}</div>
                   </div>
-                  {isAdmin ? (
-                    <span className="text-[11px] text-steel-dim italic">Esperando que Nairoby cierre</span>
-                  ) : (
-                    <button type="button" disabled={busy} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => closeTransfer(o.id)}>
-                      Cerrar transacción
-                    </button>
-                  )}
+                  <button type="button" disabled={busy} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40" onClick={() => closeTransfer(o.id)}>
+                    Cerrar transacción
+                  </button>
                 </div>
                 <ItemsWithPhotos items={o.items} onZoom={setZoomedPhoto} />
                 {o.transferProofUrl && <ProofPreview url={o.transferProofUrl} filename={o.transferProofName ?? undefined} />}

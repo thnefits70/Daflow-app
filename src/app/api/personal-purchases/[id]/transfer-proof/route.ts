@@ -15,6 +15,10 @@ const schema = z.object({ proofUrl: z.string().url(), proofName: z.string().opti
 // del admin más adelante, así que SIEMPRE avanza a PENDING_ADMIN_CONFIRM,
 // coincida o no — el admin ve el veredicto de la IA y decide con su propio
 // banco a la vista.
+//
+// Actualizado 2026-09-29: el veredicto ya NO es solo informativo —
+// confirm-transfer solo deja confirmar (y cerrar) si transferAiMatch es
+// true; si no, el admin devuelve el pedido con reject-transfer-proof.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session || session.user.role === "admin") return NextResponse.json({ error: "No autorizado." }, { status: 401 });
