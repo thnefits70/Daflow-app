@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { AlertTriangle, CheckCircle2, Package, RefreshCw, ScanLine, UserRound } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Package, RefreshCw, ScanLine, UserRound } from "lucide-react";
 import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { carrierLabel, sortCarriers } from "@/lib/carriers";
@@ -58,6 +58,18 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   // escáner desde cualquier parte de la lista, y después de "Registrar" la
   // cámara se vuelve a abrir sola para el siguiente producto.
   const [autoScan, setAutoScan] = useState(false);
+  // Pedido de Daniel 2026-09-29: tocar un producto de la lista abre su
+  // detalle (cuántas van por cada transportadora, variantes, garantía) para
+  // que el equipo lo sepa ANTES de escanear el QR de la percha.
+  const [openRows, setOpenRows] = useState<Set<string>>(new Set());
+  function toggleRow(id: string) {
+    setOpenRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
   // La cámara y el producto escaneado se abren en una ventana encima de la
   // lista (2026-09-26): antes la página saltaba arriba y el equipo perdía el
   // lugar donde iba en la lista.
@@ -414,7 +426,14 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                 {areaLabel(p.area)} · {rows.filter((x) => (x.area ?? null) === (p.area ?? null)).length} productos
               </div>
             )}
-            <div className={`rounded-md px-3 py-2 text-[12px] ${ROW_STYLE[st]}`}>
+            <div
+              className={`rounded-md px-3 py-2 text-[12px] cursor-pointer ${ROW_STYLE[st]}`}
+              onClick={(e) => {
+                // Los botones de adentro (copiar ID, confirmar) no abren el detalle.
+                if ((e.target as HTMLElement).closest("button, input, a")) return;
+                toggleRow(p.catalogItemId);
+              }}
+            >
               <div className="flex items-center gap-2 flex-wrap">
                 <Thumb url={p.photos[0]} small />
                 <CatalogCode code={p.justCode} />
@@ -429,7 +448,37 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                   )}
                 </span>
                 {st === "confirmed" && <CheckCircle2 size={14} className="text-teal shrink-0" />}
+                {openRows.has(p.catalogItemId) ? <ChevronUp size={14} className="text-steel shrink-0" /> : <ChevronDown size={14} className="text-steel shrink-0" />}
               </div>
+              {openRows.has(p.catalogItemId) && (
+                <div className="mt-2 bg-surface border border-rule rounded-md p-2.5 text-[12px]">
+                  <div className="font-semibold mb-1">
+                    Son <b className="font-mono">{p.needed}</b> {p.needed === 1 ? "unidad" : "unidades"} en total
+                    {p.warrantyNeeded > 0 ? ` (incluye ${p.warrantyNeeded} de garantía)` : ""}:
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {sortCarriers(Object.keys(byCarrierOf(p.catalogItemId))).map((c) => (
+                      <div key={c} className="flex items-center gap-2">
+                        <span className="flex-1">{carrierLabel(c)}</span>
+                        <b className="font-mono text-[13px]">{byCarrierOf(p.catalogItemId)[c]}</b>
+                      </div>
+                    ))}
+                  </div>
+                  {variantsOf(p.catalogItemId).length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {variantsOf(p.catalogItemId).map((v) => (
+                        <span key={v.label} className="text-[11.5px] bg-teal/10 border border-teal/30 rounded-full px-2 py-0.5">
+                          {v.label} <b className="font-mono">{v.quantity}</b>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="text-[11px] text-steel mt-1.5">
+                    {areaLabel(p.area)} · se saca completo en el bloque {carrierLabel(p.block)}
+                    {blockInfo(p.block)?.assigneeName ? ` (le toca a ${blockInfo(p.block)?.assigneeName})` : ""}.
+                  </div>
+                </div>
+              )}
               {variantsOf(p.catalogItemId).length > 0 && (
                 <div className="text-[11px] text-teal mt-0.5">
                   {variantsOf(p.catalogItemId).map((v) => `${v.label} ${v.quantity}`).join(" · ")}
