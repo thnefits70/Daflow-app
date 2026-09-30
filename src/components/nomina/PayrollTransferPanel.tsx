@@ -31,10 +31,28 @@ export type Transfer = {
   confirmedWithoutProofNote: string | null;
   confirmedWithoutProofAt: string | null;
   confirmedWithoutProofByName: string | null;
+  // createdAt = último envío (el reenvío tras un rechazo lo actualiza, ver
+  // los confirm/route.ts).
+  createdAt: string;
+  approvedAt: string | null;
+  rejectedAt: string | null;
 };
 
 function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString("es-EC", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+// "hoy · martes 30/9/2026 10:45", "ayer · …" o solo el día de la semana —
+// pedido explícito 2026-09-30: ver de un vistazo cuándo Nairoby envió.
+function whenLabel(iso: string) {
+  const d = new Date(iso);
+  const dayKey = (x: Date) => x.toLocaleDateString("es-EC");
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const weekday = d.toLocaleDateString("es-EC", { weekday: "long" });
+  const prefix = dayKey(d) === dayKey(today) ? "hoy · " : dayKey(d) === dayKey(yesterday) ? "ayer · " : "";
+  return `${prefix}${weekday} ${formatDateTime(d)}`;
 }
 
 function money(n: number) {
@@ -637,6 +655,13 @@ function TransferPanel({
       <BankAccountBlock account={transfer.account} direct={direct} />
 
       <div className="text-[12px] font-semibold mb-1">{direct && transfer.status === "APPROVED" ? "Aprobado — falta confirmar" : STATUS_LABEL[transfer.status]}</div>
+      <div className="text-[11.5px] text-steel mb-2 space-y-0.5">
+        {transfer.createdAt && <div>📤 Enviado por Nairoby: <b className="text-ink">{whenLabel(transfer.createdAt)}</b></div>}
+        {transfer.approvedAt && transfer.status !== "PENDING_APPROVAL" && transfer.status !== "REJECTED" && (
+          <div>✓ Aprobado: <b className="text-ink">{whenLabel(transfer.approvedAt)}</b></div>
+        )}
+        {transfer.rejectedAt && transfer.status === "REJECTED" && <div>✕ Rechazado: <b className="text-ink">{whenLabel(transfer.rejectedAt)}</b></div>}
+      </div>
 
       {transfer.status === "REJECTED" && transfer.rejectionReason && (
         <div className="text-[12px] text-red bg-red/10 border border-red/30 rounded px-2.5 py-2 mb-2">

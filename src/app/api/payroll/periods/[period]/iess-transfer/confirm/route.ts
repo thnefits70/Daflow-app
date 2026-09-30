@@ -56,7 +56,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
 
   const transfer = await prisma.payrollIessTransfer.upsert({
     where: { periodId: payrollPeriod.id },
-    update: { totalAmount, destination, status: "PENDING_APPROVAL", rejectionReason: null, rejectedAt: null },
+    // createdAt = hora del último envío (se muestra en la tarjeta).
+    update: { totalAmount, destination, status: "PENDING_APPROVAL", rejectionReason: null, rejectedAt: null, approvedAt: null, createdAt: new Date() },
     create: { periodId: payrollPeriod.id, totalAmount, destination },
   });
 
