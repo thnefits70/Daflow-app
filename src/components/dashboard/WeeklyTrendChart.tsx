@@ -2,7 +2,9 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
-export type WeeklyPoint = { week: string; value: number; detail?: string };
+// brands: desglose opcional listado debajo del valor en el tooltip (ej.
+// guías por marca en Pedidos despachados, desde S40).
+export type WeeklyPoint = { week: string; value: number; detail?: string; brands?: { label: string; value: number }[] };
 
 export function formatWeekShort(week: string) {
   const [, w] = week.split("-W");
@@ -643,8 +645,10 @@ export function WeeklyTrendChart({
           (() => {
             const c = coords[hoverIndex];
             const p = points[hoverIndex];
-            const boxW = p.detail ? 172 : 128;
-            const boxH = p.detail ? 58 : 42;
+            const brands = p.brands ?? [];
+            const boxW = p.detail || brands.length ? 172 : 128;
+            const brandTop = (p.detail ? 58 : 42) + (brands.length ? 4 : 0);
+            const boxH = brandTop + brands.length * 15 + (brands.length ? 4 : 0);
             const boxX = Math.max(padL, Math.min(c.x - boxW / 2, width - padR - boxW));
             const boxY = Math.max(4, c.y - boxH - 12);
             return (
@@ -661,6 +665,19 @@ export function WeeklyTrendChart({
                     {p.detail}
                   </text>
                 )}
+                {brands.length > 0 && (
+                  <line x1={boxX + 12} x2={boxX + boxW - 12} y1={boxY + brandTop - 4} y2={boxY + brandTop - 4} stroke="var(--color-rule)" strokeWidth="1" />
+                )}
+                {brands.map((b, bi) => (
+                  <g key={b.label}>
+                    <text x={boxX + 14} y={boxY + brandTop + 11 + bi * 15} fontSize="11" fill="var(--color-steel)">
+                      {b.label}
+                    </text>
+                    <text x={boxX + boxW - 14} y={boxY + brandTop + 11 + bi * 15} textAnchor="end" fontSize="11" fontWeight="700" fill="var(--color-ink)">
+                      {b.value.toLocaleString("es-MX")}
+                    </text>
+                  </g>
+                ))}
               </g>
             );
           })()}

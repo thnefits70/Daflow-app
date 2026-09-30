@@ -2,6 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { getMonthDispatchSummary } from "@/lib/commissionTiers";
 import { prevMonthStr } from "@/lib/pendingTasks";
 import { computeAutoStockoutWeeks, isAutoStockoutWeek } from "@/lib/autoStockout";
+import { isAutoFillRateWeek, isoWeekOf } from "@/lib/autoFillRate";
+import { brandLabel, sortBrands } from "@/lib/brandLabels";
+import { isRocketCode } from "@/lib/dropiGuidesPdf";
+import { NO_BRAND } from "@/lib/fulfillmentGuides";
 
 function pct(a: number, b: number) {
   return b === 0 ? 0 : Math.round((a / b) * 100);
@@ -133,7 +137,10 @@ export async function getCommissionProgress(): Promise<CommissionProgress> {
   };
 }
 
-export type WeeklyTrend = { deptName: string; points: { week: string; value: number; detail?: string }[] } | null;
+export type WeeklyTrend = {
+  deptName: string;
+  points: { week: string; value: number; detail?: string; brands?: { label: string; value: number }[] }[];
+} | null;
 
 // Shared by both the admin dashboard and every employee's Inicio — whichever
 // department has trackWeeklyMetric on (currently just Fulfillment).
@@ -154,10 +161,68 @@ export async function getWeeklyTrend(): Promise<WeeklyTrend> {
   });
   if (records.length === 0) return null;
 
+  const brandWeeks = records.map((r) => r.week).filter(isAutoFillRateWeek);
+  const byWeek = brandWeeks.length ? await guidesByBrandPerWeek(brandWeeks[0]) : new Map<string, Record<string, number>>();
+
   return {
     deptName: dept.name,
-    points: records.map((r) => ({ week: r.week, value: r.value })),
+    points: records.map((r) => {
+      const counts = byWeek.get(r.week);
+      const brands = counts ? sortBrands(Object.keys(counts)).map((b) => ({ label: brandLabel(b), value: counts[b] })) : undefined;
+      return { week: r.week, value: r.value, ...(brands?.length ? { brands } : {}) };
+    }),
   };
+}
+
+// Pedido del usuario (2026-09-30): al pasar el mouse por una semana del
+// gráfico de Pedidos despachados, cuántas guías fueron de cada marca. Mismo
+// criterio que "Guías por marca" del corte (fulfillmentGuides.ts): la marca
+// sale de los productos de la etiqueta; si la guía no los guardó, de la
+// marca del PDF entero (cada PDF de Dropi es el manifiesto de UNA marca).
+// Solo desde AUTO_FILL_RATE_FROM_WEEK (S40): antes el total lo escribía Yair
+// a mano y no hay guías de toda la semana para repartir.
+async function guidesByBrandPerWeek(fromWeek: string): Promise<Map<string, Record<string, number>>> {
+  const batches = await prisma.fulfillmentRequestBatch.findMany({
+    where: { lot: { status: { in: ["SENT", "CLOSED"] } } },
+    select: {
+      source: true,
+      lot: { select: { day: true } },
+      guides: { select: { guideNumber: true, codes: true } },
+      items: { select: { sourceCode: true, fromComboCode: true, catalogItem: { select: { bodega: true } } } },
+    },
+  });
+  const inRange = batches.filter((b) => b.lot && isoWeekOf(b.lot.day) >= fromWeek);
+
+  const brandByCode = new Map<string, string>();
+  const comboCodes = [...new Set(inRange.flatMap((b) => b.items.map((i) => i.fromComboCode)).filter((c): c is string => !!c))];
+  const combos = comboCodes.length ? await prisma.dropiCombo.findMany({ where: { code: { in: comboCodes } }, select: { code: true, bodega: true } }) : [];
+  for (const c of combos) if (c.bodega) brandByCode.set(c.code, c.bodega);
+  for (const b of inRange) {
+    for (const it of b.items) {
+      if (it.fromComboCode) continue;
+      if (it.catalogItem.bodega && !brandByCode.has(it.sourceCode)) brandByCode.set(it.sourceCode, it.catalogItem.bodega);
+    }
+  }
+
+  const byWeek = new Map<string, Record<string, number>>();
+  for (const b of inRange) {
+    const week = isoWeekOf(b.lot!.day);
+    const counts = byWeek.get(week) ?? {};
+    byWeek.set(week, counts);
+    // Marca del PDF: la que tienen la mayoría de sus productos.
+    const tally = new Map<string, number>();
+    for (const it of b.items) {
+      const brand = brandByCode.get(it.fromComboCode ?? it.sourceCode);
+      if (brand) tally.set(brand, (tally.get(brand) ?? 0) + 1);
+    }
+    const batchBrand = [...tally.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? NO_BRAND;
+    for (const g of b.guides) {
+      const rocket = b.source === "ROCKET" || /^RKT/i.test(g.guideNumber) || g.codes.some(isRocketCode);
+      const brand = rocket ? "ROCKET" : (g.codes.map((c) => brandByCode.get(c)).find(Boolean) ?? batchBrand);
+      counts[brand] = (counts[brand] ?? 0) + 1;
+    }
+  }
+  return byWeek;
 }
 
 // Fill Rate = pedidos despachados / (despachados + no despachados) * 100 — only
