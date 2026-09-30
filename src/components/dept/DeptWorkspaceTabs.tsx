@@ -40,6 +40,7 @@ import { ComboSuggestionsPanel } from "@/components/marketanalysis/ComboSuggesti
 import { MarketProductPanel } from "@/components/marketanalysis/MarketProductPanel";
 import { ImprovementPlanTeamPanel } from "@/components/improvement-plan/ImprovementPlanTeamPanel";
 import { WeeklyCheckinLockGate } from "@/components/dept/WeeklyCheckinLockGate";
+import { useWorkspaceTabDots } from "@/components/dept/useWorkspaceTabDots";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -489,6 +490,7 @@ export function DeptWorkspaceTabs({
   const [seenFeedback, setSeenFeedback] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [focusBox, setFocusBox] = useState<string | null>(null);
+  const { hasDot, markTabSeen } = useWorkspaceTabDots(tab);
 
   // Confirmado 2026-08-06: los links "Ir →" de Pendientes (ej. "Caja Chica
   // Secundaria con saldo bajo") llegan con ?tab=...&box=... — esto los honra
@@ -551,12 +553,13 @@ export function DeptWorkspaceTabs({
           <button
             key={t.key}
             type="button"
-            className={`pb-2.5 text-[13px] font-semibold flex items-center gap-1.5 border-b-2 cursor-pointer whitespace-nowrap ${
+            className={`relative pb-2.5 text-[13px] font-semibold flex items-center gap-1.5 border-b-2 cursor-pointer whitespace-nowrap ${
               tab === t.key ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"
             }`}
             onClick={() => {
               switchTab(t.key);
               setPinned(false);
+              markTabSeen(t.key);
               if (t.key === "feedback" && unseenFeedbackCount > 0 && !seenFeedback) {
                 setSeenFeedback(true);
                 fetch("/api/me/seen-feedback", { method: "POST" }).then(() => router.refresh());
@@ -564,6 +567,11 @@ export function DeptWorkspaceTabs({
             }}
           >
             <t.icon size={14} /> {t.label}
+            {/* Pedido de Yair 2026-09-30: punto rojo mientras haya un
+                pendiente o aviso sin abrir en esta pestaña. */}
+            {hasDot(t.key) && (
+              <span aria-label="Tiene algo pendiente" className="absolute -top-0.5 -right-2 w-2 h-2 rounded-full bg-red" />
+            )}
             {t.key === "feedback" && unseenFeedbackCount > 0 && !seenFeedback && (
               <span className="font-mono text-[10px] font-semibold bg-red/20 text-red rounded-full px-1.5 py-0.5">
                 {unseenFeedbackCount}
