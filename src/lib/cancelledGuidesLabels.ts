@@ -9,20 +9,25 @@ export const CARRIER_LABELS: Record<string, string> = {
 };
 
 export const SOURCE_AREA_LABELS: Record<string, string> = {
-  MKT_DAMIAN: "Análisis de Mercado — Bodega Importadora Damián",
-  MKT_PROVEDIX: "Análisis de Mercado — Bodega Provedix",
-  MKT_SHANGHAI: "Análisis de Mercado — Bodega Importadora Shanghai",
+  // "Marca" en vez de "Bodega" desde 2026-09-30 (pedido de Yair, aprobado
+  // por el usuario) — igual que la "Marca" de Stock Actual.
+  MKT_DAMIAN: "Análisis de Mercado — Marca Importadora Damián",
+  MKT_PROVEDIX: "Análisis de Mercado — Marca Provedix",
+  MKT_SHANGHAI: "Análisis de Mercado — Marca Importadora Shanghai",
+  ROCKET: "Análisis de Mercado — Rocket",
   FULFILLMENT: "Fulfillment",
 };
 
 // Confirmado 2026-09-03, pedido explícito del usuario: a quien reporta
 // desde Fulfillment (hoy Yair) este formulario solo le sirve para avisar
 // guías de Análisis de Mercado rechazadas por transportadora o canceladas
-// por ruptura de stock — nada de Shanghai ni del motivo propio de
-// Fulfillment ("no cumple medidas o peso", nunca usado en la práctica).
-// MKT sigue viendo las 4 opciones de siempre.
-export const SOURCE_AREAS_FOR_FULFILLMENT_SUBMITTER = ["MKT_DAMIAN", "MKT_PROVEDIX"] as const;
-export const ALL_SOURCE_AREAS = ["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "FULFILLMENT"] as const;
+// por ruptura de stock — nada del motivo propio de Fulfillment ("no cumple
+// medidas o peso", nunca usado en la práctica).
+// MKT sigue viendo todas las opciones.
+// 2026-09-30, pedido de Yair aprobado por el usuario: vuelve Shanghai y se
+// agrega Rocket (plataforma como Dropi, no transportadora).
+export const SOURCE_AREAS_FOR_FULFILLMENT_SUBMITTER = ["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "ROCKET"] as const;
+export const ALL_SOURCE_AREAS = ["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "ROCKET", "FULFILLMENT"] as const;
 
 export function allowedSourceAreasFor(deptCode: string | null | undefined): readonly string[] {
   return deptCode === "FUL" ? SOURCE_AREAS_FOR_FULFILLMENT_SUBMITTER : ALL_SOURCE_AREAS;
@@ -43,6 +48,8 @@ export const CARRIER_GUIDE_FORMATS: { carrier: keyof typeof CARRIER_LABELS; pref
   { carrier: "URBANO", prefix: "WYB", length: 12 },
   { carrier: "VELOCES", prefix: "V400", length: 11 },
   { carrier: "GINTRANCOM", prefix: "D00", length: 10 },
+  // Gintracom de Rocket (etiqueta real RKT000032606, ver dropiGuidesPdf.ts).
+  { carrier: "GINTRANCOM", prefix: "RKT", length: 12 },
   { carrier: "SERVIENTREGA", prefix: "18", length: 9 },
 ];
 

@@ -6746,6 +6746,8 @@ enum CancelledGuideSourceArea {
   MKT_PROVEDIX
   // Agregada 2026-09-02, pedido explícito del usuario.
   MKT_SHANGHAI
+  // Agregada 2026-09-30, pedido de Yair aprobado por el usuario.
+  ROCKET
   FULFILLMENT
 }
 

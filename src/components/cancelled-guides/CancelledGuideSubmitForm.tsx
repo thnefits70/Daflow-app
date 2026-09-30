@@ -5,7 +5,7 @@ import { Check, X } from "lucide-react";
 import { CARRIER_LABELS, SOURCE_AREA_LABELS, MKT_CANCEL_REASONS, FULFILLMENT_CANCEL_REASONS, allowedSourceAreasFor, splitGuideBuffer, isPossibleGuidePrefix } from "@/lib/cancelledGuidesLabels";
 import { useFormDraft } from "@/lib/useFormDraft";
 
-type SourceArea = "MKT_DAMIAN" | "MKT_PROVEDIX" | "MKT_SHANGHAI" | "FULFILLMENT";
+type SourceArea = "MKT_DAMIAN" | "MKT_PROVEDIX" | "MKT_SHANGHAI" | "ROCKET" | "FULFILLMENT";
 type DetectedGuide = { id: string; carrier: keyof typeof CARRIER_LABELS; guideNumber: string };
 type SubmitDraftData = { sourceArea: SourceArea | ""; guideBuffer: string; guides: DetectedGuide[]; reason: string; reasonOther: string };
 function isSubmitDraftEmpty(d: SubmitDraftData) {
@@ -128,7 +128,7 @@ export function CancelledGuideSubmitForm({ onSubmitted, viewerDeptCode }: { onSu
   return (
     <div className="bg-surface border border-rule rounded-md p-3.5 flex flex-col gap-3.5 max-w-md">
       <div>
-        <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Área / bodega</label>
+        <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">Área / marca</label>
         <div className="flex flex-col gap-1.5">
           {areaOptions.map((a) => (
             <button key={a} type="button" onClick={() => { setSourceArea(a); setReason(""); }} className={`text-left text-[12.5px] font-semibold rounded-md px-2.5 py-1.5 border cursor-pointer ${sourceArea === a ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`}>

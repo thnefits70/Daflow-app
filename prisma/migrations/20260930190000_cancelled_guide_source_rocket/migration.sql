@@ -1,0 +1,1 @@
+ALTER TYPE "CancelledGuideSourceArea" ADD VALUE 'ROCKET' BEFORE 'FULFILLMENT';

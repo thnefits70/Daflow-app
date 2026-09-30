@@ -29,7 +29,7 @@ export async function GET() {
 // lo carga después quien tenga canAssignCancelledGuideItems (ver docblock
 // de CancelledGuideReport en el schema).
 const schema = z.object({
-  sourceArea: z.enum(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "FULFILLMENT"]),
+  sourceArea: z.enum(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "ROCKET", "FULFILLMENT"]),
   reason: z.string().trim().min(1, "Falta el motivo."),
   guides: z
     .array(z.object({ carrier: z.enum(["SERVIENTREGA", "URBANO", "GINTRANCOM", "LAARCOURIER", "VELOCES"]), guideNumber: z.string().trim().min(1) }))
@@ -44,8 +44,8 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  // Confirmado 2026-09-03: quien reporta desde Fulfillment solo puede usar
-  // Provedix/Damián — mismo límite que ya aplica en el formulario, repetido
+  // Quien reporta desde Fulfillment no puede usar el área propia de
+  // Fulfillment (ver allowedSourceAreasFor) — mismo límite que ya aplica en el formulario, repetido
   // acá por si alguien arma la petición a mano.
   const submitterDept = await prisma.user.findUnique({ where: { id: session.user.id }, select: { department: { select: { code: true } } } });
   if (!allowedSourceAreasFor(submitterDept?.department?.code).includes(parsed.data.sourceArea)) {
