@@ -49,10 +49,10 @@ export function EmployeeSidebar({
   return (
     <>
       <div className="print:hidden md:hidden flex items-center justify-between gap-2 px-4 py-3 bg-navy text-white border-b border-white/10">
-        <div className="flex items-center gap-2">
+        <Link href="/area" prefetch onClick={() => setOpen(false)} className="flex items-center gap-2 -my-1.5 -ml-1 py-1.5 pl-1 pr-3 active:opacity-70" aria-label="Ir al inicio">
           <BrandMark logoUrl={logoUrl} size={22} light chip={!!logoUrl} />
           <span className="font-display font-bold text-[14px]">DAFLOW</span>
-        </div>
+        </Link>
         <button type="button" onClick={() => setOpen(true)} className="p-1.5 text-white cursor-pointer" aria-label="Abrir menú">
           <Menu size={20} />
         </button>
@@ -67,10 +67,10 @@ export function EmployeeSidebar({
       >
       <div className="px-4.5 pt-5 pb-3.5 border-b border-white/10">
         <div className="flex items-center justify-between gap-2.5 mb-3">
-          <div className="flex items-center gap-2.5">
+          <Link href="/area" prefetch onClick={() => setOpen(false)} className="flex items-center gap-2.5 active:opacity-70" aria-label="Ir al inicio">
             <BrandMark logoUrl={logoUrl} size={26} light chip={!!logoUrl} />
             <span className="font-display font-bold text-[15px] text-white">DAFLOW</span>
-          </div>
+          </Link>
           <div className="flex items-center gap-1.5">
             <NotificationBell />
             <button type="button" onClick={() => setOpen(false)} className="md:hidden p-1 text-white cursor-pointer" aria-label="Cerrar menú">
