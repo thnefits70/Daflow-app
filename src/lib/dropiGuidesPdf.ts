@@ -201,6 +201,8 @@ const DATE_RE = /FECHA MANIFIESTO \(DD\/MM\/YYYY\):\s*(\d{2})-(\d{2})-(\d{4})/;
 // 2026-09-28: "…Jonathan Ocampo(113467)HIDROLAVADORA … X1"); en ese caso
 // solo se acepta si el ID está en la tabla resumen (ver `glued` abajo).
 const ID_LABEL_RE = /(?<![\d(])\((\d{3,})\)\s*(.+)\s+X\s?(\d+)\b/;
+// Palabras de relleno al comparar nombres por palabras en común.
+const NAME_STOPWORDS = new Set(["del", "los", "las", "una", "unos", "unas", "con", "para", "por", "tipo"]);
 const GINTRA_PART_RE = /^(\d+)(?:[.,]\d+)?\s*\*\s*(.+)$/;
 const URBANO_ROW_RE = /^\s*\d{1,2}\s{2,}(.+?)\s{2,}(\d+)\s*$/;
 
@@ -511,7 +513,7 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
   const hits: LabelHit[] = [];
   // Productos escritos en una etiqueta que no se parecen a ningún nombre de
   // la tabla — se muestran tal cual en el aviso para que Yair vea el porqué.
-  const unmatched: { text: string; page: number; line: number }[] = [];
+  const unmatched: { text: string; page: number; line: number; qty?: number }[] = [];
   // Dónde aparece cada número de guía FUERA de la tabla resumen — sirve
   // para saber a qué guía pertenece cada etiqueta (se usa para separar las
   // garantías). Servientrega/Laar/Urbano/Veloces imprimen el número antes
@@ -560,7 +562,7 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
           if (!pm) continue;
           const hit = matchByName(pm[2]);
           if (hit) hits.push({ code: hit.code, variant: hit.variant, qty: Number(pm[1]), page: p, line: i });
-          else unmatched.push({ text: pm[2].trim(), page: p, line: i });
+          else unmatched.push({ text: pm[2].trim(), page: p, line: i, qty: Number(pm[1]) });
         }
         continue;
       }
@@ -572,7 +574,7 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
           if (!um) break;
           const hit = matchByName(fixBrokenAccents(um[1]));
           if (hit) hits.push({ code: hit.code, variant: hit.variant, qty: Number(um[2]), page: p, line: j });
-          else unmatched.push({ text: um[1].trim(), page: p, line: j });
+          else unmatched.push({ text: um[1].trim(), page: p, line: j, qty: Number(um[2]) });
           i = j;
         }
       }
@@ -588,6 +590,49 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
     }
     return best?.guide ?? null;
   };
+
+  // Pedido del usuario 2026-09-30 (Manifiesto_24-09-2026_Shanghai, guía
+  // D002056261): la tabla dice «Urinario femenino portátil» y la etiqueta de
+  // Gintracom «Urinario Unisex portátil». Si el nombre de una etiqueta no
+  // coincide, se busca por palabras en común (mismo criterio 60%/mínimo 2 que
+  // findSimilarUnlinkedItem), pero SOLO entre los productos a los que todavía
+  // les falta una unidad por leer en esa misma transportadora — así la tabla
+  // confirma que esa etiqueta es de ese producto. Si hay empate, no se adivina.
+  if (unmatched.length > 0) {
+    const words = (s: string) => new Set(normalizeName(s).split(" ").filter((w) => w.length >= 3 && !NAME_STOPWORDS.has(w)));
+    const readBy = new Map<string, number>(); // "code|transportadora" → leídos
+    for (const h of hits) {
+      const k = `${h.code}|${guides.get(guideOf(h) ?? "")?.carrier ?? ""}`;
+      readBy.set(k, (readBy.get(k) ?? 0) + h.qty);
+    }
+    for (let u = unmatched.length - 1; u >= 0; u--) {
+      const um = unmatched[u];
+      const qtyMatch = um.qty ?? 1;
+      const c = guides.get(guideOf({ code: "", variant: null, qty: 0, page: um.page, line: um.line }) ?? "")?.carrier ?? "";
+      const labelWords = words(um.text);
+      let best: { code: string; score: number } | null = null;
+      let tie = false;
+      for (const [code, row] of summary) {
+        const left = (row.byCarrier.get(c) ?? 0) - (readBy.get(`${code}|${c}`) ?? 0);
+        if (left < qtyMatch) continue;
+        const w = words(row.name);
+        const smaller = Math.min(labelWords.size, w.size);
+        if (smaller < 2) continue;
+        let inter = 0;
+        for (const x of labelWords) if (w.has(x)) inter++;
+        if (inter < Math.max(2, Math.ceil(smaller * 0.6))) continue;
+        const score = inter / smaller;
+        if (!best || score > best.score) {
+          best = { code, score };
+          tie = false;
+        } else if (score === best.score) tie = true;
+      }
+      if (!best || tie) continue;
+      hits.push({ code: best.code, variant: null, qty: qtyMatch, page: um.page, line: um.line });
+      readBy.set(`${best.code}|${c}`, (readBy.get(`${best.code}|${c}`) ?? 0) + qtyMatch);
+      unmatched.splice(u, 1);
+    }
+  }
 
   // Garantía en Dropi (confirmado con Yair 2026-09-25): Dropi descarga las
   // garantías en su PROPIA sección → un PDF aparte, con el mismo formato y
