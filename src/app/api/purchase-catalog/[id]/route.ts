@@ -64,7 +64,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   ]);
   const blockedBy = others.length > 0 ? otherOpenPurchaseMessage(others[0]) : null;
   const needsFulfillmentSize = (await getCatalogItemsNeedingFulfillmentSize([id])).has(id);
-  return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats, blockedBy, needsFulfillmentSize });
+  // Pedido del usuario 2026-09-30: si ya está marcado, quien compra lo ve y
+  // lo puede corregir él mismo (ver fulfillment-size/route.ts).
+  const setBy = item.fulfillmentSizeSetById ? await prisma.user.findUnique({ where: { id: item.fulfillmentSizeSetById }, select: { name: true } }) : null;
+  const fulfillmentSize = item.fulfillmentSize
+    ? { value: item.fulfillmentSize as "SMALL" | "NORMAL", setAt: item.fulfillmentSizeSetAt, setByName: setBy?.name ?? null }
+    : null;
+  return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats, blockedBy, needsFulfillmentSize, fulfillmentSize });
 }
 
 // Confirmado 2026-08-03/06: admin puede eliminar cualquier producto/

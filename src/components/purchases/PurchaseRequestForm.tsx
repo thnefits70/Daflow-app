@@ -9,6 +9,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { PurchaseCatalogPicker, type CatalogItemDTO, type CatalogCreateDraft } from "./PurchaseCatalogPicker";
 import { PurchaseSupplierPicker, type PurchaseSupplierDTO } from "./PurchaseSupplierPicker";
 import type { SupplierPriceHistory } from "@/lib/purchases";
+import { formatDateTime } from "@/lib/formatDateTime";
 
 type PriceStats = { count: number; min: number | null; avg: number | null; max: number | null; last3Avg: number | null };
 type SupplierCreditDTO = { id: string; amount: number; reason: string; status: "AVAILABLE" | "RESERVED" | "APPLIED" | "REFUNDED"; createdAt: string };
@@ -315,6 +316,24 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const [needsSizeByItem, setNeedsSizeByItem] = useState<Record<string, boolean>>({});
   const [sizeByItem, setSizeByItem] = useState<Record<string, "SMALL" | "NORMAL">>({});
   const [sizeAsking, setSizeAsking] = useState<Record<string, "SMALL" | "NORMAL" | null>>({});
+  // Tamaño ya guardado — quien compra lo puede corregir él mismo (2026-09-30).
+  type SavedSize = { value: "SMALL" | "NORMAL"; setAt: string | null; setByName: string | null };
+  const [savedSizeByItem, setSavedSizeByItem] = useState<Record<string, SavedSize | null>>({});
+  const [correctingSize, setCorrectingSize] = useState<Record<string, boolean>>({});
+  const [sizeSaveErr, setSizeSaveErr] = useState<Record<string, string>>({});
+
+  async function correctSize(itemId: string, value: "SMALL" | "NORMAL") {
+    const res = await fetch(`/api/purchase-catalog/${itemId}/fulfillment-size`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fulfillmentSize: value }) }).catch(() => null);
+    if (!res?.ok) {
+      const d = await res?.json().catch(() => ({}));
+      setSizeSaveErr((m) => ({ ...m, [itemId]: d?.error ?? "No se pudo guardar." }));
+      return;
+    }
+    setSavedSizeByItem((m) => ({ ...m, [itemId]: { value, setAt: new Date().toISOString(), setByName: "ti" } }));
+    setCorrectingSize((m) => ({ ...m, [itemId]: false }));
+    setSizeAsking((m) => ({ ...m, [itemId]: null }));
+    setSizeSaveErr((m) => ({ ...m, [itemId]: "" }));
+  }
 
   function fetchLineStats(idx: number, catalogItemId: string) {
     fetch(`/api/purchase-catalog/${catalogItemId}`)
@@ -323,6 +342,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         updateLine(idx, { stats: data?.stats ?? null });
         setBlockedByLine((m) => ({ ...m, [idx]: data?.blockedBy ?? null }));
         setNeedsSizeByItem((m) => ({ ...m, [catalogItemId]: !!data?.needsFulfillmentSize }));
+        setSavedSizeByItem((m) => ({ ...m, [catalogItemId]: data?.fulfillmentSize ?? null }));
       })
       .catch(() => updateLine(idx, { stats: null }));
   }
@@ -1011,6 +1031,39 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                       </div>
                     </>
                   )}
+                </div>
+              );
+            })()}
+            {line.catalogItem && !needsSizeByItem[line.catalogItem.id] && savedSizeByItem[line.catalogItem.id] && (() => {
+              const itemId = line.catalogItem.id;
+              const saved = savedSizeByItem[itemId]!;
+              const asking = sizeAsking[itemId];
+              const label = (v: "SMALL" | "NORMAL") => (v === "SMALL" ? "Pequeño ($0.50 de fulfillment)" : "Normal ($0.75 de fulfillment)");
+              return (
+                <div className="text-[12px] text-steel mb-2.5">
+                  {!correctingSize[itemId] ? (
+                    <span>
+                      Tamaño: <b className="text-ink">{label(saved.value)}</b>
+                      {saved.setByName ? ` · marcado por ${saved.setByName}` : ""}
+                      {saved.setAt ? ` · ${formatDateTime(saved.setAt)}` : ""}{" "}
+                      <button type="button" className="underline cursor-pointer" onClick={() => setCorrectingSize((m) => ({ ...m, [itemId]: true }))}>Corregir</button>
+                    </span>
+                  ) : asking ? (
+                    <span className="flex items-center gap-2 flex-wrap">
+                      ¿Seguro que <b className="text-ink">{line.catalogItem.name}</b> es <b className="text-ink">{label(asking)}</b>? Cambia el precio de venta.
+                      <button type="button" className="font-bold text-teal cursor-pointer" onClick={() => correctSize(itemId, asking)}>Sí</button>
+                      <button type="button" className="cursor-pointer" onClick={() => setSizeAsking((m) => ({ ...m, [itemId]: null }))}>No</button>
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2 flex-wrap">
+                      Corregir a:
+                      {(["SMALL", "NORMAL"] as const).filter((v) => v !== saved.value).map((v) => (
+                        <button key={v} type="button" className="rounded border border-rule bg-surface px-2.5 py-1 text-[12px] text-ink cursor-pointer hover:border-blue" onClick={() => setSizeAsking((m) => ({ ...m, [itemId]: v }))}>{label(v)}</button>
+                      ))}
+                      <button type="button" className="cursor-pointer" onClick={() => setCorrectingSize((m) => ({ ...m, [itemId]: false }))}>Cancelar</button>
+                    </span>
+                  )}
+                  {sizeSaveErr[itemId] && <div className="text-red mt-1">{sizeSaveErr[itemId]}</div>}
                 </div>
               );
             })()}
