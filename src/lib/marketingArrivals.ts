@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 import { resolveCostBasisForCatalogItems, computeMarketProductSalePrice, DROPI_MARGIN_DEFAULT } from "@/lib/marketProduct";
 
 // Confirmado 2026-08-08: "Mercadería recibida" — pedido explícito del
@@ -9,7 +10,7 @@ export const MKT_DEPT_CODE = "MKT";
 
 const arrivalInclude = {
   catalogItem: { select: { name: true, photos: true, justCode: true } },
-  receipt: { select: { photoUrls: true, receivedQuantity: true, confirmedAt: true } },
+  receipt: { select: { id: true, photoUrls: true, receivedQuantity: true, confirmedAt: true } },
   marketingFollowUp: {
     include: {
       designConfirmedBy: { select: { name: true } },
@@ -43,6 +44,26 @@ export async function getMarketingArrivals() {
   // Pedido del usuario 2026-09-30: el aviso muestra el Precio Dropi (el
   // mismo de Stock Actual) para copiarlo, no el costo del proveedor.
   const bases = await resolveCostBasisForCatalogItems(rows.map((r) => r.catalogItemId));
+  // Pedido del usuario 2026-09-30: la tarjeta le dice a Heidy cuánto stock
+  // hay en bodega AHORA (con lo que acaba de llegar ya sumado), para que no
+  // haga la cuenta a mano. Lo recibido entra al Kardex recién cuando Daniel
+  // aprueba la recepción; si todavía no entró, se suma aparte.
+  const itemIds = [...new Set(rows.map((r) => r.catalogItemId))];
+  const receiptIds = rows.map((r) => r.receipt?.id).filter((id): id is string => !!id);
+  const [stockNow, inKardex] = await Promise.all([
+    getCurrentStockByItemIds(itemIds),
+    receiptIds.length
+      ? prisma.stockKardexEntry.findMany({ where: { purchaseRequestReceiptId: { in: receiptIds } }, select: { purchaseRequestReceiptId: true } })
+      : Promise.resolve([]),
+  ]);
+  const receiptsInKardex = new Set(inKardex.map((e) => e.purchaseRequestReceiptId));
+  // Lo que ya llegó a bodega pero todavía no pasó al Kardex, por producto.
+  const pendingByItem = new Map<string, number>();
+  for (const r of rows) {
+    if (r.receipt && !receiptsInKardex.has(r.receipt.id)) {
+      pendingByItem.set(r.catalogItemId, (pendingByItem.get(r.catalogItemId) ?? 0) + r.receipt.receivedQuantity);
+    }
+  }
   return rows.map((r) => {
     const basis = bases.get(r.catalogItemId);
     const dropiPriceNow = basis ? Math.round(computeMarketProductSalePrice({ ...basis, marginPercent: basis.marginPercent ?? DROPI_MARGIN_DEFAULT }) * 100) / 100 : null;
@@ -61,6 +82,7 @@ export async function getMarketingArrivals() {
             costBefore: Math.round((costBefore ?? 0) * 100) / 100,
             costNow: Math.round(costNow * 100) / 100,
             dropiPriceNow,
+            stockInWarehouse: Math.max(0, (stockNow.get(r.catalogItemId)?.balance ?? 0) + (pendingByItem.get(r.catalogItemId) ?? 0)),
           }
         : null,
     };

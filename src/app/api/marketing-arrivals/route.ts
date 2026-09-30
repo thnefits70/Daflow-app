@@ -24,7 +24,7 @@ export async function GET() {
         void unitCost; void totalCost; void shippingCostTotal;
         return {
         ...r,
-        repeatArrival: r.repeatArrival ? { lastConfirmedAt: r.repeatArrival.lastConfirmedAt, costIncreased: r.repeatArrival.costIncreased } : null,
+        repeatArrival: r.repeatArrival ? { lastConfirmedAt: r.repeatArrival.lastConfirmedAt, costIncreased: r.repeatArrival.costIncreased, stockInWarehouse: r.repeatArrival.stockInWarehouse } : null,
         };
       });
 

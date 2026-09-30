@@ -19,7 +19,7 @@ type Row = {
     advisorConfirmedAt: string | null;
     advisorConfirmedBy: { name: string; marketingAdvisorBrand: string | null } | null;
   } | null;
-  repeatArrival: { lastConfirmedAt: string; costIncreased: boolean; costBefore?: number; costNow?: number; dropiPriceNow?: number | null } | null;
+  repeatArrival: { lastConfirmedAt: string; costIncreased: boolean; costBefore?: number; costNow?: number; dropiPriceNow?: number | null; stockInWarehouse?: number } | null;
 };
 
 type Confirmer = { id: string; name: string; role: "design" | "advisor" };
@@ -219,6 +219,7 @@ export function MarketingArrivalsPanel({ canConfirmAdvisor }: { canConfirmAdviso
                     <div className="text-[10.5px] text-steel mb-2">
                       Ya lo confirmaste antes ({formatDateTime(r.repeatArrival.lastConfirmedAt)}). Solo sube el stock en Dropi.
                     </div>
+                    {r.repeatArrival.stockInWarehouse != null && <StockToPublish units={r.repeatArrival.stockInWarehouse} />}
                     {r.repeatArrival.costIncreased && (
                       <>
                         <div className="flex items-start gap-1.5 rounded border border-gold/35 bg-gold/10 px-2.5 py-2 mb-2 text-[11.5px]" style={{ color: "var(--color-gold)" }}>
@@ -248,6 +249,27 @@ export function MarketingArrivalsPanel({ canConfirmAdvisor }: { canConfirmAdviso
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Pedido del usuario 2026-09-30: el stock real en bodega (ya con lo que
+// llegó) es la base. Con menos de 100 se publica exacto; con 100 o más, la
+// asesora puede publicar más para atraer dropshippers, sin tope fijo (decisión
+// del usuario), pero nunca menos.
+const HIGH_STOCK_THRESHOLD = 100;
+
+function StockToPublish({ units }: { units: number }) {
+  const canInflate = units >= HIGH_STOCK_THRESHOLD;
+  return (
+    <div className="rounded border border-teal/35 bg-teal/10 px-2.5 py-2 mb-2">
+      <div className="text-[11px] text-steel">Stock real en bodega ahora (ya incluye lo que llegó)</div>
+      <div className="text-[18px] font-bold text-ink leading-tight">{units} un.</div>
+      <div className="text-[11.5px] text-ink mt-0.5">
+        {canInflate
+          ? `Pon en Dropi ${units} o más. Puedes subirlo para atraer dropshippers, pero sin exagerar: nunca menos de ${units}.`
+          : `Hay menos de ${HIGH_STOCK_THRESHOLD}: pon en Dropi exactamente ${units}, sin subirlo.`}
+      </div>
     </div>
   );
 }
