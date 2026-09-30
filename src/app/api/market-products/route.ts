@@ -26,6 +26,7 @@ import {
 } from "@/lib/marketProduct";
 import { getAllCurrentStock } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
+import { getOpenPurchaseCodesByCatalogItem } from "@/lib/purchases";
 import { getMarketProductKardexReleasePendingRows } from "@/lib/pendingTasks";
 
 const supplierPriceSchema = z.object({
@@ -213,7 +214,12 @@ export async function GET(req: NextRequest) {
       include: includeFull,
       orderBy: { reviewedAt: "asc" },
     });
-    return NextResponse.json(rows);
+    // Pedido del usuario 2026-09-30 (Bryan, casco SC-124): lo que ya se está
+    // comprando sube arriba con "Compra en camino", para publicarlo primero.
+    const codes = await getOpenPurchaseCodesByCatalogItem(rows.flatMap((r) => (r.catalogItemId ? [r.catalogItemId] : [])));
+    const withPurchase = rows.map((r) => ({ ...r, purchasesInTransit: (r.catalogItemId && codes.get(r.catalogItemId)) || [] }));
+    withPurchase.sort((a, b) => Number(b.purchasesInTransit.length > 0) - Number(a.purchasesInTransit.length > 0));
+    return NextResponse.json(withPurchase);
   }
 
   // Confirmado 2026-09-23, pedido de Heidy: historial de los productos que

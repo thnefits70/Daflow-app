@@ -15,6 +15,7 @@ import { getCompiledLot, isBackfillLot } from "@/lib/fulfillmentGuides";
 import { carrierLabel } from "@/lib/carriers";
 import { isAutoStockoutWeek } from "@/lib/autoStockout";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
+import { getOpenPurchaseCodesByCatalogItem } from "@/lib/purchases";
 import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
@@ -475,6 +476,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_listo_comprar: "Análisis de Mercado — productos listos para comprar",
   analisis_mercado_brandear: "Nuevos IDs por brandear",
   analisis_mercado_sin_id: "Productos de Compras sin ID de Dropi",
+  analisis_mercado_compra_en_camino: "Ya se está comprando — publícalo en Dropi",
   fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
   fulfillment_bloque_asignado: "Bloque del corte asignado — sacar de bodega",
   compras_calientes: "Compras calientes (30 unidades o menos)",
@@ -1635,6 +1637,27 @@ async function getCatalogMissingDropiIdPendingItem(href: string): Promise<Pendin
     label: "Productos de Compras sin ID de Dropi",
     meta: `${count} producto${count === 1 ? "" : "s"}`,
     overdue: false,
+    href,
+  };
+}
+
+// Pedido del usuario 2026-09-30 (Bryan, casco SC-124): productos aprobados en
+// Análisis de Mercado que todavía no están en Dropi pero ya se están
+// comprando — Heidy los publica primero, antes de que lleguen a bodega.
+async function getPurchaseInTransitUnpublishedPendingItem(href: string): Promise<PendingItem | null> {
+  const proposals = await prisma.marketProductProposal.findMany({
+    where: { status: "APPROVED", publishedAt: null, catalogItemId: { not: null } },
+    select: { catalogItemId: true, productName: true },
+  });
+  const codes = await getOpenPurchaseCodesByCatalogItem(proposals.map((p) => p.catalogItemId!));
+  const hits = proposals.filter((p) => codes.has(p.catalogItemId!));
+  if (hits.length === 0) return null;
+  return {
+    type: "analisis_mercado_compra_en_camino",
+    icon: "🛒",
+    label: "Ya se está comprando — publícalo en Dropi primero",
+    meta: hits.length === 1 ? hits[0].productName : `${hits.length} productos`,
+    overdue: true,
     href,
   };
 }
@@ -3327,6 +3350,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (me.canPublishMarketProduct) {
       const missingIdItem = await getCatalogMissingDropiIdPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
       if (missingIdItem) teamItems.push(missingIdItem);
+      const inTransitItem = await getPurchaseInTransitUnpublishedPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
+      if (inTransitItem) teamItems.unshift(inTransitItem);
     }
     // Confirmado 2026-09-03: Jariel (transición Bryan→Jariel en Compras) es
     // delegado vía canManagePurchases pero no lidera ningún departamento —
@@ -3605,7 +3630,7 @@ export async function getPossiblePendingTypesForActor(
       // pero no su líder — mismo criterio que el resto de este bloque.
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar");
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
-      if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id");
+      if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino");
       if (me.department?.code === "INV" || me.department?.code === "FUL") types.push("fulfillment_bloque_asignado");
       if (me.canManagePurchases && me.department?.code === "MKT") types.push("compras_calientes");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
@@ -3613,7 +3638,7 @@ export async function getPossiblePendingTypesForActor(
 
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
-    if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id");
+    if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino");
     if (me.leadsDept.code === "FIN") types.push("compras_frias");
     if (me.leadsDept.code === "INV") types.push("compras_urgentes_sin_atender");
     if (me.leadsDept.code === "FIN") {

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { linkReadyToBuyProposalsToGroup } from "@/lib/marketProduct";
 import { canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
-import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes } from "@/lib/purchases";
+import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes, formatPurchaseRequestCode } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
@@ -423,6 +423,26 @@ export async function POST(req: NextRequest) {
   );
 
   await linkReadyToBuyProposalsToGroup(groupId);
+
+  // Pedido del usuario 2026-09-30 (Bryan, casco SC-124): se puede comprar un
+  // producto nuevo antes de que exista en Dropi, pero Heidy tiene que
+  // enterarse en el momento para publicarlo antes de que llegue a bodega.
+  const unpublished = await prisma.purchaseCatalogItem.findMany({
+    where: { id: { in: d.items.map((it) => it.catalogItemId) }, awaitingDropiId: true },
+    select: { name: true },
+  });
+  if (unpublished.length > 0) {
+    const publishers = await prisma.user.findMany({ where: { canPublishMarketProduct: true, isActive: true }, select: { id: true } });
+    await Promise.all(
+      publishers.map((u) =>
+        notifyOwner(u.id, {
+          title: "Ya se está comprando — publícalo en Dropi",
+          body: `${unpublished.map((c) => c.name).join(", ")} (${formatPurchaseRequestCode(requestNumber)}). Súbelo a Dropi primero, antes de que llegue a bodega.`,
+          url: "/area/workspace?tab=analisis-mercado&ptab=publicar",
+        }).catch(() => null)
+      )
+    );
+  }
 
   const summary = d.items.length === 1 ? check.nameById.get(d.items[0].catalogItemId) : `${d.items.length} productos`;
 

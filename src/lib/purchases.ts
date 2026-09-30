@@ -55,7 +55,27 @@ export function openPurchaseWhere(): Prisma.PurchaseRequestWhereInput {
   };
 }
 
-export type OtherOpenPurchase = { catalogItemId: string; itemName: string; code: string; quantity: number; requesterName: string; statusText: string; createdAt: string };
+// Pedido del usuario 2026-09-30 (Bryan, casco SC-124): códigos SC de las
+// compras abiertas por producto — Heidy ve "Compra en camino" en los que
+// todavía tiene que publicar en Dropi.
+export async function getOpenPurchaseCodesByCatalogItem(catalogItemIds: string[]): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (catalogItemIds.length === 0) return out;
+  const rows = await prisma.purchaseRequest.findMany({
+    where: { catalogItemId: { in: catalogItemIds }, AND: [openPurchaseWhere()] },
+    orderBy: { createdAt: "asc" },
+    select: { catalogItemId: true, requestNumber: true },
+  });
+  for (const r of rows) {
+    const code = r.requestNumber ? formatPurchaseRequestCode(r.requestNumber) : "sin código";
+    const list = out.get(r.catalogItemId) ?? [];
+    if (!list.includes(code)) list.push(code);
+    out.set(r.catalogItemId, list);
+  }
+  return out;
+}
+
+export type OtherOpenPurchase ={ catalogItemId: string; itemName: string; code: string; quantity: number; requesterName: string; statusText: string; createdAt: string };
 
 // Confirmado 2026-09-29, pedido del usuario: evitar que Jariel y Nairoby
 // compren el mismo producto sin saber que el otro ya lo está comprando.

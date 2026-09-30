@@ -58,6 +58,7 @@ type Proposal = {
   supplierPrices: SupplierPrice[];
   traceability?: { totalMinutes: number | null };
   suggestedSupplierId?: string | null;
+  purchasesInTransit?: string[];
 };
 
 const BODEGA_LABELS: Record<string, string> = {
@@ -849,6 +850,12 @@ function PublishQueue() {
             <img src={p.referenceImageUrl} alt="" className="w-16 h-16 rounded object-cover shrink-0" />
             <div className="flex-1">
               <div className="font-semibold text-[13.5px]">{p.code} — {p.productName}</div>
+              {/* Pedido del usuario 2026-09-30 (Bryan, casco SC-124). */}
+              {p.purchasesInTransit && p.purchasesInTransit.length > 0 && (
+                <div className="inline-block my-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase bg-red/10 border border-red/40 text-red">
+                  Compra en camino ({p.purchasesInTransit.join(", ")}) — publícalo primero
+                </div>
+              )}
               <div className="text-[12px] text-steel">Bodega: {BODEGA_LABELS[p.bodega ?? ""] ?? "—"} · {p.isPublic ? "Público" : "Privado"} · Cantidad por defecto: 100</div>
               <div className="text-[13px] font-bold text-ink mt-1">Precio de Dropi: {money(p.calculatedSalePrice)}</div>
             </div>

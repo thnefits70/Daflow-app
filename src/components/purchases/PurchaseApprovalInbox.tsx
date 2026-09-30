@@ -44,7 +44,7 @@ type Row = {
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
   shippingCostTotal: number | null;
   catalogItemId: string;
-  catalogItem: { name: string; photos: string[] };
+  catalogItem: { name: string; photos: string[]; awaitingDropiId?: boolean };
   supplier: { id: string; name: string; paymentMode?: "PREPAGO" | "CREDITO" };
   bankAccount: BankAccount | null;
   bankAccountChangeRequestedAt: string | null;
@@ -722,6 +722,17 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                       />
                     )}
                     <span>{r.catalogItem.name} · {r.quantity} un. — ${r.unitCost.toFixed(2)}/un.</span>
+                    {/* Pedido del usuario 2026-09-30 (Bryan, casco SC-124): se puede
+                        comprar antes de que exista en Dropi, pero quien aprueba debe
+                        verlo de un vistazo. */}
+                    {r.catalogItem.awaitingDropiId && (
+                      <span
+                        className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-blue/15 border border-blue/40 text-blue"
+                        title="Producto nuevo: Heidy todavía no lo publica en Dropi. Se puede comprar igual; el stock entra al Kardex cuando ella confirme el ID."
+                      >
+                        Aún no está en Dropi
+                      </span>
+                    )}
                     <button
                       type="button"
                       title="Doble clic para ver el historial de precio"
