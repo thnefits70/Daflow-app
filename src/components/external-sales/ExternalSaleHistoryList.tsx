@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Printer, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { GuidePrintLink } from "@/components/external-sales/GuidePrintLink";
 import { saleSteps, saleColumn, FLOW_COLUMNS, TimelineSteps } from "@/components/external-sales/SaleTimeline";
 
 type SaleItemDTO = {
@@ -56,6 +57,8 @@ type SaleDTO = {
   returnReceivedAt: string | null;
   returnConfirmedAt: string | null;
   deletedAt: string | null;
+  guidePrintedAt: string | null;
+  guidePrintedBy: { name: string } | null;
 };
 
 // Pedido explícito de Yair (2026-09-19, por audio): desde el tablero de
@@ -90,14 +93,7 @@ function SaleDetail({ s, canPrintGuide, hideMoney }: { s: SaleDTO; canPrintGuide
     <div className="mt-2.5 border-t border-rule pt-2.5 flex flex-col gap-2">
       <TimelineSteps steps={steps} />
       {canPrintGuide && (
-        <a
-          href={`/ventas-externas/${s.id}/guia`}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold text-blue underline"
-        >
-          <Printer size={12} /> Ver / imprimir guía
-        </a>
+        <GuidePrintLink saleId={s.id} printedAt={s.guidePrintedAt} printedByName={s.guidePrintedBy?.name ?? null} />
       )}
       {!hideMoney && s.isContraEntrega && s.freightCost != null && (
         <div className="text-[10.5px] text-steel">Flete: -${s.freightCost.toFixed(2)} · Monto a transferir: ${(s.totalAmount - s.freightCost).toFixed(2)}</div>

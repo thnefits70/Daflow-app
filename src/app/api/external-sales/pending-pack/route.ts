@@ -12,6 +12,7 @@ export async function GET() {
       include: {
         items: { include: { catalogItem: { select: { name: true, photos: true, justCode: true } } }, orderBy: { createdAt: "asc" } },
         advisor: { select: { name: true } },
+        guidePrintedBy: { select: { name: true } },
       },
       orderBy: { prepReadyAt: "asc" },
     }),

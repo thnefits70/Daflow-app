@@ -14,6 +14,7 @@ export async function GET() {
       invoiceUploadedBy: { select: { name: true } },
       dispatchAssignedTo: { select: { name: true } },
       prepReadyBy: { select: { name: true } },
+      guidePrintedBy: { select: { name: true } },
       packAssignedTo: { select: { name: true } },
       deliveredBy: { select: { name: true } },
       nairobyClosedBy: { select: { name: true } },

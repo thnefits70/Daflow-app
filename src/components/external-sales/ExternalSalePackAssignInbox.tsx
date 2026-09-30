@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Package, Printer } from "lucide-react";
+import { Package } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { GuidePrintLink } from "@/components/external-sales/GuidePrintLink";
 
 type TeamMember = { id: string; name: string };
 type SaleItemDTO = {
@@ -18,6 +19,8 @@ type SaleDTO = {
   items: SaleItemDTO[];
   pickupPersonName: string;
   advisor: { name: string } | null;
+  guidePrintedAt: string | null;
+  guidePrintedBy: { name: string } | null;
 };
 
 async function postJson(url: string, body?: unknown) {
@@ -98,14 +101,12 @@ export function ExternalSalePackAssignInbox() {
           </div>
           <div className="text-[11.5px] text-steel mb-2.5">Entrega a: {s.pickupPersonName}</div>
 
-          <a
-            href={`/ventas-externas/${s.id}/guia`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue underline mb-2.5"
-          >
-            <Printer size={12} /> Ver / imprimir guía
-          </a>
+          <GuidePrintLink
+            saleId={s.id}
+            printedAt={s.guidePrintedAt}
+            printedByName={s.guidePrintedBy?.name ?? null}
+            className="mb-2.5"
+          />
 
           {assigning === s.id ? (
             <div className="bg-cloud rounded-md p-2.5">

@@ -554,6 +554,7 @@ model User {
   externalSalesDispatchAssignedTo ExternalSale[] @relation("ExternalSaleDispatchAssignedTo")
   externalSalesDispatchAssignedBy ExternalSale[] @relation("ExternalSaleDispatchAssignedBy")
   externalSalesPrepReadyBy        ExternalSale[] @relation("ExternalSalePrepReadyBy")
+  externalSalesGuidePrintedBy     ExternalSale[] @relation("ExternalSaleGuidePrintedBy")
   externalSalesPackAssignedTo     ExternalSale[] @relation("ExternalSalePackAssignedTo")
   externalSalesPackAssignedBy     ExternalSale[] @relation("ExternalSalePackAssignedBy")
   externalSalesDelivered          ExternalSale[] @relation("ExternalSaleDeliveredBy")
@@ -6584,6 +6585,13 @@ model ExternalSale {
   prepReadyAt   DateTime?
   prepReadyById String?
   prepReadyBy   User?     @relation("ExternalSalePrepReadyBy", fields: [prepReadyById], references: [id], onDelete: SetNull)
+
+  // Pedido de Yair 2026-09-30: al abrir "Ver / imprimir guía" desde el
+  // tablero del equipo queda marcado "Ya impreso" (se puede reimprimir igual).
+  // Guarda la última vez.
+  guidePrintedAt   DateTime?
+  guidePrintedById String?
+  guidePrintedBy   User?     @relation("ExternalSaleGuidePrintedBy", fields: [guidePrintedById], references: [id], onDelete: SetNull)
 
   // Pista 2, paso 2 — Yair (líder de Fulfilment) asigna a alguien de su
   // equipo para embalar; esa misma persona hace la entrega final abajo.
