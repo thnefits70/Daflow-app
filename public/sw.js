@@ -5,6 +5,11 @@
 // entrar y cargar datos reales, no un simple check — así que "resolverlo" de
 // verdad solo pasa adentro de DAFLOW. Descartar la notificación (swipe/X) ya
 // lo hace el propio sistema operativo, sin necesitar código aquí.
+// Una versión nueva de este archivo entra en uso enseguida, sin esperar a que
+// se cierren todas las pestañas de DAFLOW.
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+
 self.addEventListener("push", (event) => {
   let data = { title: "DAFLOW", body: "Tienes un pendiente.", url: "/" };
   try {
@@ -13,13 +18,26 @@ self.addEventListener("push", (event) => {
     // payload no era JSON válido — se usa el genérico de arriba
   }
 
+  // 2026-09-30 (versión 2): después de mostrar el aviso, el celular le dice
+  // a DAFLOW "lo recibí" (/api/push/ack). Así DAFLOW detecta solo un celular
+  // que no muestra los avisos (p.ej. Chrome cerrado por ahorro de batería).
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: data.icon || "/icon.svg",
-      badge: data.icon || "/icon.svg",
-      data: { url: data.url },
-    })
+    self.registration
+      .showNotification(data.title, {
+        body: data.body,
+        icon: data.icon || "/icon.svg",
+        badge: data.icon || "/icon.svg",
+        data: { url: data.url },
+      })
+      .then(() => {
+        if (!data.sid) return;
+        if (typeof Notification !== "undefined" && Notification.permission !== "granted") return;
+        return fetch("/api/push/ack", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sid: data.sid, st: data.st }),
+        }).catch(() => null);
+      })
   );
 });
 

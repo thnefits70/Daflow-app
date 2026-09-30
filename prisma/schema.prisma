@@ -4595,13 +4595,21 @@ model AiUsageLog {
 // un campo único en User. `endpoint` es único porque el navegador lo genera
 // distinto por dispositivo/instalación.
 model PushSubscription {
-  id        String   @id @default(cuid())
-  ownerId   String
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
-  userAgent String?
-  createdAt DateTime @default(now())
+  id            String    @id @default(cuid())
+  ownerId       String
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  userAgent     String?
+  createdAt     DateTime  @default(now())
+  // 2026-09-30 (Joel no vio el aviso de bloque asignado): el celular le
+  // responde a DAFLOW cada vez que de verdad muestra un aviso. trackingSince =
+  // desde cuándo este celular tiene la versión que responde (antes no se
+  // cuentan fallos); missedCount = avisos enviados sin respuesta seguidos.
+  trackingSince DateTime?
+  lastSentAt    DateTime?
+  lastAckAt     DateTime?
+  missedCount   Int       @default(0)
 
   @@index([ownerId])
 }

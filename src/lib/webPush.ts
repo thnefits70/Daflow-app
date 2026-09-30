@@ -35,6 +35,39 @@ function ensureVapidConfigured() {
   vapidConfigured = true;
 }
 
+// 2026-09-30 (Joel no vio en el celular el aviso de bloque asignado, aunque
+// Google lo aceptó): cada celular responde "lo recibí" al mostrar un aviso
+// (public/sw.js → /api/push/ack). Un aviso que se muestra más de
+// ACK_LATE_MS después de enviado cuenta como no mostrado — así pasa cuando el
+// celular cierra Chrome para ahorrar batería: el aviso sale recién cuando la
+// persona vuelve a abrir Chrome. Con SILENT_AFTER seguidos, el celular queda
+// marcado: al abrir DAFLOW se vuelve a registrar solo y, si sigue igual, la
+// persona ve los pasos para su celular (PushSettingsToggle). Solo celulares
+// (una computadora apagada de noche es normal) y solo desde que tienen la
+// versión que responde (trackingSince), para no culpar a uno sin actualizar.
+export const SILENT_AFTER = 3;
+export const ACK_LATE_MS = 10 * 60 * 1000;
+
+export function isPhoneUserAgent(ua: string | null): boolean {
+  return !!ua && /Android|iPhone|iPad/.test(ua);
+}
+
+async function trackSent(sub: { id: string; trackingSince: Date | null }) {
+  await prisma.pushSubscription.update({
+    where: { id: sub.id },
+    data: { lastSentAt: new Date(), ...(sub.trackingSince ? { missedCount: { increment: 1 } } : {}) },
+  });
+}
+
+export function deviceLabel(ua: string | null): string {
+  if (!ua) return "dispositivo";
+  if (/iPhone|iPad/.test(ua)) return "iPhone";
+  const m = ua.match(/Android[^;]*;\s*([^;)]+?)(?:\s+Build|\))/);
+  if (/Android/.test(ua)) return m?.[1] && m[1] !== "K" ? `celular Android (${m[1].trim()})` : "celular Android";
+  if (/Windows|Macintosh|Linux/.test(ua)) return "computadora";
+  return "dispositivo";
+}
+
 // Manda la notificación a TODOS los dispositivos que esa persona haya
 // activado (celular y laptop a la vez, sin límite) — confirmado 2026-07-28.
 // Si una suscripción ya expiró o el permiso fue revocado, el navegador
@@ -49,10 +82,14 @@ export async function sendPushToOwner(ownerId: string, payload: PushPayload, opt
 
   ensureVapidConfigured();
   const icon = opts.brandIcon === false ? null : await getNotificationIcon();
-  const body = JSON.stringify(icon ? { ...payload, icon } : payload);
   await Promise.all(
     subs.map(async (sub) => {
       try {
+        // sid: el celular lo devuelve a /api/push/ack al mostrar el aviso.
+        // Se cuenta ANTES de enviar: si el celular responde rapidísimo, su
+        // "lo recibí" no debe llegar antes que este conteo y quedar pisado.
+        const body = JSON.stringify({ ...payload, ...(icon ? { icon } : {}), sid: sub.id, st: Date.now() });
+        await trackSent(sub).catch(() => null);
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           body

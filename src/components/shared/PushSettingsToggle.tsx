@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, BellOff, Info } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Bell, BellOff, Info, X } from "lucide-react";
 
 function urlBase64ToUint8Array(base64: string) {
   const padding = "=".repeat((4 - (base64.length % 4)) % 4);
@@ -31,21 +32,62 @@ function writeManualOff(off: boolean) {
   try { if (off) localStorage.setItem(MANUAL_OFF_KEY, "1"); else localStorage.removeItem(MANUAL_OFF_KEY); } catch { /* sin almacenamiento: no pasa nada */ }
 }
 
-async function refreshSubscription(existing: PushSubscription | null): Promise<boolean> {
-  const registration = await navigator.serviceWorker.register("/sw.js");
-  await registration.update().catch(() => null);
-  let sub = existing;
-  if (!sub) {
-    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-    if (!publicKey) return false;
-    sub = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
-  }
+async function postSubscription(sub: PushSubscription, extra: { stillSilentAfterReset?: boolean } = {}): Promise<{ ok: boolean; silent: boolean }> {
   const res = await fetch("/api/push/subscribe", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(sub.toJSON()),
+    body: JSON.stringify({ ...sub.toJSON(), tracking: true, ...extra }),
   });
-  return res.ok;
+  const data = res.ok ? await res.json().catch(() => ({})) : {};
+  return { ok: res.ok, silent: data?.silent === true };
+}
+
+async function subscribeFresh(registration: ServiceWorkerRegistration): Promise<PushSubscription | null> {
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  if (!publicKey) return null;
+  return registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+}
+
+// 2026-09-30: si DAFLOW detectó que este celular no muestra los avisos, lo
+// primero es volver a registrarlo desde cero (sin que nadie haga nada). Si
+// ya se hizo en los últimos RESET_WINDOW_MS y sigue igual, el problema es un
+// ajuste del celular: se muestran los pasos y se avisa al admin.
+const RESET_KEY = "daflow_push_auto_reset_at";
+const RESET_WINDOW_MS = 7 * 24 * 3600 * 1000;
+function readResetAt() {
+  try { return Number(localStorage.getItem(RESET_KEY) || 0); } catch { return 0; }
+}
+function writeResetAt() {
+  try { localStorage.setItem(RESET_KEY, String(Date.now())); } catch { /* sin almacenamiento */ }
+}
+
+// Una sola vez por carga de página, aunque el menú se dibuje dos veces.
+let autoRepairRun: Promise<{ ok: boolean; silent: boolean }> | null = null;
+
+async function autoRepair(existing: PushSubscription | null): Promise<{ ok: boolean; silent: boolean }> {
+  const registration = await navigator.serviceWorker.register("/sw.js");
+  await registration.update().catch(() => null);
+  // Unos segundos para que los avisos que estaban en cola lleguen y el
+  // celular alcance a responder antes de revisar si está "mudo".
+  await new Promise((r) => setTimeout(r, 8000));
+  let sub = existing ?? (await subscribeFresh(registration));
+  if (!sub) return { ok: false, silent: false };
+  const first = await postSubscription(sub);
+  if (!first.silent) return first;
+
+  if (Date.now() - readResetAt() > RESET_WINDOW_MS) {
+    await fetch("/api/push/subscribe", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: sub.endpoint }),
+    }).catch(() => null);
+    await sub.unsubscribe().catch(() => null);
+    sub = await subscribeFresh(registration);
+    if (!sub) return { ok: false, silent: false };
+    writeResetAt();
+    return postSubscription(sub);
+  }
+  return postSubscription(sub, { stillSilentAfterReset: true });
 }
 
 // Confirmado 2026-07-29: a diferencia de PushOptIn (el banner que se oculta
@@ -58,6 +100,8 @@ async function refreshSubscription(existing: PushSubscription | null): Promise<b
 export function PushSettingsToggle() {
   const [status, setStatus] = useState<Status>("checking");
   const [busy, setBusy] = useState(false);
+  const [silent, setSilent] = useState(false);
+  const [silentClosed, setSilentClosed] = useState(false);
 
   useEffect(() => {
     async function check() {
@@ -93,7 +137,13 @@ export function PushSettingsToggle() {
       // servidor para que quede al día y a nombre de quien entró. No se hace
       // si la persona la apagó a propósito con este botón.
       if (Notification.permission === "granted" && !readManualOff()) {
-        refreshSubscription(sub ?? null).then((ok) => ok && setStatus("on")).catch(() => null);
+        autoRepairRun ??= autoRepair(sub ?? null);
+        autoRepairRun
+          .then((r) => {
+            if (r.ok) setStatus("on");
+            setSilent(r.silent);
+          })
+          .catch(() => null);
       }
     }
     check();
@@ -117,7 +167,7 @@ export function PushSettingsToggle() {
       await fetch("/api/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subscription.toJSON()),
+        body: JSON.stringify({ ...subscription.toJSON(), tracking: true }),
       });
       writeManualOff(false);
       setStatus("on");
@@ -172,6 +222,7 @@ export function PushSettingsToggle() {
 
   return (
     <div className="flex items-center gap-1.5">
+      {silent && !silentClosed && createPortal(<SilentDeviceNotice onClose={() => setSilentClosed(true)} />, document.body)}
       <button
         type="button"
         disabled={busy}
@@ -191,6 +242,47 @@ export function PushSettingsToggle() {
           <br /><br />
           Puedes desactivarlo cuando quieras — deja de avisarte solo en este dispositivo, sin afectar a nadie más.
         </div>
+      </div>
+    </div>
+  );
+}
+
+// 2026-09-30: aparece sola, sin que nadie la pida, en el celular que DAFLOW
+// detectó que no muestra los avisos (ni después de volver a registrarlo).
+// Una página web no puede cambiar los ajustes del celular — solo su dueño —
+// así que aquí van los pasos exactos. Vuelve a salir en cada apertura hasta
+// que el celular empiece a mostrar los avisos; ahí desaparece sola.
+const IOS_STEPS = [
+  "Abre Ajustes → Notificaciones → DAFLOW.",
+  "Activa “Permitir notificaciones” y “Pantalla bloqueada”.",
+  "Revisa que no tengas activado un modo Concentración / No molestar.",
+];
+const ANDROID_STEPS = [
+  "Mantén presionado el ícono de Chrome → “Información de la app”.",
+  "Entra a “Ahorro de batería” (o “Batería”) → elige “Sin restricciones”.",
+  "Si ves “Inicio automático”, actívalo.",
+  "Entra a “Notificaciones” y activa todo.",
+];
+
+function SilentDeviceNotice({ onClose }: { onClose: () => void }) {
+  const steps = isIOS() ? IOS_STEPS : ANDROID_STEPS;
+  return (
+    <div className="fixed inset-x-3 bottom-24 z-[100] mx-auto max-w-md rounded-lg border border-rule bg-surface text-ink p-4 shadow-2xl">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-md bg-red/15 flex items-center justify-center shrink-0">
+          <BellOff size={17} className="text-red" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-[13.5px] font-bold mb-0.5">Tu celular no te está mostrando los avisos de DAFLOW</div>
+          <div className="text-[12px] text-steel mb-2">DAFLOW te los manda, pero el celular los frena. Haz esto una sola vez:</div>
+          <ol className="list-decimal pl-4 text-[12px] space-y-1">
+            {steps.map((s) => <li key={s}>{s}</li>)}
+          </ol>
+          <div className="text-[11px] text-steel mt-2">Cuando el celular vuelva a mostrar los avisos, este mensaje desaparece solo.</div>
+        </div>
+        <button type="button" onClick={onClose} className="p-1.5 text-steel hover:text-ink cursor-pointer shrink-0" title="Cerrar por ahora">
+          <X size={15} />
+        </button>
       </div>
     </div>
   );
