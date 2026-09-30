@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ClipboardCheck, CheckCircle2, Search } from "lucide-react";
+import { ClipboardCheck, CheckCircle2, Search, AlertTriangle } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -18,6 +18,7 @@ type Row = {
     advisorConfirmedAt: string | null;
     advisorConfirmedBy: { name: string; marketingAdvisorBrand: string | null } | null;
   } | null;
+  repeatArrival: { lastConfirmedAt: string; costIncreased: boolean; costBefore?: number; costNow?: number } | null;
 };
 
 type Confirmer = { id: string; name: string; role: "design" | "advisor" };
@@ -210,13 +211,35 @@ export function MarketingArrivalsPanel({ canConfirmAdvisor }: { canConfirmAdviso
             <div className="pt-3 border-t border-rule">
               <div>
                 <div className="text-[11px] font-semibold text-ink mb-0.5">Asesor de marca</div>
-                <div className="text-[10.5px] text-steel mb-2">Verificar stock, precio de venta, descripción y Dropi.</div>
+                {r.repeatArrival ? (
+                  <>
+                    {/* Confirmado 2026-09-29, pedido del usuario: si ya confirmó una llegada
+                        anterior del mismo producto, solo falta subir el stock en Dropi. */}
+                    <div className="text-[10.5px] text-steel mb-2">
+                      Ya lo confirmaste antes ({formatDateTime(r.repeatArrival.lastConfirmedAt)}). Solo sube el stock en Dropi.
+                    </div>
+                    {r.repeatArrival.costIncreased && (
+                      <div className="flex items-start gap-1.5 rounded border border-gold/35 bg-gold/10 px-2.5 py-2 mb-2 text-[11.5px]" style={{ color: "var(--color-gold)" }}>
+                        <AlertTriangle size={14} className="shrink-0 mt-px" />
+                        <span>
+                          Revisa el precio en Dropi: esta compra salió más cara
+                          {r.repeatArrival.costBefore !== undefined && r.repeatArrival.costNow !== undefined
+                            ? ` ($${r.repeatArrival.costBefore.toFixed(2)} → $${r.repeatArrival.costNow.toFixed(2)} por unidad, con flete)`
+                            : ""}
+                          .
+                        </span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-[10.5px] text-steel mb-2">Primera vez que llega: verificar stock, precio de venta, descripción y Dropi.</div>
+                )}
                 {fu?.advisorConfirmedAt ? (
                   <div className="flex items-center gap-1.5 text-[12px] text-teal">
                     <CheckCircle2 size={14} /> Confirmado — {actorName(fu.advisorConfirmedBy?.name)}{fu.advisorConfirmedBy?.marketingAdvisorBrand ? ` (${fu.advisorConfirmedBy.marketingAdvisorBrand})` : ""} · {formatDateTime(fu.advisorConfirmedAt)}
                   </div>
                 ) : canConfirmAdvisor ? (
-                  <ConfirmButton label="Confirmar stock, precio, descripción y Dropi" icon={<ClipboardCheck size={14} />} busy={busyId === r.id} onConfirm={() => confirm(r.id)} />
+                  <ConfirmButton label={r.repeatArrival ? (r.repeatArrival.costIncreased ? "Confirmar stock y precio en Dropi" : "Confirmar stock subido en Dropi") : "Confirmar stock, precio, descripción y Dropi"} icon={<ClipboardCheck size={14} />} busy={busyId === r.id} onConfirm={() => confirm(r.id)} />
                 ) : (
                   <div className="flex items-center gap-1.5 text-[12px] text-steel">
                     <ClipboardCheck size={14} /> Todavía pendiente

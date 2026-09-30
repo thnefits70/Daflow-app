@@ -22,13 +22,42 @@ const arrivalInclude = {
 // RECEIVED_PENDING_REVIEW — Robert/Heidy/Jariel/Yair ven la llegada y pueden
 // confirmar su parte apenas bodega registra la recepción, sin esperar la
 // aprobación de Daniel (que ya solo importa para Compras/Kardex).
+// Confirmado 2026-09-29, pedido del usuario: si el asesor ya confirmó una
+// llegada anterior del mismo producto, la tarjeta se acorta a "solo sube el
+// stock en Dropi" (la descripción y la publicación no cambian). Se sigue
+// pidiendo cada llegada porque Dropi no está conectado y el stock allá se
+// sube a mano. Si esta compra salió más cara por unidad (proveedor + flete)
+// que la última confirmada, avisa que revise el precio en Dropi.
+function landedUnitCost(r: { unitCost: number; quantity: number; shippingIncluded: boolean; shippingCostTotal: number | null }) {
+  const freight = !r.shippingIncluded && r.shippingCostTotal && r.quantity > 0 ? r.shippingCostTotal / r.quantity : 0;
+  return r.unitCost + freight;
+}
+
 export async function getMarketingArrivals() {
   const rows = await prisma.purchaseRequest.findMany({
     where: { status: { in: ["RECEIVED_PENDING_REVIEW", "RECEIVED"] } },
     orderBy: { receipt: { confirmedAt: "desc" } },
     include: arrivalInclude,
   });
-  return rows;
+  return rows.map((r) => {
+    const arrivedAt = r.receipt?.confirmedAt?.getTime() ?? 0;
+    const previous = rows
+      .filter((o) => o.id !== r.id && o.catalogItemId === r.catalogItemId && o.marketingFollowUp?.advisorConfirmedAt && (o.receipt?.confirmedAt?.getTime() ?? 0) < arrivedAt)
+      .sort((a, b) => (b.receipt?.confirmedAt?.getTime() ?? 0) - (a.receipt?.confirmedAt?.getTime() ?? 0))[0];
+    const costNow = landedUnitCost(r);
+    const costBefore = previous ? landedUnitCost(previous) : null;
+    return {
+      ...r,
+      repeatArrival: previous
+        ? {
+            lastConfirmedAt: previous.marketingFollowUp!.advisorConfirmedAt!,
+            costIncreased: costBefore !== null && costNow - costBefore >= 0.01,
+            costBefore: Math.round((costBefore ?? 0) * 100) / 100,
+            costNow: Math.round(costNow * 100) / 100,
+          }
+        : null,
+    };
+  });
 }
 
 // Confirmado 2026-08-18: lista de quién puede confirmar cada rol, para que
