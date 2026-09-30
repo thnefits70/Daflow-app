@@ -42,7 +42,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         publishers.map((u) =>
           notifyOwner(u.id, {
             title: "Cambió el Precio Dropi de un producto publicado",
-            body: `${item.name} (ID ${item.justCode}) ahora es producto ${size}. Precio Dropi nuevo: ${price.toFixed(2)}. Actualízalo en Dropi (también lo ves en Stock actual).`,
+            body: `${item.name} (ID ${item.justCode}) ahora es producto ${size}. Precio Dropi nuevo: $${price.toFixed(2)}. Actualízalo en Dropi (también lo ves en Stock actual).`,
             url: "/area/workspace?tab=stock-actual",
           }).catch(() => null)
         )
