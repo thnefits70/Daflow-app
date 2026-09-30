@@ -9,6 +9,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 import { SupplierCreditProofDialog } from "@/components/merchandise-outflow/SupplierCreditProofDialog";
 import type { CreditProofClaim } from "@/lib/supplierCreditProofShared";
+import { isPreDaflowClaim, PRE_DAFLOW_NOTE } from "@/lib/preDaflowClaim";
 
 type SupplierOption = { id: string; name: string };
 type ItemDTO = {
@@ -36,6 +37,7 @@ type ItemDTO = {
   expectedCreditAmount: number | null;
   purchaseExceptionDecision: "DATA_CORRECTED" | "AUTHORIZED" | "REJECTED" | null;
   purchaseExceptionNote: string | null;
+  purchaseNoMatchNote: string | null;
 };
 
 async function postJson(url: string, body?: unknown) {
@@ -219,6 +221,22 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
     }
   }
 
+  // Confirmado 2026-09-30, pedido explícito del usuario: mercadería de Chen
+  // comprada antes de DAFLOW — un clic, sin nota ni esperar a admin (ver
+  // purchase-pre-daflow/route.ts). El crédito igual lo aprueba admin.
+  async function markPreDaflow() {
+    setSaving(true);
+    setError("");
+    try {
+      await postJson(`/api/merchandise-outflow/items/${item.id}/purchase-pre-daflow`);
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo marcar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function uploadProofFile(file: File) {
     setUploadingProof(true);
     setError("");
@@ -325,6 +343,14 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
   const noProofPending = isNoProofPending(item);
   const canResolve = (isAnchored || isAuthorizedException) && !noProofPending;
   const isCreditSupplier = item.purchaseGestionSupplier?.paymentMode === "CREDITO";
+  const preDaflow = isPreDaflowClaim(item);
+
+  function openNoProof(mode: "CREDIT_ISSUED" | "REJECTED") {
+    setNoProofMode(mode);
+    // Para lo comprado antes de DAFLOW la nota ya va escrita — Jariel solo
+    // pone el monto (o la corrige si quiere).
+    if (preDaflow && !note.trim()) setNote(`${PRE_DAFLOW_NOTE} — acordado con ${item.purchaseGestionSupplier!.name} por llamada o en persona.`);
+  }
 
   return (
     <div className="bg-surface border border-rule rounded-md p-3.5">
@@ -344,7 +370,13 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
 
       {isAuthorizedException && !isAnchored && (
         <div className="bg-blue/10 border border-blue/40 rounded-md p-2.5 mb-2.5 text-[11.5px]">
-          <span className="font-semibold text-blue">Admin autorizó seguir sin compra vinculada.</span> {item.purchaseExceptionNote}
+          {preDaflow ? (
+            <span className="font-semibold text-blue">Comprado antes de DAFLOW — sigue sin compra vinculada. El crédito lo aprueba admin.</span>
+          ) : (
+            <>
+              <span className="font-semibold text-blue">Admin autorizó seguir sin compra vinculada.</span> {item.purchaseExceptionNote}
+            </>
+          )}
         </div>
       )}
 
@@ -399,7 +431,12 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
             <AlertTriangle size={13} /> No hay ninguna compra registrada a {item.purchaseGestionSupplier.name} de este producto.
           </div>
           {!reportingNoMatch ? (
-            <div className="flex gap-2 mt-1.5">
+            <div className="flex gap-2 mt-1.5 flex-wrap items-center">
+              {isCreditSupplier && item.catalogItemId && (
+                <button type="button" disabled={saving} className="text-[11.5px] font-bold border border-teal bg-teal text-navy rounded-full px-2.5 py-1 cursor-pointer disabled:opacity-50" onClick={markPreDaflow}>
+                  {saving ? "Guardando…" : "Comprado antes de DAFLOW"}
+                </button>
+              )}
               <button type="button" className="text-[11.5px] font-semibold text-blue cursor-pointer" onClick={() => setPickingAgain(true)}>
                 Probar otro proveedor
               </button>
@@ -501,11 +538,11 @@ function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: 
       {canResolve && !resolving && !noProofMode && isCreditSupplier && (
         <div className="text-[11px] text-steel mb-1.5">
           ¿{item.purchaseGestionSupplier!.name} lo arregló por llamada o en persona?{" "}
-          <button type="button" className="font-semibold text-blue cursor-pointer" onClick={() => setNoProofMode("CREDIT_ISSUED")}>
+          <button type="button" className="font-semibold text-blue cursor-pointer" onClick={() => openNoProof("CREDIT_ISSUED")}>
             Dio crédito sin captura
           </button>
           {" · "}
-          <button type="button" className="font-semibold text-red cursor-pointer" onClick={() => setNoProofMode("REJECTED")}>
+          <button type="button" className="font-semibold text-red cursor-pointer" onClick={() => openNoProof("REJECTED")}>
             Rechazó sin captura
           </button>
         </div>

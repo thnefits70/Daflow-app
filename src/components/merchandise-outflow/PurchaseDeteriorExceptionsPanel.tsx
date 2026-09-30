@@ -46,6 +46,10 @@ export function PurchaseDeteriorExceptionsPanel() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [authorizingAll, setAuthorizingAll] = useState(false);
+  const [bulkNote, setBulkNote] = useState("");
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const [bulkError, setBulkError] = useState("");
 
   function load() {
     fetch("/api/merchandise-outflow/purchase-exceptions")
@@ -71,11 +75,62 @@ export function PurchaseDeteriorExceptionsPanel() {
     }
   }
 
+  // Confirmado 2026-09-30, pedido explícito del usuario: autorizar de una
+  // vez los que ya están esperando (mercadería comprada antes de DAFLOW).
+  // Cada uno pasa por purchase-exception-decide igual que uno por uno.
+  async function authorizeAll() {
+    if (!items || !bulkNote.trim()) return;
+    setBulkError("");
+    const failed: string[] = [];
+    setBulkProgress({ done: 0, total: items.length });
+    for (let i = 0; i < items.length; i++) {
+      try {
+        await postJson(`/api/merchandise-outflow/items/${items[i].id}/purchase-exception-decide`, { decision: "AUTHORIZED", note: bulkNote.trim() });
+      } catch (e) {
+        failed.push(`${itemName(items[i])}: ${e instanceof Error ? e.message : "error"}`);
+      }
+      setBulkProgress({ done: i + 1, total: items.length });
+    }
+    setBulkProgress(null);
+    setAuthorizingAll(false);
+    setBulkNote("");
+    if (failed.length) setBulkError(`No se pudieron autorizar ${failed.length}: ${failed.join(" · ")}`);
+    load();
+  }
+
   if (items === null) return <div className="text-[13px] text-steel">Cargando…</div>;
   if (items.length === 0) return <div className="text-[13px] text-steel">No hay reclamos sin respaldo esperando tu decisión.</div>;
 
   return (
     <div className="flex flex-col gap-2.5 max-w-lg">
+      {items.length >= 2 && (
+        <div className="bg-green/10 border border-green/35 rounded-md p-2.5 text-[12.5px]">
+          {bulkProgress ? (
+            <span className="font-semibold">Autorizando {bulkProgress.done} de {bulkProgress.total}…</span>
+          ) : authorizingAll ? (
+            <div>
+              <div className="font-semibold mb-1.5">¿Estás seguro? Se autorizan los {items.length} a seguir sin compra vinculada.</div>
+              <textarea className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px] mb-2" rows={2} value={bulkNote} onChange={(e) => setBulkNote(e.target.value)} />
+              <div className="flex gap-2">
+                <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => { setAuthorizingAll(false); setBulkNote(""); }}>
+                  Cancelar
+                </button>
+                <button type="button" disabled={!bulkNote.trim()} className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={authorizeAll}>
+                  Sí, autorizar todos
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2.5">
+              <div className="flex-1 min-w-0">¿Todos son mercadería comprada antes de DAFLOW?</div>
+              <button type="button" className="shrink-0 text-[11.5px] font-bold border border-green/40 text-green rounded-full px-2.5 py-1 cursor-pointer" onClick={() => { setAuthorizingAll(true); setBulkNote("Comprado antes de DAFLOW"); }}>
+                Autorizar todos ({items.length})
+              </button>
+            </div>
+          )}
+          {bulkError && <div className="text-red text-[11px] mt-1.5">{bulkError}</div>}
+        </div>
+      )}
       {items.map((item) => (
         <div key={item.id} className="bg-red/5 border border-red/30 rounded-md p-3.5">
           <div className="flex items-center gap-3 mb-2.5">

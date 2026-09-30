@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { ExpandableName } from "@/components/ui/ExpandableName";
+import { isPreDaflowClaim } from "@/lib/preDaflowClaim";
 
 type OtherClaim = {
   id: string;
@@ -33,6 +34,8 @@ type ItemDTO = {
   otherClaims: OtherClaim[];
   previousCredits: PreviousCredit[];
   recentNoProofCount: number;
+  purchaseNoMatchNote: string | null;
+  purchaseExceptionDecision: string | null;
 };
 
 async function postJson(url: string, body?: unknown) {
@@ -72,6 +75,9 @@ export function PurchaseNoProofApprovalsPanel() {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [confirmAll, setConfirmAll] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const [bulkError, setBulkError] = useState("");
 
   function load() {
     fetch("/api/merchandise-outflow/purchase-no-proof-requests")
@@ -98,11 +104,65 @@ export function PurchaseNoProofApprovalsPanel() {
     }
   }
 
+  // Confirmado 2026-09-30, pedido explícito del usuario: para sanear rápido
+  // lo comprado antes de DAFLOW, admin aprueba todos de un clic (con
+  // "¿Estás seguro…?"). Es lo mismo que aprobar uno por uno — cada uno pasa
+  // por purchase-no-proof-decide. Si alguno falla, se sigue con los demás.
+  async function approveAll() {
+    if (!items) return;
+    setConfirmAll(false);
+    setBulkError("");
+    const failed: string[] = [];
+    setBulkProgress({ done: 0, total: items.length });
+    for (let i = 0; i < items.length; i++) {
+      try {
+        await postJson(`/api/merchandise-outflow/items/${items[i].id}/purchase-no-proof-decide`, { approve: true });
+      } catch (e) {
+        failed.push(`${items[i].catalogItem?.name ?? items[i].declaredName}: ${e instanceof Error ? e.message : "error"}`);
+      }
+      setBulkProgress({ done: i + 1, total: items.length });
+    }
+    setBulkProgress(null);
+    if (failed.length) setBulkError(`No se pudieron aprobar ${failed.length}: ${failed.join(" · ")}`);
+    load();
+  }
+
   if (items === null) return <div className="text-[13px] text-steel">Cargando…</div>;
   if (items.length === 0) return <div className="text-[13px] text-steel">No hay reclamos sin captura esperando tu aprobación.</div>;
+  const bulkCreditTotal = items.filter((i) => i.noProofResolution === "CREDIT_ISSUED").reduce((s, i) => s + (i.noProofAmount ?? 0), 0);
 
   return (
     <div className="flex flex-col gap-2.5 max-w-lg">
+      {items.length >= 2 && (
+        <div className="bg-green/10 border border-green/35 rounded-md p-2.5 text-[12.5px]">
+          {bulkProgress ? (
+            <span className="font-semibold">Aprobando {bulkProgress.done} de {bulkProgress.total}…</span>
+          ) : confirmAll ? (
+            <div>
+              <div className="font-semibold mb-2">
+                ¿Estás seguro? Se aprueban los {items.length} reclamos
+                {bulkCreditTotal > 0 && ` · créditos por ${money(bulkCreditTotal)}`}.
+              </div>
+              <div className="flex gap-2">
+                <button type="button" className="flex-1 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setConfirmAll(false)}>
+                  Cancelar
+                </button>
+                <button type="button" className="flex-1 rounded border border-teal bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer" onClick={approveAll}>
+                  Sí, aprobar todos
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2.5">
+              <div className="flex-1 min-w-0">Revisa la lista y apruébalos juntos.</div>
+              <button type="button" className="shrink-0 text-[11.5px] font-bold border border-green/40 text-green rounded-full px-2.5 py-1 cursor-pointer" onClick={() => setConfirmAll(true)}>
+                Aprobar todos ({items.length})
+              </button>
+            </div>
+          )}
+          {bulkError && <div className="text-red text-[11px] mt-1.5">{bulkError}</div>}
+        </div>
+      )}
       {items.map((item) => {
         const name = item.catalogItem?.name ?? item.declaredName;
         const supplierName = item.purchaseGestionSupplier?.name ?? "el proveedor";
@@ -120,6 +180,9 @@ export function PurchaseNoProofApprovalsPanel() {
                   <ExpandableName text={name} />
                 </div>
                 <div className="text-[11px] text-steel">{item.quantity} un. · {item.batch.code} · {supplierName}</div>
+                {isPreDaflowClaim(item) && (
+                  <span className="inline-block mt-0.5 text-[10.5px] font-semibold border border-blue/40 text-blue rounded-full px-2 py-px">Comprado antes de DAFLOW</span>
+                )}
               </div>
             </div>
 
