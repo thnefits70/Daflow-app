@@ -2597,10 +2597,11 @@ model FulfillmentRequestBatch {
   lotId String?
   lot   FulfillmentLot? @relation(fields: [lotId], references: [id], onDelete: SetNull)
 
-  items            FulfillmentRequestItem[]
-  variantNotes     FulfillmentRequestVariantNote[]
-  guides           FulfillmentRequestGuide[]
-  provisionalLines FulfillmentProvisionalLine[]
+  items             FulfillmentRequestItem[]
+  variantNotes      FulfillmentRequestVariantNote[]
+  guides            FulfillmentRequestGuide[]
+  provisionalLines  FulfillmentProvisionalLine[]
+  discontinuedSales DropiDiscontinuedSale[]
 
   @@index([requestedAt])
 }
@@ -2641,6 +2642,32 @@ model FulfillmentProvisionalLine {
   // Colores/tallas del total ("Negro 2 · Rojo 1"), solo en la primera fila del código.
   variants String?
 
+  @@index([batchId])
+}
+
+// Pedido del usuario 2026-09-30 (caso 168766 Mesa Auxiliar Doble Repisa):
+// un cliente compró en Dropi un producto que NO tenemos ni vamos a comprar
+// (dado de baja). Yair lo marca en el PDF de guías: no sale ni descuenta
+// stock, Heidy lo da de baja en Dropi (delistedAt) y Daniel, Bryan Ríos y
+// Jariel reciben el aviso. Una fila por cada vez que aparece en un PDF — si
+// vuelve a venderse después de dado de baja, se abre otro pendiente.
+model DropiDiscontinuedSale {
+  id           String                   @id @default(cuid())
+  batchId      String?
+  batch        FulfillmentRequestBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  code         String
+  name         String
+  quantity     Int
+  guideNumbers String[]                 @default([])
+  // "GINTRACOM 1", "SERVIENTREGA 2"…
+  carriers     String[]                 @default([])
+  reportedById String?
+  createdAt    DateTime                 @default(now())
+  delistedById String?
+  delistedAt   DateTime?
+
+  @@index([code])
+  @@index([delistedAt])
   @@index([batchId])
 }
 

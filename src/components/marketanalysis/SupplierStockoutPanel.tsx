@@ -6,6 +6,7 @@ import { TabGuide } from "@/components/shared/TabGuide";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 import { ProductMatchPicker, type MatchCatalogItem } from "@/components/merchandise-reentry/ProductMatchPicker";
+import { DropiDiscontinuedSection } from "./DropiDiscontinuedSection";
 
 type ResolutionAction = "CLOSED_DROPI_ID" | "STOCK_ZEROED" | "OTHER";
 
@@ -150,6 +151,8 @@ export function SupplierStockoutPanel({ canReport, canResolve }: { canReport: bo
           <>Vista de solo lectura: productos que Compras ya no consigue con ningún proveedor, y cómo se resolvió cada uno.</>
         )}
       </TabGuide>
+
+      <DropiDiscontinuedSection canDelist={canResolve} />
 
       {canReport && (
         <div className="mb-5.5">

@@ -59,6 +59,8 @@ export type CompiledLot = {
   batches: LotBatch[];
   lines: LotLine[];
   provisional?: ProvisionalLotLine[];
+  // Producto dado de baja que igual se vendió en Dropi (2026-09-30): no sale.
+  discontinued?: { code: string; name: string; quantity: number; guideNumbers: string[]; carriers: string[] }[];
   warranty: LotWarrantyLine[];
   combos: ComboRecipe[];
   shortages: LotShortage[];
@@ -478,6 +480,7 @@ export function LotView({
       )}
 
       {provisional.length > 0 && <ProvisionalBox lines={provisional} />}
+      {(lot.discontinued?.length ?? 0) > 0 && <DiscontinuedBox lines={lot.discontinued!} />}
 
       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
 
@@ -538,6 +541,30 @@ export function LotView({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Pedido del usuario 2026-09-30: un cliente compró en Dropi un producto que
+// no tenemos (dado de baja). Esas guías NO salen — Heidy lo da de baja en Dropi.
+function DiscontinuedBox({ lines }: { lines: NonNullable<CompiledLot["discontinued"]> }) {
+  return (
+    <div className="text-[11.5px] bg-red/5 border border-red/40 rounded-md p-2.5 mb-3">
+      <div className="font-semibold text-red mb-0.5">Guías que NO salen: producto dado de baja ({lines.length})</div>
+      <div className="text-[10.5px] text-steel mb-1.5">No lo tenemos en bodega. No hay que sacar nada; Heidy lo da de baja en Dropi.</div>
+      {lines.map((l, i) => (
+        <div key={`${l.code}-${i}`} className="flex items-start gap-2 py-1 border-t border-red/20">
+          <span className="font-mono text-[10.5px] font-bold shrink-0">{l.code}</span>
+          <div className="flex-1 min-w-0">
+            <div>{l.name}</div>
+            <div className="text-[10.5px] text-steel">
+              {l.guideNumbers.length > 0 ? `Guía ${l.guideNumbers.join(", ")}` : "Guía no leída"}
+              {l.carriers.length > 0 ? ` · ${l.carriers.map((c) => { const i = c.lastIndexOf(" "); return i > 0 ? `${carrierLabel(c.slice(0, i))} ${c.slice(i + 1)}` : c; }).join(" · ")}` : ""}
+            </div>
+          </div>
+          <span className="font-mono font-bold text-red shrink-0">{l.quantity}</span>
+        </div>
+      ))}
     </div>
   );
 }

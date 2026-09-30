@@ -5,6 +5,7 @@ import { canSubmitFulfillmentRequest, dbUserId, getInventoryLeadId } from "@/lib
 import { applyGuidesImport } from "@/lib/fulfillmentGuides";
 import { notifyOwner } from "@/lib/notifications";
 import { detectSuddenDemand } from "@/lib/suddenDemand";
+import { notifyDiscontinuedSales } from "@/lib/dropiDiscontinued";
 
 const variantSchema = z.object({ label: z.string().trim().min(1).max(120), quantity: z.number().int().positive() });
 const schema = z.object({
@@ -26,7 +27,7 @@ const schema = z.object({
         decision: z.discriminatedUnion("kind", [
           z.object({ kind: z.literal("product"), catalogItemId: z.string().min(1) }),
           z.object({ kind: z.literal("combo"), comboCode: z.string().trim().min(1).max(30).optional() }),
-          z.object({ kind: z.literal("ignore") }),
+          z.object({ kind: z.literal("ignore"), discontinued: z.boolean().optional() }),
         ]),
       })
     )
@@ -66,6 +67,9 @@ export async function POST(req: NextRequest) {
   if (backfill && !input.manifestDate) return NextResponse.json({ error: "No se pudo leer la fecha del manifiesto en el PDF." }, { status: 400 });
   const result = await applyGuidesImport({ ...input, backfillDay: backfill ? input.manifestDate : null }, dbUserId(session.user.id));
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  // Producto dado de baja que igual se vendió (pedido del usuario 2026-09-30):
+  // Heidy lo da de baja en Dropi, Daniel/Bryan/Jariel quedan al tanto.
+  if (result.discontinuedCount > 0) await notifyDiscontinuedSales(result.batchId).catch(() => null);
   if (backfill) {
     // Ya salió: no hay nada que sacar de bodega, solo que Daniel lo confirme.
     const danielId = await getInventoryLeadId();

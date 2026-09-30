@@ -18,6 +18,7 @@ import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
 import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
+import { DISCONTINUED_URL, getDiscontinuedPendingCount } from "@/lib/dropiDiscontinued";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -1635,6 +1636,21 @@ async function getCatalogMissingDropiIdPendingItem(href: string): Promise<Pendin
     meta: `${count} producto${count === 1 ? "" : "s"}`,
     overdue: false,
     href,
+  };
+}
+
+// Pedido del usuario 2026-09-30: producto dado de baja que igual se vendió
+// en Dropi — Heidy lo da de baja allá (ver lib/dropiDiscontinued.ts).
+async function getDropiDiscontinuedPendingItem(): Promise<PendingItem | null> {
+  const count = await getDiscontinuedPendingCount();
+  if (count === 0) return null;
+  return {
+    type: "dropi_dado_de_baja",
+    icon: "⛔",
+    label: "Se vendió en Dropi un producto dado de baja — dalo de baja allá",
+    meta: `${count} venta${count === 1 ? "" : "s"}`,
+    overdue: true,
+    href: DISCONTINUED_URL,
   };
 }
 
@@ -3286,6 +3302,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // proveedor" vía este flag delegado sin liderar ningún departamento —
     // mismo criterio que canBrandMarketProduct arriba.
     if (me.canResolveSupplierStockout) {
+      const discontinuedItem = await getDropiDiscontinuedPendingItem();
+      if (discontinuedItem) teamItems.unshift(discontinuedItem);
       const supplierStockoutItem = await getSupplierStockoutPendingItem("/area/workspace?tab=analisis-mercado&ptab=sinstock");
       if (supplierStockoutItem) teamItems.push(supplierStockoutItem);
     }

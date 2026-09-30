@@ -16,6 +16,7 @@ type Resolution =
   | { kind: "combo"; comboCode: string; label: string | null; components: { catalogItem: ItemLite; quantity: number }[]; missingIds: string[] }
   | { kind: "comboNoRecipe"; comboCode: string }
   | { kind: "ignored"; label: string }
+  | { kind: "discontinued"; label: string }
   | { kind: "unknown"; suggestion: ItemLite | null };
 type Row = {
   code: string;
@@ -41,7 +42,9 @@ type ParseResult = {
 type ComboPart = { catalogItem: ItemLite; quantity: number };
 // comboCode = el combo de Dropi que corresponde (para un código de Rocket,
 // el combo al que Yair lo vinculó).
-type Decision = { kind: "product"; item: ItemLite } | { kind: "combo"; comboCode: string; components: ComboPart[] } | { kind: "ignore" } | null;
+// ignore + discontinued: "Producto dado de baja / no lo tenemos" (pedido del
+// usuario 2026-09-30) — no sale, y Heidy lo da de baja en Dropi.
+type Decision = { kind: "product"; item: ItemLite } | { kind: "combo"; comboCode: string; components: ComboPart[] } | { kind: "ignore"; discontinued?: boolean } | null;
 
 // Confirmado 2026-09-25: los códigos de Rocket vienen como "R14599" (ver
 // dropiGuidesPdf) — se muestran como "Rocket 14599", nunca como ID de Dropi.
@@ -75,6 +78,8 @@ function linkedDecision(r: Row): Decision {
       return r.resolution.missingIds.length === 0 ? { kind: "combo", comboCode: r.resolution.comboCode, components: r.resolution.components } : null;
     case "ignored":
       return { kind: "ignore" };
+    case "discontinued":
+      return { kind: "ignore", discontinued: true };
     default:
       return null;
   }
@@ -265,7 +270,9 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
   const warranty = data?.warranty ?? [];
   const pending = rows.filter((r) => !decisions[r.code]);
   const ready = rows.filter((r) => decisions[r.code] && decisions[r.code]!.kind !== "ignore");
-  const ignored = rows.filter((r) => decisions[r.code]?.kind === "ignore");
+  const isDiscontinuedDecision = (code: string) => { const d = decisions[code]; return d?.kind === "ignore" && !!d.discontinued; };
+  const ignored = rows.filter((r) => decisions[r.code]?.kind === "ignore" && !isDiscontinuedDecision(r.code));
+  const discontinued = rows.filter((r) => isDiscontinuedDecision(r.code));
   const totalUnits = rows.reduce((s, r) => s + r.quantity, 0);
   const rowByCode = new Map(rows.map((r) => [r.code, r]));
 
@@ -313,7 +320,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             byCarrier: r.byCarrier,
             labelUnits: r.labelUnits,
             variants: r.variants,
-            decision: d.kind === "product" ? { kind: "product", catalogItemId: d.item.id } : d.kind === "combo" ? { kind: "combo", comboCode: d.comboCode } : { kind: "ignore" },
+            decision: d.kind === "product" ? { kind: "product", catalogItemId: d.item.id } : d.kind === "combo" ? { kind: "combo", comboCode: d.comboCode } : { kind: "ignore", discontinued: d.discontinued },
           };
         }),
         warranty: warranty
@@ -582,7 +589,18 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             </div>
           )}
 
-          {d?.kind === "ignore" && (
+          {d?.kind === "ignore" && d.discontinued && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-red">
+                Producto dado de baja — no sale ni descuenta stock{res.kind === "discontinued" ? " (ya se había vendido antes)" : ""}. Al guardar le llega el aviso a Heidy para darlo de baja en Dropi, y a Daniel, Bryan y Jariel.
+              </span>
+              <button type="button" className="text-teal font-semibold cursor-pointer" onClick={() => setDecisions((p) => ({ ...p, [r.code]: null }))}>
+                Volver a incluir
+              </button>
+            </div>
+          )}
+
+          {d?.kind === "ignore" && !d.discontinued && (
             <div className="flex items-center gap-2 text-steel">
               <span>
                 {res.kind !== "ignored" && isProvisionalAlf(r.name)
@@ -595,7 +613,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             </div>
           )}
 
-          {!d && (res.kind === "unknown" || res.kind === "comboNoRecipe") && (
+          {!d && (res.kind === "unknown" || res.kind === "comboNoRecipe" || res.kind === "discontinued") && (
             <>
               <div className="text-[11px] mb-1.5" style={{ color: "var(--color-gold)" }}>
                 {res.kind === "comboNoRecipe" ? "Combo sin receta todavía — dile a la app qué productos trae (una sola vez)." : "Código nuevo — dile a la app qué es (una sola vez, después lo recuerda)."}
@@ -645,7 +663,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                       </span>
                     </button>
                   )}
-                  {res.kind === "unknown" && (
+                  {(res.kind === "unknown" || res.kind === "discontinued") && (
                     <button type="button" className="font-semibold text-teal cursor-pointer" onClick={() => setPicking(r.code)}>
                       Buscar producto
                     </button>
@@ -653,6 +671,15 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                   <button type="button" className="font-semibold text-teal cursor-pointer" onClick={() => setRegistering(r.code)}>
                     {isRocket(r.code) ? "Es un combo" : "Es un combo — registrar receta"}
                   </button>
+                  {(res.kind === "unknown" || res.kind === "discontinued") && (
+                    <button
+                      type="button"
+                      className="font-semibold text-red cursor-pointer"
+                      onClick={() => setDecisions((p) => ({ ...p, [r.code]: { kind: "ignore", discontinued: true } }))}
+                    >
+                      Producto dado de baja / no lo tenemos
+                    </button>
+                  )}
                   {res.kind === "unknown" && (
                     <button type="button" className="text-steel hover:text-red cursor-pointer" onClick={() => setDecisions((p) => ({ ...p, [r.code]: { kind: "ignore" } }))}>
                       No es un producto
@@ -778,6 +805,13 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
 
           <div className="text-[11px] font-semibold text-steel mb-1.5">Listos ({ready.length})</div>
           <div className="flex flex-col gap-1.5 mb-3 max-h-[28rem] overflow-y-auto">{ready.map(renderRow)}</div>
+
+          {discontinued.length > 0 && (
+            <>
+              <div className="text-[11px] font-semibold text-red mb-1.5">Dados de baja — no salen ({discontinued.length})</div>
+              <div className="flex flex-col gap-1.5 mb-3">{discontinued.map(renderRow)}</div>
+            </>
+          )}
 
           {ignored.length > 0 && (
             <>

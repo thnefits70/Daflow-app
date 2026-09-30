@@ -44,6 +44,8 @@ export type GuideResolution =
   | { kind: "combo"; comboCode: string; label: string | null; components: { catalogItem: ItemLite; quantity: number }[]; missingIds: string[] }
   | { kind: "comboNoRecipe"; comboCode: string }
   | { kind: "ignored"; label: string }
+  // Producto dado de baja que igual se vendió en Dropi (DropiDiscontinuedSale).
+  | { kind: "discontinued"; label: string }
   | { kind: "unknown"; suggestion: ItemLite | null };
 
 export type ResolvedGuideLine = ParsedGuidesLine & { resolution: GuideResolution };
@@ -79,10 +81,11 @@ export async function resolveGuideLines(lines: ParsedGuidesLine[]): Promise<Reso
     select: { rocketCode: true, catalogItem: { select: ITEM_SELECT }, dropiCombo: { select: COMBO_SELECT } },
   });
   const rocketByCode = new Map(rocketMappings.map((m) => [`${ROCKET_PREFIX}${m.rocketCode}`, m]));
-  const [items, combos, ignored, allItems] = await Promise.all([
+  const [items, combos, ignored, discontinued, allItems] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({ where: { justCode: { in: codes } }, select: ITEM_SELECT }),
     prisma.dropiCombo.findMany({ where: { code: { in: codes } }, select: COMBO_SELECT }),
     prisma.dropiIgnoredCode.findMany({ where: { code: { in: lines.map((l) => l.code) } }, select: { code: true, label: true } }),
+    prisma.dropiDiscontinuedSale.findMany({ where: { code: { in: lines.map((l) => l.code) } }, select: { code: true, name: true }, distinct: ["code"] }),
     // Candidatos para sugerir cuando el código es nuevo. Confirmado con
     // datos reales 2026-09-23: Dropi tiene VARIOS IDs para el mismo
     // producto físico (ej. Pistola de Soldar 118388 y 112139, Licuadora
@@ -93,6 +96,7 @@ export async function resolveGuideLines(lines: ParsedGuidesLine[]): Promise<Reso
   const itemByCode = new Map(items.map((i) => [i.justCode!, i]));
   const comboByCode = new Map(combos.map((c) => [c.code, c]));
   const ignoredByCode = new Map(ignored.map((i) => [i.code, i.label]));
+  const discontinuedByCode = new Map(discontinued.map((d) => [d.code, d.name]));
   const unlinked = allItems.filter((u) => !u.justCode);
   const unlinkedNorm = unlinked.map((u) => ({ item: u, norm: normalizeName(u.name) }));
   const allNorm = allItems.map((u) => ({ item: u, norm: normalizeName(u.name) }));
@@ -108,6 +112,8 @@ export async function resolveGuideLines(lines: ParsedGuidesLine[]): Promise<Reso
     if (combo) return { ...l, resolution: comboResolution(combo) };
     const ignoredLabel = ignoredByCode.get(l.code);
     if (ignoredLabel !== undefined) return { ...l, resolution: { kind: "ignored", label: ignoredLabel } };
+    const discontinuedLabel = discontinuedByCode.get(l.code);
+    if (discontinuedLabel !== undefined) return { ...l, resolution: { kind: "discontinued", label: discontinuedLabel } };
 
     // Dropi corta los nombres a ~40 caracteres, así que se acepta que uno
     // sea el comienzo del otro; si no, palabras en común (mismo criterio que
@@ -211,7 +217,9 @@ async function getOrCreateBackfillLot(day: string, userId: string | null): Promi
 
 // comboCode: el combo de Dropi que corresponde. Para un código de Dropi es
 // el mismo código; para uno de Rocket, el combo de Dropi al que Yair lo vinculó.
-type Decision = { kind: "product"; catalogItemId: string } | { kind: "combo"; comboCode?: string } | { kind: "ignore" };
+// ignore + discontinued: producto dado de baja que igual se vendió en Dropi
+// (pedido del usuario 2026-09-30) — no sale, no toca stock, se avisa.
+type Decision = { kind: "product"; catalogItemId: string } | { kind: "combo"; comboCode?: string } | { kind: "ignore"; discontinued?: boolean };
 
 export type GuidesApplyRow = {
   code: string;
@@ -245,7 +253,7 @@ export type GuidesApplyInput = {
   backfillDay?: string | null;
 };
 
-export type GuidesApplyResult = { ok: true; batchId: string; lotId: string } | { ok: false; error: string };
+export type GuidesApplyResult = { ok: true; batchId: string; lotId: string; discontinuedCount: number } | { ok: false; error: string };
 
 // Desglose de variantes de UNA fila del PDF: lo que se leyó en las
 // etiquetas + lo que quedó sin variante + lo que no se alcanzó a leer. Suma
@@ -299,7 +307,19 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
   // IDs provisionales de ALF (pedido del usuario 2026-09-28, temporal): no
   // tocan INVESTOCK, pero sí salen en el corte y en la hoja de despacho.
   const provisionalRows = input.rows.filter((r) => r.decision.kind === "ignore" && isProvisionalAlfName(r.name) && r.quantity > 0);
-  const ignoreRows = input.rows.filter((r) => r.decision.kind === "ignore" && !isProvisionalAlfName(r.name));
+  const isDiscontinued = (r: GuidesApplyRow) => r.decision.kind === "ignore" && !!r.decision.discontinued && !isProvisionalAlfName(r.name);
+  const discontinuedRows = input.rows.filter(isDiscontinued);
+  const ignoreRows = input.rows.filter((r) => r.decision.kind === "ignore" && !isProvisionalAlfName(r.name) && !isDiscontinued(r));
+  const discontinuedSales = discontinuedRows.map((r) => ({
+    code: r.code,
+    name: r.name,
+    quantity: r.quantity,
+    guideNumbers: input.guides.filter((g) => g.codes?.includes(r.code)).map((g) => g.number),
+    carriers: Object.entries(r.byCarrier)
+      .filter(([, q]) => q > 0)
+      .map(([carrier, q]) => `${carrier} ${q}`),
+    reportedById: userId,
+  }));
   const provisionalLines = provisionalRows.flatMap((r) => {
     const variants = rowBreakdown(r).map((b) => `${b.label} ${b.quantity}`).join(" · ") || null;
     return Object.entries(r.byCarrier)
@@ -433,7 +453,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
     }
   }
 
-  if (itemRows.length === 0 && provisionalLines.length === 0) return { ok: false, error: "No hay ningún producto listo para guardar." };
+  if (itemRows.length === 0 && provisionalLines.length === 0 && discontinuedSales.length === 0) return { ok: false, error: "No hay ningún producto listo para guardar." };
 
   // Notas de variante por producto: solo si alguna de sus filas trae
   // variantes; las demás filas del mismo producto entran como "Sin
@@ -509,7 +529,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
           requestedById: userId,
           lotId: lot.id,
           totalRows: input.rows.length,
-          skippedCount: ignoreRows.length,
+          skippedCount: ignoreRows.length + discontinuedRows.length,
           fileUrls: input.fileUrls,
           manifestDate: input.manifestDate,
           parseWarnings: input.parseWarnings ?? [],
@@ -527,6 +547,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
           },
           guides: { create: input.guides.map((g) => ({ guideNumber: g.number, carrier: g.carrier, codes: g.codes ?? [] })) },
           provisionalLines: { create: provisionalLines },
+          discontinuedSales: { create: discontinuedSales },
           variantNotes: {
             create: [...notesByItem.entries()].flatMap(([catalogItemId, byCarrier]) =>
               [...byCarrier.entries()].flatMap(([carrier, m]) =>
@@ -537,7 +558,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
         },
       });
     });
-    return { ok: true, batchId: batch.id, lotId: lot.id };
+    return { ok: true, batchId: batch.id, lotId: lot.id, discontinuedCount: discontinuedSales.length };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";
     if (msg === "LOT_CLOSED" && backfillDay) return { ok: false, error: "Daniel acaba de confirmar ese corte atrasado — vuelve a guardar y entrará en uno nuevo del mismo día." };
@@ -641,6 +662,7 @@ export async function getCompiledLot(lotId: string) {
           variantNotes: { select: { catalogItemId: true, carrier: true, label: true, quantity: true } },
           guides: { select: { guideNumber: true, carrier: true, codes: true } },
           provisionalLines: true,
+          discontinuedSales: { select: { code: true, name: true, quantity: true, guideNumbers: true, carriers: true } },
         },
       },
       picks: true,
@@ -883,6 +905,8 @@ export async function getCompiledLot(lotId: string) {
     })),
     lines: lineList.sort((a, b) => b.quantity - a.quantity),
     provisional: [...provisionalMap.values()].sort((a, b) => b.quantity - a.quantity),
+    // Productos dados de baja que igual se vendieron (2026-09-30): esas guías no salen.
+    discontinued: lot.batches.flatMap((b) => b.discontinuedSales),
     warranty,
     combos,
     shortages,
