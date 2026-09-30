@@ -12,6 +12,7 @@ import { ExpandableName } from "@/components/ui/ExpandableName";
 import { SupplierStockoutPanel } from "@/components/marketanalysis/SupplierStockoutPanel";
 import { SuddenDemandPanel } from "@/components/marketanalysis/SuddenDemandPanel";
 import { MaxPurchasePrice } from "@/components/marketanalysis/MaxPurchasePrice";
+import { CopyDropiPrice } from "@/components/shared/CopyDropiPrice";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -726,11 +727,10 @@ function ReviewQueue({ canAct }: { canAct: boolean }) {
 // Productos creados en Compras sin ID antes de que se exigiera: Heidy les
 // pone el ID acá, con la misma doble confirmación que PublishQueue. Si no
 // hay ninguno, no se muestra nada.
-type MissingIdItem = { id: string; name: string; photos: string[]; bodega: string | null; createdBy: { name: string } | null };
+type MissingIdItem = { id: string; name: string; photos: string[]; bodega: string | null; createdBy: { name: string } | null; dropiPrice: number | null };
 function CatalogMissingIdQueue() {
   const [rows, setRows] = useState<MissingIdItem[]>([]);
   const [dropiId, setDropiId] = useState<Record<string, string>>({});
-  const [dropiPrice, setDropiPrice] = useState<Record<string, string>>({});
   const [errId, setErrId] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -745,7 +745,7 @@ function CatalogMissingIdQueue() {
     setErr(""); setBusy(id);
     const res = await fetch("/api/market-products/catalog-missing-id", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ catalogItemId: id, dropiProductId: dropiId[id]?.trim() ?? "", dropiPrice: Number(dropiPrice[id]) }),
+      body: JSON.stringify({ catalogItemId: id, dropiProductId: dropiId[id]?.trim() ?? "" }),
     });
     setBusy(null);
     setConfirmingId(null);
@@ -769,16 +769,17 @@ function CatalogMissingIdQueue() {
                 <div className="text-[12px] text-steel">Bodega: {BODEGA_LABELS[p.bodega ?? ""] ?? "—"} · Creado por {p.createdBy?.name ?? "—"}</div>
               </div>
             </div>
+            {p.dropiPrice != null && <CopyDropiPrice price={p.dropiPrice} />}
             {err && errId === p.id && <div className="text-red text-[12.5px] mb-2">{err}</div>}
             {confirmingId === p.id ? (
               <div className="bg-inset rounded-md p-3">
                 <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
                 <div className="text-[12px] text-steel mb-2.5">
-                  Vas a guardar el ID <b className="text-ink">{dropiId[p.id]}</b> con precio en Dropi <b className="text-ink">${Number(dropiPrice[p.id]).toFixed(2)}</b> para <b className="text-ink">{p.name}</b> — verifica que sea esta foto.
+                  Vas a guardar el ID <b className="text-ink">{dropiId[p.id]}</b> para <b className="text-ink">{p.name}</b> — verifica que sea esta foto.
                 </div>
                 <div className="flex items-center gap-2">
                   <button type="button" disabled={busy === p.id} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => save(p.id)}>
-                    Sí, este ID es de este producto
+                    {p.dropiPrice != null ? `Sí, este ID es de este producto y puse ${p.dropiPrice.toFixed(2)} o más en Dropi` : "Sí, este ID es de este producto"}
                   </button>
                   <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setConfirmingId(null)}>
                     Cancelar
@@ -788,11 +789,10 @@ function CatalogMissingIdQueue() {
             ) : (
               <div className="flex gap-2">
                 <input className="flex-1 min-w-0 rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="ID que tiene en Dropi" value={dropiId[p.id] ?? ""} onChange={(e) => setDropiId((s) => ({ ...s, [p.id]: e.target.value }))} />
-                <input className="w-32 rounded border border-rule px-2.5 py-1.5 text-[13px]" type="number" inputMode="decimal" step="0.01" min="0" placeholder="Precio en Dropi $" value={dropiPrice[p.id] ?? ""} onChange={(e) => setDropiPrice((s) => ({ ...s, [p.id]: e.target.value }))} />
                 <button
                   type="button"
                   className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-                  disabled={!dropiId[p.id]?.trim() || !(Number(dropiPrice[p.id]) > 0)}
+                  disabled={!dropiId[p.id]?.trim()}
                   onClick={() => { setErr(""); setErrId(null); setConfirmingId(p.id); }}
                 >
                   Guardar ID
@@ -809,7 +809,6 @@ function CatalogMissingIdQueue() {
 function PublishQueue() {
   const [rows, setRows] = useState<Proposal[] | null>(null);
   const [dropiId, setDropiId] = useState<Record<string, string>>({});
-  const [dropiPrice, setDropiPrice] = useState<Record<string, string>>({});
   const [errId, setErrId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState("");
@@ -830,7 +829,7 @@ function PublishQueue() {
     setErr(""); setBusy(id);
     const res = await fetch(`/api/market-products/${id}/publish`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dropiProductId: dropiId[id].trim(), dropiPrice: Number(dropiPrice[id]), quantity: 100 }),
+      body: JSON.stringify({ dropiProductId: dropiId[id].trim(), quantity: 100 }),
     });
     setBusy(null);
     setConfirmingId(null);
@@ -855,6 +854,7 @@ function PublishQueue() {
             </div>
           </div>
           <PublishPriceGuide p={p} />
+          {p.calculatedSalePrice != null && <CopyDropiPrice price={p.calculatedSalePrice} label="Precio Dropi mínimo" />}
           {err && errId === p.id && <div className="text-red text-[12.5px] mb-2">{err}</div>}
           {confirmingId === p.id ? (
             <div className="bg-inset rounded-md p-3">
@@ -862,12 +862,12 @@ function PublishQueue() {
               <div className="flex items-center gap-2.5 mb-2.5">
                 <img src={p.referenceImageUrl} alt="" className="w-12 h-12 rounded object-cover border border-rule shrink-0" />
                 <div className="text-[12px] text-steel">
-                  Vas a guardar el ID <b className="text-ink">{dropiId[p.id]}</b> con precio en Dropi <b className="text-ink">${Number(dropiPrice[p.id]).toFixed(2)}</b> para <b className="text-ink">{p.productName}</b> — verifica que sea esta foto y no la de otro producto que estés subiendo al mismo tiempo.
+                  Vas a guardar el ID <b className="text-ink">{dropiId[p.id]}</b> para <b className="text-ink">{p.productName}</b> — verifica que sea esta foto y no la de otro producto que estés subiendo al mismo tiempo.
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <button type="button" disabled={busy === p.id} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => publish(p.id)}>
-                  Sí, este ID es de este producto
+                  Sí, este ID es de este producto y puse {money(p.calculatedSalePrice)} o más en Dropi
                 </button>
                 <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setConfirmingId(null)}>
                   Cancelar
@@ -877,11 +877,10 @@ function PublishQueue() {
           ) : (
             <div className="flex gap-2">
               <input className="flex-1 min-w-0 rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="ID que te dio Dropi" value={dropiId[p.id] ?? ""} onChange={(e) => setDropiId((s) => ({ ...s, [p.id]: e.target.value }))} />
-              <input className="w-32 rounded border border-rule px-2.5 py-1.5 text-[13px]" type="number" inputMode="decimal" step="0.01" min="0" placeholder="Precio en Dropi $" value={dropiPrice[p.id] ?? ""} onChange={(e) => setDropiPrice((s) => ({ ...s, [p.id]: e.target.value }))} />
               <button
                 type="button"
                 className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-                disabled={!dropiId[p.id]?.trim() || !(Number(dropiPrice[p.id]) > 0)}
+                disabled={!dropiId[p.id]?.trim()}
                 onClick={() => { setErr(""); setErrId(null); setConfirmingId(p.id); }}
               >
                 Confirmar publicado

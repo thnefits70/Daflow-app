@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { resolveCostBasisForCatalogItems, computeMarketProductSalePrice, DROPI_MARGIN_DEFAULT } from "@/lib/marketProduct";
 
 // Confirmado 2026-08-08: "Mercadería recibida" — pedido explícito del
 // usuario para que Análisis de Mercado (MKT) sepa apenas Daniel confirma
@@ -39,7 +40,12 @@ export async function getMarketingArrivals() {
     orderBy: { receipt: { confirmedAt: "desc" } },
     include: arrivalInclude,
   });
+  // Pedido del usuario 2026-09-30: el aviso muestra el Precio Dropi (el
+  // mismo de Stock Actual) para copiarlo, no el costo del proveedor.
+  const bases = await resolveCostBasisForCatalogItems(rows.map((r) => r.catalogItemId));
   return rows.map((r) => {
+    const basis = bases.get(r.catalogItemId);
+    const dropiPriceNow = basis ? Math.round(computeMarketProductSalePrice({ ...basis, marginPercent: basis.marginPercent ?? DROPI_MARGIN_DEFAULT }) * 100) / 100 : null;
     const arrivedAt = r.receipt?.confirmedAt?.getTime() ?? 0;
     const previous = rows
       .filter((o) => o.id !== r.id && o.catalogItemId === r.catalogItemId && o.marketingFollowUp?.advisorConfirmedAt && (o.receipt?.confirmedAt?.getTime() ?? 0) < arrivedAt)
@@ -54,6 +60,7 @@ export async function getMarketingArrivals() {
             costIncreased: costBefore !== null && costNow - costBefore >= 0.01,
             costBefore: Math.round((costBefore ?? 0) * 100) / 100,
             costNow: Math.round(costNow * 100) / 100,
+            dropiPriceNow,
           }
         : null,
     };
