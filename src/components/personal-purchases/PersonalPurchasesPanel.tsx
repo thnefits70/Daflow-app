@@ -120,7 +120,7 @@ function TransferProofUploader({ orderId, onSent }: { orderId: string; onSent: (
     setProofUrl(res.url);
     setProofName(res.name);
   }
-  const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile(handleFile);
+  const { onPaste, onMouseEnter, onMouseLeave, onTapPaste, tapHint } = usePasteFile(handleFile);
 
   async function submit() {
     if (!proofUrl) return;
@@ -150,6 +150,12 @@ function TransferProofUploader({ orderId, onSent }: { orderId: string; onSent: (
           <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])} />
         </label>
       )}
+      {!proofUrl && !uploading && (
+        <button type="button" className="block mx-auto mt-1.5 text-[11.5px] font-semibold text-teal underline cursor-pointer [@media(hover:hover)]:hidden" onClick={onTapPaste}>
+          Pegar captura del portapapeles
+        </button>
+      )}
+      {tapHint && <p className="mt-1 text-[10.5px] text-red text-center">{tapHint}</p>}
       {err && <div className="text-red text-[11.5px] mt-1.5">{err}</div>}
       <button type="button" disabled={!proofUrl || submitting} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-40 mt-2.5" onClick={submit}>
         {submitting ? "Enviando…" : "Enviar comprobante"}

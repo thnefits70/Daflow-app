@@ -247,7 +247,7 @@ function ProofUploader({ apiBase, onSent }: { apiBase: string; onSent: () => voi
     const verifyData = await verifyRes.json().catch(() => null);
     if (verifyRes.ok && verifyData) setVerify(verifyData);
   }
-  const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile(handleFile);
+  const { onPaste, onMouseEnter, onMouseLeave, onTapPaste, tapHint } = usePasteFile(handleFile);
   const blockedByMismatch = !!verify && !verify.matches;
 
   async function submit() {
@@ -278,13 +278,15 @@ function ProofUploader({ apiBase, onSent }: { apiBase: string; onSent: () => voi
         </div>
       ) : (
         <div>
-          <div className="flex items-center justify-center gap-1.5 text-[11.5px] text-steel-dim border-[1.5px] border-dashed border-rule rounded-md px-3 py-4 text-center">
+          <div
+            onClick={onTapPaste}
+            className="flex items-center justify-center gap-1.5 text-[11.5px] text-steel-dim border-[1.5px] border-dashed border-rule rounded-md cursor-pointer hover:border-teal px-3 py-4 text-center">
             {uploading ? (
               "Subiendo…"
             ) : (
               <span>
-                Pegá con Ctrl+V, o{" "}
-                <button type="button" className="underline cursor-pointer hover:text-teal" onClick={() => imageInputRef.current?.click()}>
+                Pegá con Ctrl+V (en celular: tocá aquí), o{" "}
+                <button type="button" className="underline cursor-pointer hover:text-teal" onClick={(e) => { e.stopPropagation(); imageInputRef.current?.click(); }}>
                   hacé clic para elegir un archivo
                 </button>
               </span>
@@ -297,6 +299,7 @@ function ProofUploader({ apiBase, onSent }: { apiBase: string; onSent: () => voi
           >
             ¿Es un PDF? Subir documento
           </button>
+          {tapHint && <p className="mt-1 text-[10.5px] text-red text-center">{tapHint}</p>}
         </div>
       )}
       {/* accept="image/*" solo (no combinado con PDF) para que el celular
