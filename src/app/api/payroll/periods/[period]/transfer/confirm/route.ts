@@ -6,7 +6,7 @@ import { isValidPeriod } from "@/lib/payroll";
 import { isEndOfMonthQuincena } from "@/lib/payrollCalc";
 import { notifyOwner, resolveNotifications } from "@/lib/notifications";
 
-const schema = z.object({ destination: z.enum(["NAIROBY", "ADMIN_PRODUBANCO", "ADMIN_COMPANY"]).optional() });
+const schema = z.object({ destination: z.enum(["NAIROBY", "ADMIN_PRODUBANCO", "ADMIN_COMPANY", "COMPANY_DIRECT"]).optional() });
 
 // Confirmado 2026-08-24: pedido explícito del usuario — el orden real es
 // primero pagar, después publicar/entregar el rol (nunca al revés). Nairoby
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
   if (destination === "ADMIN_PRODUBANCO") {
     const acc = await prisma.adminPayrollBankAccount.findUnique({ where: { id: "singleton" } });
     if (!acc?.bankAccountNumber) return NextResponse.json({ error: "La cuenta Produbanco de nómina todavía no está registrada." }, { status: 400 });
-  } else if (destination === "ADMIN_COMPANY") {
+  } else if (destination === "ADMIN_COMPANY" || destination === "COMPANY_DIRECT") {
     const acc = await prisma.companyBankAccount.findUnique({ where: { id: "singleton" } });
     if (!acc?.bankAccountNumber) return NextResponse.json({ error: "La cuenta para recibir transferencias todavía no está registrada." }, { status: 400 });
   } else {

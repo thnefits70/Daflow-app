@@ -35,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ per
           });
           return row;
         })()
-      : transfer.destination === "ADMIN_COMPANY"
+      : transfer.destination === "ADMIN_COMPANY" || transfer.destination === "COMPANY_DIRECT"
       ? await prisma.companyBankAccount.findUnique({ where: { id: "singleton" }, select: BANK_ACCOUNT_SELECT })
       : await prisma.adminPayrollBankAccount.findUnique({ where: { id: "singleton" }, select: BANK_ACCOUNT_SELECT });
 

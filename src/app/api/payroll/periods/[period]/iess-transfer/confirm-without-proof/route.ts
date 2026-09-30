@@ -26,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
   if (payrollPeriod.iessTransfer.status !== "APPROVED") {
     return NextResponse.json({ error: "Primero hay que aprobarla." }, { status: 409 });
   }
-  if (payrollPeriod.iessTransfer.destination !== "ADMIN_COMPANY" && payrollPeriod.iessTransfer.destination !== "ADMIN_PRODUBANCO") {
+  if (payrollPeriod.iessTransfer.destination !== "ADMIN_COMPANY" && payrollPeriod.iessTransfer.destination !== "ADMIN_PRODUBANCO" && payrollPeriod.iessTransfer.destination !== "COMPANY_DIRECT") {
     return NextResponse.json({ error: "Solo se puede confirmar sin comprobante cuando la cuenta destino es propia." }, { status: 409 });
   }
 

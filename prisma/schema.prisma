@@ -5137,6 +5137,10 @@ enum PayrollTransferDestination {
   NAIROBY
   ADMIN_PRODUBANCO
   ADMIN_COMPANY
+  // Pedido de Nairoby 2026-09-30: no se transfiere el total a ninguna
+  // cuenta — se paga directo desde la Pichincha de la empresa
+  // (CompanyBankAccount). El admin igual aprueba; al aprobar queda completado.
+  COMPANY_DIRECT
 }
 
 // Confirmado 2026-08-23: transferencia real de fondos por quincena — no es

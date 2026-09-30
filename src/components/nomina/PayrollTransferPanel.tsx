@@ -16,7 +16,7 @@ type BankAccount = {
   holderIdNumber: string | null;
 };
 
-export type Destination = "NAIROBY" | "ADMIN_PRODUBANCO" | "ADMIN_COMPANY";
+export type Destination = "NAIROBY" | "ADMIN_PRODUBANCO" | "ADMIN_COMPANY" | "COMPANY_DIRECT";
 
 export type Transfer = {
   status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED" | "COMPLETED";
@@ -52,6 +52,7 @@ const DESTINATION_LABEL: Record<Destination, string> = {
   NAIROBY: "Cuenta de Nairoby",
   ADMIN_PRODUBANCO: "Cuenta Produbanco de nómina",
   ADMIN_COMPANY: "Cuenta para recibir transferencias",
+  COMPANY_DIRECT: "Pagar desde la cuenta Pichincha",
 };
 
 export type IessBreakdownRow = {
@@ -164,7 +165,7 @@ function CopyableValue({ value, className }: { value: string; className?: string
   );
 }
 
-function BankAccountBlock({ account }: { account: BankAccount | null }) {
+function BankAccountBlock({ account, direct }: { account: BankAccount | null; direct?: boolean }) {
   // Confirmado 2026-08-24: pedido explícito del usuario — la cuenta destino
   // tiene que verse de una, sin un clic extra, porque es el dato que más
   // importa para no transferir mal. Antes arrancaba oculta como la cuenta
@@ -180,7 +181,7 @@ function BankAccountBlock({ account }: { account: BankAccount | null }) {
         onClick={() => setShow((s) => !s)}
       >
         <Landmark size={12} />
-        {account ? "Cuenta destino" : "Cuenta destino sin registrar todavía"}
+        {account ? (direct ? "Cuenta desde la que se paga" : "Cuenta destino") : "Cuenta destino sin registrar todavía"}
         <ChevronDown size={12} className={show ? "rotate-180" : ""} />
       </button>
       {show && (
@@ -337,7 +338,10 @@ function ProofUploader({ apiBase, onSent }: { apiBase: string; onSent: () => voi
 // preseleccionado sigue el criterio de siempre (fin de mes -> Produbanco,
 // si no -> Nairoby) pero es editable — así puede esquivar una cuenta que
 // se quedó sin fondos sin tener que avisarle al admin por otro lado.
-function DestinationPicker({ destination, onChange }: { destination: Destination; onChange: (d: Destination) => void }) {
+// Pedido de Nairoby 2026-09-30: 4ª opción (directLabel) — no transferir el
+// total a ninguna cuenta, sino pagar directo desde la Pichincha de la
+// empresa. Solo en nómina e IESS (el sueldo de Nairoby no la muestra).
+function DestinationPicker({ destination, onChange, directLabel }: { destination: Destination; onChange: (d: Destination) => void; directLabel?: string }) {
   const [nairobyAccount, setNairobyAccount] = useState<BankAccount | null | undefined>(undefined);
   const [produbanco, setProdubanco] = useState<BankAccount | null | undefined>(undefined);
   const [company, setCompany] = useState<BankAccount | null | undefined>(undefined);
@@ -354,11 +358,12 @@ function DestinationPicker({ destination, onChange }: { destination: Destination
     { value: "ADMIN_PRODUBANCO", account: produbanco },
     { value: "ADMIN_COMPANY", account: company },
     { value: "NAIROBY", account: nairobyAccount },
+    ...(directLabel ? [{ value: "COMPANY_DIRECT" as const, account: company }] : []),
   ];
 
   return (
     <div className="mb-2.5">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">¿A qué cuenta transferís?</div>
+      <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">¿A qué cuenta transferís?{directLabel ? " — o pagás directo" : ""}</div>
       <div className="flex flex-col gap-1.5">
         {options.map((opt) => {
           const loaded = opt.account !== undefined;
@@ -379,11 +384,14 @@ function DestinationPicker({ destination, onChange }: { destination: Destination
                 onChange={() => onChange(opt.value)}
               />
               <span className="flex-1">
-                <span className="font-semibold">{DESTINATION_LABEL[opt.value]}</span>
+                <span className="font-semibold">{opt.value === "COMPANY_DIRECT" && directLabel ? directLabel : DESTINATION_LABEL[opt.value]}</span>
                 {loaded && configured && (
                   <span className="text-steel-dim"> — {opt.account!.bankName} ····{opt.account!.bankAccountNumber.slice(-4)}</span>
                 )}
                 {loaded && !configured && <span className="text-gold"> — sin registrar</span>}
+                {opt.value === "COMPANY_DIRECT" && (
+                  <span className="block text-[11px] text-steel-dim">Sin transferir a otra cuenta — el admin solo aprueba el total.</span>
+                )}
               </span>
             </label>
           );
@@ -393,7 +401,7 @@ function DestinationPicker({ destination, onChange }: { destination: Destination
   );
 }
 
-function ResendButton({ apiBase, defaultDestination, onSent }: { apiBase: string; defaultDestination: Destination; onSent: () => void }) {
+function ResendButton({ apiBase, defaultDestination, directLabel, onSent }: { apiBase: string; defaultDestination: Destination; directLabel?: string; onSent: () => void }) {
   const [destination, setDestination] = useState<Destination>(defaultDestination);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -417,10 +425,10 @@ function ResendButton({ apiBase, defaultDestination, onSent }: { apiBase: string
 
   return (
     <div className="mt-2">
-      <DestinationPicker destination={destination} onChange={setDestination} />
+      <DestinationPicker destination={destination} onChange={setDestination} directLabel={directLabel} />
       {err && <div className="text-red text-[12px] mb-1.5">{err}</div>}
       <button type="button" disabled={busy} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-50" onClick={send}>
-        {busy ? "Enviando…" : "Enviar total para transferir"}
+        {busy ? "Enviando…" : destination === "COMPANY_DIRECT" ? "Enviar total para aprobar" : "Enviar total para transferir"}
       </button>
     </div>
   );
@@ -432,6 +440,7 @@ function SendTotalPrompt({
   title,
   description,
   breakdown,
+  directLabel,
   onSent,
 }: {
   apiBase: string;
@@ -439,6 +448,7 @@ function SendTotalPrompt({
   title: string;
   description: string;
   breakdown?: IessBreakdownRow[];
+  directLabel?: string;
   onSent: () => void;
 }) {
   return (
@@ -446,7 +456,7 @@ function SendTotalPrompt({
       <div className="font-bold text-[13.5px] mb-1">{title}</div>
       <div className="text-[12px] text-steel mb-2.5">{description}</div>
       {breakdown && <IessBreakdownBlock rows={breakdown} />}
-      <ResendButton apiBase={apiBase} defaultDestination={defaultDestination} onSent={onSent} />
+      <ResendButton apiBase={apiBase} defaultDestination={defaultDestination} directLabel={directLabel} onSent={onSent} />
     </div>
   );
 }
@@ -545,6 +555,7 @@ function TransferPanel({
   transfer,
   onChanged,
   breakdown,
+  directLabel,
 }: {
   apiBase: string;
   title: string;
@@ -555,6 +566,7 @@ function TransferPanel({
   transfer: Transfer | null | undefined;
   onChanged: () => void;
   breakdown?: IessBreakdownRow[];
+  directLabel?: string;
 }) {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState("");
@@ -598,11 +610,12 @@ function TransferPanel({
 
   if (transfer === undefined) return null;
   if (transfer === null) {
-    if (canEdit) return <SendTotalPrompt apiBase={apiBase} defaultDestination={defaultDestination} title={title} description={description} breakdown={breakdown} onSent={onChanged} />;
+    if (canEdit) return <SendTotalPrompt apiBase={apiBase} defaultDestination={defaultDestination} title={title} description={description} breakdown={breakdown} directLabel={directLabel} onSent={onChanged} />;
     return null;
   }
 
-  const destinationLabel = DESTINATION_LABEL[transfer.destination];
+  const direct = transfer.destination === "COMPANY_DIRECT";
+  const destinationLabel = direct && directLabel ? directLabel : DESTINATION_LABEL[transfer.destination];
 
   return (
     <div className="bg-surface border border-rule rounded-md p-3.5 mb-4">
@@ -613,14 +626,14 @@ function TransferPanel({
         </div>
         <div className="flex flex-col items-end gap-0.5 bg-teal/15 border-2 border-teal/50 rounded-md px-3 py-1.5">
           <div className="text-[24px] font-extrabold tabular-nums text-teal leading-none">{money(transfer.totalAmount)}</div>
-          <div className="text-[9.5px] text-teal/90 uppercase tracking-wide font-semibold">Monto a transferir</div>
+          <div className="text-[9.5px] text-teal/90 uppercase tracking-wide font-semibold">{direct ? "Monto a pagar" : "Monto a transferir"}</div>
         </div>
       </div>
 
       {breakdown && <IessBreakdownBlock rows={breakdown} />}
-      <BankAccountBlock account={transfer.account} />
+      <BankAccountBlock account={transfer.account} direct={direct} />
 
-      <div className="text-[12px] font-semibold mb-1">{STATUS_LABEL[transfer.status]}</div>
+      <div className="text-[12px] font-semibold mb-1">{direct && transfer.status === "APPROVED" ? "Aprobado — falta confirmar" : STATUS_LABEL[transfer.status]}</div>
 
       {transfer.status === "REJECTED" && transfer.rejectionReason && (
         <div className="text-[12px] text-red bg-red/10 border border-red/30 rounded px-2.5 py-2 mb-2">
@@ -628,7 +641,7 @@ function TransferPanel({
           {canEdit && <div className="text-steel mt-1">Corregí el rol señalado y volvé a enviar el total.</div>}
         </div>
       )}
-      {canEdit && transfer.status === "REJECTED" && <ResendButton apiBase={apiBase} defaultDestination={defaultDestination} onSent={onChanged} />}
+      {canEdit && transfer.status === "REJECTED" && <ResendButton apiBase={apiBase} defaultDestination={defaultDestination} directLabel={directLabel} onSent={onChanged} />}
 
       {transfer.status === "COMPLETED" && (
         <div className="text-[12px] text-steel">
@@ -640,7 +653,7 @@ function TransferPanel({
           )}
           {transfer.confirmedWithoutProof && (
             <div className="mt-1.5 text-[12px] text-green bg-green/10 border border-green/30 rounded px-2.5 py-2">
-              ✓ Confirmado sin comprobante por <b>{transfer.confirmedWithoutProofByName ?? "el admin"}</b>
+              {direct ? "✓ Pagado directo desde la cuenta Pichincha — aprobado por " : "✓ Confirmado sin comprobante por "}<b>{transfer.confirmedWithoutProofByName ?? "el admin"}</b>
               {transfer.confirmedWithoutProofAt && ` · ${fmtDateTime(transfer.confirmedWithoutProofAt)}`}
               {transfer.confirmedWithoutProofNote && <div className="mt-1 text-steel italic">&quot;{transfer.confirmedWithoutProofNote}&quot;</div>}
             </div>
@@ -658,7 +671,7 @@ function TransferPanel({
       {isAdmin && transfer.status === "PENDING_APPROVAL" && !rejecting && (
         <div className="flex gap-2 mt-2">
           <button type="button" disabled={busy} className="text-[12px] font-bold bg-teal text-white rounded-md px-3.5 py-1.5 cursor-pointer disabled:opacity-50" onClick={approve}>
-            Aprobar
+            {direct ? "Aprobar — se paga desde Pichincha" : "Aprobar"}
           </button>
           <button type="button" disabled={busy} className="text-[12px] font-semibold text-red cursor-pointer" onClick={() => setRejecting(true)}>
             Rechazar
@@ -686,8 +699,8 @@ function TransferPanel({
 
       {isAdmin && transfer.status === "APPROVED" && (
         <>
-          <ProofUploader apiBase={apiBase} onSent={onChanged} />
-          {(transfer.destination === "ADMIN_COMPANY" || transfer.destination === "ADMIN_PRODUBANCO") && (
+          {!direct && <ProofUploader apiBase={apiBase} onSent={onChanged} />}
+          {(transfer.destination === "ADMIN_COMPANY" || transfer.destination === "ADMIN_PRODUBANCO" || direct) && (
             <ConfirmWithoutProofButton apiBase={apiBase} onSent={onChanged} />
           )}
         </>
@@ -732,6 +745,7 @@ export function PayrollTransferPanel({
       title="Transferencia de nómina"
       description="Cuando ya revisaste todo y está listo, enviá el total al admin para que transfiera — recién después de eso se puede publicar."
       defaultDestination={period.endsWith("-Q2") ? "ADMIN_PRODUBANCO" : "NAIROBY"}
+      directLabel="Pagar desde la cuenta Pichincha a colaboradores"
       isAdmin={isAdmin}
       canEdit={canEdit}
       transfer={transfer}
@@ -768,6 +782,7 @@ export function PayrollIessTransferPanel({
       title="Transferencia de IESS"
       description="Total a pagar al IESS por todos los colaboradores este fin de mes (aporte personal + patronal + tarifa del gobierno). Cuando esté listo, enviá el total al admin para que transfiera a la cuenta desde la que se paga al IESS."
       defaultDestination="ADMIN_COMPANY"
+      directLabel="Pagar desde la cuenta Pichincha al IESS"
       isAdmin={isAdmin}
       canEdit={canEdit}
       transfer={transfer}

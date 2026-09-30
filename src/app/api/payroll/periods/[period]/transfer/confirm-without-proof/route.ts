@@ -30,7 +30,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
   if (payrollPeriod.transfer.status !== "APPROVED") {
     return NextResponse.json({ error: "Primero hay que aprobarla." }, { status: 409 });
   }
-  if (payrollPeriod.transfer.destination !== "ADMIN_COMPANY" && payrollPeriod.transfer.destination !== "ADMIN_PRODUBANCO") {
+  if (payrollPeriod.transfer.destination !== "ADMIN_COMPANY" && payrollPeriod.transfer.destination !== "ADMIN_PRODUBANCO" && payrollPeriod.transfer.destination !== "COMPANY_DIRECT") {
     return NextResponse.json({ error: "Solo se puede confirmar sin comprobante cuando la cuenta destino es propia." }, { status: 409 });
   }
 

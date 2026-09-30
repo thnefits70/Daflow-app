@@ -5,7 +5,7 @@ import { canEditPayrollRoles, getFinanceLeadId } from "@/lib/guards";
 import { isValidPeriod, totalIessOwedFromRoles } from "@/lib/payroll";
 import { notifyOwner, resolveNotifications } from "@/lib/notifications";
 
-const schema = z.object({ destination: z.enum(["NAIROBY", "ADMIN_PRODUBANCO", "ADMIN_COMPANY"]).optional() });
+const schema = z.object({ destination: z.enum(["NAIROBY", "ADMIN_PRODUBANCO", "ADMIN_COMPANY", "COMPANY_DIRECT"]).optional() });
 
 // Mismo patrón que /transfer/confirm/route.ts, pero para el total aparte de
 // IESS (ver totalIessFromRoles) — reusa el mismo botón para reenviar
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ per
   if (destination === "ADMIN_PRODUBANCO") {
     const acc = await prisma.adminPayrollBankAccount.findUnique({ where: { id: "singleton" } });
     if (!acc?.bankAccountNumber) return NextResponse.json({ error: "La cuenta Produbanco de nómina todavía no está registrada." }, { status: 400 });
-  } else if (destination === "ADMIN_COMPANY") {
+  } else if (destination === "ADMIN_COMPANY" || destination === "COMPANY_DIRECT") {
     const acc = await prisma.companyBankAccount.findUnique({ where: { id: "singleton" } });
     if (!acc?.bankAccountNumber) return NextResponse.json({ error: "La cuenta para recibir transferencias todavía no está registrada." }, { status: 400 });
   } else {

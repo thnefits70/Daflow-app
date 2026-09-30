@@ -2215,9 +2215,10 @@ async function getSalaryAdvancePendingItem(href: string): Promise<PendingItem | 
   };
 }
 
-function payrollDestinationLabel(destination: "NAIROBY" | "ADMIN_PRODUBANCO" | "ADMIN_COMPANY"): string {
+function payrollDestinationLabel(destination: "NAIROBY" | "ADMIN_PRODUBANCO" | "ADMIN_COMPANY" | "COMPANY_DIRECT"): string {
   if (destination === "NAIROBY") return "cuenta de Nairoby";
   if (destination === "ADMIN_PRODUBANCO") return "tu cuenta Produbanco";
+  if (destination === "COMPANY_DIRECT") return "pagar directo desde la cuenta Pichincha";
   return "tu cuenta para recibir transferencias";
 }
 
@@ -2236,7 +2237,7 @@ async function getPayrollTransferKindPendingItem(opts: {
   href: string;
   noun: string;
   type: string;
-  rows: { status: string; totalAmount: number; destination: "NAIROBY" | "ADMIN_PRODUBANCO" | "ADMIN_COMPANY"; period: { period: string } }[];
+  rows: { status: string; totalAmount: number; destination: "NAIROBY" | "ADMIN_PRODUBANCO" | "ADMIN_COMPANY" | "COMPANY_DIRECT"; period: { period: string } }[];
 }): Promise<PendingItem | null> {
   const { forAdmin, href, noun, type, rows } = opts;
   const now = nowInEcuador();
@@ -2252,7 +2253,9 @@ async function getPayrollTransferKindPendingItem(opts: {
     const label = forAdmin
       ? t.status === "REJECTED"
         ? `Rechazaste la transferencia de ${noun} — falta que Nairoby corrija`
-        : `Transferir ${noun} a ${acctLabel}`
+        : t.destination === "COMPANY_DIRECT"
+          ? `Aprobar ${noun} — ${acctLabel}`
+          : `Transferir ${noun} a ${acctLabel}`
       : t.status === "REJECTED"
         ? `El admin rechazó la transferencia de ${noun} — corregí el rol señalado`
         : `Transferencia de ${noun} — esperando aprobación del admin`;
