@@ -8,10 +8,9 @@ import {
   computeB2BPrice,
   computeB2CPrice,
   computeMarketProductSalePrice,
-  pickPrimarySupplierPrice,
+  resolveCostBasisForCatalogItems,
   B2B_MARGIN_DEFAULT,
   DROPI_MARGIN_DEFAULT,
-  DROPI_FULFILLMENT_DEFAULT,
 } from "@/lib/marketProduct";
 
 // Confirmado 2026-09-10 (pedido explícito del usuario): pantalla "Stock
@@ -32,37 +31,18 @@ import {
 export async function GET() {
   if (!(await canViewStockLevels())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  const [rows, proposals, pendingAdjustments] = await Promise.all([
+  const [rows, pendingAdjustments] = await Promise.all([
     getAllCurrentStock(),
-    prisma.marketProductProposal.findMany({
-      where: { catalogItemId: { not: null } },
-      include: { supplierPrices: true },
-    }),
     // Confirmado 2026-09-22, pedido explícito del usuario: para que la fila
     // muestre "pendiente de aprobación" en vez del botón normal cuando
     // Daniel ya dejó una solicitud de ajuste de stock sin resolver.
     prisma.stockPhysicalCountAdjustmentRequest.findMany({ select: { catalogItemId: true, requestedQuantity: true } }),
   ]);
   const pendingAdjustmentByItem = new Map(pendingAdjustments.map((a) => [a.catalogItemId, a.requestedQuantity]));
-  const proposalByCatalogItemId = new Map(
-    proposals
-      .filter((p) => p.catalogItemId && pickPrimarySupplierPrice(p.supplierPrices))
-      .map((p) => {
-        const supplier = pickPrimarySupplierPrice(p.supplierPrices)!;
-        return [
-          p.catalogItemId!,
-          {
-            batchCost: supplier.batchCost,
-            batchUnits: supplier.batchUnits,
-            freightCost: supplier.freightCost,
-            insuranceRatePercent: p.insuranceRatePercent,
-            fulfillmentCost: p.fulfillmentCost,
-            marginPercent: p.marginPercent,
-            costSource: "proposal" as const,
-          },
-        ] as const;
-      })
-  );
+  // Cambiado 2026-09-30, pedido del usuario: el costo para los precios sale
+  // de lo que queda de verdad en bodega (ver sellingCost.ts), no del
+  // promedio del Kardex ni del costo fijo de la propuesta de Jariel.
+  const costBasisByItemId = await resolveCostBasisForCatalogItems(rows.map((r) => r.catalogItemId));
 
   const withPrices = rows.map((r) => {
     // Confirmado 2026-09-15, pedido explícito del usuario: agrega "Precio
@@ -73,8 +53,7 @@ export async function GET() {
     // productos no se conoce el flete por separado (freightCost: null), así
     // que "Puesto en bodega" sale igual a "Precio proveedor" — no es un
     // error, es la única base de costo que existe hoy para ellos.
-    const base = proposalByCatalogItemId.get(r.catalogItemId) ??
-      (r.avgCost > 0 ? { batchCost: r.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: DROPI_FULFILLMENT_DEFAULT, marginPercent: DROPI_MARGIN_DEFAULT, costSource: "kardex" as const } : null);
+    const base = costBasisByItemId.get(r.catalogItemId) ?? null;
     const pendingAdjustmentQuantity = pendingAdjustmentByItem.get(r.catalogItemId) ?? null;
     if (!base) return { ...r, pendingAdjustmentQuantity };
     return {
@@ -85,7 +64,7 @@ export async function GET() {
       bodegaPrice: bodegaUnitCost(base.batchCost, base.freightCost, base.batchUnits),
       benistockPrice: computeBenistockPrice(base),
       b2bPriceDefault: computeB2BPrice({ ...base, marginPercent: B2B_MARGIN_DEFAULT }),
-      dropiPrice: computeMarketProductSalePrice({ ...base, marginPercent: base.marginPercent }),
+      dropiPrice: computeMarketProductSalePrice({ ...base, marginPercent: base.marginPercent ?? DROPI_MARGIN_DEFAULT }),
       b2cPrice1Unit: computeB2CPrice({ ...base, totalQuantity: 1 }),
       b2cPrice2to11: computeB2CPrice({ ...base, totalQuantity: 2 }),
     };

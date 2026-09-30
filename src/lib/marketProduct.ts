@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO } from "@/lib/externalSalesPricingConstants";
 
-import { DROPI_MARGIN_DEFAULT, DROPI_FULFILLMENT_DEFAULT, bodegaUnitCost, computeMarketProductSalePrice } from "@/lib/dropiPricing";
+import { DROPI_MARGIN_DEFAULT, DROPI_FULFILLMENT_DEFAULT, DROPI_INSURANCE_DEFAULT, bodegaUnitCost, computeMarketProductSalePrice } from "@/lib/dropiPricing";
+import { getRemainingStockLayers, pickSellingCost } from "@/lib/sellingCost";
 
 export { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO };
 // Movidas a dropiPricing.ts (2026-09-23) para poder usarlas desde el
@@ -17,6 +18,8 @@ export type CostBasis = {
   freightCost: number | null;
   insuranceRatePercent: number;
   fulfillmentCost: number;
+  // Margen de la propuesta de Jariel (o 20% por defecto) — lo usa Stock Actual para el Precio Dropi.
+  marginPercent?: number;
   costSource: "proposal" | "kardex";
 };
 
@@ -29,43 +32,49 @@ export type CostBasis = {
 // costo promedio SE USA DIRECTO como "precio puesto en bodega" (batchUnits:1,
 // freightCost:null, seguro 6% por defecto). Si no tiene ninguno de los dos,
 // el producto no se puede calcular — queda ausente del mapa devuelto.
+// Cambiado 2026-09-30, pedido del usuario: si el producto ya tiene compras
+// reales, el costo sale de lo que QUEDA en bodega (ver sellingCost.ts) — ya
+// no del costo fijo que Jariel escribió la primera vez ni del promedio del
+// Kardex. De la propuesta de Jariel se siguen usando el seguro, el
+// fulfillment ($0.50 productos pequeños / $0.75 normales) y el margen. Sin
+// compras todavía, se usa la propuesta como antes.
 export async function resolveCostBasisForCatalogItems(catalogItemIds: string[]): Promise<Map<string, CostBasis>> {
   const ids = [...new Set(catalogItemIds)];
   if (ids.length === 0) return new Map();
 
-  const [proposals, kardexEntries] = await Promise.all([
+  const [proposals, layersByItem] = await Promise.all([
     prisma.marketProductProposal.findMany({
       where: { catalogItemId: { in: ids } },
       include: { supplierPrices: true },
     }),
-    prisma.stockKardexEntry.findMany({
-      where: { catalogItemId: { in: ids } },
-      distinct: ["catalogItemId"],
-      orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
-      select: { catalogItemId: true, avgCostAfter: true },
-    }),
+    getRemainingStockLayers(ids),
   ]);
 
   const byCatalogItemId = new Map<string, CostBasis>();
-  const proposalCatalogItemIds = new Set<string>();
-  for (const p of proposals) {
-    if (!p.catalogItemId) continue;
-    const supplier = pickPrimarySupplierPrice(p.supplierPrices);
-    if (!supplier) continue;
-    proposalCatalogItemIds.add(p.catalogItemId);
-    byCatalogItemId.set(p.catalogItemId, {
-      batchCost: supplier.batchCost,
-      batchUnits: supplier.batchUnits,
-      freightCost: supplier.freightCost,
-      insuranceRatePercent: p.insuranceRatePercent,
-      fulfillmentCost: p.fulfillmentCost,
-      costSource: "proposal",
-    });
-  }
+  const proposalById = new Map(proposals.filter((p) => p.catalogItemId).map((p) => [p.catalogItemId!, p]));
 
-  for (const e of kardexEntries) {
-    if (proposalCatalogItemIds.has(e.catalogItemId)) continue;
-    if (e.avgCostAfter > 0) byCatalogItemId.set(e.catalogItemId, { batchCost: e.avgCostAfter, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: DROPI_FULFILLMENT_DEFAULT, costSource: "kardex" });
+  for (const id of ids) {
+    const p = proposalById.get(id);
+    const insuranceRatePercent = p?.insuranceRatePercent ?? DROPI_INSURANCE_DEFAULT;
+    const fulfillmentCost = p?.fulfillmentCost ?? DROPI_FULFILLMENT_DEFAULT;
+    const marginPercent = p?.marginPercent ?? DROPI_MARGIN_DEFAULT;
+    const stock = pickSellingCost(layersByItem.get(id) ?? [], { insuranceRatePercent, fulfillmentCost, marginPercent });
+    if (stock) {
+      byCatalogItemId.set(id, { batchCost: stock.sellingCost, batchUnits: 1, freightCost: null, insuranceRatePercent, fulfillmentCost, marginPercent, costSource: "kardex" });
+      continue;
+    }
+    const supplier = p ? pickPrimarySupplierPrice(p.supplierPrices) : null;
+    if (p && supplier) {
+      byCatalogItemId.set(id, {
+        batchCost: supplier.batchCost,
+        batchUnits: supplier.batchUnits,
+        freightCost: supplier.freightCost,
+        insuranceRatePercent: p.insuranceRatePercent,
+        fulfillmentCost: p.fulfillmentCost,
+        marginPercent: p.marginPercent,
+        costSource: "proposal",
+      });
+    }
   }
 
   return byCatalogItemId;

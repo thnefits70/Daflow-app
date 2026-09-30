@@ -18,6 +18,7 @@ import {
   computeComboB2BPrice,
   computeComboB2CPrice,
   pickPrimarySupplierPrice,
+  resolveCostBasisForCatalogItems,
   B2B_MARGIN_DEFAULT,
   nextMarketProductProposalNumber,
   formatMarketProductProposalCode,
@@ -282,42 +283,17 @@ export async function GET(req: NextRequest) {
     const [canB2B, canB2C] = await Promise.all([canViewB2BPricing(), canViewB2CPricing()]);
     if (!canB2B && !canB2C) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-    const [allStock, proposals, combos] = await Promise.all([
-      getAllCurrentStock(),
-      prisma.marketProductProposal.findMany({
-        where: { catalogItemId: { not: null } },
-        include: { supplierPrices: true },
-      }),
-      prisma.dropiCombo.findMany({ include: { components: true } }),
-    ]);
-    const proposalByCatalogItemId = new Map(
-      proposals
-        .filter((p) => p.catalogItemId && pickPrimarySupplierPrice(p.supplierPrices))
-        .map((p) => {
-          const supplier = pickPrimarySupplierPrice(p.supplierPrices)!;
-          return [
-            p.catalogItemId!,
-            { batchCost: supplier.batchCost, batchUnits: supplier.batchUnits, freightCost: supplier.freightCost, insuranceRatePercent: p.insuranceRatePercent, fulfillmentCost: p.fulfillmentCost, costSource: "proposal" as const },
-          ] as const;
-        })
-    );
-    const stockByCatalogItemId = new Map(allStock.map((s) => [s.catalogItemId, s]));
+    const [allStock, combos] = await Promise.all([getAllCurrentStock(), prisma.dropiCombo.findMany({ include: { components: true } })]);
 
     const catalogItemIds = allStock.map((s) => s.catalogItemId);
-    const catalogItems = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: catalogItemIds } }, select: { id: true, name: true, justCode: true, photos: true } });
+    const [catalogItems, costBasisByItemId] = await Promise.all([
+      prisma.purchaseCatalogItem.findMany({ where: { id: { in: catalogItemIds } }, select: { id: true, name: true, justCode: true, photos: true } }),
+      // Cambiado 2026-09-30, pedido del usuario: mismo costo que Stock Actual
+      // — lo que queda de verdad en bodega (ver sellingCost.ts).
+      resolveCostBasisForCatalogItems(catalogItemIds),
+    ]);
     const catalogItemById = new Map(catalogItems.map((c) => [c.id, c]));
-
-    // Confirmado 2026-09-14: mismo default que MarketProductProposal (seguro
-    // 6%, fulfillment $0.75) para un producto sin propuesta propia, priceado
-    // a partir de su costo promedio de Kardex. `costSource` marca cuál se
-    // usó. Un producto sin ninguno de los dos no tiene nada que calcular.
-    function resolveBase(catalogItemId: string) {
-      const proposalBase = proposalByCatalogItemId.get(catalogItemId);
-      if (proposalBase) return proposalBase;
-      const stock = stockByCatalogItemId.get(catalogItemId);
-      if (stock && stock.avgCost > 0) return { batchCost: stock.avgCost, batchUnits: 1, freightCost: null, insuranceRatePercent: 6, fulfillmentCost: 0.75, costSource: "kardex" as const };
-      return null;
-    }
+    const resolveBase = (catalogItemId: string) => costBasisByItemId.get(catalogItemId) ?? null;
 
     const productRows = allStock
       .map((s) => {
