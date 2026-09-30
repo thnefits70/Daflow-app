@@ -309,6 +309,12 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // comprando este producto, se avisa apenas se elige (el servidor igual lo
   // frena al enviar). No se guarda en el borrador.
   const [blockedByLine, setBlockedByLine] = useState<Record<number, string | null>>({});
+  // Pedido del usuario 2026-09-30: producto sin marcar como pequeño o normal
+  // (nunca pasó por la calculadora de Jariel) — se elige UNA vez, con doble
+  // confirmación, y queda guardado en el producto. Por id de producto.
+  const [needsSizeByItem, setNeedsSizeByItem] = useState<Record<string, boolean>>({});
+  const [sizeByItem, setSizeByItem] = useState<Record<string, "SMALL" | "NORMAL">>({});
+  const [sizeAsking, setSizeAsking] = useState<Record<string, "SMALL" | "NORMAL" | null>>({});
 
   function fetchLineStats(idx: number, catalogItemId: string) {
     fetch(`/api/purchase-catalog/${catalogItemId}`)
@@ -316,6 +322,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       .then((data) => {
         updateLine(idx, { stats: data?.stats ?? null });
         setBlockedByLine((m) => ({ ...m, [idx]: data?.blockedBy ?? null }));
+        setNeedsSizeByItem((m) => ({ ...m, [catalogItemId]: !!data?.needsFulfillmentSize }));
       })
       .catch(() => updateLine(idx, { stats: null }));
   }
@@ -821,6 +828,11 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         return;
       }
     }
+    const missingSize = lines.filter((l) => l.catalogItem && needsSizeByItem[l.catalogItem.id] && !sizeByItem[l.catalogItem.id]);
+    if (missingSize.length > 0) {
+      setErr(`Marca si es producto pequeño o normal: ${missingSize.map((l) => l.catalogItem!.name).join(", ")}.`);
+      return;
+    }
     const missingJustificationIdx = [...justificationNeededIdx].filter((idx) => !lines[idx].justification.trim());
     if (missingJustificationIdx.length > 0) {
       const names = missingJustificationIdx.map((idx) => lines[idx].catalogItem?.name ?? `producto ${idx + 1}`).join(", ");
@@ -837,6 +849,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     const body = {
       items: lines.map((l, i) => ({
         catalogItemId: l.catalogItem!.id,
+        fulfillmentSize: sizeByItem[l.catalogItem!.id] ?? null,
         quantity: Number(l.quantity),
         unitCost: effectiveLineUnitCost(l),
         justification: justificationNeededIdx.has(i) ? l.justification.trim() : null,
@@ -968,6 +981,39 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                 {blockedByLine[idx]}
               </div>
             )}
+            {line.catalogItem && needsSizeByItem[line.catalogItem.id] && (() => {
+              const itemId = line.catalogItem.id;
+              const chosen = sizeByItem[itemId];
+              const asking = sizeAsking[itemId];
+              const label = (v: "SMALL" | "NORMAL") => (v === "SMALL" ? "Pequeño ($0.50 de fulfillment)" : "Normal ($0.75 de fulfillment)");
+              return (
+                <div className="bg-gold/10 border border-gold/35 rounded-md px-3 py-2.5 mb-2.5 text-[12.5px]">
+                  {chosen ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span>Tamaño: <b>{label(chosen)}</b></span>
+                      <button type="button" className="text-steel text-[11.5px] underline cursor-pointer" onClick={() => setSizeByItem((m) => { const n = { ...m }; delete n[itemId]; return n; })}>Cambiar</button>
+                    </div>
+                  ) : asking ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span>¿Seguro que <b>{line.catalogItem.name}</b> es <b>{label(asking)}</b>? Queda guardado para siempre.</span>
+                      <button type="button" className="font-bold text-teal cursor-pointer" onClick={() => { setSizeByItem((m) => ({ ...m, [itemId]: asking })); setSizeAsking((m) => ({ ...m, [itemId]: null })); }}>Sí</button>
+                      <button type="button" className="text-steel cursor-pointer" onClick={() => setSizeAsking((m) => ({ ...m, [itemId]: null }))}>No</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mb-1.5">Este producto nunca se marcó. ¿Es <b>pequeño</b> o <b>normal</b>? Se pregunta una sola vez.</div>
+                      <div className="flex gap-2">
+                        {(["SMALL", "NORMAL"] as const).map((v) => (
+                          <button key={v} type="button" className="rounded border border-rule bg-surface px-2.5 py-1 text-[12px] cursor-pointer hover:border-blue" onClick={() => setSizeAsking((m) => ({ ...m, [itemId]: v }))}>
+                            {label(v)}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
             {line.stats && line.stats.count > 0 && (
               <div className="grid grid-cols-3 gap-2 mb-2.5">
                 <div className="bg-cloud border border-rule rounded p-2 text-center">

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
-import { checkPurchaseSubmission, purchaseSubmissionSchema, purchaseRequestInclude, findOpenPurchasesByOthers, otherOpenPurchaseMessage } from "@/lib/purchases";
+import { checkPurchaseSubmission, purchaseSubmissionSchema, purchaseRequestInclude, findOpenPurchasesByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup } from "@/lib/supplierCredits";
 
@@ -50,6 +50,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
 
   const check = await checkPurchaseSubmission(d);
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
+  // Pedido del usuario 2026-09-30: producto pequeño o normal (ver checkAndSaveFulfillmentSizes).
+  const sizeError = await checkAndSaveFulfillmentSizes(d.items, session.user.role === "admin" ? null : session.user.id);
+  if (sizeError) return NextResponse.json({ error: sizeError }, { status: 400 });
 
   if (d.appliedCreditIds && d.appliedCreditIds.length > 0) {
     const reserveResult = await reserveCreditsForGroup({

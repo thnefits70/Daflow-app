@@ -16,6 +16,9 @@ export const DROPI_MARGIN_DEFAULT = 20;
 // sin duplicarlo.
 export const DROPI_FULFILLMENT_DEFAULT = 0.75;
 
+// Pedido del usuario 2026-09-30: fulfillment de productos pequeños.
+export const DROPI_FULFILLMENT_SMALL = 0.5;
+
 // Seguro/garantía por defecto (6%) — el mismo que usa Stock Actual cuando
 // el costo viene del Kardex.
 export const DROPI_INSURANCE_DEFAULT = 6;

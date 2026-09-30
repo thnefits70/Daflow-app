@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO } from "@/lib/externalSalesPricingConstants";
 
-import { DROPI_MARGIN_DEFAULT, DROPI_FULFILLMENT_DEFAULT, DROPI_INSURANCE_DEFAULT, bodegaUnitCost, computeMarketProductSalePrice } from "@/lib/dropiPricing";
+import { DROPI_MARGIN_DEFAULT, DROPI_FULFILLMENT_DEFAULT, DROPI_FULFILLMENT_SMALL, DROPI_INSURANCE_DEFAULT, bodegaUnitCost, computeMarketProductSalePrice } from "@/lib/dropiPricing";
 import { getRemainingStockLayers, pickSellingCost } from "@/lib/sellingCost";
 
 export { B2B_MARGIN_OPTIONS, B2B_MARGIN_DEFAULT, B2C_FLETE_PROMEDIO };
@@ -42,13 +42,17 @@ export async function resolveCostBasisForCatalogItems(catalogItemIds: string[]):
   const ids = [...new Set(catalogItemIds)];
   if (ids.length === 0) return new Map();
 
-  const [proposals, layersByItem] = await Promise.all([
+  const [proposals, layersByItem, sizes] = await Promise.all([
     prisma.marketProductProposal.findMany({
       where: { catalogItemId: { in: ids } },
       include: { supplierPrices: true },
     }),
     getRemainingStockLayers(ids),
+    prisma.purchaseCatalogItem.findMany({ where: { id: { in: ids }, fulfillmentSize: { not: null } }, select: { id: true, fulfillmentSize: true } }),
   ]);
+  // Pedido del usuario 2026-09-30: sin propuesta de Jariel, el tamaño marcado
+  // en el producto decide el fulfillment (/usr/bin/bash.50 pequeño / /usr/bin/bash.75 normal).
+  const sizeById = new Map(sizes.map((x) => [x.id, x.fulfillmentSize]));
 
   const byCatalogItemId = new Map<string, CostBasis>();
   const proposalById = new Map(proposals.filter((p) => p.catalogItemId).map((p) => [p.catalogItemId!, p]));
@@ -56,7 +60,7 @@ export async function resolveCostBasisForCatalogItems(catalogItemIds: string[]):
   for (const id of ids) {
     const p = proposalById.get(id);
     const insuranceRatePercent = p?.insuranceRatePercent ?? DROPI_INSURANCE_DEFAULT;
-    const fulfillmentCost = p?.fulfillmentCost ?? DROPI_FULFILLMENT_DEFAULT;
+    const fulfillmentCost = p?.fulfillmentCost ?? (sizeById.get(id) === "SMALL" ? DROPI_FULFILLMENT_SMALL : DROPI_FULFILLMENT_DEFAULT);
     const marginPercent = p?.marginPercent ?? DROPI_MARGIN_DEFAULT;
     const stock = pickSellingCost(layersByItem.get(id) ?? [], { insuranceRatePercent, fulfillmentCost, marginPercent });
     if (stock) {

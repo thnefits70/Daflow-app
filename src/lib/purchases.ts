@@ -406,6 +406,8 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
 // manda un arreglo `items`, todos comparten proveedor/cotización/envío.
 export const purchaseLineSchema = z.object({
   catalogItemId: z.string().min(1),
+  // Ver needsFulfillmentSize — solo se manda si el producto no estaba marcado.
+  fulfillmentSize: z.enum(["SMALL", "NORMAL"]).nullable().optional(),
   quantity: z.number().int().positive(),
   unitCost: z.number().positive(),
   // Confirmado 2026-09-07 (bug real reportado por el usuario) — antes había
@@ -726,3 +728,40 @@ export const purchaseRequestInclude = {
     },
   },
 };
+
+// Confirmado 2026-09-30, pedido del usuario: los productos que nunca pasaron
+// por la calculadora de Jariel no saben si son pequeños ($0.50 de
+// fulfillment) o normales ($0.75). La primera vez que se vuelven a comprar,
+// quien compra lo elige UNA vez (doble confirmación en el formulario) y queda
+// guardado en el producto. Después ya no se pregunta; solo el admin lo cambia.
+export async function getCatalogItemsNeedingFulfillmentSize(catalogItemIds: string[]): Promise<Set<string>> {
+  const ids = [...new Set(catalogItemIds)];
+  if (ids.length === 0) return new Set();
+  const items = await prisma.purchaseCatalogItem.findMany({
+    where: { id: { in: ids }, fulfillmentSize: null },
+    select: { id: true, marketProductProposal: { select: { id: true } } },
+  });
+  return new Set(items.filter((i) => !i.marketProductProposal).map((i) => i.id));
+}
+
+export async function checkAndSaveFulfillmentSizes(
+  items: { catalogItemId: string; fulfillmentSize?: "SMALL" | "NORMAL" | null }[],
+  userId: string | null
+): Promise<string | null> {
+  const needed = await getCatalogItemsNeedingFulfillmentSize(items.map((i) => i.catalogItemId));
+  if (needed.size === 0) return null;
+  const missing = items.filter((i) => needed.has(i.catalogItemId) && !i.fulfillmentSize);
+  if (missing.length > 0) {
+    const names = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: missing.map((m) => m.catalogItemId) } }, select: { name: true } });
+    return `Marca si es producto pequeño o normal: ${names.map((n) => n.name).join(", ")}.`;
+  }
+  const now = new Date();
+  for (const it of items) {
+    if (!needed.has(it.catalogItemId) || !it.fulfillmentSize) continue;
+    await prisma.purchaseCatalogItem.updateMany({
+      where: { id: it.catalogItemId, fulfillmentSize: null },
+      data: { fulfillmentSize: it.fulfillmentSize, fulfillmentSizeSetAt: now, fulfillmentSizeSetById: userId },
+    });
+  }
+  return null;
+}

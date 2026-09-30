@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
-import { findOpenPurchasesByOthers, getCatalogItemPriceStats, otherOpenPurchaseMessage } from "@/lib/purchases";
+import { findOpenPurchasesByOthers, getCatalogItemPriceStats, otherOpenPurchaseMessage, getCatalogItemsNeedingFulfillmentSize } from "@/lib/purchases";
 
 const OWN_DELETE_WINDOW_MS = 2 * 60 * 60 * 1000;
 
@@ -63,7 +63,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     isAdmin || !session ? Promise.resolve([]) : findOpenPurchasesByOthers([id], session.user.id),
   ]);
   const blockedBy = others.length > 0 ? otherOpenPurchaseMessage(others[0]) : null;
-  return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats, blockedBy });
+  const needsFulfillmentSize = (await getCatalogItemsNeedingFulfillmentSize([id])).has(id);
+  return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats, blockedBy, needsFulfillmentSize });
 }
 
 // Confirmado 2026-08-03/06: admin puede eliminar cualquier producto/

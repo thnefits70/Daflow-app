@@ -1883,6 +1883,16 @@ model PurchaseCatalogItem {
   // para que el equipo saque junto lo que está en el mismo lugar.
   warehouseArea String?
 
+  // Confirmado 2026-09-30, pedido del usuario: tamaño para el fulfillment de
+  // los precios de venta — "SMALL" ($0.50) o "NORMAL" ($0.75). Solo para
+  // productos sin propuesta de Jariel (la propuesta ya trae su fulfillment).
+  // Jariel lo elige UNA vez, con doble confirmación, la primera vez que vuelve
+  // a comprar el producto; después solo el admin lo cambia. null = sin
+  // marcar (se usa $0.75).
+  fulfillmentSize        String?
+  fulfillmentSizeSetAt   DateTime?
+  fulfillmentSizeSetById String?
+
   createdById String?
   createdBy   User?    @relation("PurchaseCatalogItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())

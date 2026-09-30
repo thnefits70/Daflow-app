@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { linkReadyToBuyProposalsToGroup } from "@/lib/marketProduct";
 import { canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
-import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, otherOpenPurchaseMessage } from "@/lib/purchases";
+import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
@@ -365,6 +365,9 @@ export async function POST(req: NextRequest) {
 
   const check = await checkPurchaseSubmission(d);
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
+  // Pedido del usuario 2026-09-30: producto pequeño o normal (ver checkAndSaveFulfillmentSizes).
+  const sizeError = await checkAndSaveFulfillmentSizes(d.items, session.user.role === "admin" ? null : session.user.id);
+  if (sizeError) return NextResponse.json({ error: sizeError }, { status: 400 });
 
   const groupId = randomUUID();
 
