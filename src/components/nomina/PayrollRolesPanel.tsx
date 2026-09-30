@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { X, ShieldCheck, Landmark, ChevronDown, CheckCircle2, Eye } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { PayrollEmployeeSalariesPanel } from "./PayrollEmployeeSalariesPanel";
@@ -686,6 +686,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   const [err, setErr] = useState("");
   const [confirmingPublish, setConfirmingPublish] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [showPaidHistory, setShowPaidHistory] = useState(false);
   const [addingEmployeeId, setAddingEmployeeId] = useState<string | null>(null);
 
   const publishLabel = isEndOfMonthQuincena(period) ? "Generar rol de pago" : "Publicar";
@@ -893,34 +894,79 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
               null+canEdit) quedaba inalcanzable. Ahora solo se excluye la
               espera inicial (undefined) y el caso admin+rechazado ya
               cubierto arriba. */}
+          {/* Confirmado 2026-09-30: pedido explícito del usuario — lo ya
+              pagado (Completado) no debe seguir abierto arriba dando la
+              impresión de que falta hacerlo. Se mueve a "Historial — ya
+              pagado", cerrado por defecto; lo pendiente queda arriba. */}
           {(() => {
             const ownRole = detail.financeLeadId ? detail.roles.find((r) => r.employeeId === detail.financeLeadId) : undefined;
             const showSalaryPanel = !!ownRole && ownRole.netTotal > 0;
+            const panels: { key: string; done: boolean; label: string; amount: number; node: ReactNode }[] = [];
+            if (showSalaryPanel && nairobySalaryTransfer !== undefined && !(isAdmin && nairobySalaryTransfer?.status === "REJECTED")) {
+              panels.push({
+                key: "salary",
+                done: nairobySalaryTransfer?.status === "COMPLETED",
+                label: "Pago del sueldo de Nairoby",
+                amount: nairobySalaryTransfer?.totalAmount ?? 0,
+                node: (
+                  <PayrollNairobySalaryTransferPanel
+                    period={period}
+                    isAdmin={isAdmin}
+                    canEdit={canEdit}
+                    transfer={nairobySalaryTransfer}
+                    onChanged={loadNairobySalaryTransfer}
+                  />
+                ),
+              });
+            }
+            if (transfer !== undefined && !(isAdmin && transfer?.status === "REJECTED")) {
+              panels.push({
+                key: "nomina",
+                done: transfer?.status === "COMPLETED",
+                label: "Transferencia de nómina",
+                amount: transfer?.totalAmount ?? 0,
+                node: <PayrollTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={transfer} onChanged={loadTransfer} />,
+              });
+            }
+            if (
+              isEndOfMonthQuincena(period) &&
+              iessTransfer !== undefined &&
+              !(isAdmin && iessTransfer?.status === "REJECTED") &&
+              (iessTransfer || totalIessOwedFromRoles(detail.roles) > 0)
+            ) {
+              panels.push({
+                key: "iess",
+                done: iessTransfer?.status === "COMPLETED",
+                label: "Transferencia de IESS",
+                amount: iessTransfer?.totalAmount ?? 0,
+                node: <PayrollIessTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={iessTransfer} onChanged={loadIessTransfer} breakdown={iessBreakdownFromRoles(detail.roles)} />,
+              });
+            }
+            const done = panels.filter((p) => p.done);
             return (
-              showSalaryPanel &&
-              nairobySalaryTransfer !== undefined &&
-              !(isAdmin && nairobySalaryTransfer?.status === "REJECTED") && (
-                <PayrollNairobySalaryTransferPanel
-                  period={period}
-                  isAdmin={isAdmin}
-                  canEdit={canEdit}
-                  transfer={nairobySalaryTransfer}
-                  onChanged={loadNairobySalaryTransfer}
-                />
-              )
+              <>
+                {panels.filter((p) => !p.done).map((p) => <div key={p.key}>{p.node}</div>)}
+                {done.length > 0 && (
+                  <div className="bg-surface border border-rule rounded-md mb-4">
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-between gap-2 px-3.5 py-2.5 cursor-pointer text-left"
+                      onClick={() => setShowPaidHistory((s) => !s)}
+                    >
+                      <div>
+                        <div className="text-[12.5px] font-bold text-green">✓ Historial — ya pagado ({done.length})</div>
+                        <div className="text-[10.5px] text-steel">
+                          {done.map((p) => `${p.label} ${money(p.amount)}`).join(" · ")}
+                        </div>
+                      </div>
+                      <span className="text-[11.5px] text-blue font-semibold shrink-0">{showPaidHistory ? "Ocultar ▴" : "Ver ▾"}</span>
+                    </button>
+                    {showPaidHistory && <div className="px-3.5 pb-1">{done.map((p) => <div key={p.key}>{p.node}</div>)}</div>}
+                  </div>
+                )}
+              </>
             );
           })()}
-
-          {transfer !== undefined && !(isAdmin && transfer?.status === "REJECTED") && (
-            <PayrollTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={transfer} onChanged={loadTransfer} />
-          )}
-
-          {isEndOfMonthQuincena(period) &&
-            iessTransfer !== undefined &&
-            !(isAdmin && iessTransfer?.status === "REJECTED") &&
-            (iessTransfer || totalIessOwedFromRoles(detail.roles) > 0) && (
-              <PayrollIessTransferPanel period={period} isAdmin={isAdmin} canEdit={canEdit} transfer={iessTransfer} onChanged={loadIessTransfer} breakdown={iessBreakdownFromRoles(detail.roles)} />
-            )}
 
           {detail.status === "DRAFT" && canEdit && pendingPayoutCount === detail.roles.length && (
             <div className="mb-3">
