@@ -23,6 +23,31 @@ function isStandalone() {
 
 type Status = "checking" | "unsupported" | "ios-need-install" | "denied" | "on" | "off";
 
+const MANUAL_OFF_KEY = "daflow_push_manual_off";
+function readManualOff() {
+  try { return localStorage.getItem(MANUAL_OFF_KEY) === "1"; } catch { return false; }
+}
+function writeManualOff(off: boolean) {
+  try { if (off) localStorage.setItem(MANUAL_OFF_KEY, "1"); else localStorage.removeItem(MANUAL_OFF_KEY); } catch { /* sin almacenamiento: no pasa nada */ }
+}
+
+async function refreshSubscription(existing: PushSubscription | null): Promise<boolean> {
+  const registration = await navigator.serviceWorker.register("/sw.js");
+  await registration.update().catch(() => null);
+  let sub = existing;
+  if (!sub) {
+    const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (!publicKey) return false;
+    sub = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(publicKey) });
+  }
+  const res = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(sub.toJSON()),
+  });
+  return res.ok;
+}
+
 // Confirmado 2026-07-29: a diferencia de PushOptIn (el banner que se oculta
 // para siempre en cuanto alguien lo cierra una vez — localStorage
 // "daflow_push_dismissed"), este control vive de forma PERMANENTE en el pie
@@ -61,6 +86,15 @@ export function PushSettingsToggle() {
       const registration = await navigator.serviceWorker.getRegistration("/sw.js");
       const sub = await registration?.pushManager.getSubscription();
       setStatus(sub ? "on" : "off");
+      // 2026-09-30 (Joel no recibió el aviso de bloque asignado): cada vez que
+      // alguien abre DAFLOW se renueva solo el registro de este celular, sin
+      // que nadie toque nada — si el celular perdió la suscripción pero el
+      // permiso sigue dado, se vuelve a suscribir; si la tiene, se reenvía al
+      // servidor para que quede al día y a nombre de quien entró. No se hace
+      // si la persona la apagó a propósito con este botón.
+      if (Notification.permission === "granted" && !readManualOff()) {
+        refreshSubscription(sub ?? null).then((ok) => ok && setStatus("on")).catch(() => null);
+      }
     }
     check();
   }, []);
@@ -85,6 +119,7 @@ export function PushSettingsToggle() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(subscription.toJSON()),
       });
+      writeManualOff(false);
       setStatus("on");
     } catch {
       // se queda en el estado anterior — el botón sigue disponible para reintentar
@@ -106,6 +141,7 @@ export function PushSettingsToggle() {
         });
         await sub.unsubscribe();
       }
+      writeManualOff(true);
       setStatus("off");
     } catch {
       // no-op — se puede reintentar
