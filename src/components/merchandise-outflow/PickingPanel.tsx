@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { AlertTriangle, ArrowUp, CheckCircle2, ChevronDown, ChevronUp, Package, RefreshCw, ScanLine, UserRound } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2, ChevronDown, ChevronUp, ListOrdered, Package, RefreshCw, ScanLine, Search, UserRound } from "lucide-react";
 import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { carrierLabel, sortCarriers, VARIANT_CARRIER_UNKNOWN } from "@/lib/carriers";
@@ -101,6 +101,19 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   // arriba todos los productos que van por ella (sin bajar toda la lista) y
   // cada una muestra cuántos ya se sacaron, para saber cuáles están completas.
   const [carrierFilter, setCarrierFilter] = useState<string | null>(null);
+  // Pedido de Daniel 2026-09-30: botón junto al flotante "Escanear QR" que
+  // abre la lista de productos para saltar directo a uno, sin deslizar toda
+  // la pantalla.
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const [jumpQuery, setJumpQuery] = useState("");
+  const [flashId, setFlashId] = useState<string | null>(null);
+  function jumpTo(id: string) {
+    setJumpOpen(false);
+    setJumpQuery("");
+    setFlashId(id);
+    requestAnimationFrame(() => document.getElementById(`pick-row-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    setTimeout(() => setFlashId((cur) => (cur === id ? null : cur)), 2000);
+  }
 
   const matching = lot.picking.filter((p) => rowState(p) === "match");
   const byCarrierOf = (id: string) => lot.lines.find((l) => l.catalogItemId === id)?.byCarrier ?? {};
@@ -144,6 +157,16 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   // Arriba lo que falta sacar; lo ya registrado queda al final.
   const filteredRows = activeFilter ? visible.filter((p) => goesBy(p, activeFilter)).sort((a, b) => Number(isTaken(a)) - Number(isTaken(b))) : [];
   const filteredIds = new Set(filteredRows.map((p) => p.catalogItemId));
+  // Mismo orden que la lista en pantalla: lo filtrado arriba, luego cada bloque.
+  const shownRows = [
+    ...filteredRows,
+    ...lot.blocks
+      .filter((b) => !showOnlyMine || myBlocks.includes(b.carrier))
+      .flatMap((b) => lot.picking.filter((p) => p.block === b.carrier && !filteredIds.has(p.catalogItemId))),
+  ];
+  const jq = jumpQuery.trim().toLowerCase();
+  const jumpRows = jq ? shownRows.filter((p) => p.name.toLowerCase().includes(jq) || (p.justCode ?? "").includes(jq)) : shownRows;
+  const nextPending = shownRows.find((p) => !isTaken(p));
 
   function openCode(raw: string) {
     const code = raw.trim();
@@ -227,7 +250,8 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
     const qtyToConfirm = Math.min(p.picked ?? 0, p.needed);
     return (
             <div
-              className={`rounded-md px-3 py-2 text-[12px] cursor-pointer ${ROW_STYLE[st]}`}
+              id={`pick-row-${p.catalogItemId}`}
+              className={`rounded-md px-3 py-2 text-[12px] cursor-pointer transition-shadow ${ROW_STYLE[st]} ${flashId === p.catalogItemId ? "ring-2 ring-teal shadow-lg" : ""}`}
               onClick={(e) => {
                 // Los botones de adentro (copiar ID, confirmar) no abren el detalle.
                 if ((e.target as HTMLElement).closest("button, input, a")) return;
@@ -237,8 +261,11 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
               <div className="flex items-center gap-2 flex-wrap">
                 <Thumb url={p.photos[0]} small />
                 <CatalogCode code={p.justCode} />
-                <span className="flex-1 min-w-0">{p.name}</span>
-                <span className="font-mono text-[11.5px]">
+                {/* El nombre tiene su propio espacio y los números bajan a la
+                    línea de abajo si no caben (antes se montaban encima del
+                    nombre en el celular: "Reloj Smartwatch" no se leía). */}
+                <span className="flex-1 min-w-[9rem] break-words leading-snug">{p.name}</span>
+                <span className="font-mono text-[11.5px] whitespace-nowrap">
                   pedido <b>{p.needed}</b> · sacado <b>{p.picked ?? "—"}</b>
                   {st === "confirmed" && (
                     <>
@@ -346,7 +373,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   const picked = lot.picking.filter((p) => p.picked !== null).length;
 
   return (
-    <div className="border-t border-rule pt-3 mt-1">
+    <div className={`border-t border-rule pt-3 mt-1 ${lot.status === "SENT" ? "pb-20" : ""}`}>
       <div className="flex items-center gap-2 flex-wrap mb-2">
         <span className="font-display font-bold text-[13.5px]">Sacar y confirmar</span>
         <span className="text-[11px] text-steel">
@@ -685,15 +712,89 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
         </div>
       )}
 
-      {canPick && !scanning && !current && (
-        <button
-          type="button"
-          aria-label="Escanear QR de la percha"
-          className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[140] flex items-center gap-2 rounded-full bg-teal text-navy px-5 py-3 text-[14px] font-bold shadow-2xl cursor-pointer hover:brightness-110"
-          onClick={startScan}
-        >
-          <ScanLine size={18} /> Escanear QR
-        </button>
+      {lot.status === "SENT" && !sheetOpen && !jumpOpen && shownRows.length > 0 && (
+        <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[140] flex items-center gap-2">
+          {canPick && (
+            <button
+              type="button"
+              aria-label="Escanear QR de la percha"
+              className="flex items-center gap-2 rounded-full bg-teal text-navy px-5 py-3 text-[14px] font-bold shadow-2xl cursor-pointer hover:brightness-110 whitespace-nowrap"
+              onClick={startScan}
+            >
+              <ScanLine size={18} /> Escanear QR
+            </button>
+          )}
+          <button
+            type="button"
+            aria-label="Ir a un producto de la lista"
+            title="Ir a un producto"
+            className="flex items-center justify-center gap-1.5 rounded-full bg-navy text-white border-2 border-teal px-3.5 py-2.5 text-[13px] font-bold shadow-2xl cursor-pointer hover:brightness-125 whitespace-nowrap"
+            onClick={() => setJumpOpen(true)}
+          >
+            <ListOrdered size={18} />
+            {!canPick && "Ir a un producto"}
+          </button>
+        </div>
+      )}
+
+      {jumpOpen && (
+        <>
+          <div className="fixed inset-0 z-[145] bg-black/50" onClick={() => setJumpOpen(false)} />
+          <div className="fixed inset-x-0 bottom-0 z-[150] max-h-[85dvh] flex flex-col bg-cloud rounded-t-xl p-3 pb-6 shadow-2xl">
+            <div className="flex items-center mb-2">
+              <span className="font-display font-bold text-[13.5px]">Ir a un producto</span>
+              <button type="button" className="ml-auto text-[12.5px] font-semibold text-steel cursor-pointer px-2 py-1" onClick={() => setJumpOpen(false)}>
+                Cerrar
+              </button>
+            </div>
+            {nextPending && (
+              <button
+                type="button"
+                className="mb-2 flex items-center gap-1.5 rounded border border-teal bg-teal px-3 py-2 text-[12.5px] font-bold text-navy cursor-pointer text-left"
+                onClick={() => jumpTo(nextPending.catalogItemId)}
+              >
+                <ArrowDown size={14} className="shrink-0" /> Ir al siguiente sin sacar: {nextPending.name}
+              </button>
+            )}
+            <div className="flex items-center gap-1.5 rounded border border-rule bg-surface px-2 py-1.5 mb-2">
+              <Search size={14} className="text-steel shrink-0" />
+              <input
+                type="text"
+                placeholder="Busca por nombre o ID"
+                className="flex-1 bg-transparent text-[13px] outline-none min-w-0"
+                value={jumpQuery}
+                onChange={(e) => setJumpQuery(e.target.value)}
+              />
+            </div>
+            <div className="overflow-y-auto flex flex-col gap-1">
+              {jumpRows.length === 0 && <div className="text-[12px] text-steel px-1 py-2">No hay productos con ese nombre o ID.</div>}
+              {jumpRows.map((p) => {
+                const st = rowState(p);
+                return (
+                  <button
+                    key={p.catalogItemId}
+                    type="button"
+                    className={`flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-[12px] cursor-pointer ${ROW_STYLE[st]}`}
+                    onClick={() => jumpTo(p.catalogItemId)}
+                  >
+                    <Thumb url={p.photos[0]} small />
+                    <span className="flex-1 min-w-0 break-words leading-snug">
+                      <span className="font-mono text-teal">{p.justCode}</span> · {p.name}
+                      <span className="block text-[10.5px] text-steel">
+                        {areaLabel(p.area)} · {carrierLabel(p.block)}
+                      </span>
+                    </span>
+                    {isTaken(p) ? (
+                      <CheckCircle2 size={14} className={st === "mismatch" ? "text-red shrink-0" : "text-teal shrink-0"} />
+                    ) : (
+                      <span className="text-[10.5px] font-semibold text-amber shrink-0">falta</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
