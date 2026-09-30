@@ -130,6 +130,7 @@ export function Dashboard({
             points={weeklyTrend.points}
             weeklyGoal={6000}
             dailyDivisor={6}
+            liveNote="Se actualiza sola cada vez que un corte se envía a Inventario — no es un número cerrado todavía."
             latestCaption={`≈ ${Math.round(weeklyTrend.points[weeklyTrend.points.length - 1].value / 6).toLocaleString("es-MX")} pedidos/día en promedio (lunes a sábado)`}
           />
         </div>

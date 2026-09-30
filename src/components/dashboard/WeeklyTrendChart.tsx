@@ -44,6 +44,16 @@ export function formatIsoWeekRangeLabel(week: string): string | null {
   return `${fmt(range.start)} – ${fmt(range.end)} ${year}`;
 }
 
+// Semana ISO ("YYYY-Www") de hoy en hora de Guayaquil.
+export function currentGuayaquilIsoWeek(): string {
+  const day = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Guayaquil" }).format(new Date());
+  const d = new Date(`${day}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = Date.UTC(d.getUTCFullYear(), 0, 1);
+  const week = Math.ceil(((d.getTime() - yearStart) / 86400000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
 export function goalStatus(pct: number) {
   if (pct >= 100) return { label: "Excelente", color: "#14C7C7" };
   if (pct >= 80) return { label: "Eficiente", color: "#1E5EFF" };
@@ -134,6 +144,7 @@ export function WeeklyTrendChart({
   compareIndexB,
   latestCaption,
   dailyDivisor,
+  liveNote,
 }: {
   label: string;
   deptName: string;
@@ -173,6 +184,9 @@ export function WeeklyTrendChart({
   // total de la semana. El % mostrado en el badge no cambia (es la misma
   // proporción), solo la unidad en que se explica.
   dailyDivisor?: number;
+  // Línea bajo la fecha solo mientras la última semana sea la de hoy — ej.
+  // "se actualiza con cada corte" en Pedidos despachados.
+  liveNote?: string;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [dateTooltipWeek, setDateTooltipWeek] = useState<string | null>(null);
@@ -228,6 +242,8 @@ export function WeeklyTrendChart({
   const hasCompare = compareIndexA !== undefined && compareIndexB !== undefined && compareIndexA !== compareIndexB;
 
   const latest = points[points.length - 1];
+  const latestRange = formatIsoWeekRangeLabel(latest.week);
+  const latestIsCurrent = latest.week === currentGuayaquilIsoWeek();
   const width = 1000;
   const height = 300;
   const padL = 52;
@@ -363,16 +379,33 @@ export function WeeklyTrendChart({
           </div>
           <div className="flex items-baseline gap-2.5 flex-wrap">
             <span className="font-display text-[32px] font-bold text-ink leading-none">{fmt(latest.value)}</span>
-            <span
-              className={`text-[12px] text-steel ${isoWeekDateRange(latest.week) ? "cursor-pointer hover:underline" : ""}`}
-              onClick={() => isoWeekDateRange(latest.week) && setDateTooltipWeek((v) => (v === latest.week ? null : latest.week))}
-            >
-              {periodLabel(latest.week)} ({latestLabel})
-            </span>
-            {dateTooltipWeek === latest.week && (
-              <span className="text-[11px] text-teal font-mono">{formatIsoWeekRangeLabel(latest.week)}</span>
+            {latestRange ? (
+              // Pedido del usuario (2026-09-30): que se vea sin buscar en
+              // internet qué fechas son "S40" y si es la semana de hoy.
+              <span className="text-[12px] text-steel" suppressHydrationWarning>
+                {periodLabel(latest.week)} · {latestRange}
+              </span>
+            ) : (
+              <span className="text-[12px] text-steel">
+                {periodLabel(latest.week)} ({latestLabel})
+              </span>
+            )}
+            {latestRange && (
+              <span
+                suppressHydrationWarning
+                className={`text-[10.5px] font-semibold px-2 py-0.5 rounded-full border ${
+                  latestIsCurrent ? "text-teal border-teal/40 bg-teal/10" : "text-steel border-rule"
+                }`}
+              >
+                {latestIsCurrent ? "● Semana en curso" : "Semana cerrada"}
+              </span>
             )}
           </div>
+          {latestRange && latestIsCurrent && liveNote && (
+            <div className="text-[11.5px] text-steel mt-1" suppressHydrationWarning>
+              {liveNote}
+            </div>
+          )}
           {latestCaption && <div className="text-[11.5px] text-steel mt-1">{latestCaption}</div>}
         </div>
         {status && (
