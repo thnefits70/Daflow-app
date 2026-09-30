@@ -45,7 +45,7 @@ export async function notifyDiscontinuedSales(batchId: string): Promise<void> {
   // pedido; como la guía ya se generó, Bryan Ríos gestiona con la gente de
   // Dropi para que la anulen allá (no se va a despachar).
   const heidyBody = `${detail}. No lo tenemos, así que ese pedido no sale. Entra a Dropi, da de baja el producto y cancela el pedido; después marca "Ya lo di de baja".`;
-  const bryanBody = `${detail}. No lo tenemos, así que ese pedido no se despacha. La guía ya se generó: gestiona con la gente de Dropi para que den de baja ese pedido allá. Heidy da de baja el producto en Dropi.`;
+  const bryanBody = `${detail}. No lo tenemos, así que ese pedido no se despacha. La guía ya se generó: gestiona con la gente de Dropi para que den de baja ese pedido allá y después marca "Dropi ya anuló la guía". Heidy da de baja el producto en Dropi.`;
   const watcherBody = `${detail}. No lo tenemos, así que ese pedido no sale. Heidy lo da de baja en Dropi y Bryan gestiona con Dropi que anulen la guía. Estén pendientes de ese pedido.`;
   await Promise.all([
     ...delisters.map((id) => notifyOwner(id, { title, body: heidyBody, url: DISCONTINUED_URL }).catch(() => null)),
@@ -62,12 +62,17 @@ export async function getDiscontinuedPendingCount(): Promise<number> {
   return prisma.dropiDiscontinuedSale.count({ where: { delistedAt: null } });
 }
 
+// Guías de productos dados de baja que Bryan todavía no confirmó anuladas.
+export async function getDiscontinuedOrderPendingCount(): Promise<number> {
+  return prisma.dropiDiscontinuedSale.count({ where: { orderCancelledAt: null } });
+}
+
 export async function listDiscontinuedSales() {
   const rows = await prisma.dropiDiscontinuedSale.findMany({
-    orderBy: [{ delistedAt: { sort: "asc", nulls: "first" } }, { createdAt: "desc" }],
+    orderBy: { createdAt: "desc" },
     take: 100,
   });
-  const ids = [...new Set(rows.flatMap((r) => [r.reportedById, r.delistedById]).filter((x): x is string => !!x))];
+  const ids = [...new Set(rows.flatMap((r) => [r.reportedById, r.delistedById, r.orderCancelledById]).filter((x): x is string => !!x))];
   const people = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
   const nameOf = (id: string | null) => (id ? people.find((p) => p.id === id)?.name ?? null : null);
   return rows.map((r) => ({
@@ -81,5 +86,7 @@ export async function listDiscontinuedSales() {
     reportedByName: nameOf(r.reportedById),
     delistedAt: r.delistedAt,
     delistedByName: nameOf(r.delistedById),
+    orderCancelledAt: r.orderCancelledAt,
+    orderCancelledByName: nameOf(r.orderCancelledById),
   }));
 }

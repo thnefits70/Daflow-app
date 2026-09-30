@@ -1541,6 +1541,17 @@ export async function canResolveSupplierStockout() {
   return !!user?.canResolveSupplierStockout;
 }
 
+// Pedido del usuario 2026-09-30: producto dado de baja que igual se vendió
+// en Dropi — Bryan Ríos (líder MKT) gestiona con la gente de Dropi que anulen
+// la guía ya generada y lo confirma. Admin como respaldo.
+export async function canConfirmDropiOrderCancelled() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await getGuardUser(session.user.id);
+  return !!user?.isActive && !!user.isLeader && user.leadsDept?.code === "MKT";
+}
+
 // A quién avisarle que hay un producto reportado sin stock de proveedor —
 // mismo patrón que getSupplierExchangeGestors (notifyItemAssigneesNewBatch):
 // líder de MKT + todos los que tengan el flag delegado, sin duplicar ids.

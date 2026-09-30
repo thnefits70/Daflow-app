@@ -18,7 +18,7 @@ import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
 import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
-import { DISCONTINUED_URL, getDiscontinuedPendingCount } from "@/lib/dropiDiscontinued";
+import { DISCONTINUED_URL, getDiscontinuedOrderPendingCount, getDiscontinuedPendingCount } from "@/lib/dropiDiscontinued";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -1649,6 +1649,20 @@ async function getDropiDiscontinuedPendingItem(): Promise<PendingItem | null> {
     icon: "⛔",
     label: "Se vendió en Dropi un producto dado de baja — dalo de baja allá",
     meta: `${count} venta${count === 1 ? "" : "s"}`,
+    overdue: true,
+    href: DISCONTINUED_URL,
+  };
+}
+
+// Para Bryan Ríos: la guía ya se generó, gestiona con Dropi que la anulen.
+async function getDropiDiscontinuedOrderPendingItem(): Promise<PendingItem | null> {
+  const count = await getDiscontinuedOrderPendingCount();
+  if (count === 0) return null;
+  return {
+    type: "dropi_guia_por_anular",
+    icon: "⛔",
+    label: "Guía de un producto dado de baja — gestiona con Dropi que la anulen",
+    meta: `${count} guía${count === 1 ? "" : "s"}`,
     overdue: true,
     href: DISCONTINUED_URL,
   };
@@ -3467,6 +3481,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // guards.ts, que entra por liderazgo sin necesitar el flag delegado).
     const supplierStockoutItem = await getSupplierStockoutPendingItem("/area/workspace?tab=analisis-mercado&ptab=sinstock");
     if (supplierStockoutItem) items.push(supplierStockoutItem);
+    const discontinuedOrderItem = await getDropiDiscontinuedOrderPendingItem();
+    if (discontinuedOrderItem) items.unshift(discontinuedOrderItem);
   }
 
   if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) {

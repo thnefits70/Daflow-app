@@ -2652,19 +2652,22 @@ model FulfillmentProvisionalLine {
 // Jariel reciben el aviso. Una fila por cada vez que aparece en un PDF — si
 // vuelve a venderse después de dado de baja, se abre otro pendiente.
 model DropiDiscontinuedSale {
-  id           String                   @id @default(cuid())
-  batchId      String?
-  batch        FulfillmentRequestBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  code         String
-  name         String
-  quantity     Int
-  guideNumbers String[]                 @default([])
+  id                 String                   @id @default(cuid())
+  batchId            String?
+  batch              FulfillmentRequestBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  code               String
+  name               String
+  quantity           Int
+  guideNumbers       String[]                 @default([])
   // "GINTRACOM 1", "SERVIENTREGA 2"…
-  carriers     String[]                 @default([])
-  reportedById String?
-  createdAt    DateTime                 @default(now())
-  delistedById String?
-  delistedAt   DateTime?
+  carriers           String[]                 @default([])
+  reportedById       String?
+  createdAt          DateTime                 @default(now())
+  delistedById       String?
+  delistedAt         DateTime?
+  // Bryan Ríos confirma que la gente de Dropi ya anuló esa guía (2026-09-30).
+  orderCancelledById String?
+  orderCancelledAt   DateTime?
 
   @@index([code])
   @@index([delistedAt])
