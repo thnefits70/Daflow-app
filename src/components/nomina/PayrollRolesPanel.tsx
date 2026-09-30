@@ -44,7 +44,7 @@ type Role = {
   totalIncome: number;
   totalExpense: number;
   netTotal: number;
-  employee: { id: string; name: string; position: string | null; employeeBankAccounts: EmployeeBankAccount[]; payrollProfile: { iessDeclaredSalary: number | null; companyAbsorbsIess: boolean; iessPartTime: boolean; iessSpouseExtension: boolean } | null };
+  employee: { id: string; name: string; position: string | null; employeeBankAccounts: EmployeeBankAccount[]; payrollProfile: { iessDeclaredSalary: number | null; companyAbsorbsIess: boolean; iessPartTime: boolean; iessSpouseExtension: boolean; externalPaymentMode: boolean } | null };
   lineItems: LineItem[];
   paidAt: string | null;
   paidProofUrl: string | null;
@@ -183,6 +183,13 @@ function iessBreakdownFromRoles(roles: Role[]): IessBreakdownRow[] {
         iessSpouseExtension: spouseExtension,
       };
     });
+}
+
+// Confirmado 2026-09-30, pedido de Nairoby: quien está en modo de pago
+// externo ya sube su comprobante en la pestaña "Pagos por factura" — acá no
+// se le pide otro ni cuenta como pendiente para publicar.
+function paidElsewhere(role: Role): boolean {
+  return !!role.employee.payrollProfile?.externalPaymentMode;
 }
 
 function totalIessOwedFromRoles(roles: Role[]): number {
@@ -530,6 +537,12 @@ function RoleCard({ role, index, published, canEdit, monthlyRoleId, isEndOfMonth
         <div className="flex justify-between font-bold text-[13px] mt-0.5"><span>Líquido a pagar</span><span className="tabular-nums">{money(total)}</span></div>
       </div>
 
+      {paidElsewhere(role) && (
+        <div className="mt-2.5 pt-2.5 border-t border-rule text-[11px] text-steel">
+          Su comprobante de pago se sube en la pestaña <span className="font-semibold">Pagos por factura</span>.
+        </div>
+      )}
+
       {showPayout && (
         <div className="mt-2.5 pt-2.5 border-t border-rule">
           <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">Comprobante de pago a {role.employee.name.split(" ")[0]}</div>
@@ -693,12 +706,12 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
   // netTotal 0 no cuenta como pendiente — no hay ninguna transferencia real
   // que confirmar (ver el mismo criterio en publish/route.ts y en la tarjeta
   // de cada colaborador, más abajo).
-  const pendingPayoutCount = detail?.roles.filter((r) => !r.paidAt && r.netTotal !== 0).length ?? 0;
+  const pendingPayoutCount = detail?.roles.filter((r) => !r.paidAt && r.netTotal !== 0 && !paidElsewhere(r)).length ?? 0;
   // Pedido explícito del usuario 2026-08-27: los que todavía no tienen
   // comprobante confirmado aparecen primero, para no tener que scrollear
   // buscándolos — sort estable, así que dentro de cada grupo se mantiene el
   // orden alfabético que ya devuelve la API.
-  const sortedRoles = detail ? [...detail.roles].sort((a, b) => (a.paidAt ? 1 : 0) - (b.paidAt ? 1 : 0)) : [];
+  const sortedRoles = detail ? [...detail.roles].sort((a, b) => (a.paidAt || paidElsewhere(a) ? 1 : 0) - (b.paidAt || paidElsewhere(b) ? 1 : 0)) : [];
 
   function loadDetail() {
     fetch(`/api/payroll/periods/${period}`).then((r) => (r.ok ? r.json() : null)).then(setDetail);
@@ -1036,7 +1049,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                 <div className="flex flex-col gap-1">
                   {sortedRoles.map((r) => (
                     <div key={r.id} className="flex justify-between text-[12.5px]">
-                      <span className={r.paidAt ? "text-ink" : "text-gold font-semibold"} style={r.paidAt ? undefined : { color: "var(--color-gold)" }}>{r.employee.name}</span>
+                      <span className={r.paidAt || paidElsewhere(r) ? "text-ink" : "text-gold font-semibold"} style={r.paidAt || paidElsewhere(r) ? undefined : { color: "var(--color-gold)" }}>{r.employee.name}</span>
                       <span className="font-semibold tabular-nums">{money(r.netTotal)}</span>
                     </div>
                   ))}
@@ -1057,7 +1070,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
                     canEdit={canEdit}
                     monthlyRoleId={detail.monthlyRoleIdByEmployee?.[r.employeeId]}
                     isEndOfMonth={isEndOfMonthQuincena(period)}
-                    showPayout={transfer?.status === "COMPLETED"}
+                    showPayout={transfer?.status === "COMPLETED" && !paidElsewhere(r)}
                     onChanged={refreshAfterRoleEdit}
                   />
                 ))}

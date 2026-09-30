@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { FileText, Download, ChevronDown, ChevronUp } from "lucide-react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { FileText, Download, ChevronDown, ChevronUp, Maximize2, X } from "lucide-react";
 
 function isPdfUrl(url: string) {
   return /\.pdf($|\?)/i.test(url);
@@ -34,8 +35,16 @@ export async function downloadFile(url: string, filename: string) {
 export function ProofPreview({ url, filename, size = 56 }: { url: string; filename?: string; size?: number }) {
   const [downloading, setDownloading] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const isPdf = isPdfUrl(url);
   const name = filename ?? (isPdf ? "comprobante.pdf" : "comprobante.jpg");
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setFullscreen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
 
   async function handleDownload(e: React.MouseEvent) {
     e.preventDefault();
@@ -81,9 +90,45 @@ export function ProofPreview({ url, filename, size = 56 }: { url: string; filena
             {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />} {expanded ? "Ocultar" : "Ver documento"}
           </button>
         )}
+        {isPdf && (
+          <button
+            type="button"
+            onClick={() => setFullscreen(true)}
+            className="flex items-center gap-1 text-[11px] text-steel font-semibold cursor-pointer"
+          >
+            <Maximize2 size={12} /> Ver en grande
+          </button>
+        )}
       </div>
       {isPdf && expanded && (
-        <iframe src={url} title={name} className="w-full rounded border border-rule mt-2" style={{ height: 480 }} />
+        // Confirmado 2026-09-30, pedido de Nairoby: clic sobre el documento
+        // abierto lo muestra en grande (el iframe se traga los clics, por eso
+        // la capa transparente encima).
+        <div className="relative mt-2">
+          <iframe src={url} title={name} className="w-full rounded border border-rule" style={{ height: 480 }} />
+          <button
+            type="button"
+            onClick={() => setFullscreen(true)}
+            className="absolute inset-0 cursor-zoom-in"
+            title="Clic para ver en grande"
+            aria-label="Ver documento en grande"
+          />
+        </div>
+      )}
+      {isPdf && fullscreen && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[999] bg-black/80 flex flex-col p-3 sm:p-6" onClick={() => setFullscreen(false)}>
+          <div className="flex justify-end mb-2">
+            <button
+              type="button"
+              onClick={() => setFullscreen(false)}
+              className="flex items-center gap-1 text-[12px] font-semibold text-white bg-white/10 hover:bg-white/20 rounded px-3 py-1.5 cursor-pointer"
+            >
+              <X size={14} /> Cerrar
+            </button>
+          </div>
+          <iframe src={url} title={name} className="flex-1 w-full rounded bg-white" onClick={(e) => e.stopPropagation()} />
+        </div>,
+        document.body
       )}
     </div>
   );

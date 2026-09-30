@@ -26,7 +26,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
 
   const payrollPeriod = await prisma.payrollPeriod.findUnique({
     where: { period },
-    include: { roles: { where: { isCurrent: true }, include: { employee: { select: { id: true } } } }, transfer: true, nairobySalaryTransfer: true },
+    include: { roles: { where: { isCurrent: true }, include: { employee: { select: { id: true, payrollProfile: { select: { externalPaymentMode: true } } } } } }, transfer: true, nairobySalaryTransfer: true },
   });
   if (!payrollPeriod) return NextResponse.json({ error: "Primero hay que generar los roles de este período." }, { status: 404 });
   if (payrollPeriod.status === "PUBLISHED") return NextResponse.json({ error: "Ya estaba publicado." }, { status: 409 });
@@ -62,7 +62,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ pe
   // que en el resto de los períodos su líquido a pagar es $0 — no hay
   // ninguna transferencia real que pueda tener comprobante, así que un rol
   // con netTotal 0 nunca cuenta como pendiente.
-  const pendingCount = payrollPeriod.roles.filter((r) => !r.paidAt && r.netTotal !== 0).length;
+  // Confirmado 2026-09-30, pedido de Nairoby: quien está en modo de pago
+  // externo ya tiene su comprobante en "Pagos por factura", así que acá no
+  // se le pide (ni frena la publicación).
+  const pendingCount = payrollPeriod.roles.filter((r) => !r.paidAt && r.netTotal !== 0 && !r.employee.payrollProfile?.externalPaymentMode).length;
   if (pendingCount > 0) {
     return NextResponse.json(
       { error: `Todavía falta confirmar el comprobante individual de ${pendingCount} colaborador${pendingCount === 1 ? "" : "es"} antes de publicar.` },
