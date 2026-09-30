@@ -39,15 +39,19 @@ export async function notifyDiscontinuedSales(batchId: string): Promise<void> {
   const detail = sales
     .map((s) => `${s.name} (ID ${s.code}) · ${s.quantity} unid.${s.guideNumbers.length ? ` · guía ${s.guideNumbers.join(", ")}` : ""}`)
     .join("; ");
-  const [delisters, watchers, danielId] = await Promise.all([getDropiDelisterIds(), getDiscontinuedWatcherIds(), getInventoryLeadId()]);
+  const [delisters, watchers, danielId, bryanId] = await Promise.all([getDropiDelisterIds(), getDiscontinuedWatcherIds(), getInventoryLeadId(), getMarketingLeadId()]);
   const title = sales.length === 1 ? "Se vendió un producto dado de baja" : `Se vendieron ${sales.length} productos dados de baja`;
+  // Pedido del usuario 2026-09-30: Heidy da de baja el producto y cancela el
+  // pedido; como la guía ya se generó, Bryan Ríos gestiona con la gente de
+  // Dropi para que la anulen allá (no se va a despachar).
   const heidyBody = `${detail}. No lo tenemos, así que ese pedido no sale. Entra a Dropi, da de baja el producto y cancela el pedido; después marca "Ya lo di de baja".`;
-  const watcherBody = `${detail}. No lo tenemos, así que ese pedido no sale. Heidy lo da de baja en Dropi. Estén pendientes de ese pedido.`;
+  const bryanBody = `${detail}. No lo tenemos, así que ese pedido no se despacha. La guía ya se generó: gestiona con la gente de Dropi para que den de baja ese pedido allá. Heidy da de baja el producto en Dropi.`;
+  const watcherBody = `${detail}. No lo tenemos, así que ese pedido no sale. Heidy lo da de baja en Dropi y Bryan gestiona con Dropi que anulen la guía. Estén pendientes de ese pedido.`;
   await Promise.all([
     ...delisters.map((id) => notifyOwner(id, { title, body: heidyBody, url: DISCONTINUED_URL }).catch(() => null)),
     ...watchers
       .filter((id) => !delisters.includes(id) && id !== danielId)
-      .map((id) => notifyOwner(id, { title, body: watcherBody, url: DISCONTINUED_URL }).catch(() => null)),
+      .map((id) => notifyOwner(id, { title: id === bryanId ? "Guía generada de un producto dado de baja" : title, body: id === bryanId ? bryanBody : watcherBody, url: DISCONTINUED_URL }).catch(() => null)),
     ...(danielId && !delisters.includes(danielId)
       ? [notifyOwner(danielId, { title, body: `${watcherBody} No hay que sacarlo de bodega.`, url: "/area/workspace?tab=egresos&otab=solicitud" }).catch(() => null)]
       : []),

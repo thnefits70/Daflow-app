@@ -124,7 +124,7 @@ export function DropiDiscontinuedSection({ canDelist }: { canDelist: boolean }) 
       <div className="font-display font-bold text-[14px] mb-1">Vendidos en Dropi pero dados de baja ({pending.length} por dar de baja)</div>
       <div className="text-[12px] text-steel mb-2.5">
         Un cliente compró un producto que no tenemos ni vamos a comprar. Ese pedido no sale.{" "}
-        {canDelist ? "Entra a Dropi, da de baja el producto y márcalo aquí." : "Heidy lo da de baja en Dropi."}
+        {canDelist ? "Entra a Dropi, da de baja el producto y cancela el pedido; luego márcalo aquí." : "Heidy lo da de baja en Dropi."} Como la guía ya se generó, Bryan gestiona con la gente de Dropi que anulen ese pedido.
       </div>
       <div className="flex flex-col gap-2.5 mb-3">{pending.map(card)}</div>
       {done.length > 0 && (
