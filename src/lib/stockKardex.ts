@@ -161,6 +161,13 @@ export async function releasePendingKardexForCatalogItem(catalogItemId: string, 
 
   for (const request of pendingRequests) {
     if (!request.receipt?.approvedAt) continue;
+    // Bug real 2026-10-01 (Papá Noel 188894/190688): mientras se esperaba el
+    // ID ya salieron unidades (deterioro, compra personal), así que el
+    // Kardex SÍ tenía líneas posteriores a la recepción. Insertar la entrada
+    // en el pasado no recalcula esas líneas y el saldo quedaba negativo. Si
+    // ya hay algo más nuevo, la entrada va después de lo último.
+    const latest = await getLatestKardexEntry(catalogItemId);
+    const occurredAt = latest && latest.occurredAt >= request.receipt.approvedAt ? new Date(latest.occurredAt.getTime() + 1000) : request.receipt.approvedAt;
     await recordKardexEntry({
       catalogItemId,
       type: "IN",
@@ -171,7 +178,7 @@ export async function releasePendingKardexForCatalogItem(catalogItemId: string, 
         shippingIncluded: request.shippingIncluded,
         shippingCostTotal: request.shippingCostTotal,
       }),
-      occurredAt: request.receipt.approvedAt,
+      occurredAt,
       purchaseRequestReceiptId: request.receipt.id,
     });
   }
