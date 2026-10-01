@@ -25,14 +25,18 @@ export function WarrantyPanel({
   categories,
   monthTotals,
   counts,
+  startOnLastManualMonth = false,
 }: {
   categories: WarrantyCategoryDTO[];
   monthTotals: WarrantyMonthTotalDTO[];
   counts: WarrantyCategoryMonthCountDTO[];
+  // Abre directo el formulario en septiembre 2026 (el último mes a mano) —
+  // para quien todavía tiene que cargarlo.
+  startOnLastManualMonth?: boolean;
 }) {
   const router = useRouter();
   const panelTopRef = useRef<HTMLDivElement>(null);
-  const [month, setMonth] = useState(currentMonth());
+  const [month, setMonth] = useState(startOnLastManualMonth ? WARRANTY_LAST_MANUAL_MONTH : currentMonth());
   const [totalValue, setTotalValue] = useState("");
   const [categoryName, setCategoryName] = useState("");
   const [countValue, setCountValue] = useState("");
@@ -40,7 +44,7 @@ export function WarrantyPanel({
   const [err, setErr] = useState("");
   // Pedido del usuario 2026-09-30: la pantalla se ve automática — la carga a
   // mano (solo meses antes de octubre 2026) queda escondida detrás de un enlace.
-  const [manualOpen, setManualOpen] = useState(false);
+  const [manualOpen, setManualOpen] = useState(startOnLastManualMonth);
   const [expanded, setExpanded] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [confirmingDeleteTotalId, setConfirmingDeleteTotalId] = useState<string | null>(null);

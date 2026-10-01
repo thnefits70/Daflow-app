@@ -7,12 +7,22 @@ import { ReturnRatePanel } from "@/components/finance/ReturnRatePanel";
 import { WarrantyPanel } from "@/components/finance/WarrantyPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { canManageReturnRate, canManageWarranties } from "@/lib/guards";
+import { WARRANTY_LAST_MANUAL_MONTH } from "@/lib/warrantyKpiConstants";
 
 export default async function AreaKpisGeneralesPage() {
   const session = await auth();
   if (!session) redirect("/login");
 
-  const [canReturnRate, canWarranties] = await Promise.all([canManageReturnRate(), canManageWarranties()]);
+  const [canReturnRate, canManageWarrantyKpi, lastManualWarrantyMonth] = await Promise.all([
+    canManageReturnRate(),
+    canManageWarranties(),
+    prisma.warrantyMonthTotal.findUnique({ where: { month: WARRANTY_LAST_MANUAL_MONTH }, select: { id: true } }),
+  ]);
+  // Pedido del usuario 2026-09-30: desde octubre 2026 el KPI de Garantías se
+  // llena solo. La sección solo se muestra hasta que se carga a mano el
+  // último mes manual (septiembre 2026); después desaparece de esta pantalla
+  // (el admin la sigue viendo en /admin/kpis-generales).
+  const canWarranties = canManageWarrantyKpi && !lastManualWarrantyMonth;
 
   const [returnRateRecords, warrantyCategories, warrantyMonthTotals, warrantyCounts] =
     await Promise.all([
@@ -55,9 +65,9 @@ export default async function AreaKpisGeneralesPage() {
             <PushTypeToggle type="kpi_garantias" />
           </div>
           <TabGuide storageKey="kpis-generales-garantias">
-            Desde octubre 2026 se llena sola con los cortes: cada garantía que Yair marca en las guías de Dropi suma al total del mes, con su motivo. Los meses anteriores quedan como se cargaron a mano.
+            Solo falta cargar a mano septiembre 2026 (total y motivos). Cuando lo guardes, esta sección desaparece: desde octubre se llena sola con los cortes.
           </TabGuide>
-          <WarrantyPanel categories={warrantyCategories} monthTotals={warrantyMonthTotals} counts={warrantyCounts} />
+          <WarrantyPanel categories={warrantyCategories} monthTotals={warrantyMonthTotals} counts={warrantyCounts} startOnLastManualMonth />
         </>
       )}
     </div>
