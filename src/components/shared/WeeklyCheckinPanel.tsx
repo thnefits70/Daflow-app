@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ClipboardList, Send, X, Mic, MicOff } from "lucide-react";
+import { ClipboardList, MessageCircleQuestion, Send, X, Mic, MicOff } from "lucide-react";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -41,7 +41,20 @@ type SpeechWindow = Window & {
 // sin poder cerrarlo — como la ÚNICA cosa que puede hacer en toda la
 // cuenta. Misma lógica de chat/streaming/dictado que el widget flotante;
 // solo cambia el envoltorio visual.
-export function WeeklyCheckinPanel({ embedded = false }: { embedded?: boolean } = {}) {
+//
+// `mode="help"` (pedido del usuario 2026-10-01): Mary también es la guía de
+// DAFLOW para quien NO es líder — mismo widget, pero habla con
+// /api/mary-help (solo guía, sin registrar nada) y la conversación vive en
+// sessionStorage en vez de la base. Los líderes le preguntan lo mismo
+// dentro de su chat de Feedback semanal. En ambos modos el nombre "Mary" se
+// ve en el encabezado y sobre cada respuesta suya.
+const HELP_STORAGE_KEY = "mary-help-chat";
+
+export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { embedded?: boolean; mode?: "checkin" | "help" } = {}) {
+  const isHelp = mode === "help";
+  const endpoint = isHelp ? "/api/mary-help" : "/api/weekly-checkin";
+  const title = isHelp ? "Mary · Guía de DAFLOW" : "Mary · Feedback semanal";
+  const HeaderIcon = isHelp ? MessageCircleQuestion : ClipboardList;
   const router = useRouter();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -105,14 +118,33 @@ export function WeeklyCheckinPanel({ embedded = false }: { embedded?: boolean } 
   useEffect(() => {
     if ((!open && !embedded) || loadedOnce) return;
     (async () => {
-      const res = await fetch("/api/weekly-checkin");
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(data.messages ?? []);
+      if (isHelp) {
+        let saved: ChatMessage[] = [];
+        try {
+          saved = JSON.parse(sessionStorage.getItem(HELP_STORAGE_KEY) ?? "[]");
+        } catch {
+          // sessionStorage bloqueado/vacío: arranca sin historial.
+        }
+        setMessages(Array.isArray(saved) ? saved : []);
+      } else {
+        const res = await fetch("/api/weekly-checkin");
+        if (res.ok) {
+          const data = await res.json();
+          setMessages(data.messages ?? []);
+        }
       }
       setLoadedOnce(true);
     })();
-  }, [open, embedded, loadedOnce]);
+  }, [open, embedded, loadedOnce, isHelp]);
+
+  useEffect(() => {
+    if (!isHelp || !loadedOnce || loading) return;
+    try {
+      sessionStorage.setItem(HELP_STORAGE_KEY, JSON.stringify(messages.slice(-30)));
+    } catch {
+      // Sin almacenamiento disponible: el chat sigue funcionando sin guardar.
+    }
+  }, [isHelp, loadedOnce, loading, messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -123,13 +155,13 @@ export function WeeklyCheckinPanel({ embedded = false }: { embedded?: boolean } 
     if (!text || loading) return;
     setError(null);
     // Burbujas vacías (respuesta de Mary que llegó en blanco) no se reenvían.
-    const nextMessages: ChatMessage[] = [...messages.filter((m) => m.content.trim()), { role: "user", content: text }];
+    const nextMessages: ChatMessage[] = [...messages.filter((m) => m.content.trim()), { role: "user" as const, content: text }].slice(isHelp ? -30 : -40);
     setMessages([...nextMessages, { role: "assistant", content: "" }]);
     setInput("");
     setLoading(true);
 
     try {
-      const res = await fetch("/api/weekly-checkin", {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: nextMessages }),
@@ -155,7 +187,7 @@ export function WeeklyCheckinPanel({ embedded = false }: { embedded?: boolean } 
       // El registro (si el asistente ya tenía lo necesario) quedó guardado
       // del lado del servidor — refresca la página para que la bitácora de
       // Feedback semanal del líder lo vea sin recargar manualmente.
-      router.refresh();
+      if (!isHelp) router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al contactar al asistente.");
       setMessages((prev) => prev.slice(0, -1));
@@ -173,12 +205,15 @@ export function WeeklyCheckinPanel({ embedded = false }: { embedded?: boolean } 
       <div className="flex-1 overflow-y-auto px-5 py-4 min-h-[320px]">
         {messages.length === 0 && (
           <div className="text-[13.5px] text-steel">
-            Cuéntame qué problemas tuviste esta semana y armamos juntos el plan para resolverlos.
+            {isHelp
+              ? "Hola, soy Mary. Pregúntame dónde encontrar algo en DAFLOW o cómo se hace, y te guío paso a paso con lo que tienes en tu usuario."
+              : "Hola, soy Mary. Cuéntame qué problemas tuviste esta semana y armamos juntos el plan para resolverlos. También puedes preguntarme dónde encontrar algo en DAFLOW."}
           </div>
         )}
         <div className="space-y-3">
           {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div key={i} className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"}`}>
+              {m.role === "assistant" && <div className="text-[10.5px] font-semibold text-teal mb-0.5 ml-0.5">Mary</div>}
               <div
                 className={`max-w-[80%] rounded-md px-3.5 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap ${
                   m.role === "user" ? "bg-blue text-white" : "bg-cloud border border-rule text-ink"
@@ -199,7 +234,7 @@ export function WeeklyCheckinPanel({ embedded = false }: { embedded?: boolean } 
           <input
             type="text"
             className="flex-1 rounded border border-rule bg-cloud px-3 py-2.5 text-[13.5px] min-w-0"
-            placeholder={listening ? "Escuchando..." : "Escribe o dicta tu respuesta..."}
+            placeholder={listening ? "Escuchando..." : isHelp ? "Pregúntale a Mary..." : "Escribe o dicta tu respuesta..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
@@ -241,11 +276,11 @@ export function WeeklyCheckinPanel({ embedded = false }: { embedded?: boolean } 
       <div
         className="flex-1 min-h-0 flex flex-col bg-surface border border-rule rounded-md shadow-sm"
         role="dialog"
-        aria-label="Feedback semanal"
+        aria-label={title}
       >
         <div className="flex items-center gap-2 px-4 py-3 border-b border-rule shrink-0">
-          <ClipboardList size={15} className="text-teal shrink-0" />
-          <div className="font-mono text-[10px] uppercase tracking-wide text-steel font-bold truncate">Feedback semanal</div>
+          <HeaderIcon size={15} className="text-teal shrink-0" />
+          <div className="font-mono text-[10px] uppercase tracking-wide text-steel font-bold truncate">{title}</div>
         </div>
         {chatBody}
       </div>
@@ -262,13 +297,13 @@ export function WeeklyCheckinPanel({ embedded = false }: { embedded?: boolean } 
         <div
           className="w-[min(680px,94vw)] max-h-[82vh] flex flex-col bg-surface border border-rule rounded-md shadow-2xl"
           role="dialog"
-          aria-label="Feedback semanal"
+          aria-label={title}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-rule shrink-0">
             <div className="flex items-center gap-2 min-w-0">
-              <ClipboardList size={15} className="text-teal shrink-0" />
-              <div className="font-mono text-[10px] uppercase tracking-wide text-steel font-bold truncate">Feedback semanal</div>
+              <HeaderIcon size={15} className="text-teal shrink-0" />
+              <div className="font-mono text-[10px] uppercase tracking-wide text-steel font-bold truncate">{title}</div>
             </div>
             <button type="button" title="Cerrar" className="p-1.5 rounded text-steel hover:text-ink cursor-pointer" onClick={() => setOpen(false)}>
               <X size={15} />
@@ -283,10 +318,11 @@ export function WeeklyCheckinPanel({ embedded = false }: { embedded?: boolean } 
         type="button"
         className="fixed bottom-5 left-5 z-[150] w-13 h-13 rounded-full bg-teal text-navy shadow-2xl cursor-pointer flex items-center justify-center hover:brightness-110"
         style={{ width: 52, height: 52 }}
-        title="Feedback semanal"
+        title={isHelp ? "Pregúntale a Mary" : "Mary · Feedback semanal"}
+        aria-label={isHelp ? "Pregúntale a Mary" : "Mary · Feedback semanal"}
         onClick={() => setOpen((v) => !v)}
       >
-        {open ? <X size={22} /> : <ClipboardList size={22} />}
+        {open ? <X size={22} /> : <HeaderIcon size={22} />}
       </button>
     </>
   );

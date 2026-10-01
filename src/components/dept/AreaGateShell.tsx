@@ -243,7 +243,7 @@ export function AreaGateShell({
         <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-9 print:overflow-visible print:p-0">
           <WeeklyCheckinLockGate weeksStale={weeklyCheckinLockout.weeksStale} reason={weeklyCheckinLockout.reason} />
         </main>
-        {showWeeklyCheckinPanel && <WeeklyCheckinPanel />}
+        {showWeeklyCheckinPanel ? <WeeklyCheckinPanel /> : <WeeklyCheckinPanel mode="help" />}
       </div>
     );
   }
@@ -274,7 +274,7 @@ export function AreaGateShell({
         {ledDeptName && <LeaderBanner deptName={ledDeptName} alerts={leaderAlerts} />}
         {children}
       </main>
-      {showWeeklyCheckinPanel && <WeeklyCheckinPanel />}
+      {showWeeklyCheckinPanel ? <WeeklyCheckinPanel /> : <WeeklyCheckinPanel mode="help" />}
       <BirthdayPopup />
       <MonthlyRecognitionPopup />
       <CeoBonusPopup />

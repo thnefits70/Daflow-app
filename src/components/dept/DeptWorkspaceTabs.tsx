@@ -42,12 +42,15 @@ import { MarketProductPanel } from "@/components/marketanalysis/MarketProductPan
 import { ImprovementPlanTeamPanel } from "@/components/improvement-plan/ImprovementPlanTeamPanel";
 import { WeeklyCheckinLockGate } from "@/components/dept/WeeklyCheckinLockGate";
 import { useWorkspaceTabDots } from "@/components/dept/useWorkspaceTabDots";
+import { isWorkspaceTabVisible } from "@/lib/workspaceTabVisibility";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
 
 // Orden confirmado 2026-07-23: financiero/operativo primero, luego lo
-// documental, Recordatorios al final.
+// documental, Recordatorios al final. Qué pestaña ve cada quien se decide
+// en isWorkspaceTabVisible (workspaceTabVisibility.ts) — Mary usa la misma
+// regla para saber qué puede explicarle a cada persona.
 const ALL_TABS = [
   { key: "kpis", label: "KPIs financieros", icon: LineChart },
   { key: "pagos", label: "Pagos recordatorios", icon: CalendarClock },
@@ -459,34 +462,54 @@ export function DeptWorkspaceTabs({
   // historial), pero el badge solo debe contar lo que de verdad falta
   // revisar.
   const supplierPendingCount = supplierPending.filter((s) => s.status === "PENDING").length;
-  const tabs = ALL_TABS.filter((t) => {
-    if (t.key === "kpis") return trackKpis;
-    if (t.key === "pagos") return trackPaymentReminders;
-    if (t.key === "semanal") return trackWeeklyMetric;
-    if (t.key === "feedback") return trackWeeklyReview;
-    if (t.key === "compras") return canSubmitPurchases || canViewOwnPurchases || canSubmitEmergencyPurchases || canApprovePurchases || canReceivePurchases || canInvoicePurchases;
-    if (t.key === "proveedores") return canAccessSuppliers;
-    if (t.key === "llegadas") return canViewMarketingArrivals;
-    if (t.key === "nuevos-ids") return canViewMarketingArrivals;
-    if (t.key === "inventario") return canManageInventoryControl;
-    if (t.key === "stock-actual") return canManageJustCatalog || canViewStockLevels;
-    if (t.key === "reingreso") return canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry;
-    if (t.key === "egresos") return canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canSubmitFulfillmentRequest || canViewFulfillmentRequests || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canConfirmFinanceWriteOff;
-    if (t.key === "ventas-externas") return canViewExternalSales;
-    if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
-    if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
-    if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
-    // 2026-10-01: la baja rotación ya no se anota a mano — Inventario no
-    // tiene nada que hacer en Sugerencias de Combos.
-    if (t.key === "combos") return canSyncAtomData || canApproveComboSuggestions;
-    if (t.key === "analisis-mercado")
-      return canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canViewB2BPricing || canViewB2CPricing;
-    if (t.key === "seguimiento-tiendas") return canViewStoreTracking;
-    if (t.key === "pagosadmin") return canManageAdminPayments;
-    if (t.key === "almuerzos") return canRegisterLunchPayments;
-    if (t.key === "plan-mejora") return canManageImprovementPlan;
-    return true;
-  });
+  const tabs = ALL_TABS.filter((t) =>
+    isWorkspaceTabVisible(t.key, {
+      trackKpis,
+      trackPaymentReminders,
+      trackWeeklyMetric,
+      trackWeeklyReview,
+      canSubmitPurchases,
+      canViewOwnPurchases,
+      canSubmitEmergencyPurchases,
+      canApprovePurchases,
+      canReceivePurchases,
+      canInvoicePurchases,
+      canAccessSuppliers,
+      canViewMarketingArrivals,
+      canManageInventoryControl,
+      canManageJustCatalog,
+      canViewStockLevels,
+      canCaptureMerchandiseReentry,
+      canApproveMerchandiseReentry,
+      canCloseMerchandiseReentry,
+      canViewMerchandiseOutflow,
+      canSubmitCancelledGuide,
+      canManageCancelledGuideBatches,
+      canConfirmCancelledGuideFulfillmentRemoval,
+      canAssignCancelledGuideItems,
+      canSubmitFulfillmentRequest,
+      canViewFulfillmentRequests,
+      supplierExchangeMineCount,
+      financeWriteOffPendingCount,
+      canConfirmFinanceWriteOff,
+      canViewExternalSales,
+      canViewInventoryKpisPanel,
+      hasPettyCash: !!(pettyCashData?.principal || pettyCashData?.secundaria),
+      canManageStoreFeedback,
+      canViewStoreFeedback,
+      canSyncAtomData,
+      canApproveComboSuggestions,
+      canProposeMarketProduct,
+      canReviewMarketProduct,
+      canPublishMarketProduct,
+      canViewB2BPricing,
+      canViewB2CPricing,
+      canViewStoreTracking,
+      canManageAdminPayments,
+      canRegisterLunchPayments,
+      canManageImprovementPlan,
+    }),
+  );
   // Confirmado 2026-07-30: cada área debería abrir directo en su pestaña más
   // usada, no siempre en "Procesos" — Fulfillment abre en "Pedidos
   // despachados". Confirmado 2026-08-04: Finanzas ahora abre en "Feedback

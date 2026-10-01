@@ -5,12 +5,7 @@ import { AreaGateShell } from "@/components/dept/AreaGateShell";
 import { MarketingArrivalAlert } from "@/components/marketing/MarketingArrivalAlert";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
-import {
-  canManageNomina,
-  canLogOvertimeHours,
-  canConfirmPersonalPurchaseInventory,
-  canViewReturnRateDetailFor,
-} from "@/lib/guards";
+import { getEmployeeSidebarFlags } from "@/lib/employeeSidebarFlags";
 import { getRecognitionLockout } from "@/lib/pendingTasks";
 import { getWeeklyCheckinLockoutStatus } from "@/lib/weeklyCheckin";
 
@@ -139,42 +134,12 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   const unseenPayStubCount = await prisma.payStub.count({
     where: { userId: session.user.id, updatedAt: { gt: currentUser.lastSeenPayStubAt ?? new Date(0) } },
   });
-  const confidentialAccessCount = await prisma.confidentialDocumentAccess.count({
-    where: { userId: session.user.id },
-  });
   const unseenConfidentialCount = await prisma.confidentialDocumentAccess.count({
     where: { userId: session.user.id, seenAt: null },
   });
-  // Confirmado 2026-07-22: Servicio Postventa's company-wide average is
-  // public to every employee, even those with no other KPI edit rights (the
-  // page itself still gates each individual section's edit UI) — EXCEPT
-  // confirmado 2026-09-04: pedido explícito del usuario, estas personas no
-  // deben ver el botón "KPIs Generales" en absoluto.
-  const KPIS_HIDDEN_USERNAMES = new Set([
-    "jarielmurillo2026", // Jariel Murillo
-    "robert2026", // Robert Salinas
-    "heidy2026", // Heidy Morales
-    "joelguale2026", // Joel Guale
-    "scott2026", // Bryan Franco (usuario "scott2026")
-    "luis2026", // Luis Castillo
-    "allan2026", // Allan Anastacio
-  ]);
-  // 2026-09-30: además de la lista, quien tenga el rol
-  // Asesor(a) B2B (lo que hacía Heidy, que estaba oculta) tampoco ve el botón.
-  // Pedido del usuario 2026-10-01: líderes y todo Análisis de Mercado ven el
-  // detalle de la Tasa de Devolución en KPIs Generales, así que para ellos
-  // el botón aparece aunque estén en la lista de arriba.
-  const showKpis =
-    (!KPIS_HIDDEN_USERNAMES.has(currentUser.username) && !currentUser.isB2BAdvisor) ||
-    canViewReturnRateDetailFor(currentUser, dept.code);
-  // Confirmado 2026-08-13: pedido explícito del usuario — el líder de un
-  // área habilitada para horas extra (hoy Inventario y Fulfillment)
-  // necesita entrar acá para registrar, aunque no gestione Nómina en
-  // general (esa parte de la pantalla queda oculta para él, ver
-  // NominaPageTabs).
-  const showNomina = (await canManageNomina()) || (await canLogOvertimeHours());
-  const showPersonalPurchasesInventory = await canConfirmPersonalPurchaseInventory();
-  const myLearningPathCount = await prisma.learningPathAssignment.count({ where: { userId: session.user.id } });
+  // Qué ítems opcionales del menú se ven — misma regla que usa Mary para
+  // saber qué puede explicar (ver employeeSidebarFlags.ts).
+  const sidebarFlags = await getEmployeeSidebarFlags(currentUser, dept.code);
 
   // Feedback semanal (Mary) — solo el LÍDER de un área con bitácora puede
   // usarla (mismo criterio que gatea el widget flotante abajo), y solo a él
@@ -199,13 +164,13 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       ledDeptName={ledDeptName}
       unseenFeedbackCount={unseenFeedbackCount}
       unseenPayStubCount={unseenPayStubCount}
-      showConfidential={confidentialAccessCount > 0}
+      showConfidential={sidebarFlags.showConfidential}
       unseenConfidentialCount={unseenConfidentialCount}
-      showKpis={showKpis}
+      showKpis={sidebarFlags.showKpis}
       showRecognition
-      showNomina={showNomina}
-      showMyLearningPath={myLearningPathCount > 0}
-      showPersonalPurchasesInventory={showPersonalPurchasesInventory}
+      showNomina={sidebarFlags.showNomina}
+      showMyLearningPath={sidebarFlags.showMyLearningPath}
+      showPersonalPurchasesInventory={sidebarFlags.showPersonalPurchasesInventory}
       showWeeklyCheckinPanel={showWeeklyCheckinPanel}
       weeklyCheckinLockout={weeklyCheckinLockout}
     >

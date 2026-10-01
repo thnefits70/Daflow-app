@@ -19,6 +19,16 @@ import {
   type SubmitWeeklyReportInput,
   type ClosePreviousReportInput,
 } from "@/lib/weeklyCheckin";
+import { MARY_HELP_RULES, buildMaryHelpMap } from "@/lib/maryHelp";
+
+// Desde 2026-10-01 Mary también guía al líder dentro de DAFLOW (pedido de
+// Nairoby: preguntaba dónde estaban opciones que no encontraba). Una
+// pregunta de ayuda nunca es un reporte — sin esta regla el modelo podría
+// llamar submit_weekly_report y pisar el registro de la semana.
+const CHECKIN_SYSTEM_PROMPT = `${MARY_SYSTEM_PROMPT}
+
+${MARY_HELP_RULES}
+- Una pregunta sobre cómo usar DAFLOW NO es parte del reporte semanal: respóndela y no llames ninguna herramienta por ella. Si el check-in de esta semana sigue sin registrarse, después de responder retómalo con una sola frase.`;
 
 // content sin .min(1): si una respuesta de Mary llegó vacía, el widget la
 // tenía en su historial y el siguiente envío rebotaba con "Too small:
@@ -113,9 +123,10 @@ export async function POST(req: NextRequest) {
   // semanas anteriores — se recalcula y se antepone en CADA mensaje (mismo
   // patrón que buildNancyContext en nancy.ts), así que si algo se cierra a
   // mitad de la conversación, el siguiente turno ya no lo repite.
-  const [openPrevious, lockout] = await Promise.all([
+  const [openPrevious, lockout, helpMap] = await Promise.all([
     getOpenPreviousReports(ownerId, week),
     getWeeklyCheckinLockoutStatus(ownerId),
+    buildMaryHelpMap(ownerId),
   ]);
   const context = await buildWeeklyCheckinContext({
     leaderName: leaderUser!.name,
@@ -130,11 +141,11 @@ export async function POST(req: NextRequest) {
   const stream = client.messages.stream({
     model: WEEKLY_CHECKIN_MODEL,
     max_tokens: 1024,
-    system: MARY_SYSTEM_PROMPT,
+    system: CHECKIN_SYSTEM_PROMPT,
     tools: [SUBMIT_WEEKLY_REPORT_TOOL, CLOSE_PREVIOUS_REPORT_TOOL],
     messages: [
       ...priorMessages.map((m) => ({ role: m.role, content: m.content })),
-      { role: "user" as const, content: `${context}\n\nMENSAJE DEL LÍDER:\n${lastMessage.content}` },
+      { role: "user" as const, content: `${context}\n\n${helpMap}\n\nMENSAJE DEL LÍDER:\n${lastMessage.content}` },
     ],
   });
 
