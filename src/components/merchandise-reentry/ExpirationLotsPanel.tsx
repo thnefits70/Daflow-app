@@ -58,6 +58,14 @@ export function ExpirationLotsPanel() {
     "/area/workspace?tab=reingreso"
   );
 
+  // Confirmado 2026-10-01: el pendiente de Inicio "Productos vencidos / por
+  // vencer" llega con #lotes-caducidad — este bloque está al fondo de la
+  // pestaña Productos, así que se baja solo hasta acá.
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (window.location.hash === "#lotes-caducidad") rootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   useEffect(() => {
     fetch("/api/purchase-catalog").then((r) => (r.ok ? r.json() : [])).then(setItems).catch(() => setItems([]));
   }, []);
@@ -177,7 +185,7 @@ export function ExpirationLotsPanel() {
   }
 
   return (
-    <div className="mt-6">
+    <div id="lotes-caducidad" ref={rootRef} className="mt-6 scroll-mt-4">
       <h3 className="text-[13.5px] font-bold text-ink mb-2">Lotes de caducidad</h3>
       <p className="text-[12px] text-steel mb-3">
         Declara el lote de un producto que ya está en percha (fecha de elaboración opcional, vencimiento y cantidad obligatorios) — no hace falta esperar a la próxima compra. Una vez declarado, el producto queda marcado para siempre: la próxima compra ya pide las fechas directo.

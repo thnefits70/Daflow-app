@@ -475,6 +475,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   reingreso_mercaderia_revision: "Reingreso de mercadería por revisar",
   reingreso_mercaderia_verificacion_semanal: "Reingreso de mercadería — lote semanal de dañados por verificar",
   egresos_deterioro_resolucion: "Deterioro en bodega — falta tu decisión",
+  lotes_caducidad_alerta: "Productos vencidos o que vencen en 6 meses o menos",
   reclamos_proveedor_atrasados: "Reclamos al proveedor trabados o pasados por alto",
   danados_doble_registro: "Producto dañado registrado dos veces (devolución + deterioro)",
   ventas_externas_agrupar: "Ventas Externas — asignar quién agrupa",
@@ -2649,6 +2650,44 @@ async function getDeteriorResolutionPendingItem(href: string): Promise<PendingIt
   };
 }
 
+// Confirmado 2026-10-01, pedido del usuario: los lotes ya vencidos y los que
+// vencen en 6 meses o menos solo se veían entrando a "Lotes de caducidad"
+// (o arriba de Stock Actual) — nada en Inicio le recordaba a Daniel que
+// tenía algo por gestionar. Solo Daniel (líder de INV), ambos grupos; mismo
+// criterio exacto que /api/purchase-catalog/expiration-alerts. Se quita
+// solo cuando ya no queda ningún lote con unidades en esa situación.
+async function getExpirationLotsPendingItem(href: string): Promise<PendingItem | null> {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() + 6);
+  const lots = await prisma.expirationCohort.findMany({
+    where: { quantityRemaining: { gt: 0 }, expirationDate: { lte: cutoff } },
+    select: { expirationDate: true },
+  });
+  if (lots.length === 0) return null;
+
+  // Fecha de calendario guardada a medianoche UTC (ver ExpirationAlerts):
+  // vencido = la fecha ya pasó; hoy todavía cuenta como "por vencer".
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const expired = lots.filter((l) => {
+    const d = l.expirationDate;
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) < today;
+  }).length;
+  const soon = lots.length - expired;
+
+  const parts: string[] = [];
+  if (expired > 0) parts.push(`${expired} ${expired === 1 ? "vencido" : "vencidos"}`);
+  if (soon > 0) parts.push(`${soon} ${soon === 1 ? "vence" : "vencen"} en 6 meses o menos`);
+  return {
+    type: "lotes_caducidad_alerta",
+    icon: expired > 0 ? "⛔" : "⏳",
+    label: expired > 0 ? "Productos vencidos en bodega" : "Productos por vencer",
+    meta: parts.join(" · "),
+    overdue: expired > 0,
+    href,
+  };
+}
+
 // Confirmado 2026-09-28, pedido de Jariel: el proveedor quiere revisar la
 // mercadería antes de decidir — Daniel tiene que armar el paquete de
 // revisión; y si tras revisarla la rechaza y la devuelve, confirmar que
@@ -3561,6 +3600,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (urgentUnresolvedItem) items.push(urgentUnresolvedItem);
     if (nichoBackfillItem) items.push(nichoBackfillItem);
     if (deteriorResolutionItem) items.push(deteriorResolutionItem);
+    const expirationLotsItem = await getExpirationLotsPendingItem("/area/reingreso-mercaderia?tab=productos#lotes-caducidad").catch(() => null);
+    if (expirationLotsItem) items.push(expirationLotsItem);
     const inspectionItem = await getDeteriorInspectionPendingItem("/area/workspace?tab=egresos&otab=seguimiento").catch(() => null);
     if (inspectionItem) items.push(inspectionItem);
     const doubleRegItem = await getDamagedDoubleRegistrationPendingItem("/area/reingreso-mercaderia?tab=danos").catch(() => null);
@@ -3727,7 +3768,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "ventas_externas_embalar", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
+      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ventas_externas_agrupar", "ventas_externas_embalar", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
