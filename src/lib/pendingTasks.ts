@@ -21,6 +21,7 @@ import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
 import { DISCONTINUED_URL, getDiscontinuedOrderPendingCount, getDiscontinuedPendingCount } from "@/lib/dropiDiscontinued";
+import { formerLeaderIdsFor, isSummaryComplete } from "@/lib/formerLeaders";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -125,6 +126,34 @@ function eligibleForMonth<T extends { startDate: Date | null }>(cohort: T[], mon
   return cohort.filter((u) => !u.startDate || u.startDate <= end);
 }
 
+type CohortUser = { id: string; name: string; startDate: Date | null };
+
+// Pedido del usuario 2026-10-01: un ex líder (ver formerLeaders.ts) en los
+// meses en que todavía era líder lo califica el admin, no el líder de su
+// área actual — se suma al grupo del admin y se saca del grupo del líder.
+async function adjustForFormerLeaders(cohort: CohortUser[], evaluatorIsAdmin: boolean, month: string): Promise<CohortUser[]> {
+  const ids = formerLeaderIdsFor(month);
+  if (ids.length === 0) return cohort;
+  if (!evaluatorIsAdmin) return cohort.filter((u) => !ids.includes(u.id));
+  const toAdd = ids.filter((id) => !cohort.some((u) => u.id === id));
+  if (toAdd.length === 0) return cohort;
+  const extra = await prisma.user.findMany({
+    where: { id: { in: toAdd }, isActive: true, excludeFromRecognition: false },
+    select: { id: true, name: true, startDate: true },
+  });
+  return [...cohort, ...extra];
+}
+
+// IDs con el mes calificado de verdad — un líder con solo la parte de su
+// equipo (Liderazgo 360°) todavía no cuenta (ver isSummaryComplete).
+async function completedSummaryIds(month: string, ids: string[]): Promise<Set<string>> {
+  const rows = await prisma.monthlyEvaluationSummary.findMany({
+    where: { month, evaluateeId: { in: ids } },
+    select: { evaluateeId: true, totalScore: true, liderazgoScore: true },
+  });
+  return new Set(rows.filter(isSummaryComplete).map((s) => s.evaluateeId));
+}
+
 // Confirmado 2026-08-07: metodología estricta mes por mes — no se puede
 // calificar un mes si el evaluador (líder o admin) todavía tiene gente sin
 // calificar de un mes ANTERIOR (ej. no se puede calificar agosto si julio
@@ -155,16 +184,9 @@ export async function getEarliestIncompleteMonthBefore(
 
   let month = prevMonthStr(targetMonth);
   while (month >= genesis.month) {
-    const eligible = eligibleForMonth(cohort, month);
+    const eligible = eligibleForMonth(await adjustForFormerLeaders(cohort, evaluatorIsAdmin, month), month);
     if (eligible.length > 0) {
-      const doneIds = new Set(
-        (
-          await prisma.monthlyEvaluationSummary.findMany({
-            where: { month, evaluateeId: { in: eligible.map((u) => u.id) } },
-            select: { evaluateeId: true },
-          })
-        ).map((s) => s.evaluateeId)
-      );
+      const doneIds = await completedSummaryIds(month, eligible.map((u) => u.id));
       let missing = eligible.filter((u) => !doneIds.has(u.id));
       // Red de seguridad (bug real encontrado 2026-08-31): antes del
       // 2026-07-17 la evaluación detallada (MonthlyEvaluation) se podía
@@ -180,10 +202,23 @@ export async function getEarliestIncompleteMonthBefore(
           include: { scores: { select: { pillar: true, score: true } } },
         });
         for (const rec of detailRecords) {
+          const fields = summaryFieldsFromScores(rec.scores);
+          // Un líder cuyo Liderazgo lo pone su equipo (360°) no tiene ese
+          // pilar en el detalle: se conserva el que ya estaba en el resumen.
+          if (!rec.scores.some((s) => s.pillar === "liderazgo")) {
+            const prev = await prisma.monthlyEvaluationSummary.findUnique({
+              where: { month_evaluateeId: { month, evaluateeId: rec.evaluateeId } },
+              select: { liderazgoScore: true },
+            });
+            if (prev?.liderazgoScore) {
+              fields.totalScore += prev.liderazgoScore - fields.liderazgoScore;
+              fields.liderazgoScore = prev.liderazgoScore;
+            }
+          }
           await prisma.monthlyEvaluationSummary.upsert({
             where: { month_evaluateeId: { month, evaluateeId: rec.evaluateeId } },
-            create: { month, evaluateeId: rec.evaluateeId, ...summaryFieldsFromScores(rec.scores) },
-            update: summaryFieldsFromScores(rec.scores),
+            create: { month, evaluateeId: rec.evaluateeId, ...fields },
+            update: fields,
           });
         }
         const healedIds = new Set(detailRecords.map((r) => r.evaluateeId));
@@ -239,12 +274,11 @@ export async function getRecognitionLockout(evaluatorIsAdmin: boolean, leaderDep
   const where = evaluatorIsAdmin
     ? { isLeader: true as const, isActive: true, excludeFromRecognition: false }
     : { deptId: leaderDeptId!, isLeader: false as const, isActive: true, excludeFromRecognition: false };
-  const cohort = await prisma.user.findMany({ where, select: { id: true, startDate: true } });
-  if (cohort.length === 0) return null;
-  const eligible = eligibleForMonth(cohort, month);
+  const cohort = await prisma.user.findMany({ where, select: { id: true, name: true, startDate: true } });
+  const eligible = eligibleForMonth(await adjustForFormerLeaders(cohort, evaluatorIsAdmin, month), month);
   if (eligible.length === 0) return null;
 
-  const done = await prisma.monthlyEvaluationSummary.count({ where: { month, evaluateeId: { in: eligible.map((u) => u.id) } } });
+  const done = (await completedSummaryIds(month, eligible.map((u) => u.id))).size;
   if (done >= eligible.length) return null;
   return { month, deadline: deadline.toISOString() };
 }
@@ -884,7 +918,7 @@ async function getMissingEvaluatees(evaluatorIsAdmin: boolean, leaderDeptId: str
     ? { isLeader: true as const, isActive: true, excludeFromRecognition: false }
     : { deptId: leaderDeptId!, isLeader: false as const, isActive: true, excludeFromRecognition: false };
   const evaluatees = await prisma.user.findMany({ where, select: { id: true, name: true, startDate: true } });
-  const eligible = eligibleForMonth(evaluatees, month);
+  const eligible = eligibleForMonth(await adjustForFormerLeaders(evaluatees, evaluatorIsAdmin, month), month);
   if (eligible.length === 0) return [];
   const done = await prisma.monthlyEvaluation.findMany({
     where: { month, evaluateeId: { in: eligible.map((u) => u.id) } },
@@ -968,7 +1002,8 @@ async function getRecognitionAdminPendingItem(href: string): Promise<PendingItem
     });
     const doneNonLeaderIds = new Set(doneNonLeaders.map((e) => e.evaluateeId));
     const missingTeam = nonLeaders.filter((u) => !doneNonLeaderIds.has(u.id));
-    const missing = [...missingLeaders, ...missingTeam];
+    // Un ex líder (formerLeaders.ts) puede salir en las dos listas.
+    const missing = [...missingLeaders, ...missingTeam.filter((u) => !missingLeaders.some((l) => l.id === u.id))];
     if (missing.length === 0) continue;
 
     const overdue = now >= adminConfirmDeadline(month);

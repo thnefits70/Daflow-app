@@ -7,12 +7,38 @@ import { PILLARS, pickQuestions, currentMonth, QUESTIONS_PER_PILLAR, summaryFiel
 import { purgeOldEvaluationDetail } from "@/lib/recognitionPurge";
 import { getEarliestIncompleteMonthBefore, formatMonthLabel } from "@/lib/pendingTasks";
 import { leaderHasTeam, recomputeLeaderSummary } from "@/lib/recognitionAdmin";
+import { formerLeaderOf, wasLeaderIn } from "@/lib/formerLeaders";
 
 // Un líder cuyo equipo lo califica en Liderazgo 360° ya no responde ese pilar
 // acá — ver el bloque "Feedback de Liderazgo 360°" en recognitionAdmin.ts.
-async function liderazgoSourceFor(evaluateeId: string, evaluateeIsLeader: boolean): Promise<"team" | "admin"> {
+// Un ex líder (formerLeaders.ts), en los meses en que todavía era líder, igual:
+// su ex equipo ya puso el Liderazgo.
+async function liderazgoSourceFor(evaluateeId: string, evaluateeIsLeader: boolean, month: string): Promise<"team" | "admin"> {
+  if (wasLeaderIn(evaluateeId, month)) return "team";
   if (!evaluateeIsLeader) return "admin";
   return (await leaderHasTeam(evaluateeId)) ? "team" : "admin";
+}
+
+function nextMonthOf(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  const d = new Date(Date.UTC(y, m, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+// Pedido del usuario 2026-10-01: a un ex líder lo califica el admin solo por
+// los meses en que todavía era líder; desde el mes siguiente, el líder de su
+// área actual. Devuelve el aviso a mostrar si este evaluador no le toca.
+function formerLeaderBlock(evaluateeId: string, month: string, isAdmin: boolean): string | null {
+  const f = formerLeaderOf(evaluateeId);
+  if (!f) return null;
+  const leaderMonth = wasLeaderIn(evaluateeId, month);
+  if (isAdmin && !leaderMonth) {
+    return `${f.name} ya no es líder: desde ${formatMonthLabel(nextMonthOf(f.lastLeaderMonth))} lo califica el líder de su área. A ti solo te toca ${formatMonthLabel(f.lastLeaderMonth)} — elige ese mes arriba.`;
+  }
+  if (!isAdmin && leaderMonth) {
+    return `En ${formatMonthLabel(month)} ${f.name} todavía era líder, así que ese mes lo califica el admin. Tú lo calificas desde ${formatMonthLabel(nextMonthOf(f.lastLeaderMonth))}.`;
+  }
+  return null;
 }
 
 // Returns this month's randomized question set for (evaluator, evaluatee),
@@ -42,6 +68,8 @@ export async function GET(req: NextRequest) {
   // cargar las preguntas) en vez de dejar que llene todo el formulario y
   // recién se entere al guardar.
   const isAdmin = session.user.role === "admin";
+  const formerLeaderMsg = formerLeaderBlock(evaluateeId, month, isAdmin);
+  if (formerLeaderMsg) return NextResponse.json({ error: formerLeaderMsg }, { status: 409 });
   const evaluatee = await prisma.user.findUnique({ where: { id: evaluateeId }, select: { deptId: true, isLeader: true } });
   if (!evaluatee) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const evaluateeDept = isAdmin ? null : evaluatee;
@@ -56,7 +84,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const liderazgoSource = await liderazgoSourceFor(evaluateeId, evaluatee.isLeader);
+  const liderazgoSource = await liderazgoSourceFor(evaluateeId, evaluatee.isLeader, month);
 
   const existing = await prisma.monthlyEvaluation.findUnique({
     where: { month_evaluateeId: { month, evaluateeId } },
@@ -109,9 +137,15 @@ export async function POST(req: NextRequest) {
   const canEvaluate = await canEvaluateUser(evaluateeId);
   if (!canEvaluate) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
+  // Mismo mes que más abajo — se calcula antes porque decide quién califica
+  // a un ex líder y si responde o no el pilar Liderazgo.
+  const month = parsed.data.month && parsed.data.month <= currentMonth() ? parsed.data.month : currentMonth();
+  const formerLeaderMsg = formerLeaderBlock(evaluateeId, month, session.user.role === "admin");
+  if (formerLeaderMsg) return NextResponse.json({ error: formerLeaderMsg }, { status: 409 });
+
   const evaluatee = await prisma.user.findUnique({ where: { id: evaluateeId }, select: { deptId: true, isLeader: true } });
   if (!evaluatee) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-  const liderazgoSource = await liderazgoSourceFor(evaluateeId, evaluatee.isLeader);
+  const liderazgoSource = await liderazgoSourceFor(evaluateeId, evaluatee.isLeader, month);
 
   // Every question in every pillar must be answered — a partial evaluation
   // would give this person an unfair (lower max) total against everyone
@@ -127,9 +161,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Este pilar lo califica el equipo, no se puede enviar acá." }, { status: 400 });
   }
 
-  // Same "past month only, never future" rule as GET — catching up a month
-  // this feature didn't exist for yet, not backdating around the deadline.
-  const month = parsed.data.month && parsed.data.month <= currentMonth() ? parsed.data.month : currentMonth();
+  // Same "past month only, never future" rule as GET (month se calcula
+  // arriba) — catching up a month this feature didn't exist for yet, not
+  // backdating around the deadline.
   const evaluatorId = session.user.role === "admin" ? "admin" : session.user.id;
 
   // Defensa server-side del mismo bloqueo que ya avisó el GET — por si

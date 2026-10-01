@@ -16,6 +16,9 @@ export type RecognitionPersonDTO = {
   // este mes" badge stay correct even when evaluating a past month (see the
   // month picker below), not just the current one.
   doneMonths: string[];
+  // Ex líder (formerLeaders.ts): el admin solo lo califica por este mes — al
+  // tocarlo se elige ese mes solo.
+  onlyMonth?: string;
 };
 
 type QuestionDTO = { id: string; text: string; score: number | null };
@@ -340,7 +343,10 @@ export function RecognitionPanel({
           <button
             key={p.id}
             type="button"
-            onClick={() => setSelectedId(p.id)}
+            onClick={() => {
+              if (p.onlyMonth) setSelectedMonth(p.onlyMonth);
+              setSelectedId(p.id);
+            }}
             className="bg-surface border border-rule rounded p-4 text-left hover:border-blue cursor-pointer"
           >
             <div className="flex items-center gap-2.5 mb-2">
