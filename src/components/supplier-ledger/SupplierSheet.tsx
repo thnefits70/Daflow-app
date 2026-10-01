@@ -686,8 +686,11 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
         </div>
       )}
 
-      {/* Barra de herramientas */}
-      <div className={`flex items-center gap-0.5 overflow-x-auto border-b border-neutral-200 bg-[#f9fbfd] px-2 py-1 text-[13px] ${readOnly ? "pointer-events-none opacity-40" : ""}`} onPointerDown={(e) => e.preventDefault()}>
+      {/* Barra de herramientas — confirmado 2026-09-30, pedido del usuario:
+          quien solo puede ver ya no la ve apagada, se quita para dejar más
+          espacio a los productos. */}
+      {!readOnly && (
+      <div className="flex items-center gap-0.5 overflow-x-auto border-b border-neutral-200 bg-[#f9fbfd] px-2 py-1 text-[13px]" onPointerDown={(e) => e.preventDefault()}>
         <button type="button" className={tb} title="Deshacer (Ctrl+Z)" onClick={undo}><Undo2 size={16} /></button>
         <button type="button" className={tb} title="Rehacer (Ctrl+Y)" onClick={redo}><Redo2 size={16} /></button>
         <span className="mx-1 h-5 w-px shrink-0 bg-neutral-300" />
@@ -727,6 +730,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
         <span className="mx-1 h-5 w-px shrink-0 bg-neutral-300" />
         <button type="button" className={tb} title="Quitar formato" onClick={() => setStyle(() => ({}))}><RemoveFormatting size={15} /></button>
       </div>
+      )}
 
       {/* Barra de fórmulas */}
       <div className="flex items-center border-b border-neutral-200 text-[13px]">
