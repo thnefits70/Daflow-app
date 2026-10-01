@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { formatMonthShort, returnRateStatus } from "@/components/dashboard/WeeklyTrendChart";
+import { RETURN_RATE_LAST_MANUAL_MONTH } from "@/lib/returnRateConstants";
 
 export type ReturnRateRecordDTO = { id: string; month: string; value: number };
 
@@ -24,9 +25,12 @@ function StatusBadge({ value }: { value: number }) {
   );
 }
 
-export function ReturnRatePanel({ records }: { records: ReturnRateRecordDTO[] }) {
+// lastManualOnly (pedido del usuario 2026-09-30): desde octubre 2026 la tasa
+// sale sola — el formulario abre en septiembre y no deja elegir un mes
+// automático.
+export function ReturnRatePanel({ records, lastManualOnly = false }: { records: ReturnRateRecordDTO[]; lastManualOnly?: boolean }) {
   const router = useRouter();
-  const [month, setMonth] = useState(currentMonth());
+  const [month, setMonth] = useState(lastManualOnly ? RETURN_RATE_LAST_MANUAL_MONTH : currentMonth());
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -73,13 +77,14 @@ export function ReturnRatePanel({ records }: { records: ReturnRateRecordDTO[] })
     <div>
       <div className="bg-surface border border-rule rounded-md p-4.5 mb-5">
         <label className="block mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
-          Agregar o actualizar un mes
+          {lastManualOnly ? "Último mes a mano: septiembre 2026 (cópialo de ATOM)" : "Agregar o actualizar un mes"}
         </label>
         <div className="flex items-end gap-2.5 flex-wrap">
           <div>
             <label className="block mb-1 text-[10px] text-steel">Mes</label>
             <input
               type="month"
+              max={lastManualOnly ? RETURN_RATE_LAST_MANUAL_MONTH : undefined}
               className="rounded border border-rule px-2.5 py-2 text-[13px] bg-surface"
               value={month}
               onChange={(e) => setMonth(e.target.value)}
@@ -112,7 +117,9 @@ export function ReturnRatePanel({ records }: { records: ReturnRateRecordDTO[] })
         </div>
         {err && <div className="text-red text-[12.5px] mt-2.5">{err}</div>}
         <div className="text-[11px] text-steel mt-2.5">
-          Si el mes ya tiene un valor, guardar uno nuevo lo reemplaza.
+          {lastManualOnly
+            ? "Cuando lo guardes, este formulario desaparece: desde octubre la tasa se calcula sola."
+            : "Si el mes ya tiene un valor, guardar uno nuevo lo reemplaza."}
         </div>
       </div>
 

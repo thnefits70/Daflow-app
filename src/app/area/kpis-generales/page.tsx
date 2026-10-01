@@ -8,16 +8,23 @@ import { WarrantyPanel } from "@/components/finance/WarrantyPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { canManageReturnRate, canManageWarranties } from "@/lib/guards";
 import { WARRANTY_LAST_MANUAL_MONTH } from "@/lib/warrantyKpiConstants";
+import { RETURN_RATE_LAST_MANUAL_MONTH } from "@/lib/returnRateConstants";
 
 export default async function AreaKpisGeneralesPage() {
   const session = await auth();
   if (!session) redirect("/login");
 
-  const [canReturnRate, canManageWarrantyKpi, lastManualWarrantyMonth] = await Promise.all([
+  const [canManageReturnRateKpi, canManageWarrantyKpi, lastManualReturnMonth, lastManualWarrantyMonth] = await Promise.all([
     canManageReturnRate(),
     canManageWarranties(),
+    prisma.returnRateRecord.findUnique({ where: { month: RETURN_RATE_LAST_MANUAL_MONTH }, select: { id: true } }),
     prisma.warrantyMonthTotal.findUnique({ where: { month: WARRANTY_LAST_MANUAL_MONTH }, select: { id: true } }),
   ]);
+  // Pedido del usuario 2026-09-30: igual que Garantías, la Tasa de Devolución
+  // se calcula sola desde octubre 2026 — solo aparece hasta que se copia de
+  // ATOM septiembre (el último mes a mano). El resultado automático lo ve el
+  // admin en /admin/kpis-generales y en el gráfico de Inicio.
+  const canReturnRate = canManageReturnRateKpi && !lastManualReturnMonth;
   // Pedido del usuario 2026-09-30: desde octubre 2026 el KPI de Garantías se
   // llena solo. La sección solo se muestra hasta que se carga a mano el
   // último mes manual (septiembre 2026); después desaparece de esta pantalla
@@ -48,9 +55,9 @@ export default async function AreaKpisGeneralesPage() {
             <PushTypeToggle type="tasa_devolucion" />
           </div>
           <TabGuide storageKey="kpis-generales-devolucion">
-            Cada mes registra aquí el % de devolución de esa área. Guardar un mes que ya existe reemplaza su valor anterior — no crea uno duplicado. El estado se calcula solo: menos de 20% es Saludable, 20-30% es Alerta, más de 30% es Extremadamente alta.
+            Solo falta copiar de ATOM el % de septiembre 2026. Cuando lo guardes, esta sección desaparece: desde octubre la tasa se calcula sola con los cortes y las devoluciones.
           </TabGuide>
-          <ReturnRatePanel records={returnRateRecords} />
+          <ReturnRatePanel records={returnRateRecords} lastManualOnly />
         </>
       )}
 

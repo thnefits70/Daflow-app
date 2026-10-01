@@ -1,18 +1,22 @@
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { ReturnRatePanel } from "@/components/finance/ReturnRatePanel";
+import { AutoReturnRatePanel } from "@/components/finance/AutoReturnRatePanel";
 import { WarrantyPanel } from "@/components/finance/WarrantyPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { WARRANTY_LAST_MANUAL_MONTH } from "@/lib/warrantyKpiConstants";
+import { RETURN_RATE_LAST_MANUAL_MONTH } from "@/lib/returnRateConstants";
 
-// Pedido del usuario 2026-09-30: acá solo queda lo que alguien carga a mano.
-// Ruptura de Stock y Productos ganadores se llenan solos con los cortes (sus
-// resultados se ven en los gráficos de Inicio), y el KPI de Garantías
-// también desde octubre 2026 — su sección solo aparece hasta que se carga
-// septiembre, el último mes a mano.
+// Pedido del usuario 2026-09-30: acá ya no se carga nada a mano desde
+// octubre 2026. Ruptura de Stock y Productos ganadores se llenan solos (sus
+// resultados están en los gráficos de Inicio). La Tasa de Devolución se
+// calcula sola (general, por marca y por producto); su formulario y el del
+// KPI de Garantías solo aparecen hasta que se carga septiembre, el último
+// mes a mano.
 export default async function AdminKpisGeneralesPage() {
-  const [returnRateRecords, lastManualWarrantyMonth] = await Promise.all([
+  const [returnRateRecords, lastManualReturnMonth, lastManualWarrantyMonth] = await Promise.all([
     prisma.returnRateRecord.findMany({ orderBy: { month: "desc" } }),
+    prisma.returnRateRecord.findUnique({ where: { month: RETURN_RATE_LAST_MANUAL_MONTH }, select: { id: true } }),
     prisma.warrantyMonthTotal.findUnique({ where: { month: WARRANTY_LAST_MANUAL_MONTH }, select: { id: true } }),
   ]);
   const showWarranties = !lastManualWarrantyMonth;
@@ -32,10 +36,8 @@ export default async function AdminKpisGeneralesPage() {
       <TopLine eyebrow="Finanzas" title="KPIs Generales" />
 
       <h3 className="text-[14px] font-semibold mb-3">Tasa de Devolución</h3>
-      <TabGuide storageKey="kpis-generales-devolucion">
-        Cada mes registra aquí el % de devolución de esa área. Guardar un mes que ya existe reemplaza su valor anterior — no crea uno duplicado. El estado se calcula solo: menos de 20% es Saludable, 20-30% es Alerta, más de 30% es Extremadamente alta.
-      </TabGuide>
-      <ReturnRatePanel records={returnRateRecords} />
+      {!lastManualReturnMonth && <ReturnRatePanel records={returnRateRecords} lastManualOnly />}
+      <AutoReturnRatePanel />
 
       {showWarranties && (
         <>

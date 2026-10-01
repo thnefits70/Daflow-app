@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { getAutoReturnRateMonths } from "@/lib/returnRate";
+import { isAutoReturnRateMonth } from "@/lib/returnRateConstants";
 import { getMonthDispatchSummary } from "@/lib/commissionTiers";
 import { prevMonthStr } from "@/lib/pendingTasks";
 import { computeAutoStockoutWeeks, isAutoStockoutWeek } from "@/lib/autoStockout";
@@ -396,14 +398,23 @@ export async function getOldestUnjustifiedFillRateWeek(deptId: string, excludeWe
 // Tasa de devolución general — un valor mensual (no semanal) que Nairoby o el
 // admin cargan a mano. No está atada a un departamento, así que el "deptName"
 // del gráfico es solo un rótulo genérico, no un área real.
+// Pedido del usuario 2026-09-30: desde octubre 2026 los meses salen solos
+// (ver returnRate.ts); lo cargado a mano solo cuenta hasta septiembre.
 export async function getReturnRateTrend(): Promise<WeeklyTrend> {
-  const records = await prisma.returnRateRecord.findMany({ orderBy: { month: "asc" } });
-  if (records.length === 0) return null;
+  const [records, autoMonths] = await Promise.all([
+    prisma.returnRateRecord.findMany({ orderBy: { month: "asc" } }),
+    getAutoReturnRateMonths(),
+  ]);
+  const points = [
+    ...records.filter((r) => !isAutoReturnRateMonth(r.month)).map((r) => ({ week: r.month, value: r.value })),
+    ...autoMonths
+      .filter((m) => m.pct !== null)
+      .reverse()
+      .map((m) => ({ week: m.month, value: m.pct! })),
+  ];
+  if (points.length === 0) return null;
 
-  return {
-    deptName: "General",
-    points: records.map((r) => ({ week: r.month, value: r.value })),
-  };
+  return { deptName: "General", points };
 }
 
 export type StockoutWeekPoint = { week: string; value: number; products: string[] };

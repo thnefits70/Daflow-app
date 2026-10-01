@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canManageReturnRate } from "@/lib/guards";
+import { isAutoReturnRateMonth } from "@/lib/returnRateConstants";
 
 export async function GET() {
   const canManage = await canManageReturnRate();
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
   const { month, value } = parsed.data;
+  if (isAutoReturnRateMonth(month)) return NextResponse.json({ error: "Desde octubre 2026 la tasa se calcula sola." }, { status: 409 });
 
   const record = await prisma.returnRateRecord.upsert({
     where: { month },

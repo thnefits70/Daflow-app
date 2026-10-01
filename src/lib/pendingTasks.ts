@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { isAutoWarrantyMonth } from "@/lib/warrantyKpiConstants";
+import { isAutoReturnRateMonth } from "@/lib/returnRateConstants";
 import { prisma } from "@/lib/prisma";
 import { isFixedHoliday, evaluationDeadline, adminConfirmDeadline, summaryFieldsFromScores } from "@/lib/recognition";
 import { addBusinessHours } from "@/lib/businessHours";
@@ -762,6 +763,8 @@ async function getExternalPaymentPendingItem(href: string): Promise<PendingItem 
 async function getReturnRatePendingItem(href: string): Promise<PendingItem | null> {
   const today = currentMonthStr();
   const prev = prevMonthStr(today);
+  // Desde octubre 2026 la tasa se calcula sola — no se recuerda.
+  if (isAutoReturnRateMonth(prev)) return null;
   if (fixedDayDeadlinePassed(today, 4) && !(await prisma.returnRateRecord.findUnique({ where: { month: prev } }))) {
     return {
       type: "tasa_devolucion",
