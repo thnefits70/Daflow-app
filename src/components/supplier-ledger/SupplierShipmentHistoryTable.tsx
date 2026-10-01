@@ -10,6 +10,9 @@ type HistoryRow = {
   quantity: number;
   requestedByName: string | null;
   photoUrl: string | null;
+  // Confirmado 2026-09-30: true = CHEN nunca apretó "Ya lo enviamos" pero
+  // nuestra bodega ya lo recibió; confirmedAt es la fecha de recepción.
+  receivedWithoutConfirm?: boolean;
 };
 
 type Props = {
@@ -68,7 +71,7 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
     setHasta(`${ym}-${String(lastDay).padStart(2, "0")}`);
   }
 
-  const filtered = rows.filter((r) => {
+  const filtered = [...rows].sort((a, b) => b.confirmedAt.localeCompare(a.confirmedAt)).filter((r) => {
     const key = dateKey(r.confirmedAt);
     if (desde && key < desde) return false;
     if (hasta && key > hasta) return false;
@@ -157,6 +160,7 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
                 <p className="mt-0.5 text-xs text-neutral-500">
                   {SHORT_DATETIME_FMT.format(new Date(r.confirmedAt))}
                   {r.requestedByName ? ` · ${r.requestedByName}` : ""}
+                  {r.receivedWithoutConfirm ? " · Recibido en bodega TBS" : ""}
                 </p>
               </div>
               {r.photoUrl && (
@@ -181,7 +185,10 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
             <tbody className="divide-y divide-neutral-100">
               {filtered.map((r) => (
                 <tr key={r.id}>
-                  <td className={`${td} text-neutral-600`}>{DATETIME_FMT.format(new Date(r.confirmedAt))}</td>
+                  <td className={`${td} text-neutral-600`}>
+                    {DATETIME_FMT.format(new Date(r.confirmedAt))}
+                    {r.receivedWithoutConfirm && <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Recibido en bodega TBS</span>}
+                  </td>
                   <td className="px-3 py-2">
                     {r.productImageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element

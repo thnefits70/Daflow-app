@@ -1,3 +1,4 @@
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sendPushToOwner } from "@/lib/webPush";
 import { SUPPLIER_PUBLIC_LINK_START } from "@/lib/supplierDebt";
@@ -18,17 +19,61 @@ export function isSupplierShippingPushOwnerId(ownerId: string) {
   return ownerId.startsWith("supplier-shipping:");
 }
 
-// Mismo filtro exacto que "Falta enviar" en envios/[token]/page.tsx — el
-// número del aviso tiene que coincidir con lo que ven al abrir el enlace.
+// Filtro único de "Falta enviar" — lo usan los dos enlaces de CHEN y el
+// número de los avisos push, para que siempre coincidan.
+// Confirmado 2026-09-30, pedido explícito del usuario: si el equipo de
+// Inventario ya recibió el pedido (hay recepción o reporte urgente), deja de
+// estar "por enviar" aunque CHEN nunca haya apretado "Ya lo enviamos" — llegó,
+// así que obviamente lo enviaron. No desaparece sin rastro (el problema del
+// 2026-09-17): pasa al historial marcado "Recibido en bodega TBS"
+// (supplierShipmentHistoryWhere).
+export function supplierPendingShipmentWhere(supplierId: string) {
+  return {
+    supplierId,
+    status: { notIn: ["PENDING_APPROVAL", "REJECTED", "RECEIVED_PENDING_REVIEW", "RECEIVED"] },
+    supplierShippingConfirmedAt: null,
+    receipt: { is: null },
+    urgentReports: { none: {} },
+    requestedAt: { gte: SUPPLIER_PUBLIC_LINK_START },
+  } satisfies Prisma.PurchaseRequestWhereInput;
+}
+
+// Historial: lo que CHEN confirmó que envió + lo que nuestra bodega ya
+// recibió sin que ellos lo confirmaran (ver arriba).
+export function supplierShipmentHistoryWhere(supplierId: string) {
+  return {
+    supplierId,
+    requestedAt: { gte: SUPPLIER_PUBLIC_LINK_START },
+    OR: [
+      { supplierShippingConfirmedAt: { not: null } },
+      {
+        status: { notIn: ["PENDING_APPROVAL", "REJECTED"] },
+        OR: [{ receipt: { isNot: null } }, { urgentReports: { some: {} } }, { status: { in: ["RECEIVED_PENDING_REVIEW", "RECEIVED"] } }],
+      },
+    ],
+  } satisfies Prisma.PurchaseRequestWhereInput;
+}
+
+// Fecha y etiqueta de cada fila del historial: la confirmación de CHEN si
+// la hubo; si no, cuándo la recibió nuestra bodega.
+export const supplierShipmentHistoryInclude = {
+  receipt: { select: { confirmedAt: true } },
+  urgentReports: { select: { reportedAt: true }, orderBy: { reportedAt: "asc" }, take: 1 },
+} as const;
+
+export function supplierShipmentHistoryRow(r: {
+  supplierShippingConfirmedAt: Date | null;
+  requestedAt: Date;
+  receipt: { confirmedAt: Date } | null;
+  urgentReports: { reportedAt: Date }[];
+}) {
+  if (r.supplierShippingConfirmedAt) return { confirmedAt: r.supplierShippingConfirmedAt.toISOString(), receivedWithoutConfirm: false };
+  const receivedAt = r.receipt?.confirmedAt ?? r.urgentReports[0]?.reportedAt ?? r.requestedAt;
+  return { confirmedAt: receivedAt.toISOString(), receivedWithoutConfirm: true };
+}
+
 export async function countSupplierPendingShipments(supplierId: string) {
-  return prisma.purchaseRequest.count({
-    where: {
-      supplierId,
-      status: { notIn: ["PENDING_APPROVAL", "REJECTED"] },
-      supplierShippingConfirmedAt: null,
-      requestedAt: { gte: SUPPLIER_PUBLIC_LINK_START },
-    },
-  });
+  return prisma.purchaseRequest.count({ where: supplierPendingShipmentWhere(supplierId) });
 }
 
 function pendingLabel(n: number) {

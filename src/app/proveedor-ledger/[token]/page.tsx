@@ -17,6 +17,7 @@ import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/Suppl
 import { SupplierDisputedItemsTable } from "@/components/supplier-ledger/SupplierDisputedItemsTable";
 import { SupplierReplacementHistoryTable } from "@/components/supplier-ledger/SupplierReplacementHistoryTable";
 import { firstName } from "@/lib/actorName";
+import { supplierPendingShipmentWhere, supplierShipmentHistoryWhere, supplierShipmentHistoryInclude, supplierShipmentHistoryRow } from "@/lib/supplierShippingPush";
 
 // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): página pública,
 // SIN auth() — el proveedor de crédito (hoy solo CHEN) accede solo con este
@@ -129,12 +130,9 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     // exige que Bryan ya haya aprobado (status distinto de
     // PENDING_APPROVAL/REJECTED) y que ellos no lo hayan confirmado todavía.
     prisma.purchaseRequest.findMany({
-      where: {
-        supplierId: supplier.id,
-        status: { notIn: ["PENDING_APPROVAL", "REJECTED"] },
-        supplierShippingConfirmedAt: null,
-        requestedAt: { gte: since },
-      },
+      // Corregido 2026-09-30: además, si Inventario ya lo recibió, sale de
+      // acá y pasa al historial (ver supplierPendingShipmentWhere).
+      where: supplierPendingShipmentWhere(supplier.id),
       include: shipmentInclude,
       orderBy: { requestedAt: "asc" },
     }),
@@ -151,9 +149,9 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
     // supplierShippingConfirmedAt, sin importar en qué status esté el
     // pedido para nosotros.
     prisma.purchaseRequest.findMany({
-      where: { supplierId: supplier.id, supplierShippingConfirmedAt: { not: null }, requestedAt: { gte: since } },
-      include: shipmentInclude,
-      orderBy: { supplierShippingConfirmedAt: "desc" },
+      where: supplierShipmentHistoryWhere(supplier.id),
+      include: { ...shipmentInclude, ...supplierShipmentHistoryInclude },
+      orderBy: { requestedAt: "desc" },
     }),
     getSupplierReplacementHistory(supplier.id),
   ]);
@@ -221,7 +219,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
           <SupplierShipmentHistoryTable
             rows={confirmedShipments.map((r) => ({
               id: r.id,
-              confirmedAt: (r.supplierShippingConfirmedAt ?? r.requestedAt).toISOString(),
+              ...supplierShipmentHistoryRow(r),
               productName: r.catalogItem.name,
               productImageUrl: r.catalogItem.photos.at(-1) ?? null,
               quantity: r.quantity,

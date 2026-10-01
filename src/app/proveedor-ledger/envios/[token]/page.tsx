@@ -8,6 +8,7 @@ import { SupplierPendingShipmentsList } from "@/components/supplier-ledger/Suppl
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
 import { SupplierShippingPushToggle } from "@/components/supplier-ledger/SupplierShippingPushToggle";
 import { firstName } from "@/lib/actorName";
+import { supplierPendingShipmentWhere, supplierShipmentHistoryWhere, supplierShipmentHistoryInclude, supplierShipmentHistoryRow } from "@/lib/supplierShippingPush";
 
 // Confirmado 2026-09-17, pedido explícito del usuario: segundo enlace,
 // llave completamente aparte de /proveedor-ledger/[token] (el del saldo) —
@@ -66,12 +67,9 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
     // exige que Bryan ya haya aprobado (status distinto de
     // PENDING_APPROVAL/REJECTED) y que ellos no lo hayan confirmado todavía.
     prisma.purchaseRequest.findMany({
-      where: {
-        supplierId: supplier.id,
-        status: { notIn: ["PENDING_APPROVAL", "REJECTED"] },
-        supplierShippingConfirmedAt: null,
-        requestedAt: { gte: since },
-      },
+      // Corregido 2026-09-30: además, si Inventario ya lo recibió, sale de
+      // acá y pasa al historial (ver supplierPendingShipmentWhere).
+      where: supplierPendingShipmentWhere(supplier.id),
       include,
       orderBy: { requestedAt: "asc" },
     }),
@@ -85,9 +83,9 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
     // mercadería (proceso nuestro, no de ellos) el pedido desaparecía de
     // acá aunque Chen sí lo hubiera confirmado.
     prisma.purchaseRequest.findMany({
-      where: { supplierId: supplier.id, supplierShippingConfirmedAt: { not: null }, requestedAt: { gte: since } },
-      include,
-      orderBy: { supplierShippingConfirmedAt: "desc" },
+      where: supplierShipmentHistoryWhere(supplier.id),
+      include: { ...include, ...supplierShipmentHistoryInclude },
+      orderBy: { requestedAt: "desc" },
     }),
     // Confirmado 2026-09-24, pedido explícito del usuario: el equipo de
     // despacho también ve lo que llegó mal (con el motivo reportado), para
@@ -156,7 +154,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
           <SupplierShipmentHistoryTable
             rows={confirmedShipments.map((r) => ({
               id: r.id,
-              confirmedAt: (r.supplierShippingConfirmedAt ?? r.requestedAt).toISOString(),
+              ...supplierShipmentHistoryRow(r),
               productName: r.catalogItem.name,
               productImageUrl: r.catalogItem.photos.at(-1) ?? null,
               quantity: r.quantity,
