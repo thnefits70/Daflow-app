@@ -16,13 +16,16 @@ type Row = {
   status: Status;
   openPurchase: { code: string | null; quantity: number } | null;
   escalated: boolean;
+  supplierName: string | null;
+  urgentDays: number;
+  suggestedQty: number | null;
 };
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
 type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean };
 
 const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = [
-  { status: "urgente", title: "🔴 Urgente", hint: "Se acaba en 7 días o menos", tone: "text-red" },
-  { status: "pronto", title: "🟡 Pronto", hint: "Se vende, pero alcanza para más de 7 días", tone: "text-amber" },
+  { status: "urgente", title: "🔴 Urgente", hint: "Se acaba antes de que el proveedor pueda traerlo: 15 días o menos si es de CHEN, 7 días o menos con los demás", tone: "text-red" },
+  { status: "pronto", title: "🟡 Pronto", hint: "Se vende, pero todavía alcanza para más tiempo del que tarda el proveedor", tone: "text-amber" },
   { status: "en_compra", title: "🛒 Ya en compra", hint: "Ya hay una compra abierta — no hace falta pedirlo otra vez", tone: "text-teal" },
   { status: "no_sale", title: "⚪ No sale", hint: "Tiene poco stock, pero no se vendió nada. Revisar antes de comprar", tone: "text-steel" },
 ];
@@ -73,6 +76,18 @@ function RowLine({ r, canReportStockout }: { r: Row; canReportStockout: boolean 
           ) : null}
           {r.openPurchase ? ` · compra ${r.openPurchase.code ?? "abierta"} de ${r.openPurchase.quantity} u.` : ""}
         </div>
+        {/* Confirmado 2026-10-01 por Daniel: cuánto comprar y con qué proveedor se midió. */}
+        {(r.suggestedQty || r.supplierName) && (
+          <div className="text-[12px] text-steel">
+            {r.suggestedQty ? (
+              <>
+                Comprar <b className="text-teal">~{r.suggestedQty} u.</b> (para {r.urgentDays} días mientras llega + 1 mes)
+              </>
+            ) : null}
+            {r.suggestedQty && r.supplierName ? " · " : ""}
+            {r.supplierName ? `Última compra: ${r.supplierName}` : ""}
+          </div>
+        )}
         {r.escalated && <div className="text-[11.5px] text-red font-semibold mt-0.5">Urgente hace 3 días o más sin comprar — ya se avisó a Daniel</div>}
       </div>
       {canReportStockout && r.status !== "en_compra" && (

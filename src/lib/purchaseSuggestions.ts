@@ -13,7 +13,15 @@ import { getReadyToBuyPendingProposalIds } from "@/lib/marketProduct";
 // guardar nada en la base.
 export const HOT_MAX = 30;
 export const COLD_MAX = 60;
+// Confirmado 2026-10-01 por Daniel: "urgente" = lo que tarda el proveedor en
+// traerlo + días de seguridad. 15 días con CHEN (proveedor a crédito,
+// importa) y 7 con los demás. El proveedor es el de la última compra del
+// producto; sin compra en DAFLOW, 7.
 export const URGENT_DAYS = 7;
+export const URGENT_DAYS_CREDIT_SUPPLIER = 15;
+// Confirmado 2026-10-01 por Daniel: sugerir cuánto comprar — lo que se vende
+// mientras llega + un mes más después de que llegue, menos lo que hay.
+export const COVER_DAYS_AFTER_ARRIVAL = 30;
 export const ESCALATE_DAYS = 3;
 const WINDOW_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -36,6 +44,11 @@ export type SuggestionRow = {
   openPurchase: { code: string | null; quantity: number } | null;
   // Urgente desde hace 3 días o más sin que nadie lo compre (ya se avisó a Daniel).
   escalated: boolean;
+  // Proveedor de la última compra y con cuántos días de anticipación se vuelve urgente.
+  supplierName: string | null;
+  urgentDays: number;
+  // Cuánto conviene comprar (null si no se vende o ya está en compra).
+  suggestedQty: number | null;
 };
 
 export type NewProductRow = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
@@ -116,10 +129,19 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   // Solo productos que alguna vez estuvieron en INVESTOCK. Los que esperan
   // su ID de Dropi siguen el camino de productos nuevos (Análisis de Mercado).
   const candidateIds = [...balances.entries()].filter(([, bal]) => bal <= COLD_MAX).map(([id]) => id);
-  const items = await prisma.purchaseCatalogItem.findMany({
-    where: { id: { in: candidateIds }, awaitingDropiId: false },
-    select: { id: true, name: true, photos: true, justCode: true },
-  });
+  const [items, lastPurchases] = await Promise.all([
+    prisma.purchaseCatalogItem.findMany({
+      where: { id: { in: candidateIds }, awaitingDropiId: false },
+      select: { id: true, name: true, photos: true, justCode: true },
+    }),
+    prisma.purchaseRequest.findMany({
+      where: { catalogItemId: { in: candidateIds }, status: { not: "REJECTED" } },
+      distinct: ["catalogItemId"],
+      orderBy: [{ catalogItemId: "asc" }, { createdAt: "desc" }],
+      select: { catalogItemId: true, supplier: { select: { name: true, paymentMode: true } } },
+    }),
+  ]);
+  const supplierByItem = new Map(lastPurchases.map((p) => [p.catalogItemId, p.supplier]));
 
   const hot: SuggestionRow[] = [];
   const cold: SuggestionRow[] = [];
@@ -129,10 +151,15 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
     const perDay = units / windowDays;
     const daysLeft = perDay > 0 ? Math.max(0, stock) / perDay : null;
     const openPurchase = openByItem.get(item.id) ?? null;
-    const status: SuggestionStatus = openPurchase ? "en_compra" : perDay === 0 ? "no_sale" : daysLeft! <= URGENT_DAYS ? "urgente" : "pronto";
+    const supplier = supplierByItem.get(item.id) ?? null;
+    const urgentDays = supplier?.paymentMode === "CREDITO" ? URGENT_DAYS_CREDIT_SUPPLIER : URGENT_DAYS;
+    const status: SuggestionStatus = openPurchase ? "en_compra" : perDay === 0 ? "no_sale" : daysLeft! <= urgentDays ? "urgente" : "pronto";
     // Ya era urgente hace 3 días (con el stock de ese día y la venta de hoy).
     const before = balancesBefore.get(item.id);
-    const escalated = status === "urgente" && before !== undefined && Math.max(0, before) / perDay <= URGENT_DAYS;
+    const escalated = status === "urgente" && before !== undefined && Math.max(0, before) / perDay <= urgentDays;
+    // Si con lo que hay ya alcanza para todo ese tiempo, todavía no se sugiere nada.
+    const needed = Math.ceil(perDay * (urgentDays + COVER_DAYS_AFTER_ARRIVAL) - Math.max(0, stock));
+    const suggestedQty = (status === "urgente" || status === "pronto") && needed > 0 ? needed : null;
     const row: SuggestionRow = {
       catalogItemId: item.id,
       name: item.name,
@@ -145,6 +172,9 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       status,
       openPurchase,
       escalated,
+      supplierName: supplier?.name ?? null,
+      urgentDays,
+      suggestedQty,
     };
     (stock <= HOT_MAX ? hot : cold).push(row);
   }
@@ -233,7 +263,10 @@ export function buildSuggestionNotice(s: PurchaseSuggestions, audience: Suggesti
     soon.length ? `${soon.length} pronto` : null,
     news ? plural(news, "nuevo", "nuevos") : null,
   ].filter(Boolean);
-  const top = urgent.slice(0, 3).map((r) => `${r.name} (${daysText(r.daysLeft)})`).join("; ");
+  const top = urgent
+    .slice(0, 3)
+    .map((r) => `${r.name} (${daysText(r.daysLeft)}${r.suggestedQty ? `, comprar ~${r.suggestedQty}` : ""})`)
+    .join("; ");
   return {
     audience,
     type: audience === "hot" ? "compras_calientes" : "compras_frias",
