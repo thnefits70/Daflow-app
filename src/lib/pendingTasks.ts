@@ -443,6 +443,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   reclamos_proveedor_atrasados: "Reclamos al proveedor trabados o pasados por alto",
   danados_doble_registro: "Producto dañado registrado dos veces (devolución + deterioro)",
   ventas_externas_agrupar: "Ventas Externas — asignar quién agrupa",
+  ventas_externas_embalar: "Ventas Externas — asignar quién embala y entrega",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_pendientes_aprobacion: "Solicitudes de compra por aprobar",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
@@ -2645,6 +2646,30 @@ async function getExternalSaleDispatchPendingItem(href: string): Promise<Pending
   };
 }
 
+// Pedido del usuario 2026-10-01 (tras fusionar Fulfillment en INVESTOCK):
+// mismo hueco que agrupar — ventas ya agrupadas esperando que el Líder de
+// Inventarios asigne quién embala y entrega (mismo filtro que
+// /api/external-sales/pending-pack). Antes solo llegaba el aviso puntual
+// notifyFulfilmentLeadExternalSalePrepReady.
+async function getExternalSalePackPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.externalSale.findMany({
+    where: { prepReadyAt: { not: null }, packAssignedToId: null, deletedAt: null },
+    select: { code: true, prepReadyAt: true },
+  });
+  if (rows.length === 0) return null;
+
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.prepReadyAt! < cutoff);
+  return {
+    type: "ventas_externas_embalar",
+    icon: "📦",
+    label: "Ventas Externas — asignar quién embala y entrega",
+    meta: `${rows.length === 1 ? rows[0].code : `${rows.length} ventas`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
 // Confirmado 2026-09-02: pedido explícito del usuario — el backfill
 // automático de nichos (runNichoAutoBackfill en nichoAi.ts) corre solo todos
 // los días mientras el gasto del mes no llegue al techo; en cuanto lo
@@ -3449,6 +3474,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const doubleRegItem = await getDamagedDoubleRegistrationPendingItem("/area/reingreso-mercaderia?tab=danos").catch(() => null);
     if (doubleRegItem) items.push(doubleRegItem);
     if (externalSaleDispatchItem) items.push(externalSaleDispatchItem);
+    const externalSalePackItem = await getExternalSalePackPendingItem("/area/workspace?tab=ventas-externas&etab=embalaje");
+    if (externalSalePackItem) items.push(externalSalePackItem);
     const excessKardexItem = await getPurchaseExcessPendingItem("kardex", "/area/workspace?tab=compras&ptab=inventario");
     if (excessKardexItem) items.push(excessKardexItem);
     const catalogMissingItem = await getCatalogMissingReportPendingItem("/area/reingreso-mercaderia?tab=productos");
@@ -3605,7 +3632,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
+      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "ventas_externas_embalar", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
