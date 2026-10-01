@@ -27,7 +27,7 @@ const schema = z.object({
         labelUnitsByCarrier: carrierCounts.optional(),
         variants: z.array(variantSchema).max(50),
         decision: z.discriminatedUnion("kind", [
-          z.object({ kind: z.literal("product"), catalogItemId: z.string().min(1) }),
+          z.object({ kind: z.literal("product"), catalogItemId: z.string().min(1), perUnit: z.number().int().min(1).max(50).optional() }),
           z.object({ kind: z.literal("combo"), comboCode: z.string().trim().min(1).max(30).optional() }),
           z.object({ kind: z.literal("ignore"), discontinued: z.boolean().optional() }),
         ]),

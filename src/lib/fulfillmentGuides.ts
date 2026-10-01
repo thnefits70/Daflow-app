@@ -221,7 +221,9 @@ async function getOrCreateBackfillLot(day: string, userId: string | null): Promi
 // el mismo código; para uno de Rocket, el combo de Dropi al que Yair lo vinculó.
 // ignore + discontinued: producto dado de baja que igual se vendió en Dropi
 // (pedido del usuario 2026-09-30) — no sale, no toca stock, se avisa.
-type Decision = { kind: "product"; catalogItemId: string } | { kind: "combo"; comboCode?: string } | { kind: "ignore"; discontinued?: boolean };
+// perUnit: unidades del ID madre por cada pedido de este ID de Dropi (pack
+// "X3" = 3) — solo para un ID alterno; sin él es 1.
+type Decision = { kind: "product"; catalogItemId: string; perUnit?: number } | { kind: "combo"; comboCode?: string } | { kind: "ignore"; discontinued?: boolean };
 
 export type GuidesApplyRow = {
   code: string;
@@ -419,14 +421,23 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
 
   // Qué hay que "aprender" de esta subida.
   const assignCode: { itemId: string; code: string }[] = [];
-  const aliasCombos: { code: string; label: string; itemId: string }[] = [];
+  const aliasCombos: { code: string; label: string; itemId: string; quantity: number }[] = [];
 
   for (const row of productRows) {
     const item = itemById.get((row.decision as { catalogItemId: string }).catalogItemId);
     if (!item) return { ok: false, error: `No se encontró el producto elegido para el código ${row.code}.` };
-    if (item.justCode === row.code) continue;
+    const perUnit = (row.decision as { perUnit?: number }).perUnit ?? 1;
+    if (item.justCode === row.code) {
+      if (perUnit > 1) return { ok: false, error: `${row.code} es el ID madre de "${item.name}" — no puede valer ${perUnit} unidades.` };
+      continue;
+    }
     const owner = ownerByCode.get(row.code);
     if (owner && owner.id !== item.id) return { ok: false, error: `El código ${row.code} ya pertenece a "${owner.name}" — elige ese producto.` };
+    if (!item.justCode && perUnit > 1) {
+      // Un pack no puede volverse el ID madre: primero el producto suelto
+      // necesita su propio ID de Dropi.
+      return { ok: false, error: `${row.code} es un pack de ${perUnit}: primero ponle su ID de Dropi a "${item.name}" en Stock Actual o Base de datos de productos.` };
+    }
     if (!item.justCode) {
       // El producto no tenía ID de Dropi: se le pone este — es lo que la
       // app "aprende" para no volver a preguntar.
@@ -435,8 +446,9 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
       // Confirmado por el usuario 2026-09-23: Dropi publica el mismo
       // producto con varios IDs ("de promoción"), pero en INVESTOCK existe
       // uno solo — se guarda como ID alterno (combo 1:1), nunca se pisa el
-      // ID madre.
-      aliasCombos.push({ code: row.code, label: row.name, itemId: item.id });
+      // ID madre. Si es un pack ("X3", confirmado al subir), la receta
+      // lleva esa cantidad (pedido del usuario 2026-10-01).
+      aliasCombos.push({ code: row.code, label: row.name, itemId: item.id, quantity: perUnit });
     }
   }
   if (new Set(assignCode.map((a) => a.itemId)).size !== assignCode.length) {
@@ -458,7 +470,11 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
   const expand = (code: string): { catalogItemId: string; perUnit: number; fromCombo: string | null }[] | null => {
     const d = decisionByCode.get(code);
     if (!d || d.kind === "ignore") return null;
-    if (d.kind === "product") return [{ catalogItemId: d.catalogItemId, perUnit: 1, fromCombo: null }];
+    if (d.kind === "product") {
+      // Un pack recién vinculado ya sale como el combo que se va a crear.
+      const perUnit = d.perUnit ?? 1;
+      return [{ catalogItemId: d.catalogItemId, perUnit, fromCombo: perUnit > 1 ? code : null }];
+    }
     const comboCode = d.comboCode ?? code;
     return comboByCode.get(comboCode)!.components.map((c) => ({ catalogItemId: c.catalogItemId, perUnit: c.quantity, fromCombo: comboCode }));
   };
@@ -590,7 +606,12 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
       }
       for (const a of aliasCombos) {
         await tx.dropiCombo.create({
-          data: { code: a.code, label: `${a.label} (ID alterno)`, createdById: userId, components: { create: [{ catalogItemId: a.itemId, quantity: 1 }] } },
+          data: {
+            code: a.code,
+            label: a.quantity > 1 ? `${a.label} (pack de ${a.quantity})` : `${a.label} (ID alterno)`,
+            createdById: userId,
+            components: { create: [{ catalogItemId: a.itemId, quantity: a.quantity }] },
+          },
         });
       }
       for (const r of rocketRows) {

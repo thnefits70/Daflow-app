@@ -10,6 +10,7 @@ import { ExpandableName } from "@/components/ui/ExpandableName";
 import { RegisterComboForm } from "./RegisterComboForm";
 import { carrierLabel, sortCarriers } from "@/lib/carriers";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { packCountFromName } from "@/lib/packCount";
 
 type ItemLite = MatchCatalogItem;
 type Resolution =
@@ -46,7 +47,8 @@ type ComboPart = { catalogItem: ItemLite; quantity: number };
 // el combo al que Yair lo vinculó).
 // ignore + discontinued: "Producto dado de baja / no lo tenemos" (pedido del
 // usuario 2026-09-30) — no sale, y Heidy lo da de baja en Dropi.
-type Decision = { kind: "product"; item: ItemLite } | { kind: "combo"; comboCode: string; components: ComboPart[] } | { kind: "ignore"; discontinued?: boolean } | null;
+// perUnit: respuesta al aviso de pack ("X3") de un ID alterno — ver needsPackAnswer.
+type Decision = { kind: "product"; item: ItemLite; perUnit?: number } | { kind: "combo"; comboCode: string; components: ComboPart[] } | { kind: "ignore"; discontinued?: boolean } | null;
 
 // Confirmado 2026-09-25: los códigos de Rocket vienen como "R14599" (ver
 // dropiGuidesPdf) — se muestran como "Rocket 14599", nunca como ID de Dropi.
@@ -288,7 +290,19 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
 
   const rows = data?.rows ?? [];
   const warranty = data?.warranty ?? [];
-  const pending = rows.filter((r) => !decisions[r.code]);
+  // Pedido del usuario 2026-10-01: un ID nuevo que se va a guardar como ID
+  // alterno pero cuyo nombre dice pack ("X3") no se guarda hasta que se
+  // responda si son 3 o 1 (pasó con 146702: salió 1 y eran 3).
+  const aliasPackCount = (r: Row): number | null => {
+    const d = decisions[r.code];
+    if (d?.kind !== "product" || isRocket(r.code) || !d.item.justCode || d.item.justCode === r.code) return null;
+    return packCountFromName(r.name);
+  };
+  const needsPackAnswer = (r: Row) => {
+    const d = decisions[r.code];
+    return aliasPackCount(r) !== null && d?.kind === "product" && d.perUnit === undefined;
+  };
+  const pending = rows.filter((r) => !decisions[r.code] || needsPackAnswer(r));
   const ready = rows.filter((r) => decisions[r.code] && decisions[r.code]!.kind !== "ignore");
   const isDiscontinuedDecision = (code: string) => { const d = decisions[code]; return d?.kind === "ignore" && !!d.discontinued; };
   const ignored = rows.filter((r) => decisions[r.code]?.kind === "ignore" && !isDiscontinuedDecision(r.code));
@@ -301,7 +315,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     const r = rowByCode.get(code);
     const d = decisions[code];
     if (!r || !d || d.kind === "ignore") return [];
-    if (d.kind === "product") return [{ item: d.item, perUnit: 1 }];
+    if (d.kind === "product") return [{ item: d.item, perUnit: d.perUnit ?? 1 }];
     return d.components.map((c) => ({ item: c.catalogItem, perUnit: c.quantity }));
   }
 
@@ -342,7 +356,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             labelUnits: r.labelUnits,
             labelUnitsByCarrier: r.labelUnitsByCarrier,
             variants: r.variants,
-            decision: d.kind === "product" ? { kind: "product", catalogItemId: d.item.id } : d.kind === "combo" ? { kind: "combo", comboCode: d.comboCode } : { kind: "ignore", discontinued: d.discontinued },
+            decision: d.kind === "product" ? { kind: "product", catalogItemId: d.item.id, perUnit: d.perUnit } : d.kind === "combo" ? { kind: "combo", comboCode: d.comboCode } : { kind: "ignore", discontinued: d.discontinued },
           };
         }),
         warranty: warranty
@@ -554,7 +568,11 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                   )
                 : d.item.justCode !== r.code && (
                     <span className="text-[10.5px]" style={{ color: "var(--color-gold)" }}>
-                      {d.item.justCode ? `(${r.code} quedará como ID alterno de ${d.item.justCode}, el principal en INVESTOCK)` : `(se le pondrá el ID ${r.code})`}
+                      {!d.item.justCode
+                        ? `(se le pondrá el ID ${r.code})`
+                        : (d.perUnit ?? 1) > 1
+                          ? `(${r.code} quedará como pack de ${d.perUnit} × ${d.item.justCode}: cada pedido saca ${d.perUnit})`
+                          : `(${r.code} quedará como ID alterno de ${d.item.justCode}, el principal en INVESTOCK)`}
                     </span>
                   )}
               {(res.kind !== "product" || d.item.id !== res.catalogItem.id) && (
@@ -562,6 +580,29 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                   Cambiar
                 </button>
               )}
+            </div>
+          )}
+
+          {d?.kind === "product" && aliasPackCount(r) !== null && (
+            <div className="mt-1.5 rounded border border-gold/40 bg-gold/10 p-2 text-[11.5px]">
+              <div className="flex items-start gap-1">
+                <AlertTriangle size={12} className="mt-0.5 shrink-0" style={{ color: "var(--color-gold)" }} />
+                <span>
+                  El nombre en Dropi parece un <b>pack de {aliasPackCount(r)}</b>. ¿Cada pedido de {r.code} lleva {aliasPackCount(r)} unidades de {d.item.name}?
+                </span>
+              </div>
+              <div className="mt-1.5 flex items-center gap-1.5 flex-wrap pl-4">
+                {[aliasPackCount(r)!, 1].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    className={`rounded-full border px-2.5 py-0.5 cursor-pointer ${d.perUnit === n ? "bg-teal text-white border-teal" : "border-rule bg-surface hover:border-teal"}`}
+                    onClick={() => setDecisions((p) => ({ ...p, [r.code]: { ...d, perUnit: n } }))}
+                  >
+                    {n > 1 ? `Sí, son ${n} (pack)` : "No, es 1 (solo otro ID)"}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -574,6 +615,15 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
               <PhotoThumb url={res.components[0].catalogItem.photos[0]} />
               <CatalogCode code={res.components[0].catalogItem.justCode} />
               <span>{res.components[0].catalogItem.name}</span>
+              {packCountFromName(r.name) !== null && (
+                // Ya guardado 1:1 antes de este aviso (ej. 146702): solo se avisa.
+                <div className="w-full text-[11px] text-red flex items-start gap-1">
+                  <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                  <span>
+                    El nombre dice pack de {packCountFromName(r.name)}, pero este ID está guardado como 1 unidad. Si son {packCountFromName(r.name)}, corrige la receta del combo en el corte antes de enviarlo.
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
