@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload, CheckCircle2, Lock, Bell, Trash2, Landmark, Send, ChevronDown, ChevronUp, Pencil, Copy, ClipboardCheck } from "lucide-react";
+import { Upload, CheckCircle2, Lock, Bell, Trash2, Landmark, Send, ChevronDown, ChevronUp, Pencil, Copy, ClipboardCheck, Search, X } from "lucide-react";
 import { Combobox } from "@/components/ui/Combobox";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
@@ -266,6 +266,7 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
   const [showPaid, setShowPaid] = useState(false);
+  const [paidSearch, setPaidSearch] = useState("");
   const [showAllTemplates, setShowAllTemplates] = useState(false);
   const [deactivatingTemplateId, setDeactivatingTemplateId] = useState<string | null>(null);
 
@@ -866,7 +867,42 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     new Date(b.paidAt ?? b.createdAt).getTime() - new Date(a.paidAt ?? a.createdAt).getTime();
   const pending = filtered.filter((r) => r.status === "PENDING_PAYMENT").sort(byOldestFirst);
   const settled = filtered.filter((r) => r.status !== "PENDING_PAYMENT").sort(byMostRecentPaidFirst);
-  const visibleList = showPaid ? [...pending, ...settled] : pending;
+  // Pedido 2026-10-01: búsqueda rápida por palabra clave dentro de
+  // pagados/confirmados — busca en motivo, periodo, beneficiario, cuenta,
+  // números de comprobante/contrato, notas, monto y quién lo pidió/pagó.
+  // Sin tildes ni mayúsculas, y cada palabra debe aparecer (en cualquier orden).
+  const normalize = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const searchTerms = normalize(paidSearch).split(/\s+/).filter(Boolean);
+  const settledShown = searchTerms.length
+    ? settled.filter((r) => {
+        const haystack = normalize(
+          [
+            r.motivo,
+            r.period,
+            r.payee?.name,
+            r.bankAccount?.bankName,
+            r.bankAccount?.bankAccountHolder,
+            r.bankAccount?.bankAccountNumber,
+            r.bankAccount?.holderIdNumber,
+            r.template?.numeroContrato,
+            r.iessReceiptNumber,
+            r.linkedGroupLabel,
+            r.paymentNote,
+            r.paymentOverrideNote,
+            r.declarationFileName,
+            r.paymentProofName,
+            r.createdBy?.name,
+            r.paidBy?.name,
+            r.confirmedBy?.name,
+            r.monto.toFixed(2),
+            ...r.proofs.flatMap((pr) => [pr.receiptNumber, pr.contractAccountNumber, pr.fileName]),
+          ]
+            .filter(Boolean)
+            .join(" ")
+        );
+        return searchTerms.every((t) => haystack.includes(t));
+      })
+    : settled;
 
   return (
     <div>
@@ -1247,7 +1283,47 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
       )}
 
       <div className="flex flex-col gap-2.5">
-        {visibleList.map((r, idx) => {
+        {[pending, showPaid ? settledShown : []].map((list, listIdx) => (
+          <Fragment key={listIdx}>
+            {listIdx === 1 && showPaid && settled.length > 0 && (
+              <div className="flex flex-col gap-2 mt-2 mb-0.5">
+                <button
+                  type="button"
+                  onClick={() => setShowPaid(false)}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel cursor-pointer hover:text-teal self-start"
+                >
+                  <ChevronUp size={13} /> Pagados y confirmados ({settled.length}) — ocultar
+                </button>
+                <div className="relative max-w-[420px]">
+                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-steel pointer-events-none" />
+                  <input
+                    type="text"
+                    className="w-full rounded border border-rule bg-cloud pl-8 pr-8 py-2 text-[12.5px]"
+                    placeholder="Buscar pago: motivo, beneficiario, Nº, monto..."
+                    value={paidSearch}
+                    onChange={(e) => setPaidSearch(e.target.value)}
+                  />
+                  {paidSearch && (
+                    <button
+                      type="button"
+                      title="Limpiar búsqueda"
+                      onClick={() => setPaidSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-steel hover:text-ink cursor-pointer"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+                {searchTerms.length > 0 && (
+                  <div className="text-[11.5px] text-steel">
+                    {settledShown.length === 0
+                      ? "Ningún pago coincide con esa búsqueda."
+                      : `${settledShown.length} de ${settled.length} pagos coinciden.`}
+                  </div>
+                )}
+              </div>
+            )}
+        {list.map((r) => {
           const canDelete = !r.declarationFileUrl && !r.paymentProofUrl;
           const overdue = r.status === "PENDING_PAYMENT" && Date.now() - new Date(r.createdAt).getTime() > 24 * 60 * 60 * 1000;
           // Confirmado 2026-08-31: cuando la suma de comprobantes todavía no
@@ -1259,15 +1335,6 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
           const proofInProgress = r.paymentAiMatch === false && !r.paymentOverrideNote && proofSum > 0;
           return (
             <Fragment key={r.id}>
-              {showPaid && settled.length > 0 && idx === pending.length && (
-                <button
-                  type="button"
-                  onClick={() => setShowPaid(false)}
-                  className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-steel mt-2 mb-0.5 cursor-pointer hover:text-teal"
-                >
-                  <ChevronUp size={13} /> Pagados y confirmados ({settled.length}) — ocultar
-                </button>
-              )}
             <div className="bg-surface border border-rule rounded-md p-4">
               <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
                 <div>
@@ -1896,6 +1963,8 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
             </Fragment>
           );
         })}
+          </Fragment>
+        ))}
       </div>
       {settled.length > 0 && !showPaid && (
         <button

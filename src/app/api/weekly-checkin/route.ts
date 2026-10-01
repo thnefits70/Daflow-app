@@ -20,7 +20,11 @@ import {
   type ClosePreviousReportInput,
 } from "@/lib/weeklyCheckin";
 
-const messageSchema = z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1) });
+// content sin .min(1): si una respuesta de Mary llegó vacía, el widget la
+// tenía en su historial y el siguiente envío rebotaba con "Too small:
+// expected string to have >=1 characters" (reportado 2026-10-01, Nairoby).
+// Los vacíos se descartan abajo en vez de bloquear la conversación.
+const messageSchema = z.object({ role: z.enum(["user", "assistant"]), content: z.string() });
 const bodySchema = z.object({ messages: z.array(messageSchema).min(1).max(40) });
 
 const submitReportSchema = z.object({
@@ -81,10 +85,10 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return new Response(parsed.error.issues[0]?.message ?? "Datos inválidos.", { status: 400 });
   }
-  const { messages } = parsed.data;
+  const messages = parsed.data.messages.filter((m) => m.content.trim());
 
   const lastMessage = messages[messages.length - 1];
-  if (lastMessage.role !== "user") {
+  if (!lastMessage || lastMessage.role !== "user") {
     return new Response("El último mensaje debe ser del usuario.", { status: 400 });
   }
 
@@ -231,6 +235,13 @@ export async function POST(req: NextRequest) {
         controller.enqueue(encoder.encode(closing));
       } else if (anyToolFailed && !anyToolSucceeded && !acc.trim()) {
         const closing = "No pude registrar eso completo — ¿puedes contarme de nuevo qué pasó?";
+        acc += closing;
+        controller.enqueue(encoder.encode(closing));
+      } else if (!acc.trim()) {
+        // El modelo terminó sin texto ni herramientas — nunca dejar la
+        // burbuja en blanco.
+        console.warn("weekly-checkin: respuesta vacía, stop_reason =", finalMessage?.stop_reason);
+        const closing = "Perdón, no alcancé a responder. ¿Me lo puedes enviar de nuevo?";
         acc += closing;
         controller.enqueue(encoder.encode(closing));
       }

@@ -122,7 +122,8 @@ export function WeeklyCheckinPanel({ embedded = false }: { embedded?: boolean } 
     const text = input.trim();
     if (!text || loading) return;
     setError(null);
-    const nextMessages: ChatMessage[] = [...messages, { role: "user", content: text }];
+    // Burbujas vacías (respuesta de Mary que llegó en blanco) no se reenvían.
+    const nextMessages: ChatMessage[] = [...messages.filter((m) => m.content.trim()), { role: "user", content: text }];
     setMessages([...nextMessages, { role: "assistant", content: "" }]);
     setInput("");
     setLoading(true);
@@ -159,6 +160,7 @@ export function WeeklyCheckinPanel({ embedded = false }: { embedded?: boolean } 
       setError(e instanceof Error ? e.message : "Error al contactar al asistente.");
       setMessages((prev) => prev.slice(0, -1));
     } finally {
+      setMessages((prev) => prev.filter((m) => m.content.trim()));
       setLoading(false);
     }
   }
