@@ -659,6 +659,18 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
             </svg>
           </div>
           {status === "offline" && <span className="text-[12px] text-red-600">Sin conexión — reintentando…</span>}
+          <button
+            type="button"
+            className="ml-auto flex h-6 w-6 items-center justify-center rounded text-neutral-500 hover:bg-neutral-100"
+            title="Salir"
+            aria-label="Salir"
+            onClick={async () => {
+              await fetch(`/api/proveedor-ledger/${token}/hoja/logout`, { method: "POST" }).catch(() => {});
+              window.location.reload();
+            }}
+          >
+            <LogOut size={14} />
+          </button>
         </div>
       ) : (
       <div className="flex items-center gap-3 border-b border-neutral-200 px-3 py-2 sm:px-4">
