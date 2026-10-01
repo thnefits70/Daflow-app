@@ -2441,6 +2441,13 @@ model SupplierStockoutReport {
   resolvedBy     User?                             @relation("SupplierStockoutReportResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
   resolvedAt     DateTime?
 
+  // Pedido de Jariel 2026-10-01: en "Qué comprar" ya no se le recuerda todos
+  // los días. Cada 15 días le pregunta si el proveedor ya lo tiene:
+  // "Todavía no le llega" guarda supplierCheckedAt (vuelve a preguntar en 15
+  // días); "Ya lo tiene" guarda supplierBackAt (vuelve a la lista normal).
+  supplierCheckedAt DateTime?
+  supplierBackAt    DateTime?
+
   @@index([resolvedAt])
   @@index([catalogItemId])
 }

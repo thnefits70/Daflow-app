@@ -23,13 +23,22 @@ export const URGENT_DAYS_CREDIT_SUPPLIER = 15;
 // mientras llega + un mes más después de que llegue, menos lo que hay.
 export const COVER_DAYS_AFTER_ARRIVAL = 30;
 export const ESCALATE_DAYS = 3;
+// Pedido de Jariel 2026-10-01 (vía el usuario): lo que él marcó con
+// "Ningún proveedor lo tiene" ya no le sale todos los días (le estresaba).
+// Cada 15 días se le pregunta si el proveedor ya lo tiene: "Todavía no le
+// llega" lo esconde otros 15 días, "Ya lo tiene" lo devuelve a la lista
+// normal. Tampoco se escala a Daniel: no hay nada que comprar. Una compra
+// nueva del producto también lo devuelve a lo normal.
+export const SUPPLIER_RECHECK_DAYS = 15;
 const WINDOW_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Solicitud de compra todavía en camino — definido en purchases.ts.
 export { OPEN_PURCHASE_STATUSES };
 
-export type SuggestionStatus = "urgente" | "pronto" | "no_sale" | "en_compra";
+// preguntar_proveedor = toca preguntar si el proveedor ya lo tiene;
+// sin_proveedor = marcado sin proveedor, esperando los 15 días.
+export type SuggestionStatus = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "no_sale" | "en_compra";
 
 export type SuggestionRow = {
   catalogItemId: string;
@@ -49,6 +58,8 @@ export type SuggestionRow = {
   urgentDays: number;
   // Cuánto conviene comprar (null si no se vende o ya está en compra).
   suggestedQty: number | null;
+  // Marca "Ningún proveedor lo tiene" vigente: cuándo se marcó y cuándo se vuelve a preguntar.
+  supplierOut: { reportId: string; since: string; askAt: string } | null;
 };
 
 export type NewProductRow = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
@@ -60,7 +71,7 @@ export type PurchaseSuggestions = {
   newProducts: NewProductRow[];
 };
 
-const STATUS_ORDER: Record<SuggestionStatus, number> = { urgente: 0, pronto: 1, en_compra: 2, no_sale: 3 };
+const STATUS_ORDER: Record<SuggestionStatus, number> = { preguntar_proveedor: 0, urgente: 1, pronto: 2, sin_proveedor: 3, en_compra: 4, no_sale: 5 };
 
 function sortRows(rows: SuggestionRow[]): SuggestionRow[] {
   return rows.sort((a, b) => {
@@ -129,7 +140,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   // Solo productos que alguna vez estuvieron en INVESTOCK. Los que esperan
   // su ID de Dropi siguen el camino de productos nuevos (Análisis de Mercado).
   const candidateIds = [...balances.entries()].filter(([, bal]) => bal <= COLD_MAX).map(([id]) => id);
-  const [items, lastPurchases] = await Promise.all([
+  const [items, lastPurchases, stockoutReports] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({
       where: { id: { in: candidateIds }, awaitingDropiId: false },
       select: { id: true, name: true, photos: true, justCode: true },
@@ -138,10 +149,25 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       where: { catalogItemId: { in: candidateIds }, status: { not: "REJECTED" } },
       distinct: ["catalogItemId"],
       orderBy: [{ catalogItemId: "asc" }, { createdAt: "desc" }],
-      select: { catalogItemId: true, supplier: { select: { name: true, paymentMode: true } } },
+      select: { catalogItemId: true, createdAt: true, supplier: { select: { name: true, paymentMode: true } } },
+    }),
+    prisma.supplierStockoutReport.findMany({
+      where: { catalogItemId: { in: candidateIds } },
+      distinct: ["catalogItemId"],
+      orderBy: [{ catalogItemId: "asc" }, { reportedAt: "desc" }],
+      select: { id: true, catalogItemId: true, reportedAt: true, supplierCheckedAt: true, supplierBackAt: true },
     }),
   ]);
   const supplierByItem = new Map(lastPurchases.map((p) => [p.catalogItemId, p.supplier]));
+  const lastPurchaseAt = new Map(lastPurchases.map((p) => [p.catalogItemId, p.createdAt]));
+  // La marca sigue vigente mientras no diga "Ya lo tiene" ni haya una compra posterior.
+  const supplierOutByItem = new Map<string, { reportId: string; since: Date; askAt: Date }>();
+  for (const r of stockoutReports) {
+    const bought = lastPurchaseAt.get(r.catalogItemId);
+    if (r.supplierBackAt || (bought && bought > r.reportedAt)) continue;
+    const askAt = new Date((r.supplierCheckedAt ?? r.reportedAt).getTime() + SUPPLIER_RECHECK_DAYS * DAY_MS);
+    supplierOutByItem.set(r.catalogItemId, { reportId: r.id, since: r.reportedAt, askAt });
+  }
 
   const hot: SuggestionRow[] = [];
   const cold: SuggestionRow[] = [];
@@ -153,13 +179,24 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
     const openPurchase = openByItem.get(item.id) ?? null;
     const supplier = supplierByItem.get(item.id) ?? null;
     const urgentDays = supplier?.paymentMode === "CREDITO" ? URGENT_DAYS_CREDIT_SUPPLIER : URGENT_DAYS;
-    const status: SuggestionStatus = openPurchase ? "en_compra" : perDay === 0 ? "no_sale" : daysLeft! <= urgentDays ? "urgente" : "pronto";
+    const supplierOut = supplierOutByItem.get(item.id) ?? null;
+    const status: SuggestionStatus = openPurchase
+      ? "en_compra"
+      : perDay === 0
+        ? "no_sale"
+        : supplierOut
+          ? supplierOut.askAt <= now
+            ? "preguntar_proveedor"
+            : "sin_proveedor"
+          : daysLeft! <= urgentDays
+            ? "urgente"
+            : "pronto";
     // Ya era urgente hace 3 días (con el stock de ese día y la venta de hoy).
     const before = balancesBefore.get(item.id);
     const escalated = status === "urgente" && before !== undefined && Math.max(0, before) / perDay <= urgentDays;
     // Si con lo que hay ya alcanza para todo ese tiempo, todavía no se sugiere nada.
     const needed = Math.ceil(perDay * (urgentDays + COVER_DAYS_AFTER_ARRIVAL) - Math.max(0, stock));
-    const suggestedQty = (status === "urgente" || status === "pronto") && needed > 0 ? needed : null;
+    const suggestedQty = status !== "en_compra" && status !== "no_sale" && needed > 0 ? needed : null;
     const row: SuggestionRow = {
       catalogItemId: item.id,
       name: item.name,
@@ -175,6 +212,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       supplierName: supplier?.name ?? null,
       urgentDays,
       suggestedQty,
+      supplierOut: supplierOut ? { reportId: supplierOut.reportId, since: supplierOut.since.toISOString(), askAt: supplierOut.askAt.toISOString() } : null,
     };
     (stock <= HOT_MAX ? hot : cold).push(row);
   }
@@ -257,8 +295,11 @@ export function buildSuggestionNotice(s: PurchaseSuggestions, audience: Suggesti
   const urgent = rows.filter((r) => r.status === "urgente");
   const soon = rows.filter((r) => r.status === "pronto");
   const news = audience === "hot" ? s.newProducts.length : 0;
-  if (urgent.length === 0 && soon.length === 0 && news === 0) return null;
+  // Los "sin proveedor" solo cuentan el día que toca preguntar (cada 15 días).
+  const ask = rows.filter((r) => r.status === "preguntar_proveedor").length;
+  if (urgent.length === 0 && soon.length === 0 && news === 0 && ask === 0) return null;
   const parts = [
+    ask ? `${ask} por preguntar al proveedor` : null,
     urgent.length ? plural(urgent.length, "urgente", "urgentes") : null,
     soon.length ? `${soon.length} pronto` : null,
     news ? plural(news, "nuevo", "nuevos") : null,
@@ -267,13 +308,18 @@ export function buildSuggestionNotice(s: PurchaseSuggestions, audience: Suggesti
     .slice(0, 3)
     .map((r) => `${r.name} (${daysText(r.daysLeft)}${r.suggestedQty ? `, comprar ~${r.suggestedQty}` : ""})`)
     .join("; ");
+  const askNames = rows
+    .filter((r) => r.status === "preguntar_proveedor")
+    .slice(0, 3)
+    .map((r) => r.name)
+    .join("; ");
   return {
     audience,
     type: audience === "hot" ? "compras_calientes" : "compras_frias",
     icon: audience === "hot" ? "🔥" : "❄️",
     label: audience === "hot" ? "Compras calientes" : "Compras frías",
     meta: parts.join(" · "),
-    body: `${parts.join(" · ")}${top ? `. Primero: ${top}` : ""}.`,
+    body: `${parts.join(" · ")}${top ? `. Primero: ${top}` : ""}${askNames ? `. ¿El proveedor ya tiene: ${askNames}?` : "."}`,
     overdue: urgent.some((r) => r.escalated),
   };
 }

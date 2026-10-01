@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
-type Status = "urgente" | "pronto" | "no_sale" | "en_compra";
+type Status = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "no_sale" | "en_compra";
 type Row = {
   catalogItemId: string;
   name: string;
@@ -19,13 +19,26 @@ type Row = {
   supplierName: string | null;
   urgentDays: number;
   suggestedQty: number | null;
+  supplierOut: { reportId: string; since: string; askAt: string } | null;
 };
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
 type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean };
 
 const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = [
+  {
+    status: "preguntar_proveedor",
+    title: "🔔 ¿El proveedor ya lo tiene?",
+    hint: "Hace 15 días marcaste que ningún proveedor lo tenía. Pregúntale y responde aquí",
+    tone: "text-amber",
+  },
   { status: "urgente", title: "🔴 Urgente", hint: "Se acaba antes de que el proveedor pueda traerlo: 15 días o menos si es de CHEN, 7 días o menos con los demás", tone: "text-red" },
   { status: "pronto", title: "🟡 Pronto", hint: "Se vende, pero todavía alcanza para más tiempo del que tarda el proveedor", tone: "text-amber" },
+  {
+    status: "sin_proveedor",
+    title: "🚫 Ningún proveedor lo tiene",
+    hint: "No te llegan avisos de estos productos. Cada 15 días se te pregunta si el proveedor ya lo tiene",
+    tone: "text-steel",
+  },
   { status: "en_compra", title: "🛒 Ya en compra", hint: "Ya hay una compra abierta — no hace falta pedirlo otra vez", tone: "text-teal" },
   { status: "no_sale", title: "⚪ No sale", hint: "Tiene poco stock, pero no se vendió nada. Revisar antes de comprar", tone: "text-steel" },
 ];
@@ -49,8 +62,33 @@ function stockoutUrl(catalogItemId: string) {
   return `${window.location.pathname}?tab=analisis-mercado&ptab=sinstock&reportItem=${catalogItemId}`;
 }
 
-function RowLine({ r, canReportStockout }: { r: Row; canReportStockout: boolean }) {
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" });
+}
+
+function RowLine({ r, canReportStockout, onChanged }: { r: Row; canReportStockout: boolean; onChanged: () => void }) {
   const days = fmtDaysLeft(r.daysLeft);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Pedido de Jariel 2026-10-01: un clic para responder si el proveedor ya lo tiene.
+  function answer(a: "not_yet" | "has_it") {
+    if (!r.supplierOut) return;
+    setBusy(true);
+    setError(null);
+    fetch(`/api/supplier-stockout-reports/${r.supplierOut.reportId}/supplier-check`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ answer: a }),
+    })
+      .then((res) => res.json().then((j) => ({ ok: res.ok, j })))
+      .then(({ ok, j }) => {
+        if (!ok) setError(j.error ?? "No se pudo guardar.");
+        else onChanged();
+      })
+      .catch(() => setError("No se pudo guardar."))
+      .finally(() => setBusy(false));
+  }
   return (
     <div className="flex items-center gap-3 px-3 py-2.5 border-b border-rule last:border-b-0">
       {r.photo ? (
@@ -89,8 +127,35 @@ function RowLine({ r, canReportStockout }: { r: Row; canReportStockout: boolean 
           </div>
         )}
         {r.escalated && <div className="text-[11.5px] text-red font-semibold mt-0.5">Urgente hace 3 días o más sin comprar — ya se avisó a Daniel</div>}
+        {r.supplierOut && (
+          <div className="text-[11.5px] text-steel mt-0.5">
+            Sin proveedor desde el {fmtDate(r.supplierOut.since)}
+            {r.status === "sin_proveedor" ? ` · se te vuelve a preguntar el ${fmtDate(r.supplierOut.askAt)}` : ""}
+          </div>
+        )}
+        {error && <div className="text-[11.5px] text-red mt-0.5">{error}</div>}
       </div>
-      {canReportStockout && r.status !== "en_compra" && (
+      {canReportStockout && r.status === "preguntar_proveedor" && r.supplierOut && (
+        <div className="shrink-0 flex flex-col sm:flex-row gap-1.5">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => answer("not_yet")}
+            className="rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold text-steel hover:text-ink hover:border-teal disabled:opacity-50"
+          >
+            Todavía no le llega
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => answer("has_it")}
+            className="rounded border border-teal px-2.5 py-1.5 text-[11.5px] font-semibold text-teal hover:bg-teal/10 disabled:opacity-50"
+          >
+            Ya lo tiene
+          </button>
+        </div>
+      )}
+      {canReportStockout && r.status !== "en_compra" && !r.supplierOut && (
         <a
           href={stockoutUrl(r.catalogItemId)}
           className="shrink-0 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold text-steel hover:text-ink hover:border-teal"
@@ -102,7 +167,7 @@ function RowLine({ r, canReportStockout }: { r: Row; canReportStockout: boolean 
   );
 }
 
-function List({ title, sub, rows, newProducts, open, canReportStockout }: { title: string; sub: string; rows: Row[]; newProducts?: NewProduct[]; open: boolean; canReportStockout: boolean }) {
+function List({ title, sub, rows, newProducts, open, canReportStockout, onChanged }: { title: string; sub: string; rows: Row[]; newProducts?: NewProduct[]; open: boolean; canReportStockout: boolean; onChanged: () => void }) {
   const [showNoSale, setShowNoSale] = useState(false);
   return (
     <details open={open} className="bg-surface border border-rule rounded-md mb-4">
@@ -130,7 +195,7 @@ function List({ title, sub, rows, newProducts, open, canReportStockout }: { titl
               {!collapsed && (
                 <div className="bg-surface2 border border-rule rounded-md">
                   {list.map((r) => (
-                    <RowLine key={r.catalogItemId} r={r} canReportStockout={canReportStockout} />
+                    <RowLine key={r.catalogItemId} r={r} canReportStockout={canReportStockout} onChanged={onChanged} />
                   ))}
                 </div>
               )}
@@ -191,8 +256,8 @@ export function PurchaseSuggestionsPanel() {
   const onlyCold = data.audiences.includes("cold") && !data.audiences.includes("hot");
   const onlyHot = data.audiences.includes("hot") && !data.audiences.includes("cold");
   const hotFirst = !onlyCold;
-  const hot = <List key="hot" title="🔥 Compras calientes" sub="30 unidades o menos · Jariel" rows={data.hot} newProducts={data.newProducts} open={!onlyCold} canReportStockout={data.canReportStockout} />;
-  const cold = <List key="cold" title="❄️ Compras frías" sub="31 a 60 unidades · Nairoby" rows={data.cold} open={!onlyHot} canReportStockout={data.canReportStockout} />;
+  const hot = <List key="hot" title="🔥 Compras calientes" sub="30 unidades o menos · Jariel" rows={data.hot} newProducts={data.newProducts} open={!onlyCold} canReportStockout={data.canReportStockout} onChanged={load} />;
+  const cold = <List key="cold" title="❄️ Compras frías" sub="31 a 60 unidades · Nairoby" rows={data.cold} open={!onlyHot} canReportStockout={data.canReportStockout} onChanged={load} />;
 
   return (
     <div>
