@@ -1,5 +1,4 @@
 import { AlertTriangle } from "lucide-react";
-import { formatMonthShort } from "@/components/dashboard/WeeklyTrendChart";
 import {
   getAutoReturnRateMonths,
   getRecentReturnRate,
@@ -11,6 +10,14 @@ import {
 } from "@/lib/returnRate";
 
 const PRODUCT_LIMIT = 25;
+
+// Componente de servidor: no puede usar formatMonthShort (vive en un archivo
+// "use client") — mismo formato "Oct 26".
+const MONTH_ABBR = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+function monthLabel(month: string) {
+  const [y, m] = month.split("-");
+  return `${MONTH_ABBR[Number(m) - 1]} ${y.slice(2)}`;
+}
 
 // perProduct: con pocas salidas el % engaña (ej. salió 1, regresaron 51 de
 // ventas anteriores = "5100%") — se muestra "pocas salidas" en su lugar.
@@ -97,7 +104,7 @@ export async function AutoReturnRatePanel() {
       {months.map((m) => (
         <details key={m.month} className="bg-surface border border-rule rounded-md p-4" open={m === months[0]}>
           <summary className="cursor-pointer flex items-center gap-3 flex-wrap">
-            <span className="font-semibold text-[13.5px]">{formatMonthShort(m.month)}</span>
+            <span className="font-semibold text-[13.5px]">{monthLabel(m.month)}</span>
             <span className="font-mono text-[13px]">{m.pct === null ? "—" : `${m.pct}%`}</span>
             <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 border ${m.closed ? "text-teal border-teal/40" : "text-gold border-gold/40"}`}>
               {m.closed ? "Cerrado" : `Preliminar · cierra ${RETURN_CLOSE_DAYS} días después de fin de mes`}
