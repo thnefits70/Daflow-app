@@ -5,7 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { canAssignExternalSalePack, dbUserId } from "@/lib/guards";
 import { notifyColaboradorPackAssigned, notifyGrouperPackAssigned, saleItemsSummary } from "@/lib/externalSales";
 
-const schema = z.object({ colaboradorId: z.string().min(1) });
+// `reassign` (2026-10-01, pedido de Marcos): el líder cambia a quién le tocó
+// embalar/entregar mientras todavía no se entregó — no entrega él mismo.
+const schema = z.object({ colaboradorId: z.string().min(1), reassign: z.boolean().optional() });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -18,11 +20,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const sale = await prisma.externalSale.findUnique({
     where: { id },
-    select: { prepReadyAt: true, packAssignedToId: true, dispatchAssignedToId: true, code: true, items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } } },
+    select: { prepReadyAt: true, packAssignedToId: true, deliveredAt: true, dispatchAssignedToId: true, code: true, items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } } },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (!sale.prepReadyAt) return NextResponse.json({ error: "Inventario todavía no la deja lista." }, { status: 409 });
-  if (sale.packAssignedToId) return NextResponse.json({ error: "Ya fue asignada." }, { status: 409 });
+  const reassign = !!parsed.data.reassign;
+  if (sale.packAssignedToId && !reassign) return NextResponse.json({ error: "Ya fue asignada." }, { status: 409 });
+  if (reassign) {
+    if (!sale.packAssignedToId) return NextResponse.json({ error: "Todavía no tiene a nadie asignado." }, { status: 409 });
+    if (sale.deliveredAt) return NextResponse.json({ error: "Ya se entregó, no se puede reasignar." }, { status: 409 });
+    if (sale.packAssignedToId === parsed.data.colaboradorId) return NextResponse.json({ error: "Ya está asignada a esa persona." }, { status: 409 });
+  }
 
   // Desde 2026-10-01 (Fulfillment fusionado en INVESTOCK): alguien del equipo
   // de INV que no sea el líder — mismo criterio que pending-pack.
@@ -30,7 +38,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!colaborador) return NextResponse.json({ error: "Colaborador no encontrado en INVESTOCK." }, { status: 404 });
 
   const updated = await prisma.externalSale.update({
-    where: { id },
+    where: { id, deliveredAt: null },
     data: { packAssignedToId: colaborador.id, packAssignedAt: new Date(), packAssignedById: dbUserId(session.user.id) },
   });
 

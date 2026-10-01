@@ -23,12 +23,16 @@ export type SaleTimelineDTO = {
   deliveredAt: string | null;
   deliveredBy: { name: string } | null;
   nairobyClosedAt: string | null;
+  // Opcional porque no todas las vistas lo traen; sin él se comporta como antes.
+  facturaSolicitada?: "SI" | "NO" | "PENDIENTE";
 };
 
-type Step = { label: string; at: string | null; by: { name: string } | null };
+// `skipped`: el paso no aplica a esta venta (factura NO) — no se marca como
+// "En curso" ni hace parecer que la venta está frenada ahí.
+type Step = { label: string; at: string | null; by: { name: string } | null; skipped?: boolean };
 
-function step(label: string, at: string | null, by: { name: string } | null): Step {
-  return { label, at, by };
+function step(label: string, at: string | null, by: { name: string } | null, skipped = false): Step {
+  return { label, at, by, skipped };
 }
 
 export function saleSteps(s: SaleTimelineDTO): Step[] {
@@ -36,7 +40,7 @@ export function saleSteps(s: SaleTimelineDTO): Step[] {
     step("Declarada", s.createdAt, s.advisor),
     step("Aprobada", s.reviewedAt, s.reviewedBy),
     step("Pago confirmado", s.paymentConfirmedAt, s.paymentConfirmedBy),
-    step("Facturada", s.invoiceUploadedAt, s.invoiceUploadedBy),
+    step("Facturada", s.invoiceUploadedAt, s.invoiceUploadedBy, s.facturaSolicitada === "NO"),
     step("Agrupada", s.prepReadyAt, s.prepReadyBy),
     step("Embalaje asignado", s.packAssignedAt, s.packAssignedTo),
     step("Entregada", s.deliveredAt, s.deliveredBy),
@@ -71,11 +75,15 @@ export function saleColumn(s: SaleTimelineDTO): string {
 // así que un paso saltado simplemente queda gris, sin marcarse como actual.
 export function TimelineSteps({ steps }: { steps: Step[] }) {
   const lastDoneIndex = steps.reduce((acc, st, i) => (st.at ? i : acc), -1);
+  // Primer paso pendiente después del último cumplido, saltando los que no
+  // aplican (factura NO) — así "En curso" cae en el paso que de verdad falta.
+  let currentIndex = lastDoneIndex + 1;
+  while (currentIndex < steps.length && steps[currentIndex].skipped) currentIndex++;
   return (
     <div className="flex flex-col">
       {steps.map((st, i) => {
         const done = !!st.at;
-        const isCurrent = !done && i === lastDoneIndex + 1;
+        const isCurrent = !done && i === currentIndex;
         const isLast = i === steps.length - 1;
         return (
           <div key={st.label} className="flex gap-2.5">
@@ -98,6 +106,8 @@ export function TimelineSteps({ steps }: { steps: Step[] }) {
                 </div>
               ) : isCurrent ? (
                 <div className="text-[10.5px] text-gold">En curso</div>
+              ) : st.skipped ? (
+                <div className="text-[10.5px] text-steel">No requiere</div>
               ) : null}
             </div>
           </div>

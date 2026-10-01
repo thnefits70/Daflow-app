@@ -111,7 +111,7 @@ export function ExternalSalesPanel({
       )}
       {tab === "agrupar" && canAssignPrep && (
         <>
-          <TabGuide storageKey="externalsales-agrupar">Asigna cada venta lista a un colaborador de tu equipo para que agrupe los productos según la guía.</TabGuide>
+          <TabGuide storageKey="externalsales-agrupar">Asigna cada venta lista a un colaborador de tu equipo para que agrupe los productos según la guía. Si alguien no avanza, abajo podés reasignarla a otra persona.</TabGuide>
           <ExternalSaleDispatchInbox />
         </>
       )}
@@ -123,7 +123,7 @@ export function ExternalSalesPanel({
       )}
       {tab === "embalaje" && canAssignPack && (
         <>
-          <TabGuide storageKey="externalsales-embalaje">Inventario ya dejó listos los productos — asigna a alguien de tu equipo para embalar y entregar. Podés imprimir la guía de salida.</TabGuide>
+          <TabGuide storageKey="externalsales-embalaje">Inventario ya dejó listos los productos — asigna a alguien de tu equipo para embalar y entregar. Podés imprimir la guía de salida. Si alguien no avanza, abajo podés reasignarla a otra persona.</TabGuide>
           <ExternalSalePackAssignInbox />
         </>
       )}

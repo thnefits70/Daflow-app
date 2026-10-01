@@ -27,6 +27,7 @@ type SaleDTO = {
   freightCost: number | null;
   client: { name: string; idType: "RUC" | "CEDULA" | null; idNumber: string | null; phone: string; email: string | null; city: string | null; country: string | null } | null;
   isContraEntrega: boolean;
+  facturaSolicitada: "SI" | "NO" | "PENDIENTE";
   reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
   rejectionReason: string | null;
   paymentProofUrl: string | null;
