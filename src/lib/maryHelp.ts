@@ -43,6 +43,7 @@ import {
 } from "@/lib/guards";
 import { getSupplierExchangeGestorCount } from "@/lib/pendingTasks";
 import { getEmployeeSidebarFlags, type EmployeeSidebarFlags } from "@/lib/employeeSidebarFlags";
+import { canViewSuddenDemand } from "@/lib/suddenDemand";
 import { WORKSPACE_TAB_DEFS, isWorkspaceTabVisible, type WorkspaceTabKey } from "@/lib/workspaceTabVisibility";
 
 // Mary como guía de DAFLOW — pedido del usuario 2026-10-01 (Nairoby no
@@ -228,9 +229,9 @@ const WORKSPACE_TAB_HELP: Record<WorkspaceTabKey, string> = {
   "stock-actual":
     "Stock actual: saldo de INVESTOCK (el Kardex de DAFLOW) de cada producto, en tiempo real. Se puede buscar y ordenar (nombre, stock, puesto en bodega, precios). Un saldo en rojo es stock negativo para revisar. Desde aquí también se hacen ajustes por conteo físico y etiquetas de percha (según permisos).",
   reingreso:
-    "Reingreso de Mercadería: lo que vuelve a bodega de pedidos no entregados. Sub-pestañas: Capturar (registrar productos, unidades buenas y dañadas, y enviar el lote), Revisión (el líder de Inventario aprueba los lotes), Control de Daños (cierre semanal del sábado y disposición final), Base de datos de productos (catálogo maestro: corregir códigos y nombres, juntar repetidos, armar combos, lotes de caducidad, etiquetas de percha) e Historial.",
+    "Reingreso de Mercadería: lo que vuelve a bodega de pedidos no entregados. Sub-pestañas: Capturar (registrar productos, unidades buenas y dañadas, y enviar el lote), Revisión (el líder de Inventario aprueba los lotes), Control de Daños (cierre semanal del sábado y disposición final), Base de datos de productos (catálogo maestro: corregir códigos y nombres, juntar repetidos, armar combos, lotes de caducidad, etiquetas de percha) e Historial. Los avisos de Reingreso a veces abren esta misma pantalla en una página aparte: es lo mismo.",
   egresos:
-    "Registro de Egresos: todo lo que sale de bodega. Sub-pestañas posibles: Solicitud Fulfillment (subir los PDF de guías de Dropi y el Excel de Rocket de cada corte y 'Enviar a Inventario'), Deterioro (reportar productos dañados en bodega con foto), Seguimiento de deterioro, Mercadería devuelta al proveedor (paquetes de devolución, cambio o crédito), Guías canceladas (Reportar, Gestionar lotes, Salida de Fulfillment, Cargar productos, Historial) e Historial.",
+    "Registro de Egresos: todo lo que sale de bodega. Sub-pestañas posibles: Solicitud Fulfillment (subir los PDF de guías de Dropi y el Excel de Rocket de cada corte y 'Enviar a Inventario'), Deterioro (reportar productos dañados en bodega con foto), Seguimiento de deterioro, Mercadería devuelta al proveedor (Inventario arma el paquete de devolución; quien pidió la compra original resuelve ahí cada producto: cambio, crédito o rechazo — esta parte aparece aunque no tengas otro permiso del módulo, si te toca resolver algo), Guías canceladas (Reportar, Gestionar lotes, Salida de Fulfillment, Cargar productos, Historial) e Historial.",
   "ventas-externas":
     "Ventas Externas: ventas hechas fuera de Dropi/Rocket. Sub-pestañas según tu rol: Declarar (producto, cantidad, precio y a quién se entrega; si te la rechazan, corriges y reenvías desde la misma lista), Revisión, Pagos (confirmar que llegó el dinero), Facturación, Agrupar, Preparar, Embalaje, Mis entregas, Devoluciones, Cierre, Auditoría e Historial.",
   inventoriokpis: "KPIs de Inventario (DIO, GMROI, etc.): se calculan solos con lo que hay en Control de Inventario. El ícono de información de cada tarjeta explica cómo se calcula y qué significa el color.",
@@ -270,6 +271,14 @@ const SIDEBAR_HELP: SidebarHelpItem[] = [
   { label: "Colaborador Destacado", help: "Colaborador del mes: calificaciones y reconocimientos.", show: () => true },
 ];
 
+// Pantallas que no están en el menú: se llega desde un aviso o desde el
+// botón "Ir →" de Pendientes en Inicio. Cada una con su propio permiso.
+export type MaryExtraPageKey = "productos-que-despiertan";
+const EXTRA_PAGE_HELP: Record<MaryExtraPageKey, string> = {
+  "productos-que-despiertan":
+    "Productos que despiertan (no está en el menú): productos que de repente empezaron a venderse mucho más de lo normal. Muestra lo vendido desde que despertó, el stock, los días que le quedan, si ya hay una compra abierta y la nota de Jariel (quien compra). Se abre desde el pendiente '📈 Producto que despierta' en Inicio (botón 'Ir →') o desde la notificación.",
+};
+
 // El mapa que se le pasa a Mary en cada mensaje: solo lo que ESTA persona
 // tiene. Lo que no está acá, Mary no lo describe.
 export async function buildMaryHelpMap(userId: string): Promise<string> {
@@ -278,14 +287,16 @@ export async function buildMaryHelpMap(userId: string): Promise<string> {
     select: { id: true, username: true, isB2BAdvisor: true, isLeader: true, leadsDeptId: true, department: { select: { code: true } } },
   });
   if (!user) return "MAPA DE DAFLOW DE ESTA PERSONA: (no disponible)";
-  const [sidebarFlags, tabKeys] = await Promise.all([
+  const [sidebarFlags, tabKeys, suddenDemand] = await Promise.all([
     getEmployeeSidebarFlags(user, user.department?.code ?? ""),
     getVisibleWorkspaceTabKeys(userId),
+    canViewSuddenDemand(userId),
   ]);
-  return formatMaryHelpMap(sidebarFlags, tabKeys);
+  const extraPages: MaryExtraPageKey[] = suddenDemand ? ["productos-que-despiertan"] : [];
+  return formatMaryHelpMap(sidebarFlags, tabKeys, extraPages);
 }
 
-export function formatMaryHelpMap(sidebarFlags: EmployeeSidebarFlags, tabKeys: WorkspaceTabKey[]): string {
+export function formatMaryHelpMap(sidebarFlags: EmployeeSidebarFlags, tabKeys: WorkspaceTabKey[], extraPages: MaryExtraPageKey[] = []): string {
   const sidebar = SIDEBAR_HELP.filter((i) => i.show(sidebarFlags))
     .map((i) => `- ${i.label}: ${i.help}`)
     .join("\n");
@@ -296,7 +307,7 @@ export function formatMaryHelpMap(sidebarFlags: EmployeeSidebarFlags, tabKeys: W
 MENÚ LATERAL:
 ${sidebar}
 PESTAÑAS DE "MI ÁREA DE TRABAJO":
-${tabs || "- (ninguna pestaña adicional)"}`;
+${tabs || "- (ninguna pestaña adicional)"}${extraPages.length ? `\nOTRAS PANTALLAS (fuera del menú):\n${extraPages.map((k) => `- ${EXTRA_PAGE_HELP[k]}`).join("\n")}` : ""}`;
 }
 
 // Reglas de Mary cuando le preguntan cómo usar DAFLOW — se agregan al
@@ -306,7 +317,7 @@ export const MARY_HELP_RULES = `GUÍA DE DAFLOW: además de lo tuyo, cualquier p
 - Escribe en texto plano: nada de asteriscos, almohadillas ni otros símbolos de formato (el chat los muestra tal cual). Puedes usar guiones para listas y flechas →.
 - Responde corto y en pasos simples, con la ruta exacta. Ejemplo: "Menú lateral → Mi área de trabajo → pestaña Control de Compras → Mis solicitudes".
 - Usa SOLO lo que dice el mapa. Nunca inventes botones, pantallas ni pasos. Si el mapa no lo dice con claridad, dilo con honestidad y sugiere preguntarle a su líder.
-- Si pregunta por algo que NO está en su mapa, responde que esa opción no aparece en su usuario y que, si cree que debería tenerla, se lo pida a su líder o al admin. No describas cómo es esa pantalla ni qué contiene.
+- Si pregunta por algo que NO está en su mapa, responde que esa opción no aparece en su usuario y que, si cree que debería tenerla, se lo pida a su líder o al admin. No describas cómo es esa pantalla ni qué contiene. Si nombra una pantalla que no está en su mapa, no la cambies por otra que se parezca: dile primero, claramente, que esa no aparece en su usuario.
 - Las sub-pestañas también dependen de permisos: si no ve una que mencionas, es que su usuario no la tiene.
 - No tienes acceso a datos (montos, pedidos, registros, información de otras personas). Si te pide un dato, indícale en qué pantalla de su propio usuario lo puede ver; nunca inventes cifras ni hables de otros colaboradores.
 - Si te pide hacer algo por ella (aprobar, enviar, avisar a otras áreas, cambiar un registro), explícale que tú solo la guías y dile dónde hacerlo ella misma.`;
