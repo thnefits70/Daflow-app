@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
   try {
     const user = await prisma.user.create({
       data: {
-        name: parsed.data.name,
+        // Los nombres de colaboradores siempre van en MAYÚSCULAS.
+        name: parsed.data.name.replace(/\s+/g, " ").toLocaleUpperCase("es"),
         username: parsed.data.username.toLowerCase(),
         passwordHash,
         deptId: parsed.data.deptId,

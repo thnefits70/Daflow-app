@@ -655,8 +655,8 @@ export function ProfileDetail({
           <input
             className="font-display text-[20px] font-bold border-none bg-transparent outline-none focus:ring-0 px-0 w-full mb-1.5"
             value={p.name}
-            onChange={(e) => setP({ ...p, name: e.target.value })}
-            onBlur={(e) => save({ name: e.target.value })}
+            onChange={(e) => setP({ ...p, name: e.target.value.toLocaleUpperCase("es") })}
+            onBlur={(e) => save({ name: e.target.value.toLocaleUpperCase("es") })}
           />
           <div className="flex items-center gap-1.5 text-[12.5px] text-steel mb-3.5">
             <span>usuario</span>

@@ -108,7 +108,7 @@ export function NominaGrid({
           Añadir persona directamente
         </label>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-          <input className="rounded border border-rule px-2.5 py-2 text-[13.5px]" placeholder="Nombre (ej. Ana Pérez)" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="rounded border border-rule px-2.5 py-2 text-[13.5px]" placeholder="NOMBRE (ej. ANA PÉREZ)" value={name} onChange={(e) => setName(e.target.value.toLocaleUpperCase("es"))} />
           <input className="rounded border border-rule px-2.5 py-2 text-[13.5px]" placeholder="Usuario (ej. ana.perez)" value={username} onChange={(e) => setUsername(e.target.value)} />
           <input className="rounded border border-rule px-2.5 py-2 text-[13.5px]" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} />
           <select className="rounded border border-rule px-2.5 py-2 text-[13.5px] bg-surface" value={deptId} onChange={(e) => setDeptId(e.target.value)}>

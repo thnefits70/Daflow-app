@@ -144,7 +144,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const data: Record<string, unknown> = {};
-  if (d.name !== undefined) data.name = d.name;
+  if (d.name !== undefined) data.name = d.name.replace(/\s+/g, " ").toLocaleUpperCase("es");
   if (d.username !== undefined) data.username = d.username.toLowerCase();
   if (d.position !== undefined) data.position = d.position || null;
   if (d.password) data.passwordHash = await hashPassword(d.password);
