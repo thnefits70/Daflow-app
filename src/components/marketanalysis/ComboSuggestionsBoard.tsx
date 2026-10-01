@@ -170,6 +170,9 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
   const approved = (suggestions ?? []).filter((s) => s.status === "APROBADO");
   const created = (suggestions ?? []).filter((s) => s.status === "CREADO_EN_DROPI");
   const sendable = (s: Suggestion) => s.pricing?.dropiPrice != null;
+  // Aprobadas con el sistema viejo (sin marca): no se pueden publicar.
+  const oldApproved = approved.filter((s) => !s.bodega).length;
+  const discardable = suggested.filter((s) => s.status === "SUGERIDO").length + oldApproved;
 
   // Pedido del usuario (2026-09-04): marcar de un clic todas las de un mismo
   // color de probabilidad.
@@ -393,10 +396,10 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel">Combos sugeridos</div>
           <div className="flex items-center gap-2 flex-wrap">
             {recalcMsg && <span className="text-[11px] text-steel">{recalcMsg}</span>}
-            {canApprove && suggested.length > 0 &&
+            {canApprove && discardable > 0 &&
               (confirmingDiscard ? (
                 <span className="flex items-center gap-1.5 text-[11px]">
-                  ¿Descartar los {suggested.length} sin revisar?
+                  ¿Descartar {discardable} ({discardable - oldApproved} sin revisar{oldApproved > 0 ? ` + ${oldApproved} aprobados viejos sin marca` : ""})? No se puede deshacer.
                   <button type="button" disabled={discarding} className="font-bold text-red cursor-pointer disabled:opacity-60" onClick={discardUnreviewed}>
                     {discarding ? "Descartando…" : "Sí"}
                   </button>

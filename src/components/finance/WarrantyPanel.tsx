@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, ChevronDown, ChevronUp } from "lucide-react";
 import { formatMonthShort } from "@/components/dashboard/WeeklyTrendChart";
 import { Combobox } from "@/components/ui/Combobox";
-import { isAutoWarrantyMonth } from "@/lib/warrantyKpiConstants";
+import { isAutoWarrantyMonth, WARRANTY_LAST_MANUAL_MONTH } from "@/lib/warrantyKpiConstants";
 
 export type WarrantyCategoryDTO = { id: string; name: string };
 export type WarrantyMonthTotalDTO = { id: string; month: string; total: number };
@@ -38,6 +38,9 @@ export function WarrantyPanel({
   const [countValue, setCountValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // Pedido del usuario 2026-09-30: la pantalla se ve automática — la carga a
+  // mano (solo meses antes de octubre 2026) queda escondida detrás de un enlace.
+  const [manualOpen, setManualOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [confirmingDeleteTotalId, setConfirmingDeleteTotalId] = useState<string | null>(null);
@@ -151,7 +154,13 @@ export function WarrantyPanel({
   // Editing is just prefilling the forms above with the existing values —
   // resaving upserts on [month, categoryId] / [month], so it replaces the
   // old value instead of requiring a delete-then-recreate.
+  const openManual = () => {
+    setManualOpen(true);
+    if (isAutoWarrantyMonth(month)) setMonth(WARRANTY_LAST_MANUAL_MONTH);
+  };
+
   const editTotal = (m: string, t: WarrantyMonthTotalDTO) => {
+    setManualOpen(true);
     setMonth(m);
     setTotalValue(String(t.total));
     setErr("");
@@ -159,6 +168,7 @@ export function WarrantyPanel({
   };
 
   const editCount = (m: string, c: WarrantyCategoryMonthCountDTO) => {
+    setManualOpen(true);
     setMonth(m);
     setCategoryName(c.category.name);
     setCountValue(String(c.count));
@@ -188,15 +198,34 @@ export function WarrantyPanel({
 
   return (
     <div ref={panelTopRef}>
+      {!manualOpen && (
+        <div className="bg-surface border border-teal/35 rounded-md p-4.5 mb-5">
+          <div className="text-[13px] font-semibold text-ink mb-1">Se llena sola con los cortes</div>
+          <div className="text-[12px] text-steel">
+            Cada garantía que Yair marca al subir las guías de Dropi suma al total del mes, con su motivo. No hay que escribir nada.
+          </div>
+          <button type="button" className="mt-2 text-[11px] text-steel underline cursor-pointer" onClick={openManual}>
+            Cargar o corregir un mes anterior a octubre 2026
+          </button>
+        </div>
+      )}
+
+      {manualOpen && (
       <div className="bg-surface border border-rule rounded-md p-4.5 mb-3">
-        <label className="block mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
-          Total de garantías ingresadas ese mes
-        </label>
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <label className="block text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+            Total de garantías ingresadas ese mes (solo meses anteriores a octubre 2026)
+          </label>
+          <button type="button" className="text-[11px] text-steel underline cursor-pointer" onClick={() => setManualOpen(false)}>
+            Cerrar
+          </button>
+        </div>
         <div className="flex items-end gap-2.5 flex-wrap">
           <div>
             <label className="block mb-1 text-[10px] text-steel">Mes</label>
             <input
               type="month"
+              max={WARRANTY_LAST_MANUAL_MONTH}
               className="rounded border border-rule px-2.5 py-2 text-[13px] bg-surface"
               value={month}
               onChange={(e) => setMonth(e.target.value)}
@@ -232,8 +261,9 @@ export function WarrantyPanel({
             : "Si el mes ya tiene un total, guardar uno nuevo lo reemplaza — así puedes corregir un error."}
         </div>
       </div>
+      )}
 
-      {!auto && (
+      {manualOpen && !auto && (
       <div className="bg-surface border border-rule rounded-md p-4.5 mb-5">
         <label className="block mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
           Agregar una categoría a ese mes

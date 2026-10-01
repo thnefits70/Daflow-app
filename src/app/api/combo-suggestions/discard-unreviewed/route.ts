@@ -11,8 +11,13 @@ import { canApproveComboSuggestions } from "@/lib/guards";
 // aprobación todavía) para que el próximo recálculo arranque limpio con el
 // filtro nuevo. Nunca toca SELECCIONADO/PENDIENTE_APROBACION/APROBADO/
 // CREADO_EN_DROPI — esas ya tienen una decisión real de alguien detrás.
+// Pedido del usuario 2026-09-30: también borra las aprobadas con el sistema
+// viejo (sin marca = sin precio ni nombre) que nunca se crearon en Dropi —
+// con el flujo nuevo no se pueden publicar. Lo ya creado en Dropi se queda.
 export async function POST() {
   if (!(await canApproveComboSuggestions())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-  const result = await prisma.comboSuggestion.deleteMany({ where: { status: "SUGERIDO" } });
+  const result = await prisma.comboSuggestion.deleteMany({
+    where: { OR: [{ status: "SUGERIDO" }, { status: "APROBADO", bodega: null }] },
+  });
   return NextResponse.json({ deleted: result.count });
 }

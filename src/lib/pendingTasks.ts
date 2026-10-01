@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { isAutoWarrantyMonth } from "@/lib/warrantyKpiConstants";
 import { prisma } from "@/lib/prisma";
 import { isFixedHoliday, evaluationDeadline, adminConfirmDeadline, summaryFieldsFromScores } from "@/lib/recognition";
 import { addBusinessHours } from "@/lib/businessHours";
@@ -13,7 +14,6 @@ import { getNewIdBrandingBoard } from "@/lib/newIdBranding";
 import { CLAIM_GAP_DAYS, findPossibleDoubleRegistrations, getSupplierClaimGaps } from "@/lib/reentrySupplierClaim";
 import { getCompiledLot, isBackfillLot } from "@/lib/fulfillmentGuides";
 import { carrierLabel } from "@/lib/carriers";
-import { isAutoStockoutWeek } from "@/lib/autoStockout";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
 import { getOpenPurchaseCodesByCatalogItem } from "@/lib/purchases";
 import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
@@ -641,27 +641,9 @@ async function getFillRateJustificationPendingItem(deptId: string, href: string)
   };
 }
 
-async function getStockoutPendingItem(href: string): Promise<PendingItem | null> {
-  const status = await weeklyPendingStatus(async (week) => {
-    // Desde la semana 40 se arma sola con los cortes (autoStockout.ts) — no
-    // hay nada que cargar a mano.
-    if (isAutoStockoutWeek(week)) return true;
-    const [productCount, confirmed] = await Promise.all([
-      prisma.stockoutWeekProduct.count({ where: { week } }),
-      prisma.stockoutWeekConfirmation.findUnique({ where: { week } }),
-    ]);
-    return productCount > 0 || !!confirmed;
-  });
-  if (!status) return null;
-  return {
-    type: "ruptura_stock",
-    icon: "🗃️",
-    label: "Ruptura de Stock",
-    meta: `${formatWeekLabel(status.week)} · atrasado`,
-    overdue: status.overdue,
-    href,
-  };
-}
+// Pedido del usuario 2026-09-30: Ruptura de Stock se arma sola con los
+// cortes (autoStockout.ts) — Daniel ya no tiene nada que cargar, así que ya
+// no le sale como pendiente.
 
 // Reescrito 2026-08-31 — hasta el 2026-08-24 esto contaba comprobantes
 // (PayStub) subidos a mano por Nairoby; ese flujo se retiró (commit
@@ -800,6 +782,8 @@ async function getReturnRatePendingItem(href: string): Promise<PendingItem | nul
 async function getWarrantyPendingItem(href: string): Promise<PendingItem | null> {
   const today = currentMonthStr();
   const prev = prevMonthStr(today);
+  // Desde octubre 2026 el mes se llena solo con los cortes — no se recuerda.
+  if (isAutoWarrantyMonth(prev)) return null;
   if (fixedDayDeadlinePassed(today, 1) && !(await prisma.warrantyMonthTotal.findUnique({ where: { month: prev } }))) {
     return {
       type: "kpi_garantias",
@@ -3436,8 +3420,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, personalPurchaseInventoryItem, lateClaimReviewItem, urgentUnresolvedItem, nichoBackfillItem, deteriorResolutionItem, externalSaleDispatchItem] = await Promise.all([
-      getStockoutPendingItem("/area/kpis-generales"),
+    const [receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, personalPurchaseInventoryItem, lateClaimReviewItem, urgentUnresolvedItem, nichoBackfillItem, deteriorResolutionItem, externalSaleDispatchItem] = await Promise.all([
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario", true),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getInventoryControlPendingItem("/area/workspace?tab=inventario"),
@@ -3449,7 +3432,6 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getDeteriorResolutionPendingItem("/area/workspace?tab=egresos&otab=deterioro"),
       getExternalSaleDispatchPendingItem("/area/workspace?tab=ventas-externas&etab=despacho"),
     ]);
-    if (stockoutItem) items.push(stockoutItem);
     if (receivingItem) items.push(receivingItem);
     if (replacementItem) items.push(replacementItem);
     if (inventoryControlItem) items.push(inventoryControlItem);
@@ -3620,7 +3602,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
+      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
