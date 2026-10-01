@@ -336,6 +336,11 @@ model User {
   // siquiera admin actúa.
   canPublishMarketProduct Boolean @default(false)
   canBrandMarketProduct   Boolean @default(false)
+  // Pedido de Robert 2026-10-01 (confirmado por el usuario): Marcos hace
+  // contenido con los productos nuevos. Con este flag ve en "Nuevos IDs" SOLO
+  // lo que Robert terminó por completo (brandeo + imágenes reales), en solo
+  // lectura, y recibe el aviso en ese momento.
+  notifyNewIdRealPhotos   Boolean @default(false)
 
   // Confirmado 2026-09-23, pedido de Jariel (vía el usuario): cuando Compras
   // ya no consigue un producto con ningún proveedor, Jariel lo reporta (ver
@@ -3604,6 +3609,18 @@ model NewIdBranding {
   // reales. Recién con eso pasa al historial (listo para subir al canal).
   realPhotosAt   DateTime?
   realPhotosById String?
+
+  // SIN USO: quedaron creadas en la base por la migración
+  // 20260925150000_new_id_branding_real_steps (versión de 4 pasos de brandeo
+  // + 2 de imágenes reales). Robert pidió después la versión simple (3 pasos
+  // + 1 casilla), así que nada las lee ni las escribe. Se dejan acá para que
+  // el schema coincida con la base.
+  dropiPublicAt   DateTime?
+  dropiPublicById String?
+  realDropiAt     DateTime?
+  realDropiById   String?
+  realDriveAt     DateTime?
+  realDriveById   String?
 
   channelUploadedAt   DateTime?
   channelUploadedById String?

@@ -63,6 +63,7 @@ type UserProfile = {
   canLinkStoreProducts: boolean;
   canPublishMarketProduct: boolean;
   canBrandMarketProduct: boolean;
+  notifyNewIdRealPhotos: boolean;
   canResolveSupplierStockout: boolean;
   canViewStockLevels: boolean;
   canViewB2BPricing: boolean;
@@ -1173,6 +1174,16 @@ export function ProfileDetail({
               Una vez publicado en Dropi, esta persona (hoy Robert) sube las fotos/video reales brandeados y marca el producto como terminado — esto lo matricula en el catálogo real.
             </div>
             <PermToggle value={p.canBrandMarketProduct} busy={busy} onChange={(v) => save({ canBrandMarketProduct: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Recibe aviso de productos nuevos con imágenes reales?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Para quien hace contenido con los productos nuevos (hoy Marcos). Ve en &quot;Nuevos IDs por brandear&quot; solo los productos que Robert ya terminó por completo (brandeo + imágenes reales), sin poder marcar nada, y le llega un aviso cada vez que uno queda listo.
+            </div>
+            <PermToggle value={p.notifyNewIdRealPhotos} busy={busy} onChange={(v) => save({ notifyNewIdRealPhotos: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">

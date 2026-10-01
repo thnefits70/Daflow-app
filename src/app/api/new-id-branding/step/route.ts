@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { notifyOwner } from "@/lib/notifications";
-import { canBrandNewIds } from "@/lib/newIdBranding";
+import { canBrandNewIds, getNewIdRealPhotosWatcherIds } from "@/lib/newIdBranding";
 
 const schema = z
   .object({
@@ -94,12 +94,37 @@ export async function POST(req: NextRequest) {
   const userId = session.user.id;
   const stepData = done ? { [atField]: now, [byField]: userId } : { [atField]: null, [byField]: null };
 
+  const hadRealPhotos = !!row?.realPhotosAt;
   row = row
     ? await prisma.newIdBranding.update({
         where: { id: row.id },
         data: { ...stepData, catalogItemId: row.catalogItemId ?? catalogItemId, proposalId: row.proposalId ?? proposal?.id ?? null },
       })
     : await prisma.newIdBranding.create({ data: { ...stepData, catalogItemId, proposalId: proposal?.id ?? null } });
+
+  // Pedido de Robert 2026-10-01: con las imágenes reales completadas el
+  // producto queda terminado — recién ahí se le avisa a Marcos
+  // (notifyNewIdRealPhotos). Nunca antes.
+  if (step === "realPhotos" && done && !hadRealPhotos) {
+    const combo = dropiComboId
+      ? (await prisma.newIdBranding.findUnique({ where: { id: row.id }, select: { dropiCombo: { select: { label: true, code: true } } } }))?.dropiCombo
+      : null;
+    const name = combo
+      ? `Combo · ${combo.label ?? combo.code}`
+      : catalogItemId
+        ? (await prisma.purchaseCatalogItem.findUnique({ where: { id: catalogItemId }, select: { name: true } }))?.name
+        : proposal?.productName;
+    const watchers = await getNewIdRealPhotosWatcherIds();
+    await Promise.all(
+      watchers.map((uid) =>
+        notifyOwner(uid, {
+          title: "Producto nuevo con imágenes reales",
+          body: `${name ?? "Un producto nuevo"} ya está completo: brandeado y con imágenes reales.`,
+          url: "/area/workspace?tab=nuevos-ids",
+        }).catch(() => null)
+      )
+    );
+  }
 
   if (afterBranding || !row.dropiImagesAt || !row.dropiInfoAt || !row.driveVideoAt) {
     return NextResponse.json({ ok: true, branded: false });

@@ -59,6 +59,7 @@ export default async function AreaNominaProfilePage({ params }: { params: Promis
         canLinkStoreProducts: user.canLinkStoreProducts,
         canPublishMarketProduct: user.canPublishMarketProduct,
         canBrandMarketProduct: user.canBrandMarketProduct,
+        notifyNewIdRealPhotos: user.notifyNewIdRealPhotos,
         canResolveSupplierStockout: user.canResolveSupplierStockout,
         canViewStockLevels: user.canViewStockLevels,
         canViewB2BPricing: user.canViewB2BPricing,

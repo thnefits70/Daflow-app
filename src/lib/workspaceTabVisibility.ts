@@ -48,6 +48,9 @@ export type WorkspaceTabFlags = {
   canInvoicePurchases: boolean;
   canAccessSuppliers: boolean;
   canViewMarketingArrivals: boolean;
+  // Pedido de Robert 2026-10-01: Marcos (notifyNewIdRealPhotos) ve "Nuevos IDs"
+  // solo con lo terminado (brandeo + imágenes reales), en solo lectura.
+  canViewFinishedNewIds?: boolean;
   canManageInventoryControl: boolean;
   canManageJustCatalog: boolean;
   canViewStockLevels: boolean;
@@ -91,7 +94,7 @@ export function isWorkspaceTabVisible(key: WorkspaceTabKey, f: WorkspaceTabFlags
     return f.canSubmitPurchases || f.canViewOwnPurchases || f.canSubmitEmergencyPurchases || f.canApprovePurchases || f.canReceivePurchases || f.canInvoicePurchases;
   if (key === "proveedores") return f.canAccessSuppliers;
   if (key === "llegadas") return f.canViewMarketingArrivals;
-  if (key === "nuevos-ids") return f.canViewMarketingArrivals;
+  if (key === "nuevos-ids") return f.canViewMarketingArrivals || !!f.canViewFinishedNewIds;
   if (key === "inventario") return f.canManageInventoryControl;
   if (key === "stock-actual") return f.canManageJustCatalog || f.canViewStockLevels;
   if (key === "reingreso") return f.canCaptureMerchandiseReentry || f.canApproveMerchandiseReentry || f.canCloseMerchandiseReentry;

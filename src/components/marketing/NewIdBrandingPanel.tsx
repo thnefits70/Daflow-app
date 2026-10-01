@@ -9,7 +9,7 @@ import { actorName } from "@/lib/actorName";
 
 type Mark = { at: string; by: string | null };
 type StepKey = "dropiImages" | "dropiInfo" | "driveVideo" | "realPhotos" | "channel";
-type Board = { pending: Entry[]; realPhotos: Entry[]; done: Entry[]; canAct: boolean };
+type Board = { pending: Entry[]; realPhotos: Entry[]; done: Entry[]; canAct: boolean; finishedOnly?: boolean };
 type View = "pending" | "realPhotos" | "done";
 
 type Entry = {
@@ -120,7 +120,11 @@ export function NewIdBrandingPanel() {
   function load() {
     fetch("/api/new-id-branding")
       .then((r) => (r.ok ? r.json() : { pending: [], realPhotos: [], done: [], canAct: false }))
-      .then(setData)
+      .then((d: Board) => {
+        // Marcos solo ve lo terminado (brandeo + imágenes reales).
+        if (d.finishedOnly) setView("done");
+        setData(d);
+      })
       .catch(() => setData({ pending: [], realPhotos: [], done: [], canAct: false }));
   }
   useEffect(load, []);
@@ -156,21 +160,29 @@ export function NewIdBrandingPanel() {
       <TabGuide storageKey="nuevos-ids-brandear">
         {data.canAct ? (
           <>Acá aparece cada producto nuevo <b>una sola vez</b>: cuando llega a bodega por primera vez, cuando la asesora B2B confirma su ID de Dropi, o cuando se crea un combo nuevo desde Sugerencias de Combos. El brandeo lo haces como siempre en Dropi y en el Drive — acá solo marca cada paso cuando ya lo hiciste. Con los 3 pasos marcados pasa a <b>Imágenes reales</b>: ahí espera hasta que el producto llegue a bodega y le tomes las fotos reales. Cuando marcas las imágenes reales pasa al <b>Historial</b>, donde marcas cuando ya lo subiste al canal de la marca.</>
+        ) : data.finishedOnly ? (
+          <>Acá aparecen los productos nuevos que Robert ya terminó por completo: brandeados y con imágenes reales. Cuando uno nuevo queda listo te llega un aviso, para que puedas hacer contenido con él.</>
         ) : (
           <>Vista de solo lectura: qué productos nuevos faltan por brandear, cuáles esperan sus imágenes reales, y el historial de los que ya están listos para el canal.</>
         )}
       </TabGuide>
 
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={pill(view === "pending")} onClick={() => setView("pending")}>
-          Por brandear ({data.pending.length})
-        </button>
-        <button type="button" className={pill(view === "realPhotos")} onClick={() => setView("realPhotos")}>
-          Imágenes reales ({data.realPhotos.length}){arrivedForPhotos > 0 ? ` · ${arrivedForPhotos} ya en bodega` : ""}
-        </button>
-        <button type="button" className={pill(view === "done")} onClick={() => setView("done")}>
-          Historial ({data.done.length}){notOnChannel > 0 ? ` · ${notOnChannel} sin subir al canal` : ""}
-        </button>
+        {data.finishedOnly ? (
+          <span className={pill(true)}>Productos con imágenes reales ({data.done.length})</span>
+        ) : (
+          <>
+            <button type="button" className={pill(view === "pending")} onClick={() => setView("pending")}>
+              Por brandear ({data.pending.length})
+            </button>
+            <button type="button" className={pill(view === "realPhotos")} onClick={() => setView("realPhotos")}>
+              Imágenes reales ({data.realPhotos.length}){arrivedForPhotos > 0 ? ` · ${arrivedForPhotos} ya en bodega` : ""}
+            </button>
+            <button type="button" className={pill(view === "done")} onClick={() => setView("done")}>
+              Historial ({data.done.length}){notOnChannel > 0 ? ` · ${notOnChannel} sin subir al canal` : ""}
+            </button>
+          </>
+        )}
         <div className="relative ml-auto" style={{ width: 280, maxWidth: "100%" }}>
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
           <input

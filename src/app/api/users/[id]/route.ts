@@ -67,6 +67,7 @@ const updateSchema = z.object({
   canLinkStoreProducts: z.boolean().optional(),
   canPublishMarketProduct: z.boolean().optional(),
   canBrandMarketProduct: z.boolean().optional(),
+  notifyNewIdRealPhotos: z.boolean().optional(),
   canResolveSupplierStockout: z.boolean().optional(),
   canViewStockLevels: z.boolean().optional(),
   canViewB2BPricing: z.boolean().optional(),
@@ -175,6 +176,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.canLinkStoreProducts !== undefined) data.canLinkStoreProducts = d.canLinkStoreProducts;
   if (d.canPublishMarketProduct !== undefined) data.canPublishMarketProduct = d.canPublishMarketProduct;
   if (d.canBrandMarketProduct !== undefined) data.canBrandMarketProduct = d.canBrandMarketProduct;
+  if (d.notifyNewIdRealPhotos !== undefined) data.notifyNewIdRealPhotos = d.notifyNewIdRealPhotos;
   if (d.canResolveSupplierStockout !== undefined) data.canResolveSupplierStockout = d.canResolveSupplierStockout;
   if (d.canViewStockLevels !== undefined) data.canViewStockLevels = d.canViewStockLevels;
   if (d.canViewB2BPricing !== undefined) data.canViewB2BPricing = d.canViewB2BPricing;

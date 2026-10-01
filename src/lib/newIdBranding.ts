@@ -30,6 +30,23 @@ export async function getNewIdBrandingActorIds(): Promise<string[]> {
   return users.map((u) => u.id);
 }
 
+// Pedido de Robert 2026-10-01 (confirmado por el usuario): Marcos hace
+// contenido con los productos nuevos. Quien tenga notifyNewIdRealPhotos (hoy
+// solo Marcos) ve SOLO lo que Robert ya terminó por completo — brandeo +
+// imágenes reales — en solo lectura, y recibe el aviso en ese momento. Nunca
+// ve lo que está a medias.
+export async function canViewFinishedNewIdsOnly(): Promise<boolean> {
+  const session = await auth();
+  if (!session || session.user.role === "admin") return false;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { notifyNewIdRealPhotos: true } });
+  return !!user?.notifyNewIdRealPhotos;
+}
+
+export async function getNewIdRealPhotosWatcherIds(): Promise<string[]> {
+  const users = await prisma.user.findMany({ where: { isActive: true, notifyNewIdRealPhotos: true }, select: { id: true } });
+  return users.map((u) => u.id);
+}
+
 export const BRAND_STEPS = ["dropiImages", "dropiInfo", "driveVideo"] as const;
 export type BrandStep = (typeof BRAND_STEPS)[number];
 type Mark = { at: string; by: string | null };

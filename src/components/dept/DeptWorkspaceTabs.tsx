@@ -205,6 +205,7 @@ export function DeptWorkspaceTabs({
   canManageAdminPayments = false,
   canRegisterLunchPayments = false,
   canViewMarketingArrivals = false,
+  canViewFinishedNewIds = false,
   canConfirmMarketingAdvisor = false,
   canSyncAtomData = false,
   canUploadLowRotationList = false,
@@ -424,6 +425,7 @@ export function DeptWorkspaceTabs({
   // quien tenga el flag puntual (canConfirmMarketingDesign/Advisor) — nunca
   // el líder del área, que solo supervisa.
   canViewMarketingArrivals?: boolean;
+  canViewFinishedNewIds?: boolean;
   canConfirmMarketingDesign?: boolean;
   canConfirmMarketingAdvisor?: boolean;
   // Sugerencias de Combos (ATOM + baja rotación) — confirmado 2026-08-31.
@@ -476,6 +478,7 @@ export function DeptWorkspaceTabs({
       canInvoicePurchases,
       canAccessSuppliers,
       canViewMarketingArrivals,
+      canViewFinishedNewIds,
       canManageInventoryControl,
       canManageJustCatalog,
       canViewStockLevels,
@@ -693,7 +696,7 @@ export function DeptWorkspaceTabs({
       {tab === "llegadas" && canViewMarketingArrivals && (
         <MarketingArrivalsPanel canConfirmAdvisor={canConfirmMarketingAdvisor} />
       )}
-      {tab === "nuevos-ids" && canViewMarketingArrivals && <NewIdBrandingPanel />}
+      {tab === "nuevos-ids" && (canViewMarketingArrivals || canViewFinishedNewIds) && <NewIdBrandingPanel />}
       {tab === "inventario" && canManageInventoryControl && inventoryControlData && (
         <InventoryControlPanel
           currentPeriodDefault={inventoryControlData.currentPeriod}

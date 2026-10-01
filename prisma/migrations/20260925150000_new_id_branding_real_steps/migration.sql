@@ -1,0 +1,8 @@
+ALTER TABLE "NewIdBranding" ADD COLUMN "dropiPublicAt" TIMESTAMP(3),
+ADD COLUMN "dropiPublicById" TEXT,
+ADD COLUMN "realDropiAt" TIMESTAMP(3),
+ADD COLUMN "realDropiById" TEXT,
+ADD COLUMN "realDriveAt" TIMESTAMP(3),
+ADD COLUMN "realDriveById" TEXT;
+
+ALTER TABLE "User" ADD COLUMN "notifyNewIdRealPhotos" BOOLEAN NOT NULL DEFAULT false;

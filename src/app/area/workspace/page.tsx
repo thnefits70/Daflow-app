@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
 import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageSupplierDebtPayments, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canRegisterLunchPayments as checkCanRegisterLunchPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canActOnComboSuggestions as checkCanActOnComboSuggestions, canMarkComboCreatedInDropi as checkCanMarkComboCreatedInDropi, canProposeMarketProduct, canReviewMarketProduct, canActOnMarketProductReview, canPublishMarketProduct, canBrandMarketProduct, canDecideMarketProductPurchase, canViewB2BPricing, canViewB2CPricing, canReportSupplierStockout as checkCanReportSupplierStockout, canResolveSupplierStockout as checkCanResolveSupplierStockout, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustCatalog, canViewStockLevels, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canManageOutflowPurchaseGestion, canSubmitCancelledGuide, canManageCancelledGuideBatches, canConfirmCancelledGuideFulfillmentRemoval, canAssignCancelledGuideItems, canSubmitFulfillmentRequest, canViewFulfillmentRequests, canDeclareExternalSales, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts, canJustifyFillRate as checkCanJustifyFillRate, canManageImprovementPlan, canViewStoreTracking } from "@/lib/guards";
+import { canViewFinishedNewIdsOnly } from "@/lib/newIdBranding";
 import { getFinanceKpiData } from "@/lib/financeKpis";
 import { getDeptProcessDetail } from "@/lib/processDetail";
 import { getPaymentRemindersData } from "@/lib/paymentReminders";
@@ -206,10 +207,11 @@ export default async function WorkspacePage() {
   // "Mercadería recibida" — confirmado 2026-08-08: por departamento (MKT),
   // no un flag suelto como Control de Compras — cualquiera cuyo
   // departamento real sea Análisis de Mercado la ve.
-  const [canViewMarketingArrivals, canConfirmMarketingDesign, canConfirmMarketingAdvisor] = await Promise.all([
+  const [canViewMarketingArrivals, canConfirmMarketingDesign, canConfirmMarketingAdvisor, canViewFinishedNewIds] = await Promise.all([
     checkCanViewMarketingArrivals(),
     checkCanConfirmMarketingDesign(),
     checkCanConfirmMarketingAdvisor(),
+    canViewFinishedNewIdsOnly(),
   ]);
 
   const [processDetail, periodicReminders, documents, exams, financeKpiData, paymentReminders, weeklyMetricRecords, weeklyReviewRecords, currentUser, unseenFeedbackCount, storeFeedbackStores, inventoryControlData, inventoryKpisData, pettyCashData, storeFeedbackAggregates, supplierList, supplierPending] = await Promise.all([
@@ -391,6 +393,7 @@ export default async function WorkspacePage() {
         canManageAdminPayments={canManageAdminPayments}
         canRegisterLunchPayments={canRegisterLunchPayments}
         canViewMarketingArrivals={canViewMarketingArrivals}
+        canViewFinishedNewIds={canViewFinishedNewIds}
         canConfirmMarketingDesign={canConfirmMarketingDesign}
         canConfirmMarketingAdvisor={canConfirmMarketingAdvisor}
         canSyncAtomData={canSyncAtomData}
