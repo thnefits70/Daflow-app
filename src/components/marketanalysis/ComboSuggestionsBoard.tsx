@@ -272,6 +272,35 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
     <div className="flex flex-col gap-5">
       {err && <div className="text-red text-[12.5px]">{err}</div>}
 
+      {/* Pedido del usuario 2026-10-01: el botón para limpiar lo viejo quedaba
+          debajo de los aprobados viejos y no se encontraba — va arriba. */}
+      {canApprove && discardable > 0 && (
+        <div className="bg-gold/10 border border-gold/35 rounded-md p-3.5 flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-[12.5px]">
+            <b>{discardable} combos del sistema anterior</b>
+            <span className="text-steel">
+              {" "}
+              ({discardable - oldApproved} sin revisar{oldApproved > 0 ? ` + ${oldApproved} aprobados sin marca ni precio` : ""}). Lo ya creado en Dropi no se toca.
+            </span>
+          </div>
+          {confirmingDiscard ? (
+            <span className="flex items-center gap-2 text-[12px]">
+              ¿Seguro? No se puede deshacer.
+              <button type="button" disabled={discarding} className="rounded border border-red bg-red px-3 py-1 font-bold text-white cursor-pointer disabled:opacity-60" onClick={discardUnreviewed}>
+                {discarding ? "Descartando…" : "Sí, descartar"}
+              </button>
+              <button type="button" className="text-steel cursor-pointer" onClick={() => setConfirmingDiscard(false)}>
+                No
+              </button>
+            </span>
+          ) : (
+            <button type="button" className="rounded border border-red/60 px-3 py-1.5 text-[12px] font-semibold text-red cursor-pointer" onClick={() => setConfirmingDiscard(true)}>
+              Descartar los {discardable}
+            </button>
+          )}
+        </div>
+      )}
+
       {canApprove && pendingApproval.length > 0 && (
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">
@@ -396,22 +425,6 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel">Combos sugeridos</div>
           <div className="flex items-center gap-2 flex-wrap">
             {recalcMsg && <span className="text-[11px] text-steel">{recalcMsg}</span>}
-            {canApprove && discardable > 0 &&
-              (confirmingDiscard ? (
-                <span className="flex items-center gap-1.5 text-[11px]">
-                  ¿Descartar {discardable} ({discardable - oldApproved} sin revisar{oldApproved > 0 ? ` + ${oldApproved} aprobados viejos sin marca` : ""})? No se puede deshacer.
-                  <button type="button" disabled={discarding} className="font-bold text-red cursor-pointer disabled:opacity-60" onClick={discardUnreviewed}>
-                    {discarding ? "Descartando…" : "Sí"}
-                  </button>
-                  <button type="button" className="text-steel cursor-pointer" onClick={() => setConfirmingDiscard(false)}>
-                    No
-                  </button>
-                </span>
-              ) : (
-                <button type="button" className="rounded border border-rule px-2.5 py-1 text-[11px] font-semibold cursor-pointer" onClick={() => setConfirmingDiscard(true)}>
-                  Descartar sin revisar
-                </button>
-              ))}
             {recalculating && <span className="text-[11px] text-steel">Puede tardar unos minutos…</span>}
             <button type="button" disabled={recalculating} className="rounded border border-rule px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60" onClick={recalculate}>
               {recalculating ? "Armando…" : "Armar ahora"}
