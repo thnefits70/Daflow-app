@@ -99,7 +99,7 @@ export function FulfillmentRequestPanel({ canSubmit }: { canSubmit: boolean }) {
       )}
       {!loading && !loadErr && lots.length === 0 && (
         <div className="text-[12px] text-steel bg-cloud rounded-md p-3 mb-4">
-          Todavía no hay cortes. Aparecen aquí cuando Yair sube las guías; para escanear, el corte tiene que estar enviado a Inventario.
+          Todavía no hay cortes. Aparecen aquí cuando Daniel sube las guías; para escanear, el corte tiene que estar enviado a Inventario.
         </div>
       )}
       {otherPending.length > 0 && (

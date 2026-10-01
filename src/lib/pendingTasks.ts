@@ -3590,7 +3590,7 @@ export async function getPossiblePendingTypesForActor(
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar");
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
       if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino");
-      if (me.department?.code === "INV" || me.department?.code === "FUL") types.push("fulfillment_bloque_asignado");
+      if (me.department?.code === "INV") types.push("fulfillment_bloque_asignado");
       if (me.canManagePurchases && me.department?.code === "MKT") types.push("compras_calientes");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }

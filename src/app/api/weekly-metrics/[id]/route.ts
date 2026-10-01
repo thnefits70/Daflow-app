@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canEditDeptKpis, canJustifyFillRate } from "@/lib/guards";
 import { getOldestUnjustifiedFillRateWeek, fillRateJustificationRuleAppliesTo } from "@/lib/dashboard";
-import { computeAutoCounts, fillRateNumbers, isAutoFillRateWeek } from "@/lib/autoFillRate";
+import { computeAutoCounts, fillRateNumbers, isAutoFillRateWeek, FILL_RATE_DEPT_CODE } from "@/lib/autoFillRate";
 
 const updateSchema = z.object({
   value: z.number().int().min(0),
@@ -30,11 +30,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { justification } = parsed.data;
   let { value, prepared, generated, outOfStock } = parsed.data;
-  // Desde la semana 40 (Fulfillment) solo Preparadas/Generadas son de Yair;
-  // lo demás se calcula con los cortes — ver autoFillRate.ts.
+  // Desde la semana 40 solo Preparadas/Generadas las escribe el líder; lo
+  // demás se calcula con los cortes — ver autoFillRate.ts.
   if (isAutoFillRateWeek(existing.week)) {
     const dept = await prisma.department.findUnique({ where: { id: existing.deptId }, select: { code: true } });
-    if (dept?.code === "FUL") {
+    if (dept?.code === FILL_RATE_DEPT_CODE) {
       prepared = prepared ?? 0;
       generated = generated ?? 0;
       const nums = fillRateNumbers(await computeAutoCounts(existing.week), prepared, generated);

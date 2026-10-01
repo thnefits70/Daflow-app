@@ -47,7 +47,7 @@ function JustificationSection({
     return (
       <div className="rounded-md border border-rule bg-cloud px-3.5 py-3 mt-1">
         <div className="text-[11px] font-semibold text-steel mb-1">
-          {data.justificationBy ?? "Líder de Fulfillment"} le explica al equipo:
+          {data.justificationBy ?? "Líder de Inventarios"} le explica al equipo:
         </div>
         <div className="text-[13px] leading-snug whitespace-pre-wrap">{data.justification}</div>
         {data.justificationAt && (
@@ -60,7 +60,7 @@ function JustificationSection({
   if (!canJustify) {
     return (
       <div className="rounded-md border border-dashed border-rule px-3.5 py-3 mt-1 text-[12.5px] text-steel">
-        El Fill Rate quedó por debajo de lo normal esta semana — el líder de Fulfillment todavía le debe una
+        El Fill Rate quedó por debajo de lo normal esta semana — el Líder de Inventarios todavía le debe una
         explicación al equipo. Va a aparecer aquí en cuanto la escriba.
       </div>
     );

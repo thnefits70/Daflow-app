@@ -59,7 +59,7 @@ export function CancelledGuidesPanel({
 
       {tab === "reportar" && canSubmit && (
         <>
-          <TabGuide storageKey="cancelledguides-reportar">Reporta acá las guías que hay que cancelar — Fulfillment e Inventario se enteran al toque para no despacharlas, y Análisis de Mercado recibe el lote para gestionarlo con la transportadora.</TabGuide>
+          <TabGuide storageKey="cancelledguides-reportar">Reporta acá las guías que hay que cancelar — INVESTOCK se entera al toque para no despacharlas, y Análisis de Mercado recibe el lote para gestionarlo con la transportadora.</TabGuide>
           <CancelledGuideSubmitForm viewerDeptCode={viewerDeptCode} />
         </>
       )}

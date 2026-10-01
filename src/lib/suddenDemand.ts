@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getFinanceLeadId, getFulfilmentLeadId, getInventoryLeadId, getSupplierStockoutResolverIds } from "@/lib/guards";
+import { getFinanceLeadId, getInventoryLeadId, getSupplierStockoutResolverIds } from "@/lib/guards";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
 import { notifyOwner } from "@/lib/notifications";
 import { formatPurchaseRequestCode, openPurchaseWhere } from "@/lib/purchases";
@@ -71,18 +71,17 @@ async function currentStock(catalogItemIds: string[]): Promise<Map<string, numbe
   return new Map(rows.map((r) => [r.catalogItemId, r.balanceAfter]));
 }
 
-// Daniel, Jariel, Bryan Rios, Heidy y Yair (la lista de Daniel). Nairoby
+// Daniel, Jariel, Bryan Rios y el rol Asesor(a) B2B (la lista de Daniel;
+// Yair salió el 2026-10-01 al dejar de liderar Fulfillment). Nairoby
 // aparte: solo si el producto tiene 31 a 60 en bodega (pedido de Daniel).
 export async function getSuddenDemandBaseAudienceIds(): Promise<string[]> {
-  const [inventoryLeadId, fulfilmentLeadId, hotIds, mktIds] = await Promise.all([
+  const [inventoryLeadId, hotIds, mktIds] = await Promise.all([
     getInventoryLeadId(),
-    getFulfilmentLeadId(),
     getHotBuyerIds(),
     getSupplierStockoutResolverIds(),
   ]);
   const ids = new Set<string>([...hotIds, ...mktIds]);
   if (inventoryLeadId) ids.add(inventoryLeadId);
-  if (fulfilmentLeadId) ids.add(fulfilmentLeadId);
   return [...ids];
 }
 

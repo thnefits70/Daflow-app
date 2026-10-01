@@ -117,7 +117,7 @@ export function ExternalSalesPanel({
       )}
       {tab === "preparar" && canPrep && (
         <>
-          <TabGuide storageKey="externalsales-preparar">Tus ventas asignadas — agrupa los productos, toma fotos según la guía y marca listo para que Fulfilment embale.</TabGuide>
+          <TabGuide storageKey="externalsales-preparar">Tus ventas asignadas — agrupa los productos, toma fotos según la guía y marca listo para que Daniel asigne quién embala y entrega.</TabGuide>
           <ExternalSalePrepPanel />
         </>
       )}

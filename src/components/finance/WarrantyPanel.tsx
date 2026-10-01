@@ -206,7 +206,7 @@ export function WarrantyPanel({
         <div className="bg-surface border border-teal/35 rounded-md p-4.5 mb-5">
           <div className="text-[13px] font-semibold text-ink mb-1">Se llena sola con los cortes</div>
           <div className="text-[12px] text-steel">
-            Cada garantía que Yair marca al subir las guías de Dropi suma al total del mes, con su motivo. No hay que escribir nada.
+            Cada garantía que Daniel marca al subir las guías de Dropi suma al total del mes, con su motivo. No hay que escribir nada.
           </div>
           <button type="button" className="mt-2 text-[11px] text-steel underline cursor-pointer" onClick={openManual}>
             Cargar o corregir un mes anterior a octubre 2026
@@ -261,7 +261,7 @@ export function WarrantyPanel({
         </div>
         <div className="text-[11px] text-steel mt-2.5">
           {auto
-            ? "Este mes se llena solo: cada garantía que Yair marca en las guías de Dropi suma al total, con su motivo. No hay que escribir nada."
+            ? "Este mes se llena solo: cada garantía que Daniel marca en las guías de Dropi suma al total, con su motivo. No hay que escribir nada."
             : "Si el mes ya tiene un total, guardar uno nuevo lo reemplaza — así puedes corregir un error."}
         </div>
       </div>

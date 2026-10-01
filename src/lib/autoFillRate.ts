@@ -14,6 +14,11 @@ import { getCompiledLot } from "@/lib/fulfillmentGuides";
 //   Despachadas = guías − falta de stock − preparadas − generadas.
 export const AUTO_FILL_RATE_FROM_WEEK = "2026-W40";
 
+// Área dueña del KPI "Pedidos despachados / Fill Rate". Era Fulfillment
+// (FUL); desde 2026-10-01 Fulfillment se fusionó en INVESTOCK (INV) y las 40
+// semanas guardadas se movieron con la misma fusión.
+export const FILL_RATE_DEPT_CODE = "INV";
+
 export function isoWeekOf(day: string): string {
   const d = new Date(`${day}T12:00:00Z`);
   const dow = d.getUTCDay() || 7;
@@ -59,13 +64,13 @@ export function fillRateNumbers(counts: { guides: number; outOfStock: number }, 
   return { value, outOfStock: counts.outOfStock, notDispatched: counts.outOfStock + prepared + generated };
 }
 
-// Recalcula la semana del día dado conservando lo que Yair escribió
+// Recalcula la semana del día dado conservando lo que el líder escribió
 // (preparadas/generadas) y la justificación. Se llama cada vez que un corte
 // se envía a Inventario o Daniel confirma algo — nunca rompe el flujo si falla.
 export async function recomputeAutoFillRate(day: string): Promise<void> {
   const week = isoWeekOf(day);
   if (!isAutoFillRateWeek(week)) return;
-  const dept = await prisma.department.findFirst({ where: { code: "FUL" }, select: { id: true } });
+  const dept = await prisma.department.findFirst({ where: { code: FILL_RATE_DEPT_CODE }, select: { id: true } });
   if (!dept) return;
   const existing = await prisma.weeklyMetricRecord.findUnique({
     where: { deptId_week: { deptId: dept.id, week } },

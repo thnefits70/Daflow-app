@@ -117,7 +117,7 @@ export function CancelledGuideSubmitForm({ onSubmitted, viewerDeptCode }: { onSu
           <Check size={20} className="text-green" />
         </div>
         <div className="font-display font-bold text-[15px] mb-1.5">{sentCount === 1 ? "Reportada" : `${sentCount} guías reportadas`}</div>
-        <p className="text-[12.5px] text-steel mb-4">Fulfillment e Inventario ya fueron avisados para que no las despachen, y Análisis de Mercado ya recibió el lote para gestionarlo.</p>
+        <p className="text-[12.5px] text-steel mb-4">INVESTOCK ya fue avisado para que no las despachen, y Análisis de Mercado ya recibió el lote para gestionarlo.</p>
         <button type="button" className="text-[12.5px] font-bold text-teal cursor-pointer" onClick={reset}>Reportar otra</button>
       </div>
     );

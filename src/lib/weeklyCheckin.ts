@@ -374,12 +374,15 @@ export async function buildWeeklyCheckinContext(params: {
     ctx += `\n\nPENDIENTES DE SEMANAS ANTERIORES (pregunta por cada uno antes de seguir con problemas nuevos):\n${lines}`;
   }
 
-  if (params.deptCode === "FUL" || params.deptCode === "MKT") {
+  // Desde 2026-10-01 Fulfillment se fusionó en INVESTOCK (INV): INV recibe
+  // los datos de despacho que antes eran de Fulfillment, además de los suyos.
+  if (params.deptCode === "INV" || params.deptCode === "MKT") {
     const metrics = await buildDispatchVolumeMetricsBlock();
     if (metrics) {
       ctx += `\n\nDATOS REALES DE ESTA SEMANA:\n${metrics}`;
     }
-  } else if (params.deptCode === "FIN") {
+  }
+  if (params.deptCode === "FIN") {
     const metrics = await buildWarrantyMetricsBlock();
     if (metrics) {
       ctx += `\n\nDATOS REALES (garantías):\n${metrics}`;

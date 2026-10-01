@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canEditDeptKpis, canJustifyFillRate } from "@/lib/guards";
 import { getOldestUnjustifiedFillRateWeek, fillRateJustificationRuleAppliesTo } from "@/lib/dashboard";
-import { computeAutoCounts, fillRateNumbers, isAutoFillRateWeek } from "@/lib/autoFillRate";
+import { computeAutoCounts, fillRateNumbers, isAutoFillRateWeek, FILL_RATE_DEPT_CODE } from "@/lib/autoFillRate";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -47,11 +47,12 @@ export async function POST(req: NextRequest) {
 
   // Confirmado 2026-09-25 con el usuario: desde la semana 40 el Fill Rate de
   // Fulfillment calcula solo las guías, la falta de stock y las
-  // despachadas (ver autoFillRate.ts) — Yair solo escribe Preparadas y
-  // Generadas de la semana. Lo que mande para lo demás se ignora.
+  // despachadas (ver autoFillRate.ts) — el líder solo escribe Preparadas y
+  // Generadas de la semana. Lo que mande para lo demás se ignora. Desde
+  // 2026-10-01 el KPI vive en INVESTOCK (INV), ya no en Fulfillment.
   if (isAutoFillRateWeek(week)) {
     const dept = await prisma.department.findUnique({ where: { id: deptId }, select: { code: true } });
-    if (dept?.code === "FUL") {
+    if (dept?.code === FILL_RATE_DEPT_CODE) {
       prepared = prepared ?? 0;
       generated = generated ?? 0;
       const nums = fillRateNumbers(await computeAutoCounts(week), prepared, generated);

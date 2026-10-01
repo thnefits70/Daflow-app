@@ -1184,7 +1184,7 @@ export function ProfileDetail({
               <Truck size={11} /> ¿Ve Mercadería recibida para despacho?
             </label>
             <div className="text-[11px] text-steel mb-2">
-              Ve cada llegada a bodega (solo lectura, hoy Yair) en su propia &quot;Mi área de trabajo&quot; y recibe un aviso apenas Inventario confirma una recepción, para ir organizando el despacho. No puede confirmar diseño ni asesor.
+              Ve cada llegada a bodega (solo lectura, para quien organiza despachos sin ser de Análisis de Mercado) en su propia &quot;Mi área de trabajo&quot; y recibe un aviso apenas Inventario confirma una recepción, para ir organizando el despacho. No puede confirmar diseño ni asesor.
             </div>
             <PermToggle value={p.canViewMarketingArrivalsForDispatch} busy={busy} onChange={(v) => save({ canViewMarketingArrivalsForDispatch: v })} />
           </div>

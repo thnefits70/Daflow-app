@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { recordKardexEntry } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
-import { getFulfilmentLeadId } from "@/lib/guards";
 import { formatMerchandiseOutflowCode, nextMerchandiseOutflowNumber } from "@/lib/merchandiseOutflow";
 import { getCompiledLot, isBackfillLot, manifestCode, purchaseDeciderIds } from "@/lib/fulfillmentGuides";
 import { recomputeAutoFillRate } from "@/lib/autoFillRate";
@@ -28,7 +27,7 @@ const LOT_URL = "/area/workspace?tab=egresos&otab=solicitud";
 export async function recordPick(params: { lotId: string; catalogItemId: string; quantity: number; userId: string | null; onlyAssigned?: boolean }): Promise<Result> {
   const lot = await getCompiledLot(params.lotId);
   if (!lot) return { ok: false, error: "No encontrado." };
-  if (lot.status !== "SENT") return { ok: false, error: lot.status === "DRAFT" ? "Yair todavía no envía este corte." : "Este corte ya se cerró." };
+  if (lot.status !== "SENT") return { ok: false, error: lot.status === "DRAFT" ? "Este corte todavía no se envía." : "Este corte ya se cerró." };
   if (lot.backfill) return { ok: false, error: BACKFILL_NO_SCAN };
   const line = lot.picking.find((p) => p.catalogItemId === params.catalogItemId);
   if (!line) return { ok: false, error: "Este producto no está en el manifiesto de este corte." };
@@ -250,9 +249,10 @@ export async function confirmWarrantyPiece(params: { lotId: string; itemId: stri
 }
 
 // Pedido de Daniel 2026-09-26: en cuanto Daniel confirma que de un producto
-// salió menos de lo pedido, Fulfillment sabe qué guías retener (ver
-// fulfillmentHolds.ts). Va a todo Fulfillment activo (Yair incluido): son
-// quienes empacan y entregan las guías a la transportadora. Sin montos.
+// salió menos de lo pedido, el equipo sabe qué guías retener (ver
+// fulfillmentHolds.ts). Va a todo INVESTOCK activo (desde 2026-10-01, antes
+// Fulfillment): son quienes empacan y entregan las guías a la
+// transportadora. Sin montos.
 async function notifyGuideHolds(lotId: string, catalogItemIds: string[]) {
   if (catalogItemIds.length === 0) return;
   const lot = await getCompiledLot(lotId);
@@ -262,7 +262,7 @@ async function notifyGuideHolds(lotId: string, catalogItemIds: string[]) {
   const label = `${lot.manifestNumber ? `${manifestCode(lot.manifestNumber)} · ` : ""}Corte ${lot.corte} del ${lot.day.split("-").reverse().join("/")}`;
   const list = holds.map((h) => `${h.justCode ? `${h.justCode} ` : ""}${h.name}: faltan ${h.missing} → retén ${holdSummary(h, carrierLabel)}`).join(". ");
   const team = await prisma.user.findMany({
-    where: { isActive: true, OR: [{ department: { code: "FUL" } }, { isLeader: true, leadsDept: { code: "FUL" } }] },
+    where: { isActive: true, OR: [{ department: { code: "INV" } }, { isLeader: true, leadsDept: { code: "INV" } }] },
     select: { id: true },
   });
   for (const u of team) {
@@ -291,12 +291,11 @@ async function maybeCloseLot(lotId: string) {
   const more = missing.length > 8 ? ` y ${missing.length - 8} más` : "";
   const body = `${label}: faltaron unidades — ${list}${more}.`;
 
-  // Yair (para saber qué pedidos no salen), Bryan Ríos y Jariel (quien hace
-  // las compras) — pedido de Daniel 2026-09-26: Jariel también debe
-  // enterarse. Misma lista que el aviso de "Stock insuficiente".
+  // Bryan Ríos y Jariel (quien hace las compras) — pedido de Daniel
+  // 2026-09-26. Misma lista que el aviso de "Stock insuficiente". Antes
+  // también iba al líder de Fulfillment; desde 2026-10-01 ese rol es del
+  // propio Líder de Inventarios, que es quien cierra el corte.
   const recipients = new Set<string>();
-  const yair = await getFulfilmentLeadId();
-  if (yair) recipients.add(yair);
   for (const id of await purchaseDeciderIds()) recipients.add(id);
   for (const id of recipients) {
     await notifyOwner(id, { title: "Faltaron productos en el despacho", body, url: LOT_URL });
@@ -305,15 +304,15 @@ async function maybeCloseLot(lotId: string) {
 
 // ---- Bloques asignados (pedido de Daniel 2026-09-26) ----------------------
 
-// Quién se puede asignar: el equipo de Inventario activo (Daniel incluido)
-// y, desde el 2026-09-26 (pedido de Daniel), la gente de Fulfillment menos
-// su líder (quien sube y envía el corte). Por departamento, no por nombre,
-// para que alguien nuevo aparezca solo — mismo criterio que fulfillmentPickScope.
+// Quién se puede asignar: el equipo de INVESTOCK activo (Daniel incluido;
+// desde 2026-10-01 incluye a la ex gente de Fulfillment). Por departamento,
+// no por nombre, para que alguien nuevo aparezca solo — mismo criterio que
+// fulfillmentPickScope.
 export async function listInventoryTeam(): Promise<{ id: string; name: string }[]> {
   return prisma.user.findMany({
     where: {
       isActive: true,
-      OR: [{ department: { code: "INV" } }, { isLeader: true, leadsDept: { code: "INV" } }, { department: { code: "FUL" }, isLeader: false }],
+      OR: [{ department: { code: "INV" } }, { isLeader: true, leadsDept: { code: "INV" } }],
     },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
@@ -325,7 +324,7 @@ export async function listInventoryTeam(): Promise<{ id: string; name: string }[
 export async function assignBlock(params: { lotId: string; carrier: string; assigneeId: string | null; userId: string | null }): Promise<Result> {
   const lot = await getCompiledLot(params.lotId);
   if (!lot) return { ok: false, error: "No encontrado." };
-  if (lot.status !== "SENT") return { ok: false, error: lot.status === "DRAFT" ? "Yair todavía no envía este corte." : "Este corte ya se cerró." };
+  if (lot.status !== "SENT") return { ok: false, error: lot.status === "DRAFT" ? "Este corte todavía no se envía." : "Este corte ya se cerró." };
   if (lot.backfill) return { ok: false, error: BACKFILL_NO_SCAN };
   if (!lot.blocks.some((b) => b.carrier === params.carrier)) return { ok: false, error: "Ese bloque no está en este corte." };
 

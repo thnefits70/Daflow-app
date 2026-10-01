@@ -342,7 +342,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                       <div className="text-[11px] mb-2">
                         {(p.picked ?? 0) > p.needed
                           ? `Sacaron ${p.picked}, pero se pidieron ${p.needed}: se confirman ${p.needed} y los ${(p.picked ?? 0) - p.needed} de más vuelven a la percha.`
-                          : `Se pidieron ${p.needed}: faltan ${p.needed - qtyToConfirm}. Se descuenta del Kardex solo lo que salió y se avisa a Yair y Bryan Ríos al cerrar el corte.`}
+                          : `Se pidieron ${p.needed}: faltan ${p.needed - qtyToConfirm}. Se descuenta del Kardex solo lo que salió y se avisa a Bryan Ríos y Jariel al cerrar el corte.`}
                       </div>
                       <div className="flex gap-2">
                         <button

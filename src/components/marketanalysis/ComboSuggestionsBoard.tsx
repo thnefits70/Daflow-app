@@ -493,7 +493,9 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
             {created.map((s) => (
               <div key={s.id} className="flex items-center gap-2 text-[12px] text-steel flex-wrap">
                 <CheckCircle2 size={13} className="text-teal shrink-0" />
-                <b className="text-ink">{s.suggestedName ?? "Combo"}</b>
+                {/* Los creados con el sistema anterior no tienen nombre: se
+                    muestran sus productos. */}
+                <b className="text-ink">{s.suggestedName ?? s.items.map((it) => it.catalogItem.name).join(" + ")}</b>
                 {s.dropiCombo && <span>· ID {s.dropiCombo.code}</span>}
                 {s.bodega && <span>· {MARCA_LABELS[s.bodega]}</span>}
                 {s.approvedDropiPrice != null && <span>· {money(s.approvedDropiPrice)}</span>}

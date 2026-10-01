@@ -33,7 +33,7 @@ function statusChip(r: ReportDTO): { text: string; color: string } {
   if (r.itemsAssignedAt && r.batchManagedAt && r.fulfillmentRemovedAt) return { text: "Lista — reingresando al inventario", color: "text-blue" };
   const missing: string[] = [];
   if (!r.batchManagedAt) missing.push("que Bryan gestione con la transportadora");
-  if (!r.fulfillmentRemovedAt) missing.push("que Yair confirme la salida de Fulfillment");
+  if (!r.fulfillmentRemovedAt) missing.push("que Daniel confirme la salida de Fulfillment");
   if (!r.itemsAssignedAt) missing.push("cargar productos");
   if (missing.length > 0 && (r.batchManagedAt || r.fulfillmentRemovedAt || r.itemsAssignedAt)) {
     return { text: `Falta ${missing.join(" y ")}`, color: "text-gold" };

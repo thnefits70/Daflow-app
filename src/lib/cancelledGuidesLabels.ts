@@ -29,8 +29,10 @@ export const SOURCE_AREA_LABELS: Record<string, string> = {
 export const SOURCE_AREAS_FOR_FULFILLMENT_SUBMITTER = ["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "ROCKET"] as const;
 export const ALL_SOURCE_AREAS = ["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "ROCKET", "FULFILLMENT"] as const;
 
+// Desde 2026-10-01 Fulfillment se fusionó en INVESTOCK (INV): quien reporta
+// desde ahí recibe la misma lista corta que antes tenía Fulfillment.
 export function allowedSourceAreasFor(deptCode: string | null | undefined): readonly string[] {
-  return deptCode === "FUL" ? SOURCE_AREAS_FOR_FULFILLMENT_SUBMITTER : ALL_SOURCE_AREAS;
+  return deptCode === "INV" ? SOURCE_AREAS_FOR_FULFILLMENT_SUBMITTER : ALL_SOURCE_AREAS;
 }
 
 // Reemplazados 2026-09-02, pedido explícito del usuario (antes "Solicitud

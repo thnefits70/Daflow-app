@@ -124,7 +124,7 @@ export function PayrollProfileFields({ userId, canEdit }: { userId: string; canE
       />
       <ToggleRow
         label="Puede registrar horas extra"
-        hint="Le habilita la pantalla para cargar sus horas extra y las de su equipo (hoy: Inventario y Fulfillment)."
+        hint="Le habilita la pantalla para cargar sus horas extra y las de su equipo (hoy: INVESTOCK)."
         value={profile.canLogOvertimeHours}
         onChange={(v) => save({ canLogOvertimeHours: v })}
         disabled={!canEdit}

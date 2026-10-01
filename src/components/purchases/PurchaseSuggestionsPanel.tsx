@@ -182,7 +182,7 @@ export function PurchaseSuggestionsPanel() {
   return (
     <div>
       <div className="bg-teal/10 border border-teal/30 rounded-md px-3 py-2 text-[12px] text-steel mb-4">
-        Cuánto se vende sale de los pedidos de Dropi que sube Yair y de las ventas externas de los últimos{" "}
+        Cuánto se vende sale de los pedidos de Dropi que sube Daniel y de las ventas externas de los últimos{" "}
         <b className="text-ink">{days} día{days === 1 ? "" : "s"}</b>
         {days < 30 ? " (los pedidos se guardan desde el 21 de septiembre; cada día que pasa el cálculo es más preciso)" : ""}. Los combos cuentan como venta de cada producto que los forma.
       </div>

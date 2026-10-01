@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
-import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId, getFulfilmentLeadId } from "@/lib/guards";
+import { getInventoryLeadId, getMarketingLeadId, getFinanceLeadId } from "@/lib/guards";
 import { nextMerchandiseOutflowNumber, formatMerchandiseOutflowCode } from "@/lib/merchandiseOutflow";
 import { addBusinessDays } from "@/lib/businessHours";
 import {
@@ -153,10 +153,12 @@ export async function notifyFinanceLeadExternalSalePendingInvoice(code: string):
   await notifyOwner(leadId, { title: "🧾 Venta externa lista para facturar", body: `${code} — pago confirmado, ya puedes subir la factura.`, url: `${URL_BASE}&etab=pagos` }).catch(() => null);
 }
 
+// Desde 2026-10-01 (Fulfillment fusionado en INVESTOCK) le llega al Líder de
+// Inventarios, que asigna los dos pasos.
 export async function notifyFulfilmentLeadExternalSalePrepReady(code: string): Promise<void> {
-  const leadId = await getFulfilmentLeadId();
+  const leadId = await getInventoryLeadId();
   if (!leadId) return;
-  await notifyOwner(leadId, { title: "📦 Venta externa lista para embalar", body: `${code} — Inventario ya agrupó, asigna quién embala y entrega.`, url: `${URL_BASE}&etab=embalaje` }).catch(() => null);
+  await notifyOwner(leadId, { title: "📦 Venta externa lista para embalar", body: `${code} — ya se agrupó, asigna quién embala y entrega.`, url: `${URL_BASE}&etab=embalaje` }).catch(() => null);
 }
 
 export async function notifyColaboradorPackAssigned(colaboradorId: string, code: string, productName: string): Promise<void> {

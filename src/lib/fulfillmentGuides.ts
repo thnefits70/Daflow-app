@@ -1069,7 +1069,7 @@ export function manifestCode(n: number): string {
 export async function assignManifestNumber(lotId: string): Promise<{ ok: true; manifestNumber: number } | { ok: false; error: string }> {
   const lot = await prisma.fulfillmentLot.findUnique({ where: { id: lotId }, select: { status: true, manifestNumber: true } });
   if (!lot) return { ok: false, error: "No encontrado." };
-  if (lot.status === "DRAFT") return { ok: false, error: "Yair todavía no envía este corte a Inventario." };
+  if (lot.status === "DRAFT") return { ok: false, error: "Este corte todavía no se envía a Inventario." };
   if (lot.manifestNumber) return { ok: true, manifestNumber: lot.manifestNumber };
   for (let attempt = 0; attempt < 3; attempt++) {
     const last = await prisma.fulfillmentLot.aggregate({ _max: { manifestNumber: true } });

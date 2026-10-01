@@ -24,8 +24,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!sale.prepReadyAt) return NextResponse.json({ error: "Inventario todavía no la deja lista." }, { status: 409 });
   if (sale.packAssignedToId) return NextResponse.json({ error: "Ya fue asignada." }, { status: 409 });
 
-  const colaborador = await prisma.user.findFirst({ where: { id: parsed.data.colaboradorId, department: { code: "FUL" }, isActive: true }, select: { id: true, name: true } });
-  if (!colaborador) return NextResponse.json({ error: "Colaborador no encontrado en Fulfilment." }, { status: 404 });
+  // Desde 2026-10-01 (Fulfillment fusionado en INVESTOCK): alguien del equipo
+  // de INV que no sea el líder — mismo criterio que pending-pack.
+  const colaborador = await prisma.user.findFirst({ where: { id: parsed.data.colaboradorId, department: { code: "INV" }, isActive: true, isLeader: false }, select: { id: true, name: true } });
+  if (!colaborador) return NextResponse.json({ error: "Colaborador no encontrado en INVESTOCK." }, { status: 404 });
 
   const updated = await prisma.externalSale.update({
     where: { id },

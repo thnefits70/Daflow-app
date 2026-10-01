@@ -258,7 +258,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
       rows,
       warranty: data.warranty.filter((_, idx) => idx !== i),
       guides: data.guides.map((g) => (g.number === w.guide ? { ...g, warranty: false } : g)),
-      warnings: [...data.warnings, `Yair marcó la guía ${w.guide} (${carrierLabel(w.carrier)}, SIN RECAUDO) como pago anticipado, no garantía.`],
+      warnings: [...data.warnings, `Se marcó la guía ${w.guide} (${carrierLabel(w.carrier)}, SIN RECAUDO) como pago anticipado, no garantía.`],
     });
     setWarrantyDecisions((prev) => {
       const next: Record<number, WarrantyDecision> = {};

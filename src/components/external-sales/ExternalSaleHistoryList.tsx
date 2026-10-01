@@ -76,7 +76,7 @@ function nextActionHint(s: SaleDTO): string | null {
   if (!s.reviewedAt) return "Esperando que Bryan la apruebe";
   if (s.deliveredAt) return s.nairobyClosedAt ? null : "Esperando que Nairoby cierre la venta";
   if (s.packAssignedTo) return `Esperando que ${s.packAssignedTo.name} confirme la entrega`;
-  if (s.prepReadyAt) return "Esperando que Yair asigne quién embala";
+  if (s.prepReadyAt) return "Esperando que Daniel asigne quién embala";
   if (s.dispatchAssignedTo) return `Esperando que ${s.dispatchAssignedTo.name} agrupe y marque listo`;
   return "Esperando que Daniel asigne quién agrupa";
 }

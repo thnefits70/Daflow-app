@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     if (danielId) {
       await notifyOwner(danielId, {
         title: "Manifiesto atrasado por confirmar",
-        body: `Yair cargó el manifiesto del ${day}, que ya se despachó. No hay que sacar nada: entra al corte y confirma que salió todo para descontarlo del stock.`,
+        body: `Se cargó el manifiesto del ${day}, que ya se despachó. No hay que sacar nada: entra al corte y confirma que salió todo para descontarlo del stock.`,
         url: "/area/workspace?tab=egresos&otab=solicitud",
       }).catch(() => null);
     }

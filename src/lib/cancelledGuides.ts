@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
-import { getMarketingLeadId, getInventoryLeadId, getFulfilmentLeadId } from "@/lib/guards";
+import { getMarketingLeadId, getInventoryLeadId } from "@/lib/guards";
 
 export async function nextCancelledGuideNumber(): Promise<number> {
   const updated = await prisma.platformSettings.update({
@@ -28,15 +28,15 @@ export function formatCancelledGuideBatchCode(batchNumber: number): string {
 
 const URL_BASE = "/area/workspace?tab=egresos&otab=guias";
 
-// Confirmado 2026-08-25: apenas se sube una guía a cancelar, Fulfillment
-// entero se entera (son quienes despacharían físicamente) y en especial
+// Confirmado 2026-08-25: apenas se sube una guía a cancelar, el equipo que
+// despacha entero se entera (desde 2026-10-01 INVESTOCK, antes Fulfillment) (son quienes despacharían físicamente) y en especial
 // Daniel — pedido explícito del usuario, "en especial el líder de
 // inventario debería [saber de] esas cancelaciones". Actualizado
 // 2026-09-02: ahora se manda una sola vez por lote (no una por guía) para
 // no saturar de pushes cuando Yair sube muchas guías juntas.
 export async function notifyCancelledGuideBatchSubmitted(batchCode: string, guideCount: number): Promise<void> {
   const [fulfillmentTeam, invLeadId] = await Promise.all([
-    prisma.user.findMany({ where: { department: { code: "FUL" } }, select: { id: true } }),
+    prisma.user.findMany({ where: { department: { code: "INV" }, isActive: true }, select: { id: true } }),
     getInventoryLeadId(),
   ]);
   const recipients = new Set([...fulfillmentTeam.map((u) => u.id), ...(invLeadId ? [invLeadId] : [])]);
@@ -73,11 +73,11 @@ export async function notifyItemAssigneesNewBatch(batchCode: string, guideCount:
 }
 
 // Agregado 2026-09-03, pedido explícito del usuario: apenas Bryan gestiona
-// un lote, le llega a Yair (líder FUL) para que confirme que ya sacó esas
-// guías del área de Fulfillment (fulfillmentRemovedAt) — paso nuevo, antes
-// de que el lote pueda llegar a Daniel.
+// un lote, le llega al líder del despacho para que confirme que ya sacó esas
+// guías de la zona de despacho (fulfillmentRemovedAt). Desde 2026-10-01
+// (Fulfillment fusionado en INVESTOCK) es el Líder de Inventarios.
 export async function notifyFulfillmentLeadBatchManaged(batchCode: string, guideCount: number): Promise<void> {
-  const leadId = await getFulfilmentLeadId();
+  const leadId = await getInventoryLeadId();
   if (!leadId) return;
   const body = guideCount === 1 ? `${batchCode} — 1 guía gestionada, confirmá que la sacaste de Fulfillment.` : `${batchCode} — ${guideCount} guías gestionadas, confirmá que las sacaste de Fulfillment.`;
   await notifyOwner(leadId, { title: "Lote gestionado — sacalo de Fulfillment", body, url: `${URL_BASE}&sub=salida-fulfillment` }).catch(() => null);

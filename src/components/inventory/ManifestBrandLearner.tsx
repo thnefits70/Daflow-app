@@ -56,7 +56,7 @@ export function ManifestBrandLearner({ onDone }: { onDone: () => void }) {
     <div className="border border-rule rounded-md p-3 mb-3 bg-cloud">
       <div className="text-[12.5px] font-bold mb-0.5">Marcas aprendidas de los manifiestos</div>
       <div className="text-[11.5px] text-steel mb-2">
-        Cada PDF que sube Yair es el manifiesto de una marca. La app pone esa marca sola a los IDs que vienen en él y no la tenían (sobre todo combos). Nunca cambia una marca que ya está puesta: si no coincide, te la muestra abajo para que decidas.
+        Cada PDF de guías que sube Daniel es el manifiesto de una marca. La app pone esa marca sola a los IDs que vienen en él y no la tenían (sobre todo combos). Nunca cambia una marca que ya está puesta: si no coincide, te la muestra abajo para que decidas.
       </div>
       <button
         type="button"

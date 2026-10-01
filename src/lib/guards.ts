@@ -590,10 +590,6 @@ function isInventoryTeamMember(user: { isLeader: boolean; leadsDept: { code: str
   return (user.isLeader && user.leadsDept?.code === "INV") || user.department?.code === "INV";
 }
 
-function isFulfilmentTeamMember(user: { isLeader: boolean; leadsDept: { code: string } | null; department: { code: string } | null }) {
-  return (user.isLeader && user.leadsDept?.code === "FUL") || user.department?.code === "FUL";
-}
-
 // Confirmado 2026-09-02: pedido explícito del usuario — alguien en
 // transición (purchasingNewRequestsBlocked, hoy Bryan) no debe conservar
 // "Mis solicitudes" para siempre. Una vez que ya no le queda ninguna
@@ -710,7 +706,7 @@ export async function canActOnPurchaseApproval() {
 
 // Confirmado 2026-09-02: usado para avisarle por push a quien tenga el
 // nuevo flag de aprobación (hoy Bryan) apenas entra una solicitud nueva —
-// mismo estilo que getInventoryLeadId/getFulfilmentLeadId.
+// mismo estilo que getInventoryLeadId.
 export async function getPurchaseApproverIds(): Promise<string[]> {
   const users = await prisma.user.findMany({
     where: { canApprovePurchaseRequests: true, isActive: true },
@@ -804,17 +800,10 @@ export async function getInventoryLeadId(): Promise<string | null> {
   return lead?.id ?? null;
 }
 
-// Yair — líder de Fulfilment, además de asesor de Ventas Externas.
-export async function getFulfilmentLeadId(): Promise<string | null> {
-  const lead = await prisma.user.findFirst({
-    where: { isLeader: true, leadsDept: { code: "FUL" }, isActive: true },
-    select: { id: true },
-  });
-  return lead?.id ?? null;
-}
-
 // Confirmado 2026-08-31: pedido explícito del usuario — la justificación
-// del Fill Rate bajo es EXCLUSIVA del líder de Fulfillment (hoy Yair), a
+// del Fill Rate bajo es EXCLUSIVA del líder del área que despacha (desde
+// 2026-10-01, con Fulfillment fusionado en INVESTOCK, el Líder de
+// Inventarios), a
 // diferencia del resto de KPIs departamentales (canEditDeptKpis, que
 // también deja pasar a admin). El admin la ve igual que el resto del
 // equipo: solo lectura, sin el botón de publicar — él la lee, no la
@@ -823,7 +812,7 @@ export async function canJustifyFillRate() {
   const session = await auth();
   if (!session || session.user.role !== "employee") return false;
   const user = await getGuardUser(session.user.id);
-  return !!user?.isLeader && user.leadsDept?.code === "FUL";
+  return !!user?.isLeader && user.leadsDept?.code === "INV";
 }
 
 // Fix confirmado 2026-08-11: excepción explícita al patrón "admin siempre
@@ -1079,14 +1068,16 @@ export async function canViewMerchandiseOutflow() {
 // criterio de membresía que canCaptureMerchandiseOutflow (equipo, sin
 // bypass de admin — admin nunca captura Registro de Egresos, solo supervisa
 // en modo lectura, ver canViewFulfillmentRequests) pero para el
-// departamento FUL en vez de INV. Cualquiera del equipo puede subir el
-// Excel de Rocket, no solo Yair (líder).
+// departamento FUL en vez de INV.
+// 2026-10-01, pedido del usuario: Fulfillment se fusionó en INVESTOCK (INV)
+// y el Líder de Inventarios "hace todo": sube los PDF, envía el corte y lo
+// confirma. El resto del equipo saca la mercadería.
 export async function canSubmitFulfillmentRequest() {
   const session = await auth();
   if (!session) return false;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return false;
-  return isFulfilmentTeamMember(user);
+  return !!user.isLeader && user.leadsDept?.code === "INV";
 }
 
 // Visibilidad de solo lectura del compendiado — Daniel/admin (mismo criterio
@@ -1106,18 +1097,16 @@ export async function canPickFulfillmentLot() {
   return (await fulfillmentPickScope()) !== null;
 }
 
-// Pedido de Daniel 2026-09-26: también puede sacar la gente de Fulfillment,
-// pero SOLO los productos del bloque que Daniel le asignó ("ASSIGNED").
-// Inventario sigue pudiendo registrar cualquier producto ("ALL"). El líder
-// de Fulfillment (quien sube y envía el corte) queda fuera a propósito — el
-// que pide no debería ser el que saca.
+// Pedido de Daniel 2026-09-26: la gente de Fulfillment sacaba SOLO los
+// productos del bloque que Daniel le asignó ("ASSIGNED"). Desde 2026-10-01
+// Fulfillment se fusionó en INVESTOCK (INV): todo el equipo registra
+// cualquier producto ("ALL"). "ASSIGNED" queda sin uso por ahora.
 export async function fulfillmentPickScope(): Promise<"ALL" | "ASSIGNED" | null> {
   const session = await auth();
   if (!session || session.user.role === "admin") return null;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return null;
   if (isInventoryTeamMember(user)) return "ALL";
-  if (user.department?.code === "FUL" && !user.isLeader) return "ASSIGNED";
   return null;
 }
 
@@ -1183,7 +1172,8 @@ export async function getMarketingLeadId(): Promise<string | null> {
  * (pedido explícito del usuario — "yo apruebo el recibido"). Facturar es de
  * Nairoby (líder de Finanzas). Agrupar/preparar reusa las guards de Registro
  * de Egresos (equipo de Inventario, Daniel exclusivo para asignar). Embalar
- * y entregar es del equipo de Fulfilment (Yair exclusivo para asignar).
+ * y entregar también es del equipo de INVESTOCK desde 2026-10-01 (antes
+ * Fulfilment); el Líder de Inventarios asigna los dos pasos.
  * Cerrar la venta es de Nairoby.
  *
  * Actualizado 2026-08-29, pedido explícito del usuario: aprobar/rechazar
@@ -1221,17 +1211,17 @@ export async function canInvoiceExternalSale() {
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
-// Yair (líder de Fulfilment) asigna a su equipo quién embala y entrega —
-// mismo patrón que canActOnMerchandiseOutflow pero para el departamento FUL.
-// Confirmado 2026-08-29: Yair es a la vez asesor (declara ventas del canal
-// Shanghai) y líder de este equipo — los dos roles conviven.
+// El Líder de Inventarios asigna a su equipo quién embala y entrega — mismo
+// patrón que canActOnMerchandiseOutflow. Antes era del líder de Fulfilment;
+// desde 2026-10-01 el área se fusionó en INVESTOCK y se mantienen los dos
+// pasos (agrupar → embalar/entregar), los dos asignados por el mismo líder.
 export async function canAssignExternalSalePack() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return false;
-  return !!user.isLeader && user.leadsDept?.code === "FUL";
+  return !!user.isLeader && user.leadsDept?.code === "INV";
 }
 
 export async function canPackExternalSale() {
@@ -1239,7 +1229,7 @@ export async function canPackExternalSale() {
   if (!session) return false;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return false;
-  return isFulfilmentTeamMember(user);
+  return isInventoryTeamMember(user);
 }
 
 export async function canCloseExternalSale() {
@@ -1282,7 +1272,7 @@ export async function canSubmitCancelledGuide() {
   if (!session) return false;
   const user = await cancelledGuideUserContext(session.user.id);
   if (!user) return false;
-  return user.department?.code === "MKT" || user.department?.code === "FUL";
+  return user.department?.code === "MKT" || user.department?.code === "INV";
 }
 
 // Bryan (líder MKT) confirma que gestionó un lote completo con la
@@ -1295,16 +1285,17 @@ export async function canManageCancelledGuideBatches() {
   return !!user?.isLeader && user.leadsDept?.code === "MKT";
 }
 
-// Agregado 2026-09-03, pedido explícito del usuario: Yair (líder FUL)
+// Agregado 2026-09-03, pedido explícito del usuario: el líder del despacho
 // confirma, después de que Bryan gestionó el lote, que ya sacó esas guías
-// del área de Fulfillment para que no se despachen. Mismo criterio que
+// de la zona de despacho para que no salgan. Desde 2026-10-01 (Fulfillment
+// fusionado en INVESTOCK) es el Líder de Inventarios. Mismo criterio que
 // canManageCancelledGuideBatches (admin también puede).
 export async function canConfirmCancelledGuideFulfillmentRemoval() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
   const user = await cancelledGuideUserContext(session.user.id);
-  return !!user?.isLeader && user.leadsDept?.code === "FUL";
+  return !!user?.isLeader && user.leadsDept?.code === "INV";
 }
 
 // Delegado puntual (hoy Heidy) que carga productos/cantidades guía por
@@ -1324,7 +1315,7 @@ export async function canViewAllCancelledGuides() {
   if (!session) return false;
   if (session.user.role === "admin") return true;
   const user = await cancelledGuideUserContext(session.user.id);
-  return !!user?.isLeader && !!user.leadsDept && ["MKT", "FUL", "INV"].includes(user.leadsDept.code);
+  return !!user?.isLeader && !!user.leadsDept && ["MKT", "INV"].includes(user.leadsDept.code);
 }
 
 export async function canViewCancelledGuides() {

@@ -180,21 +180,22 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canViewMerchandiseOutflow={dept.code === "INV"}
         // Solicitud de Fulfillment — admin nunca sube el Excel de Rocket
         // (mismo criterio "admin nunca captura" de arriba), pero sí puede
-        // ver el compendiado en modo lectura al navegar FUL (donde Yair
-        // sube) o INV (donde Daniel lo consulta).
+        // ver el compendiado en modo lectura al navegar INV (INVESTOCK, donde
+        // Daniel lo sube y lo confirma desde 2026-10-01).
         canSubmitFulfillmentRequest={false}
-        canViewFulfillmentRequests={dept.code === "INV" || dept.code === "FUL"}
+        canViewFulfillmentRequests={dept.code === "INV"}
         // Guías Canceladas (Fase 4), rediseñado 2026-09-02 — admin nunca
         // reporta ni carga productos (canAssignCancelledGuideItems es
         // EXCLUSIVO de quien tiene el flag, ni siquiera admin, mismo
         // patrón que canConfirmMarketingDesign de abajo); gestionar lotes
         // SÍ es de admin además de Bryan (mismo bypass ya presente en el
         // guard), se muestra al navegar el departamento de MKT. Agregado
-        // 2026-09-03: confirmar salida de Fulfillment (Yair) sigue el
-        // mismo bypass de admin, se muestra al navegar el departamento FUL.
+        // 2026-09-03: confirmar salida de la zona de despacho sigue el
+        // mismo bypass de admin, se muestra al navegar INV (desde
+        // 2026-10-01, antes FUL).
         canSubmitCancelledGuide={false}
         canManageCancelledGuideBatches={dept.code === "MKT"}
-        canConfirmCancelledGuideFulfillmentRemoval={dept.code === "FUL"}
+        canConfirmCancelledGuideFulfillmentRemoval={dept.code === "INV"}
         canAssignCancelledGuideItems={false}
         // Ventas Externas (Fase 3) — Nairoby factura y cierra (FIN), admin
         // confirma pago SIEMPRE (no es de ningún departamento en
@@ -208,16 +209,16 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canReviewExternalSales={false}
         canConfirmExternalSalePayment={true}
         canInvoiceExternalSale={dept.code === "FIN"}
-        canAssignExternalSalePack={dept.code === "FUL"}
+        canAssignExternalSalePack={dept.code === "INV"}
         canPackExternalSale={false}
         canCloseExternalSale={dept.code === "FIN"}
         // Corrección 2026-09-01: esto había quedado en `true` fijo por
         // error, así que la pestaña salía en TODOS los departamentos (ej.
         // Control de Compras), donde nadie tiene ningún rol en este flujo.
         // Los únicos departamentos con un rol real son MKT (Bryan revisa,
-        // Heidy/Jariel declaran), FIN (Nairoby), INV (Daniel/equipo) y FUL
-        // (Yair/equipo).
-        canViewExternalSales={["MKT", "FIN", "INV", "FUL"].includes(dept.code)}
+        // Heidy/Jariel declaran), FIN (Nairoby) e INV (Daniel/equipo; desde
+        // 2026-10-01 incluye lo que era Fulfillment).
+        canViewExternalSales={["MKT", "FIN", "INV"].includes(dept.code)}
         pettyCashData={pettyCashData}
         canManageAdminPayments={dept.code === "FIN"}
         // Flag delegado a una persona puntual (hoy Daniel), no "el rol de

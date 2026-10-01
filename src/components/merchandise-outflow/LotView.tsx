@@ -487,7 +487,7 @@ export function LotView({
 
       {lot.status === "DRAFT" && !canSubmit && (
         <div className="text-[12px] bg-gold/15 border border-gold/40 rounded-md p-2.5 mb-3">
-          Yair todavía está armando este corte. El escáner aparece cuando lo envíe a Inventario. Los cortes anteriores están en &quot;Cortes por día&quot;, abajo.
+          Daniel todavía está armando este corte. El escáner aparece cuando lo envíe. Los cortes anteriores están en &quot;Cortes por día&quot;, abajo.
         </div>
       )}
 
