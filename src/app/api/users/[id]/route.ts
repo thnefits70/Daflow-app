@@ -68,6 +68,8 @@ const updateSchema = z.object({
   canBrandMarketProduct: z.boolean().optional(),
   canResolveSupplierStockout: z.boolean().optional(),
   canViewStockLevels: z.boolean().optional(),
+  canViewB2BPricing: z.boolean().optional(),
+  canViewB2CPricing: z.boolean().optional(),
   canViewMarketingArrivalsForDispatch: z.boolean().optional(),
   marketingAdvisorBrand: z.string().nullable().optional(),
   canManageStoreFeedback: z.boolean().optional(),
@@ -173,6 +175,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.canBrandMarketProduct !== undefined) data.canBrandMarketProduct = d.canBrandMarketProduct;
   if (d.canResolveSupplierStockout !== undefined) data.canResolveSupplierStockout = d.canResolveSupplierStockout;
   if (d.canViewStockLevels !== undefined) data.canViewStockLevels = d.canViewStockLevels;
+  if (d.canViewB2BPricing !== undefined) data.canViewB2BPricing = d.canViewB2BPricing;
+  if (d.canViewB2CPricing !== undefined) data.canViewB2CPricing = d.canViewB2CPricing;
   if (d.canViewMarketingArrivalsForDispatch !== undefined) data.canViewMarketingArrivalsForDispatch = d.canViewMarketingArrivalsForDispatch;
   if (d.marketingAdvisorBrand !== undefined) data.marketingAdvisorBrand = d.marketingAdvisorBrand;
   if (d.canManageStoreFeedback !== undefined) data.canManageStoreFeedback = d.canManageStoreFeedback;

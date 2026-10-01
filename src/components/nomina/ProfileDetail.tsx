@@ -64,6 +64,8 @@ type UserProfile = {
   canBrandMarketProduct: boolean;
   canResolveSupplierStockout: boolean;
   canViewStockLevels: boolean;
+  canViewB2BPricing: boolean;
+  canViewB2CPricing: boolean;
   canViewMarketingArrivalsForDispatch: boolean;
   marketingAdvisorBrand: string | null;
   isB2BAdvisor: boolean;
@@ -1155,6 +1157,26 @@ export function ProfileDetail({
               Ve la tabla de &quot;Stock Actual&quot; (stock INVESTOCK, costos y precios de venta) en su propia &quot;Mi área de trabajo&quot;, igual que Bryan. Solo mirar: no puede cambiar marcas ni ajustar el conteo.
             </div>
             <PermToggle value={p.canViewStockLevels} busy={busy} onChange={(v) => save({ canViewStockLevels: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <HandCoins size={11} /> ¿Ve precios B2B (Consulta de precios)?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Ve el precio al por mayor de cada producto en &quot;Consulta de precios&quot;, solo mirar. Quien está en Análisis de Mercado ya lo ve sin esto.
+            </div>
+            <PermToggle value={p.canViewB2BPricing} busy={busy} onChange={(v) => save({ canViewB2BPricing: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <HandCoins size={11} /> ¿Ve precios B2C (Consulta de precios)?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Ve el precio al por menor (cliente final) de cada producto en &quot;Consulta de precios&quot;, solo mirar — para quien vende contra entrega (hoy Marcos).
+            </div>
+            <PermToggle value={p.canViewB2CPricing} busy={busy} onChange={(v) => save({ canViewB2CPricing: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
