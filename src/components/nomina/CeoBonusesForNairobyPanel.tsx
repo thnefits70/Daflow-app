@@ -5,8 +5,9 @@ import { formatDateTime } from "@/lib/formatDateTime";
 
 type Grant = {
   id: string;
-  type: "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO";
+  type: "ADICIONAL" | "PRODUCTIVIDAD" | "MERITO" | "PERSONALIZADO";
   note: string | null;
+  amount: number;
   grantedAt: string;
   user: { name: string };
   targetPeriod: string;
@@ -14,11 +15,10 @@ type Grant = {
   paidAt: string | null;
 };
 
-const LABELS: Record<Grant["type"], string> = { ADICIONAL: "Bono Adicional", PRODUCTIVIDAD: "Bono de Productividad", MERITO: "Bono al Mérito" };
-// Mismo motivo por el que LABELS está duplicado acá en vez de importarse de
-// commissionTiers.ts: ese archivo importa prisma (server-only) y este es un
-// componente "use client" — no se puede traer al bundle del navegador.
-const AMOUNTS: Record<Grant["type"], number> = { ADICIONAL: 50, PRODUCTIVIDAD: 100, MERITO: 150 };
+// Duplicado acá en vez de importarse de commissionTiers.ts: ese archivo
+// importa prisma (server-only) y este es un componente "use client". El
+// monto ya viene calculado del servidor (incluye el del bono personalizado).
+const LABELS: Record<Grant["type"], string> = { ADICIONAL: "Bono Adicional", PRODUCTIVIDAD: "Bono de Productividad", MERITO: "Bono al Mérito", PERSONALIZADO: "Bono personalizado" };
 const MONTHS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 function periodLabel(period: string) {
@@ -79,8 +79,8 @@ export function CeoBonusesForNairobyPanel() {
         {grants.map((g) => (
           <div key={g.id} className="flex items-center justify-between gap-2 text-[12px] text-ink py-1 border-b border-rule last:border-0">
             <div className="flex flex-col gap-0.5">
-              <span><span className="font-semibold">{g.user.name}</span> — {LABELS[g.type]} · ${AMOUNTS[g.type]}</span>
-              <span className="text-steel-dim text-[11px]">Otorgado {formatDateTime(g.grantedAt)} · se paga en {periodLabel(g.targetPeriod)}</span>
+              <span><span className="font-semibold">{g.user.name}</span> — {LABELS[g.type]} · ${g.amount.toFixed(2)}{g.note && <span className="text-steel"> · {g.note}</span>}</span>
+              <span className="text-steel-dim text-[11px]">Otorgado {formatDateTime(g.grantedAt)} · {g.status === "PAID" ? "se pagó en" : "se paga en"} {periodLabel(g.targetPeriod)} (una sola vez)</span>
             </div>
             {g.status === "PAID" && (
               <span className="text-[10.5px] font-semibold text-green bg-green/10 border border-green/30 rounded-full px-2 py-0.5 shrink-0">
