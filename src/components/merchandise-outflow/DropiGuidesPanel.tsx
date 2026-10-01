@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileText, Package, X } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { ProductMatchPicker, type MatchCatalogItem } from "@/components/merchandise-reentry/ProductMatchPicker";
@@ -112,6 +112,10 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
   const [picking, setPicking] = useState<string | null>(null);
   const [registering, setRegistering] = useState<string | null>(null);
   const [warrantyDecisions, setWarrantyDecisions] = useState<Record<number, WarrantyDecision>>({});
+  // Pedido del usuario 2026-09-30: motivo de cada garantía (por número de
+  // guía) — de ahí sale solo el KPI de Garantías.
+  const [warrantyReasons, setWarrantyReasons] = useState<Record<string, string>>({});
+  const [reasonOptions, setReasonOptions] = useState<string[]>([]);
   const [err, setErr] = useState("");
   // Manifiesto atrasado (pedido del usuario 2026-09-29): un PDF de un día
   // pasado que nunca se cargó. Yair lo marca y va al corte de ESE día, que
@@ -128,10 +132,10 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
   // para descartarlo todo. No se borra solo: puede ser trabajo sin terminar.
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Guayaquil" });
   const [draftDay, setDraftDay] = useState(today);
-  type GuidesDraft = { files: typeof files; data: ParseResult | null; decisions: typeof decisions; warrantyDecisions: typeof warrantyDecisions; day?: string };
+  type GuidesDraft = { files: typeof files; data: ParseResult | null; decisions: typeof decisions; warrantyDecisions: typeof warrantyDecisions; warrantyReasons?: typeof warrantyReasons; day?: string };
   const { clearDraft } = useFormDraft<GuidesDraft>(
     "dropi-guides-panel",
-    { files, data, decisions, warrantyDecisions, day: draftDay },
+    { files, data, decisions, warrantyDecisions, warrantyReasons, day: draftDay },
     (d) => {
       // Respaldo de antes de este cambio (sin día) = de un día anterior.
       setDraftDay(d.day ?? "");
@@ -139,10 +143,18 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
       setData(d.data ?? null);
       setDecisions(d.decisions ?? {});
       setWarrantyDecisions(d.warrantyDecisions ?? {});
+      setWarrantyReasons(d.warrantyReasons ?? {});
       setPhase(d.data ? "preview" : "idle");
     },
     (d) => d.files.length === 0
   );
+
+  useEffect(() => {
+    fetch("/api/fulfillment-requests/dropi/guides/warranty-reasons")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setReasonOptions(d?.reasons ?? []))
+      .catch(() => null);
+  }, []);
 
   async function handleFiles(list: FileList) {
     setErr("");
@@ -211,6 +223,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     setData(null);
     setDecisions({});
     setWarrantyDecisions({});
+    setWarrantyReasons({});
     setPhase("idle");
     setErr("");
     setDraftDay(today);
@@ -289,6 +302,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     if (decisions[w.code]?.kind === "ignore") return true;
     const wd = warrantyDecisions[i];
     if (!wd || partsOf(w.code).length === 0) return false;
+    if (!warrantyReasons[w.guide]?.trim()) return false;
     if (wd.mode === "PARTIAL") return wd.catalogItemIds.length > 0;
     if (wd.mode === "PIECE") return !!wd.catalogItemId && !!wd.piece.trim();
     return true;
@@ -326,7 +340,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
         warranty: warranty
           .map((w, i) => ({ w, wd: warrantyDecisions[i] }))
           .filter(({ w, wd }) => wd && decisions[w.code]?.kind !== "ignore")
-          .map(({ w, wd }) => ({ guide: w.guide, carrier: w.carrier, code: w.code, quantity: w.quantity, variant: w.variant, decision: wd })),
+          .map(({ w, wd }) => ({ guide: w.guide, carrier: w.carrier, code: w.code, quantity: w.quantity, variant: w.variant, decision: wd, reason: (warrantyReasons[w.guide] ?? "").trim() })),
       }),
     });
     const json = await res.json().catch(() => null);
@@ -454,6 +468,17 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                 />
               </div>
             )}
+            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+              <span className="font-semibold">Motivo de la garantía:</span>
+              <input
+                type="text"
+                list="warranty-reason-options"
+                placeholder="Elige o escribe uno nuevo. Ej. No enciende"
+                className="flex-1 min-w-[12rem] rounded border border-rule bg-surface px-2 py-1 text-[11.5px]"
+                value={warrantyReasons[w.guide] ?? ""}
+                onChange={(e) => setWarrantyReasons((p) => ({ ...p, [w.guide]: e.target.value }))}
+              />
+            </div>
           </div>
         )}
       </div>
@@ -823,7 +848,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
           {(warranty.length > 0 || data.unreadWarrantyGuides.length > 0) && (
             <>
               <div className="text-[11px] font-semibold text-steel mb-1.5">
-                Garantías ({warranty.length}) — marca qué sale de verdad en cada una
+                Garantías ({warranty.length}) — marca qué sale de verdad y el motivo de cada una
               </div>
               {data.unreadWarrantyGuides.length > 0 && (
                 <div className="text-[11px] text-red mb-1.5 flex items-start gap-1">
@@ -833,6 +858,11 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                   </span>
                 </div>
               )}
+              <datalist id="warranty-reason-options">
+                {reasonOptions.map((r) => (
+                  <option key={r} value={r} />
+                ))}
+              </datalist>
               <div className="flex flex-col gap-1.5 mb-3">{warranty.map(renderWarranty)}</div>
             </>
           )}
@@ -892,7 +922,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             </button>
             {(pending.length > 0 || pendingWarranty > 0) && (
               <span className="text-[11.5px]" style={{ color: "var(--color-gold)" }}>
-                {pending.length > 0 ? `Resuelve los ${pending.length} código(s) pendientes` : `Marca qué sale en ${pendingWarranty} garantía(s)`} antes de guardar.
+                {pending.length > 0 ? `Resuelve los ${pending.length} código(s) pendientes` : `Marca qué sale y el motivo en ${pendingWarranty} garantía(s)`} antes de guardar.
               </span>
             )}
           </div>

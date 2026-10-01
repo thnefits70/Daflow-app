@@ -93,11 +93,11 @@ export function ComboSuggestionsPanel({
         <>
           <TabGuide storageKey="combos-sugerencias">
             {canAct ? (
-              <>Acá salen las combinaciones que la IA arma sola, cruzando productos que venden bien con productos de baja rotación — cada una trae un % de qué tan segura es. Marca las que quieras armar, mándalas a aprobación, y cuando las apruebes quedan listas para que quien tenga el rol de crearlas en Dropi (hoy Heidy) las arme allá y marque &quot;Creado en Dropi&quot;. &quot;Descartar sin revisar&quot; borra las sugerencias viejas sin decisión tomada, y &quot;Recalcular sugerencias&quot; vuelve a correr el cruce con los datos más frescos (puede tardar hasta 1 minuto).</>
-            ) : canApprove ? (
-              <>Ves todo en modo lectura, incluyendo los lotes esperando aprobación — aprobar o rechazar es exclusivo del líder de Análisis de Mercado, ni admin lo hace. Sí puedes seleccionar sugerencias y mandarlas a aprobación, igual que el resto del equipo.</>
+              <>Cada noche el sistema arma solo los combos con lo que sale en los cortes: 1 ganador + 1 de baja salida, o 2 ganadores + 1 que casi no se mueve, siempre del mismo nicho, con nombre, precio Dropi (20% de margen) y stock recomendado. La asesora B2B elige cuáles te manda. Tú apruebas o rechazas cada uno y eliges UNA marca — un combo nunca se repite en otra marca.</>
+            ) : canMarkCreated ? (
+              <>Cada noche el sistema arma solo los combos con nombre, precio Dropi y stock recomendado. Elige cuáles mandar a aprobación según tu análisis (no hay que cambiar nada). Cuando el líder los apruebe, copia nombre, precio y stock a Dropi en la marca indicada, pega el ID que te dio Dropi y presiona &quot;Creado en Dropi&quot; — queda solo en Stock Actual y pasa a brandeo.</>
             ) : (
-              <>Acá ves las combinaciones que la IA sugiere, cruzando productos que venden bien con productos de baja rotación — cada una trae un % de qué tan segura es. Seleccionar y mandar a aprobación es de cualquiera del equipo de Análisis de Mercado; aprobar o rechazar el lote es exclusivo del líder.</>
+              <>Acá ves los combos que el sistema arma solo cada noche. La asesora B2B elige cuáles mandar a aprobación; el líder de Análisis de Mercado aprueba cada uno y elige la marca.</>
             )}
           </TabGuide>
           <ComboSuggestionsBoard canApprove={canApprove} canAct={canAct} canMarkCreated={canMarkCreated} />

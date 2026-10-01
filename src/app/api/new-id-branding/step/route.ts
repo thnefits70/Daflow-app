@@ -9,10 +9,11 @@ const schema = z
   .object({
     catalogItemId: z.string().min(1).nullable().optional(),
     proposalId: z.string().min(1).nullable().optional(),
+    dropiComboId: z.string().min(1).nullable().optional(),
     step: z.enum(["dropiImages", "dropiInfo", "driveVideo", "realPhotos", "channel"]),
     done: z.boolean(),
   })
-  .refine((d) => d.catalogItemId || d.proposalId, { message: "Falta el producto." });
+  .refine((d) => d.catalogItemId || d.proposalId || d.dropiComboId, { message: "Falta el producto." });
 
 const STEP_FIELDS = {
   dropiImages: ["dropiImagesAt", "dropiImagesById"],
@@ -37,9 +38,13 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   const { step, done } = parsed.data;
 
-  let catalogItemId = parsed.data.catalogItemId ?? null;
+  // Pedido del usuario 2026-09-30: combos creados desde Sugerencias de
+  // Combos — sus productos ya están en bodega, no tienen propuesta ni
+  // llegadas propias.
+  const dropiComboId = parsed.data.dropiComboId ?? null;
+  let catalogItemId = dropiComboId ? null : parsed.data.catalogItemId ?? null;
   const proposalSelect = { id: true, productName: true, brandedAt: true, catalogItemId: true } as const;
-  let proposal = parsed.data.proposalId
+  let proposal = parsed.data.proposalId && !dropiComboId
     ? await prisma.marketProductProposal.findUnique({ where: { id: parsed.data.proposalId }, select: proposalSelect })
     : null;
   if (parsed.data.proposalId && !proposal) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
@@ -48,9 +53,12 @@ export async function POST(req: NextRequest) {
     proposal = await prisma.marketProductProposal.findUnique({ where: { catalogItemId }, select: proposalSelect });
   }
 
-  let row = await prisma.newIdBranding.findFirst({
-    where: { OR: [...(catalogItemId ? [{ catalogItemId }] : []), ...(proposal ? [{ proposalId: proposal.id }] : [])] },
-  });
+  let row = dropiComboId
+    ? await prisma.newIdBranding.findUnique({ where: { dropiComboId } })
+    : await prisma.newIdBranding.findFirst({
+        where: { OR: [...(catalogItemId ? [{ catalogItemId }] : []), ...(proposal ? [{ proposalId: proposal.id }] : [])] },
+      });
+  if (dropiComboId && !row) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   const legacyDone = catalogItemId
     ? !!(await prisma.purchaseReceiptFollowUp.findFirst({ where: { designConfirmedAt: { not: null }, request: { catalogItemId } }, select: { id: true } }))
     : false;
@@ -64,8 +72,9 @@ export async function POST(req: NextRequest) {
   // tomar cuando el producto ya está físicamente en bodega, y recién con
   // ellas se sube al canal. Lo ya marcado en el canal antes de este cambio
   // sigue valiendo (se puede desmarcar sin pedir fotos reales).
-  const arrived =
-    afterBranding && done && catalogItemId
+  const arrived = dropiComboId
+    ? true
+    : afterBranding && done && catalogItemId
       ? !!(await prisma.purchaseRequest.findFirst({ where: { catalogItemId, status: { in: ["RECEIVED_PENDING_REVIEW", "RECEIVED"] } }, select: { id: true } }))
       : false;
   if (step === "realPhotos" && done && !arrived) {

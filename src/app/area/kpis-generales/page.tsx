@@ -7,7 +7,7 @@ import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { ReturnRatePanel } from "@/components/finance/ReturnRatePanel";
 import { StockoutPanel } from "@/components/finance/StockoutPanel";
 import { WarrantyPanel } from "@/components/finance/WarrantyPanel";
-import { MonthlyTopMoversPanel } from "@/components/finance/MonthlyTopMoversPanel";
+import { CurrentWinnersPanel } from "@/components/finance/CurrentWinnersPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { canManageReturnRate, canManageStockouts, canManageWarranties, canManageInventoryControl } from "@/lib/guards";
 
@@ -69,12 +69,12 @@ export default async function AreaKpisGeneralesPage() {
       {canTopMovers && (
         <>
           <div className={`flex items-center justify-between gap-2 mb-3 ${canReturnRate || canStockouts ? "mt-7" : ""}`}>
-            <h3 className="text-[14px] font-semibold">Productos ganadores del mes</h3>
+            <h3 className="text-[14px] font-semibold">Productos ganadores</h3>
           </div>
           <TabGuide storageKey="kpis-generales-topmovers">
-            Una vez al mes (ideal: los primeros 3 días), sube el reporte de productos con 200+ movimientos ese mes. Estos ganadores se suman a los de ATOM para armar Sugerencias de Combos — mientras más productos ganadores tenga el sistema, más opciones de combos puede sugerir.
+            Se llena sola con los cortes: no hay que subir ningún reporte. Estos ganadores se usan para armar Sugerencias de Combos.
           </TabGuide>
-          <MonthlyTopMoversPanel />
+          <CurrentWinnersPanel />
         </>
       )}
 
@@ -85,7 +85,7 @@ export default async function AreaKpisGeneralesPage() {
             <PushTypeToggle type="kpi_garantias" />
           </div>
           <TabGuide storageKey="kpis-generales-garantias">
-            Registra el total de garantías ingresadas ese mes, y opcionalmente desglósalo por categoría de producto (el conteo por categoría es aparte del total — ambos se guardan por mes).
+            Desde octubre 2026 se llena sola con los cortes: cada garantía que Yair marca en las guías de Dropi suma al total del mes, con su motivo. Los meses anteriores quedan como se cargaron a mano.
           </TabGuide>
           <WarrantyPanel categories={warrantyCategories} monthTotals={warrantyMonthTotals} counts={warrantyCounts} />
         </>

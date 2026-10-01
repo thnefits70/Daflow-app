@@ -1936,6 +1936,7 @@ model PurchaseCatalogItem {
   lowRotationWeeklyEntries       LowRotationWeeklyEntry[]
   comboSuggestionsAsWinner       ComboSuggestion[]               @relation("ComboSuggestionWinner")
   comboSuggestionsAsLowRotation  ComboSuggestion[]               @relation("ComboSuggestionLowRotation")
+  comboSuggestionItems           ComboSuggestionItem[]
   monthlyTopMoverEntries         MonthlyTopMoverEntry[]
   // Confirmado 2026-09-09: Análisis de Mercado (Fase 2) — se crea/liga solo
   // cuando Robert termina de brandear una propuesta, con sus 3 fotos reales.
@@ -2134,9 +2135,54 @@ model ComboSuggestion {
   createdInDropiById String?
   createdInDropiBy   User?     @relation("ComboSuggestionCreatedInDropiBy", fields: [createdInDropiById], references: [id], onDelete: SetNull)
 
-  @@unique([winnerCatalogItemId, lowRotationCatalogItemId])
+  // Pedido del usuario 2026-09-30: combos armados solos cada noche — 1
+  // ganador + 1 de baja salida, o 2 ganadores + 1 de muy baja salida. Si un
+  // ganador es un combo ya registrado entra con su receta real. La lista
+  // completa (con cantidades) vive en items; winner/lowRotation de arriba
+  // quedan como el ganador principal y el de baja salida.
+  items ComboSuggestionItem[]
+
+  // "Huella" = productos×cantidad ordenados. Un combo vive en UNA sola
+  // marca: la misma huella nunca se repite (ni en otra marca).
+  fingerprint String? @unique
+
+  // Nombre llamativo (máx. 4 palabras) sugerido por la IA en la misma
+  // consulta que arma el combo.
+  suggestedName String?
+
+  // Marca elegida por el líder de Análisis de Mercado al aprobar (una sola).
+  bodega MarketProductBodega?
+
+  // Precio Dropi congelado al aprobar — el que la asesora B2B copia.
+  approvedDropiPrice Float?
+
+  // Combo registrado en Stock Actual cuando la asesora B2B pega el ID de Dropi.
+  dropiComboId String?     @unique
+  dropiCombo   DropiCombo? @relation(fields: [dropiComboId], references: [id], onDelete: SetNull)
+
+  @@index([winnerCatalogItemId, lowRotationCatalogItemId])
   @@index([status])
   @@index([batchId])
+}
+
+enum ComboSuggestionItemRole {
+  WINNER
+  LOW
+}
+
+model ComboSuggestionItem {
+  id            String                  @id @default(cuid())
+  suggestionId  String
+  suggestion    ComboSuggestion         @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem     @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  quantity      Int                     @default(1)
+  role          ComboSuggestionItemRole
+  // Si este producto entra por un ganador que ya es combo registrado.
+  fromComboCode String?
+
+  @@index([suggestionId])
+  @@index([catalogItemId])
 }
 
 // ---------------- Fase 2: Análisis de Mercado ----------------
@@ -2421,6 +2467,8 @@ model DropiCombo {
   bodega MarketProductBodega?
 
   components         DropiComboComponent[]
+  comboSuggestion    ComboSuggestion?
+  newIdBranding      NewIdBranding?
   // Confirmado 2026-09-21: Rocket vende el mismo combo con un código propio,
   // distinto al de Dropi — ver RocketCodeMapping.
   rocketCodeMappings RocketCodeMapping[]
@@ -2731,6 +2779,10 @@ model FulfillmentRequestItem {
   warrantyGuide      String?
   warrantyMode       String?
   warrantyPiece      String?
+  // Pedido del usuario 2026-09-30: Yair marca el motivo de cada garantía en
+  // el corte — de ahí sale solo el KPI de Garantías (total + motivos).
+  warrantyCategoryId String?
+  warrantyCategory   WarrantyCategory? @relation(fields: [warrantyCategoryId], references: [id], onDelete: SetNull)
   // Garantía de solo una pieza: Daniel confirma que salió (no se escanea ni
   // toca el Kardex — sale del stock de repuestos).
   pieceConfirmedAt   DateTime?
@@ -3478,6 +3530,10 @@ model NewIdBranding {
   catalogItem   PurchaseCatalogItem?   @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
   proposalId    String?                @unique
   proposal      MarketProductProposal? @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  // Pedido del usuario 2026-09-30: combos nacidos de Sugerencias de Combos
+  // también se brandean al poner su ID de Dropi.
+  dropiComboId  String?                @unique
+  dropiCombo    DropiCombo?            @relation(fields: [dropiComboId], references: [id], onDelete: Cascade)
 
   // Corregido 2026-09-23 (aclaración del usuario): el brandeo se hace FUERA
   // de DAFLOW (imágenes e información en Dropi, videos en Google Drive) — acá
@@ -4063,7 +4119,8 @@ model WarrantyCategory {
   name      String   @unique
   createdAt DateTime @default(now())
 
-  monthCounts WarrantyCategoryMonthCount[]
+  monthCounts      WarrantyCategoryMonthCount[]
+  fulfillmentItems FulfillmentRequestItem[]
 }
 
 // "Total de garantías ingresadas" ese mes — el denominador para el % del

@@ -468,7 +468,6 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   catalogo_producto_faltante: "Productos reportados como faltantes en el catálogo",
   control_inventario: "Control de Inventario — captura mensual",
   combo_sugerencias_nicho_backfill: "Sugerencias de Combos — nichos por asignar (tope de gasto alcanzado)",
-  monthly_top_movers: "KPIs Generales — productos ganadores del mes por subir",
   plan_mejora_evaluacion_pendiente: "Plan de Mejora — evaluación semanal pendiente",
   plan_mejora_etapa_vencida: "Plan de Mejora — etapa vencida, falta decidir cómo siguió",
   plan_mejora_cierre_aprobacion: "Plan de Mejora — cierre de un líder por aprobar",
@@ -2690,29 +2689,9 @@ async function getNichoBackfillPendingItem(href: string): Promise<PendingItem | 
   };
 }
 
-// Confirmado 2026-09-04: pedido explícito de Daniel — recordatorio en Inicio
-// durante los primeros 3 días del mes para subir el reporte mensual de
-// productos ganadores (200+ movimientos), que suma como fuente de ganadores
-// para Sugerencias de Combos. Fuera de esos 3 días no molesta más — se puede
-// seguir subiendo después (con solo un aviso en la propia pantalla), pero el
-// recordatorio en Inicio es solo por la ventana ideal.
-async function getMonthlyTopMoversPendingItem(href: string): Promise<PendingItem | null> {
-  const dayOfMonth = new Date().getDate();
-  if (dayOfMonth > 3) return null;
-
-  const month = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
-  const alreadyLoaded = await prisma.monthlyTopMoverEntry.count({ where: { month } });
-  if (alreadyLoaded > 0) return null;
-
-  return {
-    type: "monthly_top_movers",
-    icon: "📈",
-    label: "Productos ganadores del mes por subir",
-    meta: "Reporte de productos con 200+ movimientos — se suma a las Sugerencias de Combos",
-    overdue: false,
-    href,
-  };
-}
+// Pedido del usuario 2026-09-30: el reporte mensual de ganadores ya no se
+// sube a mano — los ganadores salen solos de los cortes (ver
+// getCurrentWinners en comboSuggestions.ts), así que ya no hay recordatorio.
 
 // Confirmado 2026-09-24, pedido de Nairoby: "que me notifique cuando un
 // proceso no se cumpla o se pase por alto". Un solo pendiente que resume
@@ -3187,13 +3166,12 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const comPriceCorrectionHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=precio` : "/admin";
     const deterioroExcepcionesHref = "/admin/deterioro-excepciones";
     const nichoBackfillHref = "/admin/reingreso-mercaderia?tab=productos";
-    const monthlyTopMoversHref = "/admin/kpis-generales";
     // Confirmado 2026-08-31: "Ventas Externas" vive en la página del
     // departamento MKT (ver canViewExternalSales en admin/dept/[id]/page.tsx),
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
     const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseAwaitingCostItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, monthlyTopMoversItem, improvementPlanClosureItems, purchaseExceptionItem, stockAdjustmentItem, catalogDeleteItem, supplierAccountItem, freightExceptionItem, nairobySalaryItem, adminPlanItems, priceCorrectionItem, writeOffApprovalItem] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseAwaitingCostItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, improvementPlanClosureItems, purchaseExceptionItem, stockAdjustmentItem, catalogDeleteItem, supplierAccountItem, freightExceptionItem, nairobySalaryItem, adminPlanItems, priceCorrectionItem, writeOffApprovalItem] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -3218,7 +3196,6 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getExternalSalePaymentConfirmPendingItem(mktVentasPagosHref),
       getUpcomingBirthdayPendingItems("/admin/nomina"),
       getNichoBackfillPendingItem(nichoBackfillHref),
-      getMonthlyTopMoversPendingItem(monthlyTopMoversHref),
       getImprovementPlanPendingClosureApprovalItems("/admin/plan-mejora"),
       getPurchaseExceptionAdminPendingItem(deterioroExcepcionesHref),
       getStockAdjustmentAdminPendingItem(invStockHref),
@@ -3256,7 +3233,6 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(externalSalePaymentConfirmItem ? [externalSalePaymentConfirmItem] : []),
       ...birthdayItems,
       ...(nichoBackfillItem ? [nichoBackfillItem] : []),
-      ...(monthlyTopMoversItem ? [monthlyTopMoversItem] : []),
       ...(purchaseExceptionItem ? [purchaseExceptionItem] : []),
       ...(stockAdjustmentItem ? [stockAdjustmentItem] : []),
       ...(priceCorrectionItem ? [priceCorrectionItem] : []),
@@ -3460,7 +3436,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, personalPurchaseInventoryItem, lateClaimReviewItem, urgentUnresolvedItem, nichoBackfillItem, monthlyTopMoversItem, deteriorResolutionItem, externalSaleDispatchItem] = await Promise.all([
+    const [stockoutItem, receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, personalPurchaseInventoryItem, lateClaimReviewItem, urgentUnresolvedItem, nichoBackfillItem, deteriorResolutionItem, externalSaleDispatchItem] = await Promise.all([
       getStockoutPendingItem("/area/kpis-generales"),
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario", true),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -3470,7 +3446,6 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getLateClaimReviewPendingItem("/area/workspace?tab=compras&ptab=inventario"),
       getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes"),
       getNichoBackfillPendingItem("/area/reingreso-mercaderia?tab=productos"),
-      getMonthlyTopMoversPendingItem("/area/kpis-generales"),
       getDeteriorResolutionPendingItem("/area/workspace?tab=egresos&otab=deterioro"),
       getExternalSaleDispatchPendingItem("/area/workspace?tab=ventas-externas&etab=despacho"),
     ]);
@@ -3483,7 +3458,6 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (lateClaimReviewItem) items.push(lateClaimReviewItem);
     if (urgentUnresolvedItem) items.push(urgentUnresolvedItem);
     if (nichoBackfillItem) items.push(nichoBackfillItem);
-    if (monthlyTopMoversItem) items.push(monthlyTopMoversItem);
     if (deteriorResolutionItem) items.push(deteriorResolutionItem);
     const inspectionItem = await getDeteriorInspectionPendingItem("/area/workspace?tab=egresos&otab=seguimiento").catch(() => null);
     if (inspectionItem) items.push(inspectionItem);
@@ -3600,7 +3574,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion", "ajuste_stock_conteo", "catalogo_compras_borrado", "cuenta_proveedor_verificar", "caja_chica_excepcion_flete", "sueldo_nairoby_transferencia", "plan_mejora_admin", "correccion_precio_compra", "perdida_compra_aprobar");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion", "ajuste_stock_conteo", "catalogo_compras_borrado", "cuenta_proveedor_verificar", "caja_chica_excepcion_flete", "sueldo_nairoby_transferencia", "plan_mejora_admin", "correccion_precio_compra", "perdida_compra_aprobar");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -3646,7 +3620,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "monthly_top_movers", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
+      types.push("ruptura_stock", "compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "ventas_externas_agrupar", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

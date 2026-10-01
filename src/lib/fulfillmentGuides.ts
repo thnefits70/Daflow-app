@@ -6,6 +6,7 @@ import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId } from "@/lib/guards";
 import { lineBlock, NO_CARRIER, sortCarriers, VARIANT_CARRIER_UNKNOWN } from "@/lib/carriers";
 import { areaRank } from "@/lib/warehouseAreas";
+import { guayaquilMonth, syncWarrantyMonth } from "@/lib/warrantyKpi";
 
 export const NO_BRAND = "SIN_MARCA";
 
@@ -239,7 +240,10 @@ export type WarrantyDecision =
   // repuestos aparte, nunca del Kardex del producto).
   | { mode: "PIECE"; catalogItemId: string; piece: string };
 
-export type GuidesApplyWarranty = { guide: string; carrier: string; code: string; quantity: number; variant: string | null; decision: WarrantyDecision };
+// reason: motivo de la garantía (pedido del usuario 2026-09-30) — nombre de
+// un WarrantyCategory existente o uno nuevo que se crea al guardar. De ahí
+// sale solo el KPI de Garantías.
+export type GuidesApplyWarranty = { guide: string; carrier: string; code: string; quantity: number; variant: string | null; decision: WarrantyDecision; reason: string };
 
 export type GuidesApplyInput = {
   fileUrls: string[];
@@ -286,6 +290,7 @@ type ItemRow = {
   warrantyGuide?: string;
   warrantyMode?: string;
   warrantyPiece?: string;
+  warrantyCategoryId?: string;
   breakdown: { label: string; quantity: number }[];
 };
 
@@ -293,6 +298,24 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
   const dup = await findAlreadyUploadedGuides(input.guides.map((g) => g.number));
   if (dup.length > 0) {
     return { ok: false, error: `${dup.length} guía(s) de este PDF ya se subieron antes (ej. ${dup[0].number}) — no se vuelven a sumar.` };
+  }
+
+  // Motivo de cada garantía: obligatorio. Se reutiliza la categoría con el
+  // mismo nombre (sin importar mayúsculas) o se crea una nueva.
+  const missingReason = input.warranty.find((w) => !w.reason?.trim());
+  if (missingReason) return { ok: false, error: `Garantía ${missingReason.guide}: elige el motivo.` };
+  const categoryIdByReason = new Map<string, string>();
+  if (input.warranty.length > 0) {
+    const existingCategories = await prisma.warrantyCategory.findMany({ select: { id: true, name: true } });
+    const byLower = new Map(existingCategories.map((c) => [c.name.trim().toLowerCase(), c.id]));
+    for (const reason of new Set(input.warranty.map((w) => w.reason.trim()))) {
+      let id = byLower.get(reason.toLowerCase());
+      if (!id) {
+        id = (await prisma.warrantyCategory.upsert({ where: { name: reason }, create: { name: reason }, update: {} })).id;
+        byLower.set(reason.toLowerCase(), id);
+      }
+      categoryIdByReason.set(reason, id);
+    }
   }
 
   const decisionByCode = new Map(input.rows.map((r) => [r.code, r.decision]));
@@ -431,6 +454,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
         warrantyGuide: w.guide,
         warrantyMode: "PIECE",
         warrantyPiece: d.piece.trim(),
+        warrantyCategoryId: categoryIdByReason.get(w.reason.trim()),
         breakdown: [],
       });
       continue;
@@ -448,6 +472,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
         warrantyMode: d.mode,
         // En COMPLETE/PARTIAL este campo guarda el color/talla de la guía.
         warrantyPiece: w.variant ?? undefined,
+        warrantyCategoryId: categoryIdByReason.get(w.reason.trim()),
         breakdown: [],
       });
     }
@@ -543,6 +568,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
               warrantyGuide: r.warrantyGuide ?? null,
               warrantyMode: r.warrantyMode ?? null,
               warrantyPiece: r.warrantyPiece ?? null,
+              warrantyCategoryId: r.warrantyCategoryId ?? null,
             })),
           },
           guides: { create: input.guides.map((g) => ({ guideNumber: g.number, carrier: g.carrier, codes: g.codes ?? [] })) },
@@ -558,6 +584,8 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
         },
       });
     });
+    // KPI de Garantías automático: se recalcula el mes con lo recién subido.
+    if (input.warranty.length > 0) await syncWarrantyMonth(guayaquilMonth(new Date())).catch(() => null);
     return { ok: true, batchId: batch.id, lotId: lot.id, discontinuedCount: discontinuedSales.length };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";

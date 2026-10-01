@@ -40,9 +40,12 @@ export type BrandStep = (typeof BRAND_STEPS)[number];
 type Mark = { at: string; by: string | null };
 
 export type NewIdEntry = {
-  key: string; // "c:<catalogItemId>" o "p:<proposalId>"
+  key: string; // "c:<catalogItemId>", "p:<proposalId>" o "k:<dropiComboId>"
   catalogItemId: string | null;
   proposalId: string | null;
+  // Pedido del usuario 2026-09-30: combo nacido de Sugerencias de Combos
+  // (al poner su ID de Dropi). Sus productos ya están en bodega.
+  dropiComboId: string | null;
   name: string;
   code: string | null;
   referencePhotos: string[];
@@ -99,7 +102,11 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
       },
     }),
     prisma.newIdBranding.findMany({
-      include: { brandedBy: { select: { name: true } }, channelUploadedBy: { select: { name: true } } },
+      include: {
+        brandedBy: { select: { name: true } },
+        channelUploadedBy: { select: { name: true } },
+        dropiCombo: { select: { code: true, label: true, createdAt: true, components: { select: { catalogItem: { select: { photos: true } } } } } },
+      },
     }),
   ]);
 
@@ -109,6 +116,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
   );
   const rowByCatalog = new Map(rows.filter((r) => r.catalogItemId).map((r) => [r.catalogItemId!, r]));
   const rowByProposal = new Map(rows.filter((r) => r.proposalId).map((r) => [r.proposalId!, r]));
+  const rowByCombo = new Map(rows.filter((r) => r.dropiComboId).map((r) => [r.dropiComboId!, r]));
   const proposalByCatalog = new Map(proposals.filter((p) => p.catalogItemId).map((p) => [p.catalogItemId!, p]));
 
   const entries = new Map<string, NewIdEntry>();
@@ -124,6 +132,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
         key,
         catalogItemId: a.catalogItemId,
         proposalId: prop?.id ?? null,
+        dropiComboId: null,
         name: a.catalogItem.name,
         code: a.catalogItem.justCode ?? prop?.dropiProductId ?? null,
         referencePhotos: a.catalogItem.photos,
@@ -175,6 +184,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
         key,
         catalogItemId: p.catalogItemId,
         proposalId: p.id,
+        dropiComboId: null,
         name: p.productName,
         code: p.dropiProductId,
         referencePhotos: [p.referenceImageUrl],
@@ -195,10 +205,40 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
     }
   }
 
+  // 2b) Combos creados desde Sugerencias de Combos (pedido del usuario
+  // 2026-09-30): se arman con productos que ya están en bodega, así que
+  // cuentan como "llegados" desde que se registró el ID.
+  for (const r of rows) {
+    if (!r.dropiComboId || !r.dropiCombo) continue;
+    const at = r.dropiCombo.createdAt.toISOString();
+    entries.set(`k:${r.dropiComboId}`, {
+      key: `k:${r.dropiComboId}`,
+      catalogItemId: null,
+      proposalId: null,
+      dropiComboId: r.dropiComboId,
+      name: `Combo · ${r.dropiCombo.label ?? r.dropiCombo.code}`,
+      code: r.dropiCombo.code,
+      referencePhotos: r.dropiCombo.components.flatMap((c) => c.catalogItem.photos.slice(0, 1)),
+      arrivalPhotos: [],
+      arrivedAt: at,
+      arrivals: 1,
+      dropiPublishedAt: at,
+      since: "",
+      steps: { dropiImages: null, dropiInfo: null, driveVideo: null },
+      branded: null,
+      realPhotos: null,
+      channel: null,
+    });
+  }
+
   // 3) Lo guardado en esta sección manda sobre lo viejo.
   const mark = (at: Date | null, byId: string | null): Mark | null => (at ? { at: at.toISOString(), by: (byId && userNames.get(byId)) || null } : null);
   for (const e of entries.values()) {
-    const row = (e.catalogItemId && rowByCatalog.get(e.catalogItemId)) || (e.proposalId && rowByProposal.get(e.proposalId)) || null;
+    const row =
+      (e.dropiComboId && rowByCombo.get(e.dropiComboId)) ||
+      (e.catalogItemId && rowByCatalog.get(e.catalogItemId)) ||
+      (e.proposalId && rowByProposal.get(e.proposalId)) ||
+      null;
     if (row) {
       e.realPhotos = mark(row.realPhotosAt, row.realPhotosById);
       e.steps = {

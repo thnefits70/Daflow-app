@@ -16,6 +16,7 @@ type Entry = {
   key: string;
   catalogItemId: string | null;
   proposalId: string | null;
+  dropiComboId: string | null;
   name: string;
   code: string | null;
   referencePhotos: string[];
@@ -129,7 +130,7 @@ export function NewIdBrandingPanel() {
     const res = await fetch("/api/new-id-branding/step", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ catalogItemId: e.catalogItemId, proposalId: e.proposalId, step, done }),
+      body: JSON.stringify({ catalogItemId: e.catalogItemId, proposalId: e.proposalId, dropiComboId: e.dropiComboId, step, done }),
     }).catch(() => null);
     if (!res?.ok) {
       const d = await res?.json().catch(() => null);
@@ -154,7 +155,7 @@ export function NewIdBrandingPanel() {
     <div className="flex flex-col gap-3">
       <TabGuide storageKey="nuevos-ids-brandear">
         {data.canAct ? (
-          <>Acá aparece cada producto nuevo <b>una sola vez</b>: cuando llega a bodega por primera vez o cuando Heidy confirma su ID de Dropi. El brandeo lo haces como siempre en Dropi y en el Drive — acá solo marca cada paso cuando ya lo hiciste. Con los 3 pasos marcados pasa a <b>Imágenes reales</b>: ahí espera hasta que el producto llegue a bodega y le tomes las fotos reales. Cuando marcas las imágenes reales pasa al <b>Historial</b>, donde marcas cuando ya lo subiste al canal de la marca.</>
+          <>Acá aparece cada producto nuevo <b>una sola vez</b>: cuando llega a bodega por primera vez, cuando la asesora B2B confirma su ID de Dropi, o cuando se crea un combo nuevo desde Sugerencias de Combos. El brandeo lo haces como siempre en Dropi y en el Drive — acá solo marca cada paso cuando ya lo hiciste. Con los 3 pasos marcados pasa a <b>Imágenes reales</b>: ahí espera hasta que el producto llegue a bodega y le tomes las fotos reales. Cuando marcas las imágenes reales pasa al <b>Historial</b>, donde marcas cuando ya lo subiste al canal de la marca.</>
         ) : (
           <>Vista de solo lectura: qué productos nuevos faltan por brandear, cuáles esperan sus imágenes reales, y el historial de los que ya están listos para el canal.</>
         )}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2, Pencil, ChevronDown, ChevronUp } from "lucide-react";
 import { formatMonthShort } from "@/components/dashboard/WeeklyTrendChart";
 import { Combobox } from "@/components/ui/Combobox";
+import { isAutoWarrantyMonth } from "@/lib/warrantyKpiConstants";
 
 export type WarrantyCategoryDTO = { id: string; name: string };
 export type WarrantyMonthTotalDTO = { id: string; month: string; total: number };
@@ -182,6 +183,9 @@ export function WarrantyPanel({
   for (const c of counts) usageByCategoryId.set(c.category.id, (usageByCategoryId.get(c.category.id) ?? 0) + 1);
   const comboboxOptions = categories.map((c) => ({ id: c.id, name: c.name, usageCount: usageByCategoryId.get(c.id) ?? 0 }));
 
+  // Desde octubre 2026 el mes se llena solo con los cortes — no se escribe a mano.
+  const auto = isAutoWarrantyMonth(month);
+
   return (
     <div ref={panelTopRef}>
       <div className="bg-surface border border-rule rounded-md p-4.5 mb-3">
@@ -198,6 +202,8 @@ export function WarrantyPanel({
               onChange={(e) => setMonth(e.target.value)}
             />
           </div>
+          {!auto && (
+          <>
           <div>
             <label className="block mb-1 text-[10px] text-steel">Total ingresadas</label>
             <input
@@ -217,12 +223,17 @@ export function WarrantyPanel({
           >
             <Plus size={14} /> Guardar total
           </button>
+          </>
+          )}
         </div>
         <div className="text-[11px] text-steel mt-2.5">
-          Si el mes ya tiene un total, guardar uno nuevo lo reemplaza — así puedes corregir un error.
+          {auto
+            ? "Este mes se llena solo: cada garantía que Yair marca en las guías de Dropi suma al total, con su motivo. No hay que escribir nada."
+            : "Si el mes ya tiene un total, guardar uno nuevo lo reemplaza — así puedes corregir un error."}
         </div>
       </div>
 
+      {!auto && (
       <div className="bg-surface border border-rule rounded-md p-4.5 mb-5">
         <label className="block mb-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
           Agregar una categoría a ese mes
@@ -264,6 +275,7 @@ export function WarrantyPanel({
           Si la categoría ya existe, escribe su nombre igual y se reutiliza. Si el mes y la categoría ya tienen un valor, guardar uno nuevo lo reemplaza. En la lista desplegable, el bote de basura elimina una categoría del catálogo para siempre — solo si no tiene historial guardado.
         </div>
       </div>
+      )}
 
       {months.length === 0 && (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">

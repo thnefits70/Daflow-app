@@ -7,6 +7,7 @@ import { TabGuide } from "@/components/shared/TabGuide";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { CopyDropiPrice } from "@/components/shared/CopyDropiPrice";
+import { recommendedDropiStock, DROPI_STOCK_MIN_RECOMMENDED } from "@/lib/dropiStockRecommendation";
 
 type Row = {
   id: string;
@@ -254,21 +255,21 @@ export function MarketingArrivalsPanel({ canConfirmAdvisor }: { canConfirmAdviso
 }
 
 // Pedido del usuario 2026-09-30: el stock real en bodega (ya con lo que
-// llegó) es la base. Con menos de 100 se publica exacto; con 100 o más, la
-// asesora puede publicar más para atraer dropshippers, sin tope fijo (decisión
-// del usuario), pero nunca menos.
-const HIGH_STOCK_THRESHOLD = 100;
-
+// llegó) es la base. Cambiado el mismo día (pedido del usuario): es solo una
+// RECOMENDACIÓN — con menos de 100 reales igual se recomienda 100 (con poco
+// stock no le interesa a los dropshippers); con 100 o más, el doble o más.
+// Misma regla que los combos (ver dropiStockRecommendation.ts).
 function StockToPublish({ units }: { units: number }) {
-  const canInflate = units >= HIGH_STOCK_THRESHOLD;
+  const recommended = recommendedDropiStock(units);
   return (
     <div className="rounded border border-teal/35 bg-teal/10 px-2.5 py-2 mb-2">
       <div className="text-[11px] text-steel">Stock real en bodega ahora (ya incluye lo que llegó)</div>
       <div className="text-[18px] font-bold text-ink leading-tight">{units} un.</div>
       <div className="text-[11.5px] text-ink mt-0.5">
-        {canInflate
-          ? `Pon en Dropi ${units} o más. Puedes subirlo para atraer dropshippers, pero sin exagerar: nunca menos de ${units}.`
-          : `Hay menos de ${HIGH_STOCK_THRESHOLD}: pon en Dropi exactamente ${units}, sin subirlo.`}
+        Recomendado para Dropi: <b>{recommended}</b>
+        {units < DROPI_STOCK_MIN_RECOMMENDED
+          ? ` — hay menos de ${DROPI_STOCK_MIN_RECOMMENDED} reales, pero con poco stock a los dropshippers no les interesa.`
+          : ` o más — el doble de lo real; con esa cantidad se soporta la operación.`}
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canManageWarranties } from "@/lib/guards";
+import { isAutoWarrantyMonth } from "@/lib/warrantyKpiConstants";
 
 export async function GET() {
   const canManage = await canManageWarranties();
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   }
   const { month, total } = parsed.data;
+  if (isAutoWarrantyMonth(month)) return NextResponse.json({ error: "Este mes se llena solo con los cortes." }, { status: 409 });
 
   const record = await prisma.warrantyMonthTotal.upsert({
     where: { month },
