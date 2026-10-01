@@ -229,7 +229,9 @@ export type GuidesApplyRow = {
   quantity: number;
   byCarrier: Record<string, number>;
   labelUnits: number;
-  variants: { label: string; quantity: number }[];
+  variants: { label: string; quantity: number; byCarrier?: Record<string, number> }[];
+  // Ver ParsedGuidesLine.labelUnitsByCarrier — falta en borradores viejos.
+  labelUnitsByCarrier?: Record<string, number>;
   decision: Decision;
 };
 
@@ -264,10 +266,58 @@ export type GuidesApplyResult = { ok: true; batchId: string; lotId: string; disc
 // etiquetas + lo que quedó sin variante + lo que no se alcanzó a leer. Suma
 // siempre exactamente `quantity` (así cuadra con la validación de
 // saveVariantNotes). Vacío si la fila no trae ninguna variante.
+// Corte MF-0019 (2026-10-01, Daniel): el desglose iba entero en la primera
+// transportadora y las demás recibían OTRA VEZ su "Sin variante" — la suma
+// salía mayor que el pedido (Funda de zapatos: 9 pedidas, 12 en variantes).
+// Ahora cada transportadora lleva solo las variantes leídas en SUS guías.
+// Lo leído sin guía conocida ("") se acomoda donde todavía falte. Null si
+// la fila no trae transportadora por variante (borrador anterior).
+function rowBreakdownByCarrier(row: GuidesApplyRow): Map<string, { label: string; quantity: number }[]> | null {
+  if (!row.labelUnitsByCarrier || row.variants.some((v) => !v.byCarrier)) return null;
+  const out = new Map<string, { label: string; quantity: number }[]>();
+  if (rowBreakdown(row).length === 0) return out;
+  const carriers = Object.entries(row.byCarrier).filter(([, q]) => q > 0);
+  const per = new Map(carriers.map(([c, q]) => [c, { quantity: q, labelUnits: row.labelUnitsByCarrier![c] ?? 0, variants: new Map<string, number>() }]));
+  const loose: { label: string | null; quantity: number }[] = [];
+  for (const v of row.variants) {
+    for (const [c, q] of Object.entries(v.byCarrier!)) {
+      const t = per.get(c);
+      if (t) t.variants.set(v.label, (t.variants.get(v.label) ?? 0) + q);
+      else loose.push({ label: v.label, quantity: q });
+    }
+  }
+  const knownVariant = (c: string) => row.variants.reduce((s, v) => s + (v.byCarrier![c] ?? 0), 0);
+  for (const [c, q] of Object.entries(row.labelUnitsByCarrier)) {
+    if (per.has(c)) continue;
+    const plain = q - knownVariant(c);
+    if (plain > 0) loose.push({ label: null, quantity: plain });
+  }
+  for (const l of loose) {
+    let left = l.quantity;
+    for (const t of per.values()) {
+      const room = t.quantity - t.labelUnits;
+      if (left === 0 || room <= 0) continue;
+      const q = Math.min(room, left);
+      t.labelUnits += q;
+      if (l.label) t.variants.set(l.label, (t.variants.get(l.label) ?? 0) + q);
+      left -= q;
+    }
+  }
+  for (const [c, t] of per) {
+    const variants = [...t.variants].map(([label, quantity]) => ({ label, quantity }));
+    const b = variants.length > 0 ? rowBreakdown({ variants, quantity: t.quantity, labelUnits: t.labelUnits }) : [];
+    // Sin variantes en esta transportadora: todo lo suyo es "Sin variante"
+    // (o "Sin leer" si no se alcanzó a leer su etiqueta).
+    const read = Math.min(t.labelUnits, t.quantity);
+    out.set(c, b.length > 0 ? b : [...(read > 0 ? [{ label: "Sin variante", quantity: read }] : []), ...(t.quantity - read > 0 ? [{ label: "Sin leer en guías", quantity: t.quantity - read }] : [])]);
+  }
+  return out;
+}
+
 // Pedido del usuario 2026-09-28 (temporal): ID provisional de ALF.
 export const isProvisionalAlfName = (name: string) => /-\s*ALF\s*$/i.test(name.trim());
 
-function rowBreakdown(row: GuidesApplyRow): { label: string; quantity: number }[] {
+function rowBreakdown(row: Pick<GuidesApplyRow, "variants" | "quantity" | "labelUnits">): { label: string; quantity: number }[] {
   const variants = row.variants.filter((v) => v.label.trim() && v.quantity > 0);
   if (variants.length === 0 || row.quantity === 0) return [];
   const read = variants.reduce((s, v) => s + v.quantity, 0);
@@ -418,6 +468,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
     const parts = expand(row.code);
     if (!parts || row.quantity === 0) continue;
     const breakdown = rowBreakdown(row);
+    const byCarrierBreakdown = rowBreakdownByCarrier(row);
     for (const part of parts) {
       const carriers = Object.entries(row.byCarrier).filter(([, q]) => q > 0);
       carriers.forEach(([carrier, q], idx) => {
@@ -427,12 +478,12 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
           sourceCode: row.code,
           fromComboCode: part.fromCombo,
           carrier,
-          // El desglose de variantes va una sola vez por producto (en la
-          // primera transportadora) — es del total, no de cada una.
-          breakdown:
-            idx === 0
-              ? breakdown.map((b) => ({ label: part.fromCombo ? `Combo ${part.fromCombo}: ${b.label}` : b.label, quantity: b.quantity * part.perUnit }))
-              : [],
+          // Cada transportadora con su propio desglose; en borradores viejos
+          // (sin transportadora por variante) va una sola vez, en la primera.
+          breakdown: (byCarrierBreakdown ? byCarrierBreakdown.get(carrier) ?? [] : idx === 0 ? breakdown : []).map((b) => ({
+            label: part.fromCombo ? `Combo ${part.fromCombo}: ${b.label}` : b.label,
+            quantity: b.quantity * part.perUnit,
+          })),
         });
       });
     }
@@ -506,11 +557,19 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
     for (const p of r.breakdown) m.set(p.label, (m.get(p.label) ?? 0) + p.quantity);
   }
   for (const [itemId, byCarrier] of notesByItem) {
-    for (const [carrier, total] of totalByItem.get(itemId) ?? []) {
+    const totals = totalByItem.get(itemId) ?? new Map<string, number>();
+    // Nunca rellenar más allá del total del producto (un desglose viejo que
+    // ya cubre todo en la primera transportadora no se vuelve a sumar).
+    let itemGap = [...totals.values()].reduce((a, b) => a + b, 0) - [...byCarrier.values()].reduce((a, m) => a + [...m.values()].reduce((x, y) => x + y, 0), 0);
+    for (const [carrier, total] of totals) {
       let m = byCarrier.get(carrier);
       if (!m) byCarrier.set(carrier, (m = new Map()));
       const noted = [...m.values()].reduce((a, b) => a + b, 0);
-      if (noted < total) m.set("Sin variante", (m.get("Sin variante") ?? 0) + total - noted);
+      const gap = Math.min(total - noted, itemGap);
+      if (gap > 0) {
+        m.set("Sin variante", (m.get("Sin variante") ?? 0) + gap);
+        itemGap -= gap;
+      }
     }
   }
 

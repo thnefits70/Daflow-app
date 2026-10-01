@@ -25,7 +25,8 @@ type Row = {
   quantity: number;
   byCarrier: Record<string, number>;
   labelUnits: number;
-  variants: { label: string; quantity: number }[];
+  labelUnitsByCarrier?: Record<string, number>;
+  variants: { label: string; quantity: number; byCarrier?: Record<string, number> }[];
   resolution: Resolution;
 };
 type WarrantyLine = { guide: string; carrier: string; code: string; name: string; quantity: number; variant: string | null };
@@ -244,11 +245,16 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             ...r,
             quantity: r.quantity + w.quantity,
             labelUnits: r.labelUnits + w.quantity,
+            labelUnitsByCarrier: r.labelUnitsByCarrier && { ...r.labelUnitsByCarrier, [w.carrier]: (r.labelUnitsByCarrier[w.carrier] ?? 0) + w.quantity },
             byCarrier: { ...r.byCarrier, [w.carrier]: (r.byCarrier[w.carrier] ?? 0) + w.quantity },
             variants: w.variant
               ? r.variants.some((v) => v.label === w.variant)
-                ? r.variants.map((v) => (v.label === w.variant ? { ...v, quantity: v.quantity + w.quantity } : v))
-                : [...r.variants, { label: w.variant, quantity: w.quantity }]
+                ? r.variants.map((v) =>
+                    v.label === w.variant
+                      ? { ...v, quantity: v.quantity + w.quantity, byCarrier: v.byCarrier && { ...v.byCarrier, [w.carrier]: (v.byCarrier[w.carrier] ?? 0) + w.quantity } }
+                      : v
+                  )
+                : [...r.variants, { label: w.variant, quantity: w.quantity, byCarrier: { [w.carrier]: w.quantity } }]
               : r.variants,
           }
         : r
@@ -334,6 +340,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             quantity: r.quantity,
             byCarrier: r.byCarrier,
             labelUnits: r.labelUnits,
+            labelUnitsByCarrier: r.labelUnitsByCarrier,
             variants: r.variants,
             decision: d.kind === "product" ? { kind: "product", catalogItemId: d.item.id } : d.kind === "combo" ? { kind: "combo", comboCode: d.comboCode } : { kind: "ignore", discontinued: d.discontinued },
           };

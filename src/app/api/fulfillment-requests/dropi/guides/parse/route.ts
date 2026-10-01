@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { canSubmitFulfillmentRequest } from "@/lib/guards";
-import { parseGuidesPdf, rocketNameCode, ROCKET_NAME_PREFIX, type ParsedGuidesLine, type ParsedWarrantyLine } from "@/lib/dropiGuidesPdf";
+import { addGuidesLine, parseGuidesPdf, rocketNameCode, ROCKET_NAME_PREFIX, type ParsedGuidesLine, type ParsedWarrantyLine } from "@/lib/dropiGuidesPdf";
 import { learnBrandsFromManifest } from "@/lib/manifestBrand";
 import { findAlreadyUploadedGuides, resolveGuideLines } from "@/lib/fulfillmentGuides";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
@@ -81,17 +81,11 @@ export async function POST(req: NextRequest) {
     for (const l of result.lines) {
       const prev = merged.get(l.code);
       if (!prev) {
-        merged.set(l.code, { ...l, byCarrier: { ...l.byCarrier }, variants: [...l.variants] });
+        merged.set(l.code, { ...l, byCarrier: {}, quantity: 0, labelUnits: 0, labelUnitsByCarrier: l.labelUnitsByCarrier && {}, variants: [] });
+        addGuidesLine(merged.get(l.code)!, l);
         continue;
       }
-      prev.quantity += l.quantity;
-      prev.labelUnits += l.labelUnits;
-      for (const [c, q] of Object.entries(l.byCarrier)) prev.byCarrier[c] = (prev.byCarrier[c] ?? 0) + q;
-      for (const v of l.variants) {
-        const same = prev.variants.find((x) => x.label === v.label);
-        if (same) same.quantity += v.quantity;
-        else prev.variants.push({ ...v });
-      }
+      addGuidesLine(prev, l);
     }
   }
 
@@ -103,14 +97,7 @@ export async function POST(req: NextRequest) {
   for (const [code, l] of [...merged.entries()]) {
     const target = code.startsWith(ROCKET_NAME_PREFIX) ? merged.get(rocketIdByNameCode.get(code) ?? "") : undefined;
     if (!target) continue;
-    target.quantity += l.quantity;
-    target.labelUnits += l.labelUnits;
-    for (const [c, q] of Object.entries(l.byCarrier)) target.byCarrier[c] = (target.byCarrier[c] ?? 0) + q;
-    for (const v of l.variants) {
-      const same = target.variants.find((x) => x.label === v.label);
-      if (same) same.quantity += v.quantity;
-      else target.variants.push({ ...v });
-    }
+    addGuidesLine(target, l);
     merged.delete(code);
   }
   for (const w of warranty) if (w.code.startsWith(ROCKET_NAME_PREFIX)) w.code = rocketIdByNameCode.get(w.code) ?? w.code;

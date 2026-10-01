@@ -157,10 +157,15 @@ export type ParsedGuidesLine = {
   byCarrier: Record<string, number>;
   // Desglose por variante que salió de las etiquetas. Suma ≤ quantity; si
   // falta, el resto se agrega como "Sin leer en guías" al aplicar.
-  variants: { label: string; quantity: number }[];
+  // byCarrier: en qué transportadora iba cada una (sale de la guía de su
+  // etiqueta; "" si no se supo la guía).
+  variants: { label: string; quantity: number; byCarrier?: Record<string, number> }[];
   // Cuántas unidades se alcanzaron a encontrar en las etiquetas (con o sin
   // variante) — solo diagnóstico/aviso.
   labelUnits: number;
+  // Lo mismo por transportadora (2026-10-01, corte MF-0019): sin esto el
+  // relleno "Sin variante" de cada transportadora se contaba dos veces.
+  labelUnitsByCarrier?: Record<string, number>;
 };
 
 // Confirmado 2026-09-23 con un manifiesto real del usuario: una guía de
@@ -194,7 +199,9 @@ const SUMMARY_RE = /\(ID:\s*(\d+)\)\s*-\s*\(SKU:[^)]*\)\s*-\s*(.+?)\s+(\d+)\s*$/
 // 2026-09-29 (manifiestos del 22–25/09): algunas relaciones de Dropi vienen
 // con el número pegado a "Ciudad Destino" ("D002047127Ciudad Destino") — sin
 // el corte, la guía quedaba como "D002047127CIUDAD" y no se hallaba su etiqueta.
-const GUIDE_RE = /Nro:\s*\d+\s+Guia:\s*([A-Z0-9-]+?)(?=\s|Ciudad|$)/i;
+// 2026-10-01 (corte MF-0019): desde la guía 10 Dropi puede pegar el número
+// a "Guia" ("Nro: 10Guia: LC55622371") — con \s+ esa guía se perdía.
+const GUIDE_RE = /Nro:\s*\d+\s*Guia:\s*([A-Z0-9-]+?)(?=\s|Ciudad|$)/i;
 const CARRIER_RE = /TRANSPORTADORA:\s*([A-Z0-9 ]+?)\s*$/i;
 const DATE_RE = /FECHA MANIFIESTO \(DD\/MM\/YYYY\):\s*(\d{2})-(\d{2})-(\d{4})/;
 // Greedy a propósito: "(103511)CUATRO ALMOHADAS X4 X1" → la cantidad es el
@@ -212,6 +219,10 @@ const URBANO_ROW_RE = /^\s*\d{1,2}\s{2,}(.+?)\s{2,}(\d+)\s*$/;
 // nombre ya viene cortado, lo que sigue en la etiqueta es el resto del
 // nombre, no una variante.
 const SUMMARY_NAME_CUT = 38;
+
+function variantWithCarriers(label: string, byCarrier: Map<string, number>): { label: string; quantity: number; byCarrier: Record<string, number> } {
+  return { label, quantity: [...byCarrier.values()].reduce((a, b) => a + b, 0), byCarrier: Object.fromEntries(byCarrier) };
+}
 
 type LabelHit = { code: string; variant: string | null; qty: number; page: number; line: number };
 
@@ -279,7 +290,7 @@ function gintracomRocketLabel(lines: PdfLine[]): { guide: string; products: { na
 
 function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuidesPdf {
   const guides = new Map<string, { carrier: string; warranty: boolean }>();
-  const normal = new Map<string, { name: string; byCarrier: Map<string, number>; variants: Map<string, number>; labeled: number }>();
+  const normal = new Map<string, { name: string; byCarrier: Map<string, number>; variants: Map<string, Map<string, number>>; labeled: number }>();
   const warranty: ParsedWarrantyLine[] = [];
   let manifestDate: string | null = null;
 
@@ -311,7 +322,9 @@ function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuide
     row.labeled += qty;
     if (variant) {
       const key = tidyVariantLabel(variant);
-      row.variants.set(key, (row.variants.get(key) ?? 0) + qty);
+      let v = row.variants.get(key);
+      if (!v) row.variants.set(key, (v = new Map()));
+      v.set(carrier, (v.get(carrier) ?? 0) + qty);
     }
   };
 
@@ -393,8 +406,9 @@ function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuide
     name: r.name,
     quantity: r.labeled,
     byCarrier: Object.fromEntries(r.byCarrier),
-    variants: [...r.variants.entries()].map(([label, quantity]) => ({ label, quantity })).sort((a, b) => b.quantity - a.quantity),
+    variants: [...r.variants.entries()].map(([label, m]) => variantWithCarriers(label, m)).sort((a, b) => b.quantity - a.quantity),
     labelUnits: r.labeled,
+    labelUnitsByCarrier: Object.fromEntries(r.byCarrier),
   }));
   return {
     manifestDate,
@@ -686,7 +700,7 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
   for (const [n, g] of guides) g.warranty = warrantyFile || garantiaGuides.has(n);
   const warrantyGuides = new Set([...guides.entries()].filter(([, g]) => g.warranty).map(([n]) => n));
   const warranty: ParsedWarrantyLine[] = [];
-  const byLabel = new Map<string, Map<string, number>>(); // code → variante ("" = sin variante) → unidades
+  const byLabel = new Map<string, Map<string, Map<string, number>>>(); // code → variante ("" = sin variante) → transportadora → unidades
   const ordersRead = new Map<string, number>(); // code → pedidos leídos en etiquetas
   const packExtra = new Map<string, Map<string, number>>(); // code → transportadora → unidades extra por paquetes
   const codesByGuide = new Map<string, Set<string>>();
@@ -712,17 +726,18 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
     if (!m) byLabel.set(h.code, (m = new Map()));
     let key = h.variant ? tidyVariantLabel(h.variant) : "";
     ordersRead.set(h.code, (ordersRead.get(h.code) ?? 0) + h.qty);
+    const c = (hg && guides.get(hg)?.carrier) || "";
     const n = packSize(key);
     if (n) {
       key = packLabel(n);
       // Unidades de más sobre el pedido, en la transportadora de su guía.
-      const g = guideOf(h);
-      const c = (g && guides.get(g)?.carrier) || "";
       let e = packExtra.get(h.code);
       if (!e) packExtra.set(h.code, (e = new Map()));
       e.set(c, (e.get(c) ?? 0) + h.qty * (n - 1));
     }
-    m.set(key, (m.get(key) ?? 0) + h.qty * (n ?? 1));
+    let byC = m.get(key);
+    if (!byC) m.set(key, (byC = new Map()));
+    byC.set(c, (byC.get(c) ?? 0) + h.qty * (n ?? 1));
   }
 
   const lines: ParsedGuidesLine[] = [];
@@ -747,9 +762,11 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
     }
     const quantity = Object.values(byCarrier).reduce((a, b) => a + b, 0);
     const labels = byLabel.get(code);
-    const labelUnits = labels ? [...labels.values()].reduce((a, b) => a + b, 0) : 0;
-    const variants = labels ? [...labels.entries()].filter(([k]) => k).map(([label, q]) => ({ label, quantity: q })) : [];
-    lines.push({ code, name: s.name, quantity, byCarrier, variants: variants.sort((a, b) => b.quantity - a.quantity), labelUnits });
+    const labelUnitsByCarrier: Record<string, number> = {};
+    for (const byC of labels?.values() ?? []) for (const [c, q] of byC) labelUnitsByCarrier[c] = (labelUnitsByCarrier[c] ?? 0) + q;
+    const labelUnits = Object.values(labelUnitsByCarrier).reduce((a, b) => a + b, 0);
+    const variants = labels ? [...labels.entries()].filter(([k]) => k).map(([label, byC]) => variantWithCarriers(label, byC)) : [];
+    lines.push({ code, name: s.name, quantity, byCarrier, variants: variants.sort((a, b) => b.quantity - a.quantity), labelUnits, labelUnitsByCarrier });
   }
 
   // Garantías en paquete: se multiplica DESPUÉS de restarlas del resumen
@@ -864,4 +881,27 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
     uncertainWarrantyGuides,
     warnings,
   };
+}
+
+// Suma `l` dentro de `target` (mismo producto en otro PDF de la subida),
+// conservando la transportadora de cada variante y de lo leído.
+export function addGuidesLine(target: ParsedGuidesLine, l: ParsedGuidesLine): void {
+  const add = (to: Record<string, number>, from: Record<string, number>) => {
+    for (const [c, q] of Object.entries(from)) to[c] = (to[c] ?? 0) + q;
+  };
+  target.quantity += l.quantity;
+  target.labelUnits += l.labelUnits;
+  add(target.byCarrier, l.byCarrier);
+  if (target.labelUnitsByCarrier && l.labelUnitsByCarrier) add(target.labelUnitsByCarrier, l.labelUnitsByCarrier);
+  else target.labelUnitsByCarrier = undefined;
+  for (const v of l.variants) {
+    const same = target.variants.find((x) => x.label === v.label);
+    if (!same) {
+      target.variants.push({ ...v, byCarrier: v.byCarrier ? { ...v.byCarrier } : undefined });
+      continue;
+    }
+    same.quantity += v.quantity;
+    if (same.byCarrier && v.byCarrier) add(same.byCarrier, v.byCarrier);
+    else same.byCarrier = undefined;
+  }
 }

@@ -7,7 +7,8 @@ import { notifyOwner } from "@/lib/notifications";
 import { detectSuddenDemand } from "@/lib/suddenDemand";
 import { notifyDiscontinuedSales } from "@/lib/dropiDiscontinued";
 
-const variantSchema = z.object({ label: z.string().trim().min(1).max(120), quantity: z.number().int().positive() });
+const carrierCounts = z.record(z.string().max(40), z.number().int().nonnegative());
+const variantSchema = z.object({ label: z.string().trim().min(1).max(120), quantity: z.number().int().positive(), byCarrier: carrierCounts.optional() });
 const schema = z.object({
   fileUrls: z.array(z.string().url()).min(1).max(40),
   manifestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
@@ -23,6 +24,7 @@ const schema = z.object({
         quantity: z.number().int().nonnegative(),
         byCarrier: z.record(z.string().max(40), z.number().int().nonnegative()),
         labelUnits: z.number().int().nonnegative(),
+        labelUnitsByCarrier: carrierCounts.optional(),
         variants: z.array(variantSchema).max(50),
         decision: z.discriminatedUnion("kind", [
           z.object({ kind: z.literal("product"), catalogItemId: z.string().min(1) }),
