@@ -470,7 +470,9 @@ export function DeptWorkspaceTabs({
     if (t.key === "inventoriokpis") return canViewInventoryKpisPanel;
     if (t.key === "cajachica") return !!(pettyCashData?.principal || pettyCashData?.secundaria);
     if (t.key === "postventa") return canManageStoreFeedback || canViewStoreFeedback;
-    if (t.key === "combos") return canSyncAtomData || canUploadLowRotationList || canApproveComboSuggestions;
+    // 2026-10-01: la baja rotación ya no se anota a mano — Inventario no
+    // tiene nada que hacer en Sugerencias de Combos.
+    if (t.key === "combos") return canSyncAtomData || canApproveComboSuggestions;
     if (t.key === "analisis-mercado")
       return canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canViewB2BPricing || canViewB2CPricing;
     if (t.key === "pagosadmin") return canManageAdminPayments;
@@ -754,7 +756,7 @@ export function DeptWorkspaceTabs({
       {tab === "postventa" && !canManageStoreFeedback && canViewStoreFeedback && !isAdmin && (
         <StoreFeedbackKpiPanel aggregates={storeFeedbackAggregates} />
       )}
-      {tab === "combos" && (canSyncAtomData || canUploadLowRotationList || canApproveComboSuggestions) && (
+      {tab === "combos" && (canSyncAtomData || canApproveComboSuggestions) && (
         <ComboSuggestionsPanel
           canSyncAtom={canSyncAtomData}
           canUploadLowRotation={canUploadLowRotationList}

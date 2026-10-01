@@ -233,17 +233,14 @@ async function askAi(winners: Candidate[], lows: Candidate[], actorId: string): 
 // cuando corre sola de noche.
 export async function generateComboSuggestions(actorId = "system"): Promise<{ created: number }> {
   const since7 = daysAgo(7);
-  const [out7, out30, catalog, combos, atomStatuses, lowRotationEntries, latestBalances, openRows, existingFps] = await Promise.all([
+  // 2026-10-01 (pedido del usuario): ya no se usan ATOM ni la lista manual
+  // de baja rotación — todo sale de los cortes. Esos datos viejos quedan
+  // guardados pero no entran al armado.
+  const [out7, out30, catalog, combos, latestBalances, openRows, existingFps] = await Promise.all([
     sumKardexOut(since7),
     sumKardexOut(daysAgo(30)),
     prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, nicho: true, justCode: true } }),
     prisma.dropiCombo.findMany({ select: { code: true, label: true, components: { select: { catalogItemId: true, quantity: true } } } }),
-    prisma.atomProductStatus.findMany({
-      where: { status: "RENTABLE", isCombo: false, matchedCatalogItemId: { not: null } },
-      orderBy: { capturedAt: "desc" },
-      select: { matchedCatalogItemId: true },
-    }),
-    prisma.lowRotationWeeklyEntry.findMany({ orderBy: { weekOf: "desc" }, select: { catalogItemId: true, weekOf: true, unitsDispatched: true } }),
     prisma.stockKardexEntry.findMany({
       distinct: ["catalogItemId"],
       orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
@@ -257,7 +254,7 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
   // real de Dropi — los que no lo tienen no entran al armado.
   const catalogById = new Map(catalog.filter((c) => c.justCode?.trim()).map((c) => [c.id, c]));
 
-  // Ganadores: productos (cortes/Kardex + ATOM) y combos registrados.
+  // Ganadores: productos (cortes/Kardex) y combos registrados.
   const winners = new Map<string, Candidate>();
   const addItemWinner = (id: string) => {
     const item = catalogById.get(id);
@@ -265,15 +262,6 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
     winners.set(`i:${id}`, { name: item.name, nicho: item.nicho, parts: [{ catalogItemId: id, quantity: 1, fromComboCode: null }], units7: out7.get(id) ?? 0, units30: out30.get(id) ?? 0 });
   };
   for (const [id, units30] of out30) if (isWinner(out7.get(id) ?? 0, units30)) addItemWinner(id);
-  // ATOM detecta ventas que nunca tocan nuestra bodega (ej. Dropi directo) —
-  // sigue sumando, como antes.
-  const seenAtom = new Set<string>();
-  for (const s of atomStatuses) {
-    const id = s.matchedCatalogItemId as string;
-    if (seenAtom.has(id)) continue;
-    seenAtom.add(id);
-    addItemWinner(id);
-  }
   for (const c of combos) {
     const s = sales.get(c.code);
     if (!s || !isWinner(s.units7, s.units30) || c.components.length === 0) continue;
@@ -292,18 +280,12 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
   const winnerList = [...winners.values()].filter((w) => (openByWinner.get(w.parts[0].catalogItemId) ?? 0) < MAX_OPEN_PER_WINNER);
 
   // Baja salida: todo lo que tiene stock en bodega y salió menos de 8 en 7
-  // días (incluye los que salieron 0), más la lista manual de Daniel.
+  // días (incluye los que salieron 0).
   const winnerItemIds = new Set([...winners.values()].flatMap((w) => w.parts.map((p) => p.catalogItemId)));
   const lowUnits = new Map<string, number>();
   for (const b of latestBalances) {
     const units = out7.get(b.catalogItemId) ?? 0;
     if (b.balanceAfter > 0 && units < LOW_ROTATION_THRESHOLD) lowUnits.set(b.catalogItemId, units);
-  }
-  const manualSeen = new Set<string>();
-  for (const e of lowRotationEntries) {
-    if (manualSeen.has(e.catalogItemId)) continue; // solo su semana más reciente
-    manualSeen.add(e.catalogItemId);
-    if (e.unitsDispatched < LOW_ROTATION_THRESHOLD && !lowUnits.has(e.catalogItemId)) lowUnits.set(e.catalogItemId, e.unitsDispatched);
   }
   const lowList: Candidate[] = [...lowUnits.entries()]
     .filter(([id]) => !winnerItemIds.has(id) && catalogById.has(id))
@@ -433,21 +415,4 @@ export async function findRegisteredComboWithFingerprint(fp: string): Promise<{ 
   const target = normalizeFingerprint(fp);
   const hit = combos.find((c) => c.components.length > 0 && comboFingerprint(c.components) === target);
   return hit ? { code: hit.code, bodega: hit.bodega } : null;
-}
-
-// Cuántas semanas consecutivas lleva un producto en la lista de baja
-// rotación de Daniel — usado como ranking simple en la pantalla de
-// selección del equipo de MKT (mientras más semanas, más urgente moverlo).
-export async function getLowRotationStreakWeeks(catalogItemId: string): Promise<number> {
-  const entries = await prisma.lowRotationWeeklyEntry.findMany({
-    where: { catalogItemId },
-    orderBy: { weekOf: "desc" },
-    select: { weekOf: true, unitsDispatched: true },
-  });
-  let streak = 0;
-  for (const e of entries) {
-    if (e.unitsDispatched >= LOW_ROTATION_THRESHOLD) break;
-    streak++;
-  }
-  return streak;
 }

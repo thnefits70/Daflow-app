@@ -6,7 +6,6 @@ import { getStalePurchaseRequestPushes } from "@/lib/purchases";
 import { getStaleSupplierCreditPushes } from "@/lib/supplierCredits";
 import { getStaleAdminPaymentPushes } from "@/lib/adminPayments";
 import { getStalePersonalPurchaseTransferPushes } from "@/lib/personalPurchases";
-import { getAtomSyncReminderPushes } from "@/lib/atomReminder";
 import { getWeeklyCheckinPushes, getMidweekFollowupPushes } from "@/lib/weeklyCheckin";
 import { getDeliveryOverduePushes, getContraEntregaPaymentOverduePushes } from "@/lib/externalSales";
 import { getExpiringLotPushes } from "@/lib/stockKardex";
@@ -118,15 +117,8 @@ export async function GET(req: NextRequest) {
     notified++;
   }
 
-  // Sugerencias de Combos (ATOM + baja rotación) — confirmado 2026-08-31:
-  // recordatorio a todo el equipo de Análisis de Mercado los días que toca
-  // leer ATOM (lunes/miércoles/viernes, corrido por feriado) si nadie lo ha
-  // hecho todavía hoy. Nunca entra solo a ATOM — esto es SOLO el aviso.
-  const atomSyncReminders = await getAtomSyncReminderPushes();
-  for (const r of atomSyncReminders) {
-    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
-    notified++;
-  }
+  // 2026-10-01: ya no se recuerda leer ATOM — los combos salen solos de
+  // los cortes (pedido del usuario).
 
   // Check-in semanal — reemplaza la reunión 1:1: solo se activa los
   // viernes (ver getWeeklyCheckinPushes), a todo colaborador activo de un
