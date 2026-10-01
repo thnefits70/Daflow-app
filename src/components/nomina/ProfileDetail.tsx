@@ -116,6 +116,7 @@ function B2BAdvisorRoleCard({
   const [confirming, setConfirming] = useState<"on" | "off" | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [expanded, setExpanded] = useState(false);
   const otherHolder = holder && holder.id !== p.id ? holder : null;
 
   const send = async (patch: Record<string, unknown>) => {
@@ -152,8 +153,27 @@ function B2BAdvisorRoleCard({
 
   const roleName = p.b2bAdvisorTitle || title;
 
+  // Quien no tiene el rol ve solo una línea gris; el detalle se abre al tocar
+  // "Dar el rol" para que no parezca que ya lo tiene.
+  if (!p.isB2BAdvisor && !expanded) {
+    return (
+      <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5 flex items-center gap-2 flex-wrap">
+        <span className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+          <ShieldCheck size={11} /> Rol Asesor(a) B2B
+        </span>
+        <span className="text-[11.5px] text-steel">
+          {otherHolder ? <>— hoy lo tiene <b>{otherHolder.name}</b></> : "— nadie lo tiene"}
+        </span>
+        <button type="button" className="ml-auto text-blue text-[11.5px] font-semibold cursor-pointer underline" onClick={() => setExpanded(true)}>
+          Dar el rol
+        </button>
+        {notice && <div className="w-full text-[11.5px] text-teal">{notice}</div>}
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-cloud border border-blue rounded p-3.5 mt-3.5">
+    <div className={`bg-cloud border ${p.isB2BAdvisor ? "border-blue" : "border-rule"} rounded p-3.5 mt-3.5`}>
       <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
         <ShieldCheck size={11} /> Rol: Asesor(a) B2B
       </label>
@@ -247,9 +267,14 @@ function B2BAdvisorRoleCard({
               </button>
             </div>
           ) : (
-            <button type="button" className="rounded border border-blue bg-surface px-3 py-1.5 text-[12px] font-semibold text-blue cursor-pointer" onClick={() => setConfirming("on")}>
-              Dar el rol de {title}
-            </button>
+            <div className="flex items-center gap-3">
+              <button type="button" className="rounded border border-blue bg-surface px-3 py-1.5 text-[12px] font-semibold text-blue cursor-pointer" onClick={() => setConfirming("on")}>
+                Dar el rol de {title}
+              </button>
+              <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setExpanded(false)}>
+                Cerrar
+              </button>
+            </div>
           )}
         </div>
       )}
