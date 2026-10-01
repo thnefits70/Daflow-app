@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { notifyOwner } from "@/lib/notifications";
-import { canBrandNewIds, REAL_PHOTOS_SINCE } from "@/lib/newIdBranding";
+import { canBrandNewIds } from "@/lib/newIdBranding";
 
 const schema = z
   .object({
@@ -83,9 +83,9 @@ export async function POST(req: NextRequest) {
   if (step === "realPhotos" && !done && row?.channelUploadedAt) {
     return NextResponse.json({ error: "Primero desmarca \"Subido al canal de la marca\"." }, { status: 409 });
   }
-  // Brandeado antes de este cambio y ya en bodega: sigue como antes (ver REAL_PHOTOS_SINCE).
-  const legacyReady = arrived && (!row?.brandedAt || row.brandedAt.toISOString() < REAL_PHOTOS_SINCE);
-  if (step === "channel" && done && !row?.realPhotosAt && !legacyReady) {
+  // Pedido de Robert 2026-10-01: ya no hay atajo para lo brandeado antes —
+  // al canal solo se sube lo que tiene imágenes reales completadas.
+  if (step === "channel" && done && !row?.realPhotosAt) {
     return NextResponse.json({ error: "Primero marca las imágenes reales." }, { status: 409 });
   }
 

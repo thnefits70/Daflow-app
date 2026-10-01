@@ -194,7 +194,21 @@ export function NewIdBrandingPanel() {
       {list.map((e) => {
         const doneSteps = BRAND_STEPS.filter((s) => e.steps[s.key]).length;
         return (
-          <div key={e.key} className="bg-surface border border-rule rounded-md p-4">
+          <div key={e.key} className="bg-surface border border-rule rounded-md p-4 flex gap-3.5">
+            {/* Pedido de Robert 2026-10-01: en Imágenes reales e Historial cada
+                ID lleva una foto para diferenciar el producto de un vistazo.
+                La imagen brandeada vive en Dropi, así que se usa la foto del
+                producto que sí está en DAFLOW. */}
+            {view !== "pending" && (
+              <div className="bg-cloud rounded border border-rule flex items-center justify-center w-20 h-20 shrink-0">
+                {e.referencePhotos[0] || e.arrivalPhotos[0] ? (
+                  <img src={e.referencePhotos[0] || e.arrivalPhotos[0]} alt="" className="max-w-full max-h-full object-contain" />
+                ) : (
+                  <span className="text-[10px] text-steel text-center px-1">Sin foto</span>
+                )}
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
             <div className="text-[14.5px] font-bold mb-0.5 flex items-center gap-1.5 flex-wrap">
               <CatalogCode code={e.code} size="text-[11px]" />
               <span>{e.name}</span>
@@ -222,12 +236,17 @@ export function NewIdBrandingPanel() {
                 <div className="flex items-center gap-1.5 text-[12px] text-teal">
                   <CheckCircle2 size={14} /> Brandeado — {actorName(e.branded?.by ?? null)}{e.branded?.at ? ` · ${formatDateTime(e.branded.at)}` : ""}
                 </div>
-                <div className="pt-2.5 border-t border-rule">
+                <div className="pt-2.5 border-t border-rule flex flex-col gap-1.5">
                   {e.arrivedAt ? (
-                    <StepCheck label="Imágenes reales tomadas" mark={e.realPhotos} canToggle={data.canAct} onToggle={(done) => toggle(e, "realPhotos", done)} />
+                    <>
+                      <div className="flex items-center gap-2 text-[12.5px] font-semibold text-teal">
+                        <CheckCircle2 size={14} /> Ya está en bodega — ya puedes tomar las imágenes reales.
+                      </div>
+                      <StepCheck label="Imágenes reales completadas" mark={e.realPhotos} canToggle={data.canAct} onToggle={(done) => toggle(e, "realPhotos", done)} />
+                    </>
                   ) : (
                     <div className="flex items-center gap-2 text-[12.5px] text-steel">
-                      <Clock size={14} /> Esperando que llegue a bodega para tomar las imágenes reales.
+                      <Clock size={14} /> Todavía no está en bodega. Cuando llegue te aviso para que tomes las imágenes reales.
                     </div>
                   )}
                 </div>
@@ -247,13 +266,14 @@ export function NewIdBrandingPanel() {
                   </div>
                 )}
                 {e.realPhotos && (
-                  <StepCheck label="Imágenes reales tomadas" mark={e.realPhotos} canToggle={data.canAct && !e.channel} onToggle={(done) => toggle(e, "realPhotos", done)} />
+                  <StepCheck label="Imágenes reales completadas" mark={e.realPhotos} canToggle={data.canAct && !e.channel} onToggle={(done) => toggle(e, "realPhotos", done)} />
                 )}
                 <div className="pt-2.5 border-t border-rule">
                   <StepCheck label="Subido al canal de la marca" mark={e.channel} canToggle={data.canAct} onToggle={(done) => toggle(e, "channel", done)} />
                 </div>
               </div>
             )}
+            </div>
           </div>
         );
       })}

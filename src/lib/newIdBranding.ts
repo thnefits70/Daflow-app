@@ -30,11 +30,6 @@ export async function getNewIdBrandingActorIds(): Promise<string[]> {
   return users.map((u) => u.id);
 }
 
-// Lo brandeado antes de que existiera "Imágenes reales" (2026-09-25, medianoche
-// de Guayaquil) y que ya llegó a bodega sigue directo en el historial, como
-// antes — así Robert no tiene que marcar ~100 productos viejos uno por uno.
-export const REAL_PHOTOS_SINCE = "2026-09-25T05:00:00.000Z";
-
 export const BRAND_STEPS = ["dropiImages", "dropiInfo", "driveVideo"] as const;
 export type BrandStep = (typeof BRAND_STEPS)[number];
 type Mark = { at: string; by: string | null };
@@ -262,8 +257,12 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
   const pending = all
     .filter((e) => !e.branded && !waitingDropi.has(e.key))
     .sort((a, b) => a.since.localeCompare(b.since)); // lo más antiguo primero
-  const readyForChannel = (e: NewIdEntry) =>
-    !!(e.realPhotos || e.channel || (e.arrivedAt && (e.branded?.at ?? "") < REAL_PHOTOS_SINCE));
+  // Pedido de Robert 2026-10-01: lo brandeado antes del 2026-09-25 ya no pasa
+  // directo al historial — muchos productos viejos todavía no tienen
+  // imágenes reales (se toman cuando llega mercadería por pedidos), así que
+  // esperan en "Imágenes reales" como cualquier otro. Lo que ya se marcó
+  // como subido al canal se queda en el historial.
+  const readyForChannel = (e: NewIdEntry) => !!(e.realPhotos || e.channel);
   // Lo que ya llegó (se le pueden tomar fotos) primero, lo más antiguo arriba;
   // lo que todavía no llega, al final.
   const realPhotos = all
