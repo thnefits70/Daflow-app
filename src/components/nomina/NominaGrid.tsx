@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, User, Award } from "lucide-react";
+import { Plus, User, Award, Search, X } from "lucide-react";
 import { useFormDraft } from "@/lib/useFormDraft";
 
 type Dept = { id: string; name: string; code: string };
@@ -93,7 +93,14 @@ export function NominaGrid({
   const [tab, setTab] = useState<"active" | "inactive">("active");
   const activeUsers = users.filter((u) => u.isActive);
   const inactiveUsers = users.filter((u) => !u.isActive);
-  const shown = tab === "active" ? activeUsers : inactiveUsers;
+  const [query, setQuery] = useState("");
+  // Busca sin importar tildes ni mayúsculas, por nombre, usuario, cargo o área.
+  const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const q = normalize(query.trim());
+  const matches = (u: NominaUser) =>
+    !q ||
+    [u.name, u.username, u.position ?? "", deptById(u.deptId)?.name ?? ""].some((f) => normalize(f).includes(q));
+  const shown = (tab === "active" ? activeUsers : inactiveUsers).filter(matches);
 
   return (
     <div>
@@ -129,7 +136,7 @@ export function NominaGrid({
         {err && <div className="text-red text-[12.5px] mt-2">{err}</div>}
       </div>
 
-      <div className="flex gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
         <button
           type="button"
           onClick={() => setTab("active")}
@@ -148,11 +155,35 @@ export function NominaGrid({
         >
           Inactivos ({inactiveUsers.length})
         </button>
+        <div className="relative w-full sm:w-auto sm:ml-auto sm:min-w-[280px]">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-steel pointer-events-none" />
+          <input
+            type="text"
+            className="w-full rounded border border-rule bg-surface pl-8 pr-8 py-1.5 text-[13px]"
+            placeholder="Buscar colaborador por nombre, cargo o área"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {query && (
+            <button
+              type="button"
+              aria-label="Limpiar búsqueda"
+              onClick={() => setQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-steel hover:text-blue cursor-pointer"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       {shown.length === 0 && (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-8.5 text-center text-steel text-[13.5px]">
-          {tab === "active" ? "Aún no hay personas registradas." : "No hay personas inactivas."}
+          {q
+            ? `Ningún colaborador coincide con "${query.trim()}".`
+            : tab === "active"
+              ? "Aún no hay personas registradas."
+              : "No hay personas inactivas."}
         </div>
       )}
 
