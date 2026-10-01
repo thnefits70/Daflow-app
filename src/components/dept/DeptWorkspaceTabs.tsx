@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers, UserCog, Sparkles } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers, UserCog, Sparkles, Store } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -37,6 +37,7 @@ import { MerchandiseOutflowPanel } from "@/components/merchandise-outflow/Mercha
 import { ExternalSalesPanel } from "@/components/external-sales/ExternalSalesPanel";
 import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/SuppliersPanel";
 import { ComboSuggestionsPanel } from "@/components/marketanalysis/ComboSuggestionsPanel";
+import { StoreTrackingPanel } from "@/components/marketanalysis/StoreTrackingPanel";
 import { MarketProductPanel } from "@/components/marketanalysis/MarketProductPanel";
 import { ImprovementPlanTeamPanel } from "@/components/improvement-plan/ImprovementPlanTeamPanel";
 import { WeeklyCheckinLockGate } from "@/components/dept/WeeklyCheckinLockGate";
@@ -71,6 +72,7 @@ const ALL_TABS = [
   { key: "postventa", label: "Servicio Postventa", icon: Heart },
   { key: "combos", label: "Sugerencias de Combos", icon: Combine },
   { key: "analisis-mercado", label: "Análisis de Mercado", icon: TrendingUp },
+  { key: "seguimiento-tiendas", label: "Seguimiento de tiendas", icon: Store },
   { key: "plan-mejora", label: "Plan de Mejora", icon: UserCog },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
@@ -152,6 +154,7 @@ export function DeptWorkspaceTabs({
   canDecideMarketProductPurchase = false,
   canViewB2BPricing = false,
   canViewB2CPricing = false,
+  canViewStoreTracking = false,
   canReportSupplierStockout = false,
   canResolveSupplierStockout = false,
   canAccessSuppliers = false,
@@ -305,6 +308,9 @@ export function DeptWorkspaceTabs({
   // Consulta de precios (2026-09-14) — Heidy/Yair ven B2B, Marcos ve B2C.
   canViewB2BPricing?: boolean;
   canViewB2CPricing?: boolean;
+  // Seguimiento de tiendas (2026-10-01) — solo Yair, Bryan y admin, ver
+  // canViewStoreTracking en guards.ts. Quién vincula lo decide la API.
+  canViewStoreTracking?: boolean;
   // Proveedores — movido de su propio ítem de sidebar a esta pestaña
   // (confirmado 2026-08-21), entre "Control de Compras" y "Documentos".
   // canAccessSuppliers gatea si la pestaña se ve (ver access.canView /
@@ -475,6 +481,7 @@ export function DeptWorkspaceTabs({
     if (t.key === "combos") return canSyncAtomData || canApproveComboSuggestions;
     if (t.key === "analisis-mercado")
       return canProposeMarketProduct || canReviewMarketProduct || canPublishMarketProduct || canViewB2BPricing || canViewB2CPricing;
+    if (t.key === "seguimiento-tiendas") return canViewStoreTracking;
     if (t.key === "pagosadmin") return canManageAdminPayments;
     if (t.key === "almuerzos") return canRegisterLunchPayments;
     if (t.key === "plan-mejora") return canManageImprovementPlan;
@@ -784,6 +791,7 @@ export function DeptWorkspaceTabs({
           canResolveStockout={canResolveSupplierStockout}
         />
       )}
+      {tab === "seguimiento-tiendas" && canViewStoreTracking && <StoreTrackingPanel />}
       {tab === "plan-mejora" && canManageImprovementPlan && <ImprovementPlanTeamPanel deptId={deptId} isAdmin={isAdmin} />}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}

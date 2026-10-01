@@ -1606,6 +1606,27 @@ export async function canViewB2CPricing() {
   return !!user?.canViewB2CPricing;
 }
 
+// ---------------- Seguimiento de tiendas (Análisis de Mercado) ----------------
+// Confirmado con el usuario 2026-10-01: la pestaña la ven SOLO Yair (asesor de
+// Importadora Shanghai, flag canLinkStoreProducts), Bryan (líder de MKT) y
+// admin. Es de solo lectura; lo único que se cambia es el vínculo ID ↔ tienda
+// y eso lo hace exclusivamente quien tiene el flag (Yair) — ni admin actúa.
+export async function canViewStoreTracking() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await getGuardUser(session.user.id);
+  if (user?.canLinkStoreProducts) return true;
+  return !!user?.isLeader && user.leadsDept?.code === "MKT";
+}
+
+export async function canLinkStoreProducts() {
+  const session = await auth();
+  if (!session || session.user.role === "admin") return false;
+  const user = await getGuardUser(session.user.id);
+  return !!user?.canLinkStoreProducts;
+}
+
 export async function canViewMarketProductPricing() {
   return (await canViewB2BPricing()) || (await canViewB2CPricing());
 }

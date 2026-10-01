@@ -323,6 +323,12 @@ model User {
   // puntual, EXCLUSIVO de quien tiene el flag — ni siquiera admin actúa.
   canMarkComboCreatedInDropi Boolean @default(false)
 
+  // Confirmado 2026-10-01 (Seguimiento de tiendas): quien vincula los IDs de
+  // Importadora Shanghai a su tienda (hoy Yair, asesor de Shanghai). Ver
+  // canLinkStoreProducts en guards.ts — el panel lo ven además el líder de
+  // MKT (Bryan) y admin, solo lectura.
+  canLinkStoreProducts Boolean @default(false)
+
   // Confirmado 2026-09-09 (Fase 2, Análisis de Mercado): mismo patrón
   // delegado y exclusivo que canConfirmMarketingDesign/
   // canMarkComboCreatedInDropi — hoy Heidy publica en Dropi y Robert
@@ -497,6 +503,7 @@ model User {
   purchaseRequestUrgentReportsExcessConfirmed      PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportExcessConfirmedBy")
   purchaseRequestUrgentReportsExcessKardexRecorded PurchaseRequestUrgentReport[]         @relation("PurchaseRequestUrgentReportExcessKardexRecordedBy")
   storeFeedbackEvaluations                         StoreFeedbackEvaluation[]             @relation("StoreFeedbackEvaluatedBy")
+  storeProductLinks                                StoreProductLink[]                    @relation("StoreProductLinkedBy")
   confidentialAccess                               ConfidentialDocumentAccess[]
   monthlyEvaluationsReceived                       MonthlyEvaluation[]
   monthlyRecognitionResults                        MonthlyRecognitionResult[]
@@ -1476,13 +1483,38 @@ model Store {
   // campo simple aquí (no FK) porque Servicio Postventa vive en Análisis de
   // Mercado, un dominio distinto. Solo 3 valores conocidos, cambian rara vez.
   brand        String?
+  // Confirmado 2026-10-01 (Seguimiento de tiendas): nombre que Dropi imprime
+  // como remitente en la etiqueta de la guía (ej. tienda Alonfe = "GUSTAVO
+  // URIBE"). Con eso cada guía subida en un corte se reconoce de esta tienda.
+  labelSender  String?
   isActive     Boolean  @default(true)
   order        Int      @default(0)
   createdAt    DateTime @default(now())
 
-  evaluations StoreFeedbackEvaluation[]
+  evaluations  StoreFeedbackEvaluation[]
+  productLinks StoreProductLink[]
 
   @@index([order])
+}
+
+// Seguimiento de tiendas (Análisis de Mercado) — confirmado 2026-10-01: cada
+// ID de Importadora Shanghai pertenece a UNA tienda (hoy Alonfe), para ver su
+// tendencia de pedidos y recordarle a la tienda hacer pauta cuando se estanca.
+// code = ID de Dropi tal como viene en la guía (incluye provisionales "- ALF").
+// source: LABEL (leído del remitente al subir guías), MANUAL (lo vinculó
+// Yair) o HISTORY (carga inicial del 2026-10-01, guías del 21–30/09).
+model StoreProductLink {
+  id         String   @id @default(cuid())
+  code       String   @unique
+  name       String
+  storeId    String
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  source     String
+  linkedById String?
+  linkedBy   User?    @relation("StoreProductLinkedBy", fields: [linkedById], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+
+  @@index([storeId])
 }
 
 model StoreFeedbackEvaluation {
@@ -2694,6 +2726,8 @@ model FulfillmentRequestGuide {
   // prefijo R) — de ahí sale la marca de la guía para contar guías por
   // marca y transportadora en el corte. Vacío en guías anteriores.
   codes       String[]                @default([])
+  // Remitente impreso en la etiqueta (2026-10-01) — ver Store.labelSender.
+  sender      String?
   createdAt   DateTime                @default(now())
 
   @@index([batchId])

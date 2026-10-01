@@ -60,6 +60,7 @@ type UserProfile = {
   canConfirmMarketingAdvisor: boolean;
   canAssignCancelledGuideItems: boolean;
   canMarkComboCreatedInDropi: boolean;
+  canLinkStoreProducts: boolean;
   canPublishMarketProduct: boolean;
   canBrandMarketProduct: boolean;
   canResolveSupplierStockout: boolean;
@@ -1117,6 +1118,16 @@ export function ProfileDetail({
               Una vez que Bryan aprueba un lote de Sugerencias de Combos, esta persona (hoy el rol Asesor(a) B2B) es quien arma el combo en Dropi de verdad y lo marca &quot;Creado en Dropi&quot;. El resto del equipo de Análisis de Mercado sigue viendo la cola de aprobados, solo que sin este botón.
             </div>
             <PermToggle value={p.canMarkComboCreatedInDropi} busy={busy} onChange={(v) => save({ canMarkComboCreatedInDropi: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Vincula los productos de Importadora Shanghai a su tienda (Seguimiento de tiendas)?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Esta persona (hoy Yair, asesor de Shanghai) ve la pestaña &quot;Seguimiento de tiendas&quot; y es la única que vincula un producto de Shanghai a su tienda cuando la etiqueta de la guía no lo dice. Bryan y el administrador solo la ven.
+            </div>
+            <PermToggle value={p.canLinkStoreProducts} busy={busy} onChange={(v) => save({ canLinkStoreProducts: v })} />
           </div>
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">

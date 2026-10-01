@@ -173,7 +173,9 @@ export type ParsedWarrantyLine = { guide: string; carrier: string; code: string;
 export type ParsedGuidesPdf = {
   manifestDate: string | null;
   // codes: productos que trae la etiqueta de la guía (de ahí sale su marca).
-  guides: { number: string; carrier: string; warranty: boolean; codes: string[] }[];
+  // sender: remitente/tienda impreso en la etiqueta (ej. "GUSTAVO URIBE" =
+  // tienda Alonfe de Shanghai) — de ahí sale el Seguimiento de tiendas.
+  guides: { number: string; carrier: string; warranty: boolean; codes: string[]; sender?: string | null }[];
   lines: ParsedGuidesLine[];
   warranty: ParsedWarrantyLine[];
   // Guías de garantía cuya etiqueta no se pudo leer — se avisa, nunca se
@@ -453,6 +455,33 @@ function dropRepeatedDropiBlocks(pages: PdfLine[][]): { pages: PdfLine[][]; repe
   return { pages: kept, repeated };
 }
 
+// Texto que nunca es un remitente (encabezados/valores vecinos en la etiqueta).
+const NOT_SENDER_RE = /^(FACTURA|DESTINATARIO|REMITENTE|RECAUDO|CONTENIDO|PRODUCTOS|VALOR|PESO|TOTAL|\$|[\d\s\-|:./]+$)/i;
+
+function senderOf(lines: PdfLine[], i: number): string | null {
+  const text = lines[i].text.trim();
+  const clean = (s: string | undefined) => {
+    const v = (s ?? "").replace(/\s*Celular\s+Tienda:.*$/i, "").replace(/\s+/g, " ").trim();
+    return v.length >= 3 && /[A-Za-zÁÉÍÓÚÑáéíóúñ]{2}/.test(v) && !NOT_SENDER_RE.test(v) ? v : null;
+  };
+  const r = text.match(/^REMITENTE:\s*(.+)$/i);
+  if (r) return clean(r[1]);
+  if (/^DROPI\s+S\.A\.S\.?$/i.test(text)) return clean(lines[i + 1]?.text);
+  const t = text.match(/Nombre de la tienda:\s*(.*)$/i);
+  if (t) return clean(t[1]) ?? clean(lines[i + 1]?.text);
+  return null;
+}
+
+// Pedido del usuario 2026-10-01: la tienda de una etiqueta se reconoce si su
+// nombre de etiqueta (Store.labelSender) está dentro del remitente leído —
+// Laar lo trae pegado a la ciudad ("GUSTAVO URIBE GUAYAQUIL").
+export function senderMatches(sender: string | null | undefined, labelSender: string): boolean {
+  if (!sender) return false;
+  const a = normalizeName(sender);
+  const b = normalizeName(labelSender);
+  return !!b && (` ${a} `).includes(` ${b} `);
+}
+
 function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGuidesPdf {
   const { pages, repeated } = dropRepeatedDropiBlocks(allPages);
 
@@ -524,6 +553,11 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
   // Veloces imprime en la etiqueta "Esta orden de garantia se genero a
   // través de la guia original #…" (ejemplo real 2026-09-25).
   const garantiaSpots: { page: number; line: number }[] = [];
+  // Remitente de cada etiqueta (pedido del usuario 2026-10-01, Seguimiento de
+  // tiendas). Formatos reales vistos en los PDF del 21–30/09: Servientrega
+  // "DROPI S.A.S." y en la línea siguiente la tienda ("GUSTAVO URIBE"); Laar
+  // "REMITENTE: GUSTAVO URIBE GUAYAQUIL"; otro formato "Nombre de la tienda:".
+  const senderSpots: { text: string; page: number; line: number }[] = [];
 
   pages.forEach((lines, p) => {
     for (let i = 0; i < lines.length; i++) {
@@ -532,6 +566,8 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
       const compact = text.replace(/[\s*]/g, "").toUpperCase();
       for (const g of guideTokens) if (compact.includes(g)) guideSpots.push({ guide: g, page: p, line: i });
       if (/orden\s+de\s+garant/i.test(text)) garantiaSpots.push({ page: p, line: i });
+      const sender = senderOf(lines, i);
+      if (sender) senderSpots.push({ text: sender, page: p, line: i });
       if (SUMMARY_RE.test(text) || /\(ID:/.test(text)) continue;
 
       // Servientrega / Laar / Veloces: traen el ID de Dropi.
@@ -727,6 +763,13 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
 
   const readWarranty = new Set(warranty.map((w) => w.guide));
 
+  // Primer remitente legible de cada guía (la etiqueta más cercana en la página).
+  const senderByGuide = new Map<string, string>();
+  for (const s of senderSpots) {
+    const g = guideOf({ code: "", variant: null, qty: 0, page: s.page, line: s.line });
+    if (g && !senderByGuide.has(g)) senderByGuide.set(g, s.text);
+  }
+
   const warnings: string[] = [];
   if (repeated.length > 0) {
     warnings.push(
@@ -808,7 +851,13 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
 
   return {
     manifestDate,
-    guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty, codes: [...(codesByGuide.get(number) ?? [])] })),
+    guides: [...guides.entries()].map(([number, g]) => ({
+      number,
+      carrier: g.carrier,
+      warranty: g.warranty,
+      codes: [...(codesByGuide.get(number) ?? [])],
+      sender: senderByGuide.get(number) ?? null,
+    })),
     lines,
     warranty,
     unreadWarrantyGuides: [...warrantyGuides].filter((g) => !readWarranty.has(g)),

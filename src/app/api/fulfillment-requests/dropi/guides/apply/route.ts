@@ -14,7 +14,7 @@ const schema = z.object({
   // Manifiesto atrasado: va al corte del día que dice el PDF (manifestDate).
   backfill: z.boolean().optional(),
   parseWarnings: z.array(z.string().max(1000)).max(400).optional(),
-  guides: z.array(z.object({ number: z.string().trim().min(1).max(40), carrier: z.string().max(40), codes: z.array(z.string().max(120)).max(50).optional() })).max(12000),
+  guides: z.array(z.object({ number: z.string().trim().min(1).max(40), carrier: z.string().max(40), codes: z.array(z.string().max(120)).max(50).optional(), sender: z.string().max(120).nullable().optional() })).max(12000),
   rows: z
     .array(
       z.object({

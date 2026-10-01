@@ -7,6 +7,7 @@ import { getInventoryLeadId } from "@/lib/guards";
 import { lineBlock, NO_CARRIER, sortCarriers, VARIANT_CARRIER_UNKNOWN } from "@/lib/carriers";
 import { areaRank } from "@/lib/warehouseAreas";
 import { guayaquilMonth, syncWarrantyMonth } from "@/lib/warrantyKpi";
+import { linkProductsFromGuides } from "@/lib/storeTracking";
 
 export const NO_BRAND = "SIN_MARCA";
 
@@ -250,7 +251,7 @@ export type GuidesApplyInput = {
   // Lo que no se pudo leer bien (se le mostró a Yair) — queda guardado.
   parseWarnings?: string[];
   manifestDate: string | null;
-  guides: { number: string; carrier: string; codes?: string[] }[];
+  guides: { number: string; carrier: string; codes?: string[]; sender?: string | null }[];
   rows: GuidesApplyRow[];
   warranty: GuidesApplyWarranty[];
   // Manifiesto atrasado: el día real del manifiesto (ver getOrCreateBackfillLot).
@@ -571,7 +572,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
               warrantyCategoryId: r.warrantyCategoryId ?? null,
             })),
           },
-          guides: { create: input.guides.map((g) => ({ guideNumber: g.number, carrier: g.carrier, codes: g.codes ?? [] })) },
+          guides: { create: input.guides.map((g) => ({ guideNumber: g.number, carrier: g.carrier, codes: g.codes ?? [], sender: g.sender ?? null })) },
           provisionalLines: { create: provisionalLines },
           discontinuedSales: { create: discontinuedSales },
           variantNotes: {
@@ -586,6 +587,9 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
     });
     // KPI de Garantías automático: se recalcula el mes con lo recién subido.
     if (input.warranty.length > 0) await syncWarrantyMonth(guayaquilMonth(new Date())).catch(() => null);
+    // Seguimiento de tiendas: cada ID de Shanghai queda vinculado a la tienda
+    // que dice su etiqueta (nunca frena la subida).
+    await linkProductsFromGuides(input.guides).catch(() => null);
     return { ok: true, batchId: batch.id, lotId: lot.id, discontinuedCount: discontinuedSales.length };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";

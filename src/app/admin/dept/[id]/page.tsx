@@ -251,6 +251,9 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         canDecideMarketProductPurchase={false}
         canViewB2BPricing={dept.code === "MKT"}
         canViewB2CPricing={false}
+        // Seguimiento de tiendas (2026-10-01): admin lo ve en modo lectura
+        // navegando Análisis de Mercado.
+        canViewStoreTracking={dept.code === "MKT"}
         // Confirmado 2026-09-23: mismo criterio que canActOnMarketProductReview
         // arriba — reportar/resolver "Sin stock de proveedor" son delegados y
         // exclusivos (hoy Jariel/Heidy/Bryan), el admin viendo desde acá solo

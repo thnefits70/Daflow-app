@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   const unreadWarranty: string[] = [];
   const uncertainWarranty: string[] = [];
   const warnings: string[] = [];
-  const guides = new Map<string, { carrier: string; warranty: boolean; codes: string[] }>();
+  const guides = new Map<string, { carrier: string; warranty: boolean; codes: string[]; sender: string | null }>();
   const repeatedInUpload: string[] = [];
   let manifestDate: string | null = null;
   const emptyFiles: number[] = [];
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
     manifestDate = manifestDate ?? result.manifestDate;
     for (const g of result.guides) {
       if (guides.has(g.number)) repeatedInUpload.push(g.number);
-      else guides.set(g.number, { carrier: g.carrier, warranty: g.warranty, codes: g.codes });
+      else guides.set(g.number, { carrier: g.carrier, warranty: g.warranty, codes: g.codes, sender: g.sender ?? null });
     }
     // Cada PDF de Dropi es el manifiesto de una marca: el sistema aprende
     // solo la marca de los IDs (combos sobre todo) que aún no la tienen —
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     manifestDate,
     carriers: [...new Set([...guides.values()].map((g) => g.carrier))].filter(Boolean),
-    guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty, codes: g.codes })),
+    guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty, codes: g.codes, sender: g.sender })),
     rows,
     warranty,
     unreadWarrantyGuides: unreadWarranty,

@@ -32,7 +32,7 @@ type WarrantyLine = { guide: string; carrier: string; code: string; name: string
 type ParseResult = {
   manifestDate: string | null;
   carriers: string[];
-  guides: { number: string; carrier: string; warranty: boolean; codes?: string[] }[];
+  guides: { number: string; carrier: string; warranty: boolean; codes?: string[]; sender?: string | null }[];
   rows: Row[];
   warranty: WarrantyLine[];
   unreadWarrantyGuides: string[];
@@ -325,7 +325,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
         manifestDate: data.manifestDate,
         backfill: canBackfill && backfill,
         parseWarnings: data.warnings,
-        guides: data.guides.map((g) => ({ number: g.number, carrier: g.carrier, codes: g.codes ?? [] })),
+        guides: data.guides.map((g) => ({ number: g.number, carrier: g.carrier, codes: g.codes ?? [], sender: g.sender ?? null })),
         rows: rows.map((r) => {
           const d = decisions[r.code]!;
           return {

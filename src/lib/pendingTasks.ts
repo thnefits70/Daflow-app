@@ -22,6 +22,7 @@ import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
 import { DISCONTINUED_URL, getDiscontinuedOrderPendingCount, getDiscontinuedPendingCount } from "@/lib/dropiDiscontinued";
 import { formerLeaderIdsFor, isSummaryComplete } from "@/lib/formerLeaders";
+import { getUnlinkedShanghaiCount } from "@/lib/storeTracking";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -511,6 +512,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_listo_comprar: "Análisis de Mercado — productos listos para comprar",
   analisis_mercado_brandear: "Nuevos IDs por brandear",
   analisis_mercado_sin_id: "Productos de Compras sin ID de Dropi",
+  seguimiento_tiendas_sin_tienda: "Seguimiento de tiendas — productos de Shanghai sin tienda",
   analisis_mercado_compra_en_camino: "Ya se está comprando — publícalo en Dropi",
   fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
   fulfillment_bloque_asignado: "Bloque del corte asignado — sacar de bodega",
@@ -1710,6 +1712,21 @@ async function getDropiDiscontinuedOrderPendingItem(): Promise<PendingItem | nul
     meta: `${count} guía${count === 1 ? "" : "s"}`,
     overdue: true,
     href: DISCONTINUED_URL,
+  };
+}
+
+// Seguimiento de tiendas (2026-10-01): productos de Importadora Shanghai que
+// salieron en las guías sin que la etiqueta dijera su tienda — Yair los vincula.
+async function getStoreTrackingUnlinkedPendingItem(): Promise<PendingItem | null> {
+  const count = await getUnlinkedShanghaiCount();
+  if (count === 0) return null;
+  return {
+    type: "seguimiento_tiendas_sin_tienda",
+    icon: "🏬",
+    label: "Productos de Shanghai sin tienda — vincúlalos",
+    meta: `${count} producto${count === 1 ? "" : "s"}`,
+    overdue: false,
+    href: "/area/workspace?tab=seguimiento-tiendas",
   };
 }
 
@@ -3305,6 +3322,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       canConfirmMarketingDesign: true,
       canResolveSupplierStockout: true,
       canPublishMarketProduct: true,
+      canLinkStoreProducts: true,
       leadsDept: { select: { code: true, name: true, trackWeeklyMetric: true } },
       department: { select: { code: true } },
     },
@@ -3375,6 +3393,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (missingIdItem) teamItems.push(missingIdItem);
       const inTransitItem = await getPurchaseInTransitUnpublishedPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
       if (inTransitItem) teamItems.unshift(inTransitItem);
+    }
+    if (me.canLinkStoreProducts) {
+      const storeTrackingItem = await getStoreTrackingUnlinkedPendingItem();
+      if (storeTrackingItem) teamItems.push(storeTrackingItem);
     }
     // Confirmado 2026-09-03: Jariel (transición Bryan→Jariel en Compras) es
     // delegado vía canManagePurchases pero no lidera ningún departamento —
@@ -3633,6 +3655,7 @@ export async function getPossiblePendingTypesForActor(
         canBrandMarketProduct: true,
         canConfirmMarketingDesign: true,
         canPublishMarketProduct: true,
+        canLinkStoreProducts: true,
         leadsDept: { select: { code: true, trackWeeklyMetric: true } },
         department: { select: { code: true } },
       },
@@ -3652,6 +3675,7 @@ export async function getPossiblePendingTypesForActor(
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar");
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
       if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino");
+      if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
       if (me.department?.code === "INV") types.push("fulfillment_bloque_asignado");
       if (me.canManagePurchases && me.department?.code === "MKT") types.push("compras_calientes");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
@@ -3660,6 +3684,7 @@ export async function getPossiblePendingTypesForActor(
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
     if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino");
+    if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
     if (me.leadsDept.code === "FIN") types.push("compras_frias");
     if (me.leadsDept.code === "INV") types.push("compras_urgentes_sin_atender");
     if (me.leadsDept.code === "FIN") {
