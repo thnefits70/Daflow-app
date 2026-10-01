@@ -640,7 +640,10 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
   const rows = Array.from({ length: rowCount }, (_, r) => r);
   const selCell = getCell(tab, sel.r, sel.c);
   const selRaw = selCell.v;
-  const barValue = editing && editing.r === sel.r && editing.c === sel.c ? editing.value : selRaw;
+  // Confirmado 2026-09-30, pedido del usuario: al tocar una foto la barra de
+  // fórmulas dice solo "Imagen", nunca el enlace largo (salvo mientras se
+  // edita esa celda).
+  const barValue = editing && editing.r === sel.r && editing.c === sel.c ? editing.value : imageUrlOf(selRaw) ? "Imagen" : selRaw;
   const rangeLabel = range.r1 === range.r2 && range.c1 === range.c2 ? cellName(sel.r, sel.c) : `${cellName(range.r1, range.c1)}:${cellName(range.r2, range.c2)}`;
 
   const tb = "flex h-7 min-w-7 items-center justify-center rounded px-1 text-neutral-700 hover:bg-neutral-200 disabled:opacity-40";
