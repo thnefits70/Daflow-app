@@ -17,7 +17,7 @@ export default async function AreaRolesDePagoPage() {
 
   const departments = canManage
     ? await prisma.department.findMany({
-        where: { isSpecial: false },
+        where: { isSpecial: false, deletedAt: null },
         orderBy: { order: "asc" },
         select: { id: true, name: true, code: true },
       })

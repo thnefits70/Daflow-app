@@ -15,7 +15,7 @@ export default async function AdminRecognitionPage() {
       select: { id: true, name: true, photoUrl: true, position: true, department: { select: { name: true } } },
       orderBy: { name: "asc" },
     }),
-    prisma.department.findMany({ where: { isSpecial: false }, orderBy: { order: "asc" }, select: { id: true, name: true } }),
+    prisma.department.findMany({ where: { isSpecial: false, deletedAt: null }, orderBy: { order: "asc" }, select: { id: true, name: true } }),
   ]);
   // Every month each leader has an evaluation for (not just the current
   // one) — needed so the "Evaluado ese mes" badge stays correct when the

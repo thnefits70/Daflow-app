@@ -35,7 +35,9 @@ export type DashboardData = {
 export async function getDashboardData(): Promise<DashboardData> {
   const [departments, processes, documents, exams, scores, users] = await Promise.all([
     prisma.department.findMany({
-      where: { isSpecial: false },
+      // Un área eliminada (borrado lógico, ej. Fulfillment el 2026-10-01) no
+      // sale en el organigrama.
+      where: { isSpecial: false, deletedAt: null },
       orderBy: { order: "asc" },
       // Someone who's isActive:false left the company — the org chart
       // shouldn't show them as a department's leader anymore.
