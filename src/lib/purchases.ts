@@ -651,7 +651,11 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
     // no tiene sentido exigir justificar por no comprarle a un precio
     // desactualizado.
     if (!cheapest.recentWithinYear) continue;
-    if (cheapest.supplierId !== d.supplierId) {
+    // Confirmado 2026-10-01: si el precio de hoy ya iguala o mejora al más
+    // barato conocido, no hay nada que justificar.
+    const lineShipping = lineShippingByIndex[i];
+    const effCost = effectiveUnitCost({ unitCost: it.unitCost, quantity: it.quantity, shippingIncluded: d.shippingIncluded, shippingCostTotal: lineShipping });
+    if (cheapest.supplierId !== d.supplierId && effCost > cheapest.latest) {
       anySupplierNotCheapest = true;
       needsJustificationByIndex[i] = true;
       const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: it.catalogItemId }, select: { name: true } });

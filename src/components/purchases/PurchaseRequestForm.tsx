@@ -704,6 +704,13 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       if (!l.catalogItem || !comparison || comparison.length === 0 || !supplier) return null;
       const cheapest = comparison[0];
       if (cheapest.supplierId === supplier.id) return null;
+      // Confirmado 2026-10-01: si el precio de hoy ya iguala o mejora al más
+      // barato conocido, no hay nada que justificar (ej. antes $2.53 con
+      // otro proveedor, hoy $2.00 con este).
+      const qty = Number(l.quantity) || 0;
+      const lineShipping = shippingIncluded || !shippingCostTotal || totalQty === 0 ? 0 : (Number(shippingCostTotal) * qty) / totalQty;
+      const effCost = effectiveLineUnitCost(l) + (qty > 0 ? lineShipping / qty : 0);
+      if (effCost <= cheapest.latest) return null;
       return { idx: i, name: l.catalogItem.name, cheapestSupplierName: cheapest.supplierName, cheapestPrice: cheapest.latest };
     })
     .filter((x): x is { idx: number; name: string; cheapestSupplierName: string; cheapestPrice: number } => x !== null);
