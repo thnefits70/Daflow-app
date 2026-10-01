@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { canViewStockLevels } from "@/lib/guards";
 import { getAllCurrentStock } from "@/lib/stockKardex";
+import { getUnconfirmedDispatchSummary } from "@/lib/fulfillmentPicking";
 import {
   bodegaUnitCost,
   computeBenistockPrice,
@@ -31,12 +32,15 @@ import {
 export async function GET() {
   if (!(await canViewStockLevels())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  const [rows, pendingAdjustments] = await Promise.all([
+  const [rows, pendingAdjustments, unconfirmedDispatch] = await Promise.all([
     getAllCurrentStock(),
     // Confirmado 2026-09-22, pedido explícito del usuario: para que la fila
     // muestre "pendiente de aprobación" en vez del botón normal cuando
     // Daniel ya dejó una solicitud de ajuste de stock sin resolver.
     prisma.stockPhysicalCountAdjustmentRequest.findMany({ select: { catalogItemId: true, requestedQuantity: true } }),
+    // Pedido del usuario 2026-10-01: avisar que el stock todavía no descuenta
+    // los cortes que Daniel no ha confirmado.
+    getUnconfirmedDispatchSummary(),
   ]);
   const pendingAdjustmentByItem = new Map(pendingAdjustments.map((a) => [a.catalogItemId, a.requestedQuantity]));
   // Cambiado 2026-09-30, pedido del usuario: el costo para los precios sale
@@ -70,5 +74,5 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ rows: withPrices });
+  return NextResponse.json({ rows: withPrices, unconfirmedDispatch });
 }

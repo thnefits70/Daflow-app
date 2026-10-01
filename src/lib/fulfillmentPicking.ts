@@ -5,6 +5,7 @@ import { formatMerchandiseOutflowCode, nextMerchandiseOutflowNumber } from "@/li
 import { getCompiledLot, isBackfillLot, manifestCode, purchaseDeciderIds } from "@/lib/fulfillmentGuides";
 import { recomputeAutoFillRate } from "@/lib/autoFillRate";
 import { carrierLabel } from "@/lib/carriers";
+import { getInventoryLeadId } from "@/lib/guards";
 import { computeGuideHolds, holdSummary } from "@/lib/fulfillmentHolds";
 
 // Parte 3 del plan acordado con el usuario 2026-09-23:
@@ -42,7 +43,37 @@ export async function recordPick(params: { lotId: string; catalogItemId: string;
     create: { lotId: params.lotId, catalogItemId: params.catalogItemId, pickedQty: params.quantity, pickedById: params.userId },
     update: { pickedQty: params.quantity, pickedById: params.userId, pickedAt: new Date() },
   });
+
+  // Pedido del usuario 2026-10-01: los cortes se contaban pero nadie los
+  // confirmaba, y el stock de INVESTOCK nunca bajaba. Cuando este registro
+  // completa el conteo del corte, se le avisa a Daniel — la confirmación
+  // sigue siendo solo suya.
+  const completesLot = line.picked === null && lot.picking.every((p) => p.catalogItemId === line.catalogItemId || p.picked !== null || !!p.confirmedAt);
+  if (completesLot) {
+    const danielId = await getInventoryLeadId();
+    if (danielId) {
+      const label = `${lot.manifestNumber ? `${manifestCode(lot.manifestNumber)} · ` : ""}Corte ${lot.corte} del ${lot.day.split("-").reverse().join("/")}`;
+      await notifyOwner(danielId, {
+        title: "Corte listo para confirmar",
+        body: `${label}: tu equipo ya contó todo. Confírmalo para que se descuente del stock de INVESTOCK.`,
+        url: LOT_URL,
+      }).catch(() => null);
+    }
+  }
   return { ok: true };
+}
+
+// Pedido del usuario 2026-10-01: cuánto despacho ya contado sigue sin
+// confirmar por Daniel (y por eso todavía no baja del stock). Lo usan
+// Inicio y Stock Actual.
+export async function getUnconfirmedDispatchSummary(): Promise<{ lots: number; units: number; since: string | null }> {
+  const lots = await prisma.fulfillmentLot.findMany({ where: { status: "SENT" }, select: { id: true, day: true }, orderBy: { day: "asc" } });
+  if (lots.length === 0) return { lots: 0, units: 0, since: null };
+  const picks = await prisma.fulfillmentLotPick.findMany({
+    where: { lotId: { in: lots.map((l) => l.id) }, confirmedAt: null, pickedQty: { gt: 0 } },
+    select: { pickedQty: true },
+  });
+  return { lots: lots.length, units: picks.reduce((s, p) => s + (p.pickedQty ?? 0), 0), since: lots[0].day };
 }
 
 // Un Egreso (EG-xxxx) por corte y por motivo — se crea la primera vez que

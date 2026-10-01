@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
-import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, RefreshCw, Copy } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, RefreshCw, Copy, AlertTriangle } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { ExpandableName } from "@/components/ui/ExpandableName";
@@ -544,6 +544,8 @@ function FormulaInfoButton({ open, onToggle }: { open: boolean; onToggle: () => 
 // semana subida (Control de Inventario).
 export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?: boolean; canEdit?: boolean }) {
   const [rows, setRows] = useState<StockRow[] | null>(null);
+  // Pedido del usuario 2026-10-01: cortes contados que Daniel aún no confirma.
+  const [unconfirmedDispatch, setUnconfirmedDispatch] = useState<{ lots: number; units: number; since: string | null } | null>(null);
   const [query, setQuery] = useState("");
   // Confirmado 2026-09-28, pedido del usuario: buscador propio de los combos,
   // justo encima de su tabla (el de arriba queda lejos cuando se ven
@@ -587,6 +589,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
       .then((r) => (r.ok ? r.json() : { rows: [] }))
       .then((data) => {
         setRows(data.rows);
+        setUnconfirmedDispatch(data.unconfirmedDispatch ?? null);
         setLastLoadedAt(new Date());
       })
       .catch(() => setRows([]));
@@ -836,6 +839,23 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
       <TabGuide storageKey="stock-actual">
         Acá ves el saldo de INVESTOCK (el Kardex propio de DAFLOW) de cada producto del catálogo, calculado en tiempo real a partir de lo recibido en Compras y lo despachado en Egresos — sin depender de que alguien suba un archivo. Un saldo en rojo significa stock negativo (algo salió sin haber entrado, o hay un error de conteo por revisar).
       </TabGuide>
+
+      {unconfirmedDispatch && unconfirmedDispatch.lots > 0 && (
+        <a
+          href="/area/workspace?tab=egresos&otab=solicitud"
+          className="flex items-start gap-2 border border-red/40 bg-red/5 rounded-md px-3 py-2 mb-3 text-[12px] hover:bg-red/10"
+        >
+          <AlertTriangle size={14} className="text-red shrink-0 mt-0.5" />
+          <span>
+            <b className="text-red">
+              {unconfirmedDispatch.lots === 1 ? "1 corte" : `${unconfirmedDispatch.lots} cortes`} sin confirmar
+              {unconfirmedDispatch.since ? ` desde el ${unconfirmedDispatch.since.split("-").reverse().slice(0, 2).join("/")}` : ""}.
+            </b>{" "}
+            {unconfirmedDispatch.units > 0 ? `El equipo ya sacó ${unconfirmedDispatch.units} unidades que todavía no bajan del stock: ` : "Lo despachado todavía no baja del stock: "}
+            el stock de esta tabla sale más alto que el real hasta que Daniel confirme cada corte.
+          </span>
+        </a>
+      )}
 
       {isAdmin && (
         <div className="border border-gold rounded-md mb-3">

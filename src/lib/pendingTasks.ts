@@ -2503,10 +2503,32 @@ async function getMyBankAccountPendingItem(userId: string, href: string): Promis
 async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingItem[]> {
   const rows = await prisma.fulfillmentLot.findMany({
     where: { status: "SENT" },
-    select: { day: true, corte: true, sentAt: true, createdAt: true },
+    select: { id: true, day: true, corte: true, sentAt: true, createdAt: true },
     orderBy: [{ day: "asc" }, { corte: "asc" }],
   });
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  // Pedido del usuario 2026-10-01: del 28/09 al 01/10 el equipo contó 21
+  // cortes y ninguno se confirmó, así que el stock nunca bajó. La fila ahora
+  // dice cuánto falta contar o, si ya está todo contado, que solo falta la
+  // confirmación de Daniel (que sigue siendo suya) — atrasado a las 3 horas.
+  const readyCutoff = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  const progress = new Map<string, { total: number; counted: number; matching: number; lastPickedAt: Date | null }>();
+  await Promise.all(
+    rows
+      .filter((r) => !isBackfillLot(r))
+      .map(async (r) => {
+        const lot = await getCompiledLot(r.id);
+        if (!lot) return;
+        const open = lot.picking.filter((p) => !p.confirmedAt);
+        const times = open.map((p) => p.pickedAt).filter((t): t is Date => !!t);
+        progress.set(r.id, {
+          total: open.length,
+          counted: open.filter((p) => p.picked !== null).length,
+          matching: open.filter((p) => p.picked === p.needed).length,
+          lastPickedAt: times.length ? new Date(Math.max(...times.map((t) => new Date(t).getTime()))) : null,
+        });
+      }),
+  );
   return rows.map((r) => {
     const [, m, d] = r.day.split("-");
     const overdue = (r.sentAt ?? new Date()) < cutoff;
@@ -2522,11 +2544,24 @@ async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingI
         href,
       };
     }
+    const p = progress.get(r.id);
+    if (p && p.total > 0 && p.counted === p.total) {
+      const late = overdue || (!!p.lastPickedAt && p.lastPickedAt < readyCutoff);
+      const off = p.total - p.matching;
+      return {
+        type: "fulfillment_corte_enviado",
+        icon: "✅",
+        label: "Corte contado — falta tu confirmación",
+        meta: `${where} · ${p.matching} cuadran${off > 0 ? `, ${off} no cuadran` : ""} · mientras no confirmes, no baja del stock${late ? " · atrasado" : ""}`,
+        overdue: late,
+        href,
+      };
+    }
     return {
       type: "fulfillment_corte_enviado",
       icon: "🚚",
-      label: "Corte de Fulfillment por despachar",
-      meta: `${where} · asigna los bloques y confirma lo que salió${overdue ? " · atrasado" : ""}`,
+      label: "Corte por despachar",
+      meta: `${where} · ${p && p.total > 0 ? `contados ${p.counted} de ${p.total} · ` : ""}asigna los bloques y confirma lo que salió${overdue ? " · atrasado" : ""}`,
       overdue,
       href,
     };
