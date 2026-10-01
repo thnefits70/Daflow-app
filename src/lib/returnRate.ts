@@ -140,6 +140,19 @@ export async function getAutoReturnRateMonths(): Promise<ReturnRateMonth[]> {
   return result.reverse();
 }
 
+// Tarjeta de Inicio (pedido del usuario 2026-10-01): los productos que más
+// regresan en los últimos 30 días — solo los que salieron lo suficiente.
+export async function getTopReturnProducts(limit = 5) {
+  const recent = await getRecentReturnRate();
+  const ranked = recent.byProduct.filter((p) => p.out >= HIGH_RETURN_MIN_OUT && p.pct !== null);
+  return {
+    rows: ranked.slice(0, limit),
+    highCount: ranked.filter((p) => p.high).length,
+    readyAt: recent.readyAt ? recent.readyAt.toISOString() : null,
+  };
+}
+export type TopReturnProducts = Awaited<ReturnType<typeof getTopReturnProducts>>;
+
 // En tiempo real, por producto: lo que regresó en los últimos 30 días contra
 // lo que salió en los 30 días que terminan hace RETURN_LAG_DAYS — para
 // detectar rápido un producto que está regresando mucho. Nunca mira antes del

@@ -11,6 +11,7 @@ import {
   getCommissionProgress,
 } from "@/lib/dashboard";
 import { getStoreFeedbackAggregate, getStoreFeedbackTrend, getStoreFeedbackStoreDetails } from "@/lib/storeFeedback";
+import { getTopReturnProducts } from "@/lib/returnRate";
 import { getTeamLearningPathResults } from "@/lib/learningPaths";
 import { getAiSpendOverview } from "@/lib/aiUsage";
 import { getPurchaseMerchandisePaymentsShortcut } from "@/lib/pendingTasks";
@@ -23,13 +24,14 @@ import { Dashboard } from "@/components/dashboard/Dashboard";
 // líder ya ve los suyos en su propio Inicio (`getDuePeriodicReminders({deptId})`
 // en area/page.tsx) — el admin ya no ve ninguno aquí.
 export default async function AdminHomePage() {
-  const [data, weeklyTrend, fillRateTrend, fillRateBreakdown, returnRateTrend, stockoutWeeks, warrantyMonthlyChart, warrantyReasonChart, warrantyReasonTrend, storeFeedback, storeFeedbackTrend, learningPathResults, aiSpend, commissionProgress, merchandisePayments] =
+  const [data, weeklyTrend, fillRateTrend, fillRateBreakdown, returnRateTrend, returnProducts, stockoutWeeks, warrantyMonthlyChart, warrantyReasonChart, warrantyReasonTrend, storeFeedback, storeFeedbackTrend, learningPathResults, aiSpend, commissionProgress, merchandisePayments] =
     await Promise.all([
       getDashboardData(),
       getWeeklyTrend(),
       getFillRateTrend(),
       getLatestFillRateBreakdown(),
       getReturnRateTrend(),
+      getTopReturnProducts(),
       getStockoutWeeks(),
       getWarrantyMonthlyChart(),
       getWarrantyReasonChart(),
@@ -50,6 +52,7 @@ export default async function AdminHomePage() {
       fillRateTrend={fillRateTrend}
       fillRateBreakdown={fillRateBreakdown}
       returnRateTrend={returnRateTrend}
+      returnProducts={returnProducts}
       stockoutWeeks={stockoutWeeks}
       warrantyMonthlyChart={warrantyMonthlyChart}
       warrantyReasonChart={warrantyReasonChart}

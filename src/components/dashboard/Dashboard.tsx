@@ -9,7 +9,8 @@ import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
 import { CommissionProgressCard } from "./CommissionProgressCard";
-import { FillRateTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
+import { FillRateTile, ReturnProductsTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
+import type { TopReturnProducts } from "@/lib/returnRate";
 import { FillRateBreakdownCard } from "./FillRateBreakdownCard";
 import { AiSpendWidget } from "./AiSpendWidget";
 import { StoreFeedbackTile } from "./StoreFeedbackTile";
@@ -40,6 +41,7 @@ export function Dashboard({
   fillRateTrend,
   fillRateBreakdown,
   returnRateTrend,
+  returnProducts,
   stockoutWeeks,
   warrantyMonthlyChart,
   warrantyReasonChart,
@@ -60,6 +62,7 @@ export function Dashboard({
   commissionProgress?: CommissionProgress;
   fillRateBreakdown?: FillRateBreakdown;
   returnRateTrend?: WeeklyTrend;
+  returnProducts?: TopReturnProducts;
   stockoutWeeks?: StockoutWeekPoint[];
   warrantyMonthlyChart?: WarrantyMonthlyChart | null;
   warrantyReasonChart?: PieSlice[];
@@ -156,6 +159,7 @@ export function Dashboard({
 
           {fillRateTrend && <FillRateTile trend={fillRateTrend} />}
           {returnRateTrend && <ReturnRateTile trend={returnRateTrend} />}
+          {returnProducts && <ReturnProductsTile data={returnProducts} href="/admin/kpis-generales" />}
 
           {fillRateBreakdown && (
             <div className="sm:col-span-2">

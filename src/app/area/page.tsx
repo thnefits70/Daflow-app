@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { getTopReturnProducts } from "@/lib/returnRate";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -37,6 +38,7 @@ export default async function AreaHomePage() {
     fillRateTrend,
     fillRateBreakdown,
     returnRateTrend,
+    returnProducts,
     stockoutWeeks,
     dashboardData,
     warrantyMonthlyChart,
@@ -63,6 +65,7 @@ export default async function AreaHomePage() {
     getFillRateTrend(),
     getLatestFillRateBreakdown(),
     getReturnRateTrend(),
+    getTopReturnProducts(),
     getStockoutWeeks(),
     getDashboardData(),
     getWarrantyMonthlyChart(),
@@ -107,6 +110,7 @@ export default async function AreaHomePage() {
       fillRateBreakdown={fillRateBreakdown}
       canJustifyFillRate={canJustifyFillRateFlag}
       returnRateTrend={returnRateTrend}
+      returnProducts={returnProducts}
       stockoutWeeks={stockoutWeeks}
       warrantyMonthlyChart={warrantyMonthlyChart}
       warrantyReasonChart={warrantyReasonChart}

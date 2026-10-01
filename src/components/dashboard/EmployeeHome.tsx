@@ -10,7 +10,8 @@ import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
 import { CommissionProgressCard } from "./CommissionProgressCard";
-import { FillRateTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
+import { FillRateTile, ReturnProductsTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
+import type { TopReturnProducts } from "@/lib/returnRate";
 import { FillRateBreakdownCard } from "./FillRateBreakdownCard";
 import { StoreFeedbackTile } from "./StoreFeedbackTile";
 import { StockoutBarChart } from "./StockoutBarChart";
@@ -61,6 +62,7 @@ export function EmployeeHome({
   fillRateTrend,
   fillRateBreakdown,
   returnRateTrend,
+  returnProducts,
   stockoutWeeks,
   warrantyMonthlyChart,
   warrantyReasonChart,
@@ -90,6 +92,7 @@ export function EmployeeHome({
   fillRateBreakdown?: FillRateBreakdown;
   canJustifyFillRate?: boolean;
   returnRateTrend?: WeeklyTrend;
+  returnProducts?: TopReturnProducts;
   stockoutWeeks?: StockoutWeekPoint[];
   warrantyMonthlyChart?: WarrantyMonthlyChart | null;
   warrantyReasonChart?: PieSlice[];
@@ -187,6 +190,7 @@ export function EmployeeHome({
 
           {fillRateTrend && <FillRateTile trend={fillRateTrend} />}
           {returnRateTrend && <ReturnRateTile trend={returnRateTrend} />}
+          {returnProducts && <ReturnProductsTile data={returnProducts} />}
 
           {fillRateBreakdown && (
             <div className="sm:col-span-2">

@@ -11,6 +11,7 @@ import {
 } from "./WeeklyTrendChart";
 import { PieChart } from "./PieChart";
 import type { WeeklyTrend, WarrantyMonthlyChart } from "@/lib/dashboard";
+import type { TopReturnProducts } from "@/lib/returnRate";
 
 // Confirmado 2026-08-31: pedido explícito del usuario — quien vea la
 // tarjetita chiquita (no solo la tarjeta grande de desglose) debe poder
@@ -304,13 +305,27 @@ export function FillRateTile({ trend }: { trend: NonNullable<WeeklyTrend> }) {
   );
 }
 
+// Pedido del usuario 2026-10-01: la misma tasa mensual, con botones para
+// verla por marca. El desglose existe desde octubre 2026 (meses automáticos);
+// lo de antes se copió de ATOM sin marca.
 export function ReturnRateTile({ trend }: { trend: NonNullable<WeeklyTrend> }) {
-  const latest = trend.points[trend.points.length - 1];
+  const [brand, setBrand] = useState<string | null>(null);
+  const brandLabels = [...new Set(trend.points.flatMap((p) => (p.brands ?? []).map((b) => b.label)))];
+  const series = brand
+    ? trend.points.flatMap((p) => {
+        const b = p.brands?.find((x) => x.label === brand);
+        return b ? [{ week: p.week, value: b.value }] : [];
+      })
+    : trend.points;
+  const latest = series[series.length - 1] ?? trend.points[trend.points.length - 1];
+  const preliminary = !brand && !!trend.points[trend.points.length - 1]?.detail?.includes("preliminar");
+  const chip = (active: boolean) =>
+    `rounded-full border px-2 py-0.5 text-[10px] font-semibold cursor-pointer ${active ? "border-teal bg-teal/15 text-teal" : "border-rule text-steel"}`;
   return (
     <KpiTile
-      kicker={`Tasa de Devolución · ${trend.deptName}`}
+      kicker={`Tasa de Devolución · ${brand ?? trend.deptName}`}
       value={`${Math.round(latest.value)}%`}
-      period={`${formatMonthShort(latest.week)} · último mes`}
+      period={`${formatMonthShort(latest.week)} · último mes${preliminary ? " · preliminar" : ""}`}
       pill={returnRateStatus(latest.value)}
       legend={[
         { color: "#22C55E", label: "<20% Excelente" },
@@ -318,14 +333,65 @@ export function ReturnRateTile({ trend }: { trend: NonNullable<WeeklyTrend> }) {
         { color: "#E0574A", label: "≥28% Alerta" },
       ]}
     >
+      {brandLabels.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2">
+          <button type="button" className={chip(brand === null)} onClick={() => setBrand(null)}>
+            General
+          </button>
+          {brandLabels.map((b) => (
+            <button key={b} type="button" className={chip(brand === b)} onClick={() => setBrand(b)}>
+              {b}
+            </button>
+          ))}
+        </div>
+      )}
       <MiniSparkline
-        points={trend.points}
+        points={series}
         color="#14C7C7"
         dangerAbove={28}
         formatPeriod={formatMonthShort}
         formatValue={(v) => `${Math.round(v)}%`}
       />
     </KpiTile>
+  );
+}
+
+// Pedido del usuario 2026-10-01: en Inicio, junto a la tasa, los productos
+// que más regresan en los últimos 30 días (ver getTopReturnProducts).
+export function ReturnProductsTile({ data, href }: { data: TopReturnProducts; href?: string }) {
+  return (
+    <div className="bg-surface border border-rule rounded-lg p-4">
+      <div className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-steel mb-2">Productos que más regresan</div>
+      <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
+        <span className="font-display text-[22px] font-bold leading-none">{data.highCount}</span>
+        <span className="text-[11px] text-steel">con 15% o más de devolución</span>
+      </div>
+      <div className="text-[10.5px] text-steel mb-2.5">Últimos 30 días · por unidades</div>
+      {data.readyAt ? (
+        <div className="text-[11.5px] text-steel">
+          Empieza a mostrarse el {new Date(data.readyAt).toLocaleDateString("es-EC", { day: "numeric", month: "long", timeZone: "America/Guayaquil" })}, cuando ya hayan regresado las devoluciones de los primeros cortes.
+        </div>
+      ) : data.rows.length === 0 ? (
+        <div className="text-[11.5px] text-steel">Todavía no hay productos con suficientes salidas.</div>
+      ) : (
+        <div className="flex flex-col divide-y divide-rule">
+          {data.rows.map((r) => (
+            <div key={r.key} className="flex items-center justify-between gap-2 py-1.5 text-[12px]">
+              <span className="min-w-0 truncate">{r.name}</span>
+              <span className="shrink-0 text-steel">
+                {r.returned}/{r.out} ·{" "}
+                <b className={r.high ? "text-red" : "text-ink"}>{r.pct}%</b>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+      {href && (
+        <a href={href} className="inline-block mt-2 text-[11px] font-semibold text-blue">
+          Ver todos →
+        </a>
+      )}
+    </div>
   );
 }
 

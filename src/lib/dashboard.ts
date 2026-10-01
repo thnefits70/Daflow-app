@@ -407,10 +407,16 @@ export async function getReturnRateTrend(): Promise<WeeklyTrend> {
   ]);
   const points = [
     ...records.filter((r) => !isAutoReturnRateMonth(r.month)).map((r) => ({ week: r.month, value: r.value })),
+    // Pedido del usuario 2026-10-01: cada mes automático trae su desglose
+    // por marca (la tarjeta de Inicio deja cambiar General ↔ marca).
     ...autoMonths
       .filter((m) => m.pct !== null)
       .reverse()
-      .map((m) => ({ week: m.month, value: m.pct! })),
+      .map((m) => {
+        const brands = m.byBrand.filter((b) => b.pct !== null).map((b) => ({ label: b.name, value: b.pct! }));
+        const parts = [...brands.map((b) => `${b.label} ${b.value}%`), ...(m.closed ? [] : ["preliminar"])];
+        return { week: m.month, value: m.pct!, brands, detail: parts.join(" · ") || undefined };
+      }),
   ];
   if (points.length === 0) return null;
 
