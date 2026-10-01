@@ -63,6 +63,7 @@ export function EmployeeHome({
   fillRateBreakdown,
   returnRateTrend,
   returnProducts,
+  canViewReturnDetail = false,
   stockoutWeeks,
   warrantyMonthlyChart,
   warrantyReasonChart,
@@ -93,6 +94,7 @@ export function EmployeeHome({
   canJustifyFillRate?: boolean;
   returnRateTrend?: WeeklyTrend;
   returnProducts?: TopReturnProducts;
+  canViewReturnDetail?: boolean;
   stockoutWeeks?: StockoutWeekPoint[];
   warrantyMonthlyChart?: WarrantyMonthlyChart | null;
   warrantyReasonChart?: PieSlice[];
@@ -190,7 +192,7 @@ export function EmployeeHome({
 
           {fillRateTrend && <FillRateTile trend={fillRateTrend} />}
           {returnRateTrend && <ReturnRateTile trend={returnRateTrend} />}
-          {returnProducts && <ReturnProductsTile data={returnProducts} />}
+          {returnProducts && <ReturnProductsTile data={returnProducts} href={canViewReturnDetail ? "/area/kpis-generales" : undefined} />}
 
           {fillRateBreakdown && (
             <div className="sm:col-span-2">

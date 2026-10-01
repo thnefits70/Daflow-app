@@ -18,7 +18,7 @@ import { getStoreFeedbackAggregate, getStoreFeedbackTrend, getStoreFeedbackStore
 import { getDuePeriodicReminders } from "@/lib/periodicReminders";
 import { getMyLearningPaths, summarizeMyLearningPaths } from "@/lib/learningPaths";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
-import { canViewInventoryKpisHome, canJustifyFillRate, canManageStoreFeedback, canUseWeeklyCheckin } from "@/lib/guards";
+import { canViewInventoryKpisHome, canJustifyFillRate, canManageStoreFeedback, canUseWeeklyCheckin, canViewReturnRateDetail } from "@/lib/guards";
 import { getInventoryKpisData } from "@/lib/inventoryKpis";
 import { getActiveImprovementPlanForCollaborator } from "@/lib/improvementPlan";
 
@@ -81,7 +81,10 @@ export default async function AreaHomePage() {
   ]);
   if (!dept) redirect("/api/auth/force-logout");
 
-  const canJustifyFillRateFlag = fillRateBreakdown ? await canJustifyFillRate() : false;
+  const [canJustifyFillRateFlag, canViewReturnDetail] = await Promise.all([
+    fillRateBreakdown ? canJustifyFillRate() : Promise.resolve(false),
+    canViewReturnRateDetail(),
+  ]);
   // Confirmado 2026-08-31: pedido explícito del usuario — acceso directo
   // en Inicio, un clic, al chat con Mary (ver WeeklyCheckinPanel, montada
   // globalmente en area/layout.tsx solo para líderes de un área con
@@ -111,6 +114,7 @@ export default async function AreaHomePage() {
       canJustifyFillRate={canJustifyFillRateFlag}
       returnRateTrend={returnRateTrend}
       returnProducts={returnProducts}
+      canViewReturnDetail={canViewReturnDetail}
       stockoutWeeks={stockoutWeeks}
       warrantyMonthlyChart={warrantyMonthlyChart}
       warrantyReasonChart={warrantyReasonChart}

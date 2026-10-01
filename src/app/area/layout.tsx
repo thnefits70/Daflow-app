@@ -9,6 +9,7 @@ import {
   canManageNomina,
   canLogOvertimeHours,
   canConfirmPersonalPurchaseInventory,
+  canViewReturnRateDetailFor,
 } from "@/lib/guards";
 import { getRecognitionLockout } from "@/lib/pendingTasks";
 import { getWeeklyCheckinLockoutStatus } from "@/lib/weeklyCheckin";
@@ -160,7 +161,12 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
   ]);
   // 2026-09-30: además de la lista, quien tenga el rol
   // Asesor(a) B2B (lo que hacía Heidy, que estaba oculta) tampoco ve el botón.
-  const showKpis = !KPIS_HIDDEN_USERNAMES.has(currentUser.username) && !currentUser.isB2BAdvisor;
+  // Pedido del usuario 2026-10-01: líderes y todo Análisis de Mercado ven el
+  // detalle de la Tasa de Devolución en KPIs Generales, así que para ellos
+  // el botón aparece aunque estén en la lista de arriba.
+  const showKpis =
+    (!KPIS_HIDDEN_USERNAMES.has(currentUser.username) && !currentUser.isB2BAdvisor) ||
+    canViewReturnRateDetailFor(currentUser, dept.code);
   // Confirmado 2026-08-13: pedido explícito del usuario — el líder de un
   // área habilitada para horas extra (hoy Inventario y Fulfillment)
   // necesita entrar acá para registrar, aunque no gestione Nómina en

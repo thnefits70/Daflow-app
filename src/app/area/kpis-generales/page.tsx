@@ -6,7 +6,8 @@ import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { ReturnRatePanel } from "@/components/finance/ReturnRatePanel";
 import { WarrantyPanel } from "@/components/finance/WarrantyPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
-import { canManageReturnRate, canManageWarranties } from "@/lib/guards";
+import { canManageReturnRate, canManageWarranties, canViewReturnRateDetail } from "@/lib/guards";
+import { AutoReturnRatePanel } from "@/components/finance/AutoReturnRatePanel";
 import { WARRANTY_LAST_MANUAL_MONTH } from "@/lib/warrantyKpiConstants";
 import { RETURN_RATE_LAST_MANUAL_MONTH } from "@/lib/returnRateConstants";
 
@@ -14,7 +15,8 @@ export default async function AreaKpisGeneralesPage() {
   const session = await auth();
   if (!session) redirect("/login");
 
-  const [canManageReturnRateKpi, canManageWarrantyKpi, lastManualReturnMonth, lastManualWarrantyMonth] = await Promise.all([
+  const [canReturnRateDetail, canManageReturnRateKpi, canManageWarrantyKpi, lastManualReturnMonth, lastManualWarrantyMonth] = await Promise.all([
+    canViewReturnRateDetail(),
     canManageReturnRate(),
     canManageWarranties(),
     prisma.returnRateRecord.findUnique({ where: { month: RETURN_RATE_LAST_MANUAL_MONTH }, select: { id: true } }),
@@ -61,13 +63,23 @@ export default async function AreaKpisGeneralesPage() {
         </>
       )}
 
+      {/* Pedido del usuario 2026-10-01: el detalle completo (cada mes, por
+          marca y todos los productos) lo ven todos los líderes y todo
+          Análisis de Mercado. */}
+      {canReturnRateDetail && (
+        <>
+          <h3 className={`text-[14px] font-semibold mb-3 ${canReturnRate ? "mt-7" : ""}`}>Tasa de Devolución — detalle</h3>
+          <AutoReturnRatePanel />
+        </>
+      )}
+
       {/* Pedido del usuario 2026-09-30: Ruptura de Stock y Productos ganadores
           se llenan solos con los cortes — ya no se muestran acá para que
           Daniel (quien antes los cargaba) no piense que tiene algo que hacer.
           Siguen visibles para el admin en /admin/kpis-generales. */}
       {canWarranties && (
         <>
-          <div className={`flex items-center justify-between gap-2 mb-3 ${canReturnRate ? "mt-7" : ""}`}>
+          <div className={`flex items-center justify-between gap-2 mb-3 ${canReturnRate || canReturnRateDetail ? "mt-7" : ""}`}>
             <h3 className="text-[14px] font-semibold">KPI de Garantías</h3>
             <PushTypeToggle type="kpi_garantias" />
           </div>

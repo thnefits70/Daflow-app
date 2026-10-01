@@ -407,6 +407,22 @@ export async function canManageWarranties() {
 // Same rule as canManagePayroll (admin or whoever leads Finanzas), applied to
 // a different indicator — kept as its own function since the two features
 // are unrelated even though the permission happens to be identical today.
+// Pedido del usuario 2026-10-01: el detalle completo de la Tasa de
+// Devolución automática (cada mes, por marca y todos los productos) lo ven
+// el admin, TODOS los líderes de área y todo el equipo de Análisis de
+// Mercado. Solo lectura — se calcula sola.
+export function canViewReturnRateDetailFor(user: { isLeader: boolean } | null, deptCode: string | null | undefined) {
+  return !!user?.isLeader || deptCode === "MKT";
+}
+
+export async function canViewReturnRateDetail() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await getGuardUser(session.user.id);
+  return canViewReturnRateDetailFor(user, user?.department?.code);
+}
+
 export async function canManageReturnRate() {
   const session = await auth();
   if (!session) return false;
