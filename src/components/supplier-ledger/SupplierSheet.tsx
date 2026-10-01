@@ -648,7 +648,19 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
 
   return (
     <div className="flex h-dvh flex-col bg-white text-neutral-900 select-none [color-scheme:light]" onPointerDown={() => tabMenu && setTabMenu(null)}>
-      {/* Barra de título */}
+      {/* Barra de título — confirmado 2026-09-30, pedido del usuario: quien
+          solo puede ver ve únicamente el logo pequeño (que parezca un Excel),
+          sin título, correo, "Todo guardado" ni barra de fórmulas. */}
+      {!canWrite ? (
+        <div className="flex items-center gap-2 border-b border-neutral-200 px-3 py-1.5">
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[#0f9d58] text-white">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+              <path d="M5 3h10l4 4v14H5V3zm2 8v2h4v-2H7zm6 0v2h4v-2h-4zm-6 4v2h4v-2H7zm6 0v2h4v-2h-4z" />
+            </svg>
+          </div>
+          {status === "offline" && <span className="text-[12px] text-red-600">Sin conexión — reintentando…</span>}
+        </div>
+      ) : (
       <div className="flex items-center gap-3 border-b border-neutral-200 px-3 py-2 sm:px-4">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[#0f9d58] text-white">
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
@@ -679,6 +691,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
           </button>
         </div>
       </div>
+      )}
 
       {tab.locked && (
         <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[12.5px] text-amber-900">
@@ -733,6 +746,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
       )}
 
       {/* Barra de fórmulas */}
+      {canWrite && (
       <div className="flex items-center border-b border-neutral-200 text-[13px]">
         <div className="w-[88px] shrink-0 truncate border-r border-neutral-200 px-2 py-1 text-neutral-700">{rangeLabel}</div>
         <div className="px-2 italic text-neutral-400">fx</div>
@@ -751,6 +765,7 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
           </div>
         )}
       </div>
+      )}
 
       {/* Cuadrícula */}
       <div
