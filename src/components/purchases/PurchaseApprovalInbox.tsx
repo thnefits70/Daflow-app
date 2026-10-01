@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useB2BAdvisorLabel } from "@/lib/useB2BAdvisorLabel";
 import { useRouter } from "next/navigation";
 import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown, Award, CreditCard, PackageSearch, PackageCheck } from "lucide-react";
 import { actorName } from "@/lib/actorName";
@@ -203,6 +204,7 @@ function buildValidationSummary(g: Row[]) {
 // pagar" caso por caso.
 export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPayMerchandise = false, isAdmin = true }: { canAct?: boolean; canPayHere?: boolean; canPayMerchandise?: boolean; isAdmin?: boolean }) {
   const router = useRouter();
+  const b2b = useB2BAdvisorLabel();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
   const [rejectingGroup, setRejectingGroup] = useState<string | null>(null);
@@ -728,7 +730,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                     {r.catalogItem.awaitingDropiId && (
                       <span
                         className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-blue/15 border border-blue/40 text-blue"
-                        title="Producto nuevo: Heidy todavía no lo publica en Dropi. Se puede comprar igual; el stock entra al Kardex cuando ella confirme el ID."
+                        title={`Producto nuevo: ${b2b.the} todavía no lo publica en Dropi. Se puede comprar igual; el stock entra al Kardex cuando confirme el ID.`}
                       >
                         Aún no está en Dropi
                       </span>

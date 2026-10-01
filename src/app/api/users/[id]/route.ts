@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireAdminSession, canManageNomina } from "@/lib/guards";
 import { hashPassword } from "@/lib/password";
+import { assignB2BAdvisorRole, revokeB2BAdvisorRole, B2B_ADVISOR_TITLES } from "@/lib/b2bAdvisorRole";
 
 function omitPasswordHash<T extends { passwordHash: string; twoFactorSecret?: string | null; twoFactorBackupCodes?: string[] }>(
   user: T
@@ -73,6 +74,11 @@ const updateSchema = z.object({
   canViewStoreFeedback: z.boolean().optional(),
   excludeFromRecognition: z.boolean().optional(),
   isActive: z.boolean().optional(),
+  // Rol "Asesor(a) B2B" (2026-09-30) — ver lib/b2bAdvisorRole.ts. Activarlo
+  // se lo quita a quien lo tuviera y prende sus flags de una vez.
+  isB2BAdvisor: z.boolean().optional(),
+  b2bAdvisorTitle: z.enum(B2B_ADVISOR_TITLES).optional(),
+  b2bAdvisorProvisional: z.boolean().optional(),
   // Confirmado 2026-09-08: borra el secreto 2FA + códigos de respaldo de
   // esta persona, invalidando de inmediato lo que tenga en su celular —
   // exclusivo del admin (ver chequeo más abajo), ni siquiera Nairoby vía
@@ -115,6 +121,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       await prisma.user.updateMany({
         where: { leadsDeptId: d.leadsDeptId, isLeader: true, id: { not: id } },
         data: { isLeader: false, leadsDeptId: null },
+      });
+    }
+  }
+
+  // Rol Asesor(a) B2B: va en su propia transacción (toca a dos personas).
+  let b2bResult: { previousHolders: string[]; movedToMkt: boolean } | null = null;
+  if (d.isB2BAdvisor === false) {
+    await revokeB2BAdvisorRole(id);
+  } else if (d.isB2BAdvisor === true || d.b2bAdvisorTitle !== undefined || d.b2bAdvisorProvisional !== undefined) {
+    const cur = await prisma.user.findUnique({ where: { id }, select: { isB2BAdvisor: true, b2bAdvisorTitle: true, b2bAdvisorProvisional: true } });
+    if (!cur) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+    if (d.isB2BAdvisor === true || cur.isB2BAdvisor) {
+      b2bResult = await assignB2BAdvisorRole(id, {
+        title: d.b2bAdvisorTitle ?? cur.b2bAdvisorTitle ?? "Asesora B2B",
+        provisional: d.b2bAdvisorProvisional ?? (cur.isB2BAdvisor ? cur.b2bAdvisorProvisional : false),
       });
     }
   }
@@ -167,7 +188,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   try {
     const user = await prisma.user.update({ where: { id }, data });
-    return NextResponse.json(omitPasswordHash(user));
+    return NextResponse.json({
+      ...omitPasswordHash(user),
+      ...(b2bResult ? { b2bPreviousHolders: b2bResult.previousHolders, b2bMovedToMkt: b2bResult.movedToMkt } : {}),
+    });
   } catch {
     return NextResponse.json({ error: "Ya existe un usuario con ese nombre de usuario." }, { status: 409 });
   }

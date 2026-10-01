@@ -8,7 +8,7 @@ export default async function AreaNominaProfilePage({ params }: { params: Promis
 
   const { userId } = await params;
 
-  const [user, departments, positions, canViewPayroll, canEditPayroll] = await Promise.all([
+  const [user, departments, positions, canViewPayroll, canEditPayroll, b2bAdvisorHolder] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -20,6 +20,7 @@ export default async function AreaNominaProfilePage({ params }: { params: Promis
     prisma.position.findMany({ orderBy: { name: "asc" } }),
     canViewPayrollRoles(),
     canEditPayrollRoles(),
+    prisma.user.findFirst({ where: { isB2BAdvisor: true }, select: { id: true, name: true } }),
   ]);
 
   if (!user) notFound();
@@ -61,6 +62,10 @@ export default async function AreaNominaProfilePage({ params }: { params: Promis
         canViewStockLevels: user.canViewStockLevels,
         canViewMarketingArrivalsForDispatch: user.canViewMarketingArrivalsForDispatch,
         marketingAdvisorBrand: user.marketingAdvisorBrand,
+        isB2BAdvisor: user.isB2BAdvisor,
+        b2bAdvisorTitle: user.b2bAdvisorTitle,
+        b2bAdvisorProvisional: user.b2bAdvisorProvisional,
+        b2bAdvisorGrantedFlags: user.b2bAdvisorGrantedFlags,
         canManageStoreFeedback: user.canManageStoreFeedback,
         canViewStoreFeedback: user.canViewStoreFeedback,
         excludeFromRecognition: user.excludeFromRecognition,
@@ -86,6 +91,7 @@ export default async function AreaNominaProfilePage({ params }: { params: Promis
       canDelete={false}
       canViewPayroll={canViewPayroll}
       canEditPayroll={canEditPayroll}
+      b2bAdvisorHolder={b2bAdvisorHolder}
     />
   );
 }

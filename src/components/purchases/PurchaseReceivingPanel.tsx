@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, X, AlertTriangle, Truck, Package } from "lucide-react";
 import { actorName } from "@/lib/actorName";
@@ -2206,7 +2207,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       {r.catalogItem.awaitingDropiId && (
                         <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-blue bg-blue/10 border border-blue/30 rounded-md px-2.5 py-2 mb-2">
                           <AlertTriangle size={13} className="shrink-0" />
-                          Producto nuevo pendiente de ID de Dropi — al aprobar, queda RECIBIDO pero no se suma a INVESTOCK todavía. Entra al Kardex cuando Heidy confirme el ID y Bryan lo libere.
+                          Producto nuevo pendiente de ID de Dropi — al aprobar, queda RECIBIDO pero no se suma a INVESTOCK todavía. Entra al Kardex cuando <B2BAdvisorName /> confirme el ID y Bryan lo libere.
                         </div>
                       )}
                       {/* Confirmado 2026-09-25, pedido explícito del usuario: el lote

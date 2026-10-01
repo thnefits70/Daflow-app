@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, RefreshCw, Copy } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { TabGuide } from "@/components/shared/TabGuide";
@@ -1110,7 +1111,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                   {/* Comprado sin ID (ej. Guante De Acero, de Compras antes de
                       exigir el ID): lo pone Heidy en "Publicar en Dropi". */}
                   {!r.notPurchasedYet && !r.justCode && !r.pendingDropiId && r.bodega !== "MKT_SUMINISTROS" && (
-                    <span className="text-[10.5px] font-semibold text-gold mt-0.5">Sin ID · lo pone Heidy</span>
+                    <span className="text-[10.5px] font-semibold text-gold mt-0.5">Sin ID · lo pone <B2BAdvisorName /></span>
                   )}
                 </span>
                 {/* Desde 2026-09-28: la marca viene de Análisis de Mercado / Control de Compras; solo el admin corrige. */}

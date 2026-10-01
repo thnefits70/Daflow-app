@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useB2BAdvisorLabel } from "@/lib/useB2BAdvisorLabel";
+import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { Search, Plus, Camera, AlertTriangle, CheckCircle2, Trash2, Flag, X, Clock, Pencil, BellRing } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
@@ -80,6 +82,7 @@ export function PurchaseCatalogPicker({
   defaultCreateDraft?: CatalogCreateDraft | null;
   onCreateDraftChange?: (draft: CatalogCreateDraft) => void;
 }) {
+  const b2b = useB2BAdvisorLabel();
   const [query, setQuery] = useState(defaultQuery);
   const [results, setResults] = useState<CatalogItemDTO[]>([]);
   const [open, setOpen] = useState(false);
@@ -372,7 +375,7 @@ export function PurchaseCatalogPicker({
             {value.awaitingDropiId && (
               <span
                 className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-blue/15 border border-blue/40 text-blue"
-                title="Se puede comprar ya — el Kardex de INVESTOCK espera a que Heidy confirme el ID de Dropi"
+                title={`Se puede comprar ya — el Kardex de INVESTOCK espera a que ${b2b.the} confirme el ID de Dropi`}
               >
                 Pendiente ID Dropi
               </span>
@@ -479,7 +482,7 @@ export function PurchaseCatalogPicker({
               <AlertTriangle size={13} className="mt-0.5 shrink-0 text-blue" />
               <span>
                 ¿Todavía no tiene ID de Dropi? No lo crees aquí:{" "}
-                <a href="/area/workspace?tab=analisis-mercado" className="font-semibold text-blue underline">propónlo en Análisis de Mercado</a>. Bryan lo aprueba con su marca y ya lo puedes comprar; Heidy le pone el ID después.
+                <a href="/area/workspace?tab=analisis-mercado" className="font-semibold text-blue underline">propónlo en Análisis de Mercado</a>. Bryan lo aprueba con su marca y ya lo puedes comprar; <B2BAdvisorName /> le pone el ID después.
               </span>
             </div>
             <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
@@ -621,7 +624,7 @@ export function PurchaseCatalogPicker({
                     {item.awaitingDropiId && (
                       <span
                         className="shrink-0 font-mono text-[9px] font-bold uppercase rounded-full px-1.5 py-0.5 bg-blue/15 border border-blue/40 text-blue"
-                        title="Se puede comprar ya — el Kardex de INVESTOCK espera a que Heidy confirme el ID de Dropi"
+                        title={`Se puede comprar ya — el Kardex de INVESTOCK espera a que ${b2b.the} confirme el ID de Dropi`}
                       >
                         Pendiente ID Dropi
                       </span>

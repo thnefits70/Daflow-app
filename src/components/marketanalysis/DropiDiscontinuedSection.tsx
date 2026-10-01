@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useB2BAdvisorLabel } from "@/lib/useB2BAdvisorLabel";
+import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
@@ -35,6 +37,7 @@ function carrierText(c: string) {
 type StepKind = "delist" | "order";
 
 export function DropiDiscontinuedSection({ canDelist }: { canDelist: boolean }) {
+  const b2b = useB2BAdvisorLabel();
   const [rows, setRows] = useState<Sale[] | null>(null);
   const [canCancelOrder, setCanCancelOrder] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
@@ -83,7 +86,7 @@ export function DropiDiscontinuedSection({ canDelist }: { canDelist: boolean }) 
             button: "Ya lo di de baja en Dropi",
             question: "¿Estás seguro de que ya diste de baja el producto en Dropi?",
             yes: "Sí, ya lo di de baja",
-            waiting: "Heidy: dar de baja el producto en Dropi y cancelar el pedido.",
+            waiting: `${b2b.The}: dar de baja el producto en Dropi y cancelar el pedido.`,
           }
         : {
             at: r.orderCancelledAt,
@@ -173,7 +176,7 @@ export function DropiDiscontinuedSection({ canDelist }: { canDelist: boolean }) 
     <div className="mb-7">
       <div className="font-display font-bold text-[14px] mb-1">Vendidos en Dropi pero dados de baja ({pending.length} pendientes)</div>
       <div className="text-[12px] text-steel mb-2.5">
-        Un cliente compró un producto que no tenemos ni vamos a comprar. Ese pedido no sale. Heidy da de baja el producto en Dropi y cancela el pedido; como la
+        Un cliente compró un producto que no tenemos ni vamos a comprar. Ese pedido no sale. <B2BAdvisorName capital /> da de baja el producto en Dropi y cancela el pedido; como la
         guía ya se generó, Bryan gestiona con la gente de Dropi que la anulen. Cada uno marca su paso aquí.
       </div>
       <div className="flex flex-col gap-2.5 mb-3">{pending.map(card)}</div>

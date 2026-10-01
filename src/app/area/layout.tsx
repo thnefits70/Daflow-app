@@ -158,7 +158,9 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
     "luis2026", // Luis Castillo
     "allan2026", // Allan Anastacio
   ]);
-  const showKpis = !KPIS_HIDDEN_USERNAMES.has(currentUser.username);
+  // 2026-09-30: además de la lista, quien tenga el rol
+  // Asesor(a) B2B (lo que hacía Heidy, que estaba oculta) tampoco ve el botón.
+  const showKpis = !KPIS_HIDDEN_USERNAMES.has(currentUser.username) && !currentUser.isB2BAdvisor;
   // Confirmado 2026-08-13: pedido explícito del usuario — el líder de un
   // área habilitada para horas extra (hoy Inventario y Fulfillment)
   // necesita entrar acá para registrar, aunque no gestione Nómina en

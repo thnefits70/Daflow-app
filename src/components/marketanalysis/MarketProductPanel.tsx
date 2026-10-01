@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { Upload, CheckCircle2, XCircle, Sparkles } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
@@ -1369,7 +1370,7 @@ function TraceabilityView({ canDecidePurchase }: { canDecidePurchase: boolean })
           {canDecidePurchase && p.catalogItem?.awaitingDropiId && p.publishedAt && !p.kardexReleasedAt && (
             <div className="bg-blue/10 border border-blue/30 rounded-md p-2.5 mb-3">
               <div className="text-[12px] text-ink mb-2">
-                Heidy confirmó el ID de Dropi ({p.dropiProductId}). Cualquier compra de este producto que ya haya llegado a bodega está esperando esta liberación para sumarse a INVESTOCK.
+                <B2BAdvisorName capital /> confirmó el ID de Dropi ({p.dropiProductId}). Cualquier compra de este producto que ya haya llegado a bodega está esperando esta liberación para sumarse a INVESTOCK.
                 {!!p.kardexPendingUnits && (
                   <span className="block mt-1 font-semibold text-red">
                     Ya hay {p.kardexPendingUnits} un. en bodega que no aparecen en INVESTOCK hasta que lo liberes.

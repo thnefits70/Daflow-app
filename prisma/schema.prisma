@@ -355,6 +355,20 @@ model User {
   canViewB2BPricing Boolean @default(false)
   canViewB2CPricing Boolean @default(false)
 
+  // Confirmado 2026-09-30, pedido explícito del usuario: rol "Asesor(a) B2B"
+  // — agrupa todo lo que hacía Heidy (ver B2B_ADVISOR_ROLE_FLAGS en
+  // lib/b2bAdvisorRole.ts). Una sola persona a la vez: asignarlo a alguien se
+  // lo quita a quien lo tenía. El rol ENCIENDE los mismos flags de siempre
+  // (todo lo demás sigue leyendo esos flags) y guarda en
+  // b2bAdvisorGrantedFlags cuáles prendió él, para que al quitarlo apague
+  // solo esos y no lo que la persona ya tenía por su propio trabajo (Jariel
+  // provisional: Ventas Externas, Stock Actual y proveedores son suyos).
+  // b2bAdvisorTitle: "Asesor B2B" (hombre) o "Asesora B2B" (mujer).
+  isB2BAdvisor           Boolean  @default(false)
+  b2bAdvisorTitle        String?
+  b2bAdvisorProvisional  Boolean  @default(false)
+  b2bAdvisorGrantedFlags String[] @default([])
+
   // Confirmado 2026-09-08: pedido explícito del usuario — Daniel registra
   // cada semana la cantidad de almuerzos pedidos (convenio con el
   // restaurante a un precio fijo por almuerzo, IVA incluido); el monto se

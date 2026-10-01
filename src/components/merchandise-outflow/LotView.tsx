@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { ArrowUp, CheckCircle2, ChevronDown, ChevronUp, ChevronsUpDown, Package, Printer, X } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { areaGroupCount, carrierLabel, lineBlock, newAreaGroup, sortByBlock, sortCarriers } from "@/lib/carriers";
@@ -551,7 +552,7 @@ function DiscontinuedBox({ lines }: { lines: NonNullable<CompiledLot["discontinu
   return (
     <div className="text-[11.5px] bg-red/5 border border-red/40 rounded-md p-2.5 mb-3">
       <div className="font-semibold text-red mb-0.5">Guías que NO salen: producto dado de baja ({lines.length})</div>
-      <div className="text-[10.5px] text-steel mb-1.5">No lo tenemos en bodega. No hay que sacar nada; Heidy lo da de baja en Dropi y Bryan gestiona con Dropi que anulen la guía.</div>
+      <div className="text-[10.5px] text-steel mb-1.5">No lo tenemos en bodega. No hay que sacar nada; <B2BAdvisorName /> lo da de baja en Dropi y Bryan gestiona con Dropi que anulen la guía.</div>
       {lines.map((l, i) => (
         <div key={`${l.code}-${i}`} className="flex items-start gap-2 py-1 border-t border-red/20">
           <span className="font-mono text-[10.5px] font-bold shrink-0">{l.code}</span>

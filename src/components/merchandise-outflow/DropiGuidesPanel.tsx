@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { AlertTriangle, CheckCircle2, FileText, Package, X } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { ProductMatchPicker, type MatchCatalogItem } from "@/components/merchandise-reentry/ProductMatchPicker";
@@ -617,7 +618,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
           {d?.kind === "ignore" && d.discontinued && (
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-red">
-                Producto dado de baja — no sale ni descuenta stock{res.kind === "discontinued" ? " (ya se había vendido antes)" : ""}. Al guardar le llega el aviso a Heidy (da de baja el producto y cancela el pedido), a Bryan (gestiona con Dropi que anulen la guía), a Daniel y a Jariel.
+                Producto dado de baja — no sale ni descuenta stock{res.kind === "discontinued" ? " (ya se había vendido antes)" : ""}. Al guardar le llega el aviso a <B2BAdvisorName /> (da de baja el producto y cancela el pedido), a Bryan (gestiona con Dropi que anulen la guía), a Daniel y a Jariel.
               </span>
               <button type="button" className="text-teal font-semibold cursor-pointer" onClick={() => setDecisions((p) => ({ ...p, [r.code]: null }))}>
                 Volver a incluir

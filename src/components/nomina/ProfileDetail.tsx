@@ -13,6 +13,7 @@ import { PayrollProfileFields } from "@/components/nomina/PayrollProfileFields";
 import { uploadFile as uploadToStorage } from "@/lib/uploadFile";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { B2B_ADVISOR_ROLE_FLAGS, B2B_ADVISOR_FLAG_LABELS, B2B_ADVISOR_TITLES, DEFAULT_B2B_ADVISOR_TITLE } from "@/lib/b2bAdvisorRoleShared";
 
 type Dept = { id: string; name: string; code: string };
 
@@ -65,6 +66,10 @@ type UserProfile = {
   canViewStockLevels: boolean;
   canViewMarketingArrivalsForDispatch: boolean;
   marketingAdvisorBrand: string | null;
+  isB2BAdvisor: boolean;
+  b2bAdvisorTitle: string | null;
+  b2bAdvisorProvisional: boolean;
+  b2bAdvisorGrantedFlags: string[];
   canManageStoreFeedback: boolean;
   canViewStoreFeedback: boolean;
   excludeFromRecognition: boolean;
@@ -84,6 +89,170 @@ function generatePassword() {
   let out = "";
   for (let i = 0; i < 8; i++) out += chars[Math.floor(Math.random() * chars.length)];
   return out;
+}
+
+// Confirmado 2026-09-30: rol "Asesor(a) B2B" — todo lo que hacía Heidy en un
+// solo interruptor. Una persona a la vez: activarlo aquí se lo quita a quien
+// lo tenía (y a esa persona solo se le apaga lo que el rol le había dado).
+// Ver lib/b2bAdvisorRole.ts.
+function B2BAdvisorRoleCard({
+  p,
+  holder,
+  onSaved,
+  onError,
+  refresh,
+}: {
+  p: UserProfile;
+  holder: { id: string; name: string } | null;
+  onSaved: (u: Partial<UserProfile>) => void;
+  onError: (msg: string) => void;
+  refresh: () => void;
+}) {
+  const [title, setTitle] = useState<string>(p.b2bAdvisorTitle || DEFAULT_B2B_ADVISOR_TITLE);
+  const [provisional, setProvisional] = useState(false);
+  const [confirming, setConfirming] = useState<"on" | "off" | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const otherHolder = holder && holder.id !== p.id ? holder : null;
+
+  const send = async (patch: Record<string, unknown>) => {
+    setBusy(true);
+    onError("");
+    setNotice("");
+    const res = await fetch(`/api/users/${p.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    setBusy(false);
+    setConfirming(null);
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data) {
+      onError(data?.error || "No se pudo guardar el cambio. Intenta de nuevo.");
+      return;
+    }
+    const next: Record<string, unknown> = {
+      isB2BAdvisor: data.isB2BAdvisor,
+      b2bAdvisorTitle: data.b2bAdvisorTitle,
+      b2bAdvisorProvisional: data.b2bAdvisorProvisional,
+      b2bAdvisorGrantedFlags: data.b2bAdvisorGrantedFlags,
+      deptId: data.deptId,
+    };
+    for (const f of B2B_ADVISOR_ROLE_FLAGS) next[f] = data[f];
+    onSaved(next as Partial<UserProfile>);
+    const msgs: string[] = [];
+    if (data.b2bPreviousHolders?.length) msgs.push(`Se le quitó el rol a ${data.b2bPreviousHolders.join(", ")}.`);
+    if (data.b2bMovedToMkt) msgs.push("También quedó en el área Análisis de Mercado.");
+    setNotice(msgs.join(" "));
+    refresh();
+  };
+
+  const roleName = p.b2bAdvisorTitle || title;
+
+  return (
+    <div className="bg-cloud border border-blue rounded p-3.5 mt-3.5">
+      <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+        <ShieldCheck size={11} /> Rol: Asesor(a) B2B
+      </label>
+      <div className="text-[11px] text-steel mb-2">
+        Todo lo que hacía la asesora B2B, en un solo interruptor. Solo una persona puede tenerlo: si se lo activas a alguien, se le quita
+        a quien lo tenía (y a esa persona solo se le quita lo que le dio el rol, no lo que ya tenía por su trabajo). También la deja en
+        el área Análisis de Mercado.
+      </div>
+      <ul className="text-[11px] text-ink mb-2.5 list-disc pl-4 space-y-0.5">
+        {B2B_ADVISOR_ROLE_FLAGS.map((f) => (
+          <li key={f}>{B2B_ADVISOR_FLAG_LABELS[f]}</li>
+        ))}
+        <li>Lo que tiene todo el equipo de Análisis de Mercado (proponer productos, ver combos, llegadas, guías canceladas)</li>
+      </ul>
+
+      {p.isB2BAdvisor ? (
+        <div>
+          <div className="text-[12.5px] font-semibold text-teal mb-2">
+            ✓ Tiene el rol: {roleName}
+            {p.b2bAdvisorProvisional ? " (provisional)" : ""}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <span className="text-[11px] text-steel">Se muestra como:</span>
+            {B2B_ADVISOR_TITLES.map((t) => (
+              <button
+                key={t}
+                type="button"
+                disabled={busy}
+                className={`rounded border px-2.5 py-1 text-[11.5px] font-semibold cursor-pointer ${p.b2bAdvisorTitle === t ? "bg-blue text-white border-blue" : "bg-surface text-steel border-rule"}`}
+                onClick={() => p.b2bAdvisorTitle !== t && send({ b2bAdvisorTitle: t })}
+              >
+                {t}
+              </button>
+            ))}
+            <label className="flex items-center gap-1 text-[11.5px] text-steel cursor-pointer">
+              <input
+                type="checkbox"
+                disabled={busy}
+                checked={p.b2bAdvisorProvisional}
+                onChange={(e) => send({ b2bAdvisorProvisional: e.target.checked })}
+              />
+              Provisional
+            </label>
+          </div>
+          {confirming === "off" ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11.5px] text-steel">¿Quitarle el rol? Se le apaga solo lo que le dio el rol.</span>
+              <button type="button" disabled={busy} className="rounded border border-red bg-red px-2.5 py-1 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => send({ isB2BAdvisor: false })}>
+                Sí, quitar
+              </button>
+              <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setConfirming(null)}>
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="text-red text-[11.5px] font-semibold cursor-pointer underline" onClick={() => setConfirming("off")}>
+              Quitar el rol
+            </button>
+          )}
+        </div>
+      ) : (
+        <div>
+          {otherHolder && <div className="text-[11.5px] text-steel mb-2">Hoy lo tiene: <b>{otherHolder.name}</b>.</div>}
+          <div className="flex items-center gap-2 flex-wrap mb-2">
+            <span className="text-[11px] text-steel">Se muestra como:</span>
+            {B2B_ADVISOR_TITLES.map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={`rounded border px-2.5 py-1 text-[11.5px] font-semibold cursor-pointer ${title === t ? "bg-blue text-white border-blue" : "bg-surface text-steel border-rule"}`}
+                onClick={() => setTitle(t)}
+              >
+                {t}
+              </button>
+            ))}
+            <label className="flex items-center gap-1 text-[11.5px] text-steel cursor-pointer">
+              <input type="checkbox" checked={provisional} onChange={(e) => setProvisional(e.target.checked)} />
+              Provisional
+            </label>
+          </div>
+          {confirming === "on" ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11.5px] text-steel">
+                ¿Darle el rol de {title} a {p.name}?{otherHolder ? ` Se le quita a ${otherHolder.name}.` : ""}
+              </span>
+              <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-2.5 py-1 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => send({ isB2BAdvisor: true, b2bAdvisorTitle: title, b2bAdvisorProvisional: provisional })}>
+                Sí, dar el rol
+              </button>
+              <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setConfirming(null)}>
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <button type="button" className="rounded border border-blue bg-surface px-3 py-1.5 text-[12px] font-semibold text-blue cursor-pointer" onClick={() => setConfirming("on")}>
+              Dar el rol de {title}
+            </button>
+          )}
+        </div>
+      )}
+      {notice && <div className="text-[11.5px] text-teal mt-2">{notice}</div>}
+    </div>
+  );
 }
 
 function cvKind(cvUrl: string | null, cvName: string | null): "pdf" | "image" | "other" {
@@ -150,6 +319,7 @@ export function ProfileDetail({
   canViewPayroll = false,
   canEditPayroll = false,
   isAdmin = false,
+  b2bAdvisorHolder = null,
 }: {
   profile: UserProfile;
   departments: Dept[];
@@ -159,6 +329,7 @@ export function ProfileDetail({
   canViewPayroll?: boolean;
   canEditPayroll?: boolean;
   isAdmin?: boolean;
+  b2bAdvisorHolder?: { id: string; name: string } | null;
 }) {
   const router = useRouter();
   const [p, setP] = useState(profile);
@@ -789,6 +960,14 @@ export function ProfileDetail({
             )}
           </div>
 
+          <B2BAdvisorRoleCard
+            p={p}
+            holder={b2bAdvisorHolder}
+            onSaved={(u) => setP((cur) => ({ ...cur, ...u }))}
+            onError={setSaveErr}
+            refresh={() => router.refresh()}
+          />
+
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
             <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
               <FileText size={11} /> ¿Puede subir Leyes y Reglamentos?
@@ -868,7 +1047,7 @@ export function ProfileDetail({
               <HandCoins size={11} /> ¿Puede declarar Ventas Externas?
             </label>
             <div className="text-[11px] text-steel mb-2">
-              Ventas por fuera de Dropi/Rocket (hoy Heidy, Jariel, Yair, Marcos) — declara producto, cantidad y precio para que Bryan lo apruebe. Aparece en su propia &quot;Mi área de trabajo&quot;.
+              Ventas por fuera de Dropi/Rocket (hoy Jariel, Yair, Marcos y el rol Asesor(a) B2B) — declara producto, cantidad y precio para que Bryan lo apruebe. Aparece en su propia &quot;Mi área de trabajo&quot;.
             </div>
             <PermToggle value={p.canDeclareExternalSales} busy={busy} onChange={(v) => save({ canDeclareExternalSales: v })} />
           </div>
@@ -923,7 +1102,7 @@ export function ProfileDetail({
               <Truck size={11} /> ¿Carga productos de Guías Canceladas?
             </label>
             <div className="text-[11px] text-steel mb-2">
-              Una vez que Bryan gestiona un lote de guías canceladas con la transportadora/Dropi, esta persona (hoy Heidy) ve esas guías y carga qué productos y cantidades venían en cada una, para que vuelvan solas al inventario.
+              Una vez que Bryan gestiona un lote de guías canceladas con la transportadora/Dropi, esta persona (hoy el rol Asesor(a) B2B) ve esas guías y carga qué productos y cantidades venían en cada una, para que vuelvan solas al inventario.
             </div>
             <PermToggle value={p.canAssignCancelledGuideItems} busy={busy} onChange={(v) => save({ canAssignCancelledGuideItems: v })} />
           </div>
@@ -933,7 +1112,7 @@ export function ProfileDetail({
               <Truck size={11} /> ¿Crea en Dropi los combos aprobados?
             </label>
             <div className="text-[11px] text-steel mb-2">
-              Una vez que Bryan aprueba un lote de Sugerencias de Combos, esta persona (hoy Heidy) es quien arma el combo en Dropi de verdad y lo marca &quot;Creado en Dropi&quot;. El resto del equipo de Análisis de Mercado sigue viendo la cola de aprobados, solo que sin este botón.
+              Una vez que Bryan aprueba un lote de Sugerencias de Combos, esta persona (hoy el rol Asesor(a) B2B) es quien arma el combo en Dropi de verdad y lo marca &quot;Creado en Dropi&quot;. El resto del equipo de Análisis de Mercado sigue viendo la cola de aprobados, solo que sin este botón.
             </div>
             <PermToggle value={p.canMarkComboCreatedInDropi} busy={busy} onChange={(v) => save({ canMarkComboCreatedInDropi: v })} />
           </div>
@@ -943,7 +1122,7 @@ export function ProfileDetail({
               <Truck size={11} /> ¿Publica los productos aprobados en Dropi (Análisis de Mercado)?
             </label>
             <div className="text-[11px] text-steel mb-2">
-              Una vez que Bryan aprueba una propuesta de producto nuevo, esta persona (hoy Heidy) lo publica de verdad en Dropi y carga el ID real que le da la plataforma.
+              Una vez que Bryan aprueba una propuesta de producto nuevo, esta persona (hoy el rol Asesor(a) B2B) lo publica de verdad en Dropi y carga el ID real que le da la plataforma.
             </div>
             <PermToggle value={p.canPublishMarketProduct} busy={busy} onChange={(v) => save({ canPublishMarketProduct: v })} />
           </div>
@@ -963,7 +1142,7 @@ export function ProfileDetail({
               <Truck size={11} /> ¿Resuelve reportes de &quot;Sin stock de proveedor&quot; (Análisis de Mercado)?
             </label>
             <div className="text-[11px] text-steel mb-2">
-              Cuando Compras (hoy Jariel) reporta que un producto ya no se consigue con ningún proveedor, esta persona (hoy Heidy) decide cerrar el ID en Dropi o bajar el stock a 0, y lo marca resuelto. Bryan también puede, por ser líder de Análisis de Mercado, sin necesitar este flag.
+              Cuando Compras (hoy Jariel) reporta que un producto ya no se consigue con ningún proveedor, esta persona (hoy el rol Asesor(a) B2B) decide cerrar el ID en Dropi o bajar el stock a 0, y lo marca resuelto. Bryan también puede, por ser líder de Análisis de Mercado, sin necesitar este flag.
             </div>
             <PermToggle value={p.canResolveSupplierStockout} busy={busy} onChange={(v) => save({ canResolveSupplierStockout: v })} />
           </div>

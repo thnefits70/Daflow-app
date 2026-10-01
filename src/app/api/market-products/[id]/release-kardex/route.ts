@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { canDecideMarketProductPurchase } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { releasePendingKardexForCatalogItem } from "@/lib/stockKardex";
+import { getB2BAdvisorTitle, b2bAdvisorWithArticle } from "@/lib/b2bAdvisorRole";
 
 // Confirmado 2026-09-18 (Análisis de Mercado + INVESTOCK): liberación final,
 // exclusiva de Bryan (mismo guard que decidir qué comprar, Etapa 6) — solo
@@ -19,7 +20,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (!existing.catalogItemId) return NextResponse.json({ error: "Falta el catálogo de este producto — avisa al admin." }, { status: 409 });
   if (!existing.dropiProductId || !existing.publishedAt) {
-    return NextResponse.json({ error: "Heidy todavía no confirma el ID de Dropi." }, { status: 409 });
+    const advisor = b2bAdvisorWithArticle(await getB2BAdvisorTitle());
+    return NextResponse.json({ error: `${advisor.charAt(0).toUpperCase() + advisor.slice(1)} todavía no confirma el ID de Dropi.` }, { status: 409 });
   }
   if (existing.kardexReleasedAt) return NextResponse.json({ error: "Ya se liberó al Kardex." }, { status: 409 });
 

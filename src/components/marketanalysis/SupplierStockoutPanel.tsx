@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { CatalogCode } from "@/components/shared/CatalogCode";
@@ -140,7 +141,7 @@ export function SupplierStockoutPanel({ canReport, canResolve }: { canReport: bo
         {canReport ? (
           <>
             Reportá acá un producto que ya no consigues con ningún proveedor. Elegilo del catálogo y escribí una nota de qué debe hacer el equipo (bajar el
-            stock, cerrar el ID en Dropi, etc.) — le llega de una a Heidy y a Bryan.
+            stock, cerrar el ID en Dropi, etc.) — le llega de una a <B2BAdvisorName /> y a Bryan.
           </>
         ) : canResolve ? (
           <>

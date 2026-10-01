@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { formatDateTime } from "@/lib/formatDateTime";
 
@@ -204,7 +205,7 @@ export function SuddenDemandPanel({ compact = false }: { compact?: boolean }) {
     <div>
       <div className="bg-teal/10 border border-teal/30 rounded-md px-3 py-2 text-[12px] text-steel mb-4">
         Un producto que salió <b className="text-ink">10 o menos</b> en el último mes y un día sale <b className="text-ink">4 o más</b>. El aviso llega ese mismo día a
-        Daniel, Jariel, Bryan Rios, Heidy y Yair (a Nairoby si hay 31 a 60 en bodega). Si sigue saliendo, no llega otro aviso: la tarjeta se actualiza.
+        Daniel, Jariel, Bryan Rios, <B2BAdvisorName /> y Yair (a Nairoby si hay 31 a 60 en bodega). Si sigue saliendo, no llega otro aviso: la tarjeta se actualiza.
         {data.canWriteNote && <> Escribe en cada tarjeta qué decidiste; todos lo ven.</>}
       </div>
       {waiting && (
