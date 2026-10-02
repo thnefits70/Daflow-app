@@ -139,7 +139,9 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
 
   // Solo productos que alguna vez estuvieron en INVESTOCK. Los que esperan
   // su ID de Dropi siguen el camino de productos nuevos (Análisis de Mercado).
-  const candidateIds = [...balances.entries()].filter(([, bal]) => bal <= COLD_MAX).map(([id]) => id);
+  // Pedido del usuario 2026-10-02: un stock negativo es un error de conteo,
+  // no una compra urgente — se sacan de la lista hasta que se corrija.
+  const candidateIds = [...balances.entries()].filter(([, bal]) => bal >= 0 && bal <= COLD_MAX).map(([id]) => id);
   const [items, lastPurchases, stockoutReports] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({
       where: { id: { in: candidateIds }, awaitingDropiId: false },
