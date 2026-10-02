@@ -116,6 +116,9 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   }
 
   const matching = lot.picking.filter((p) => rowState(p) === "match");
+  // Corte de un día anterior con productos que nadie escaneó (ya salieron) — ver confirmUnscannedAsShipped.
+  const todayEc = new Date().toLocaleDateString("en-CA", { timeZone: "America/Guayaquil" });
+  const unscannedOld = !lot.backfill && lot.day < todayEc ? lot.picking.filter((p) => p.picked === null && !p.confirmedAt) : [];
   const byCarrierOf = (id: string) => lot.lines.find((l) => l.catalogItemId === id)?.byCarrier ?? {};
   // Variantes (color/talla/paquete): antes solo salían en la hoja impresa,
   // y ahora imprimir es opcional — se sacan desde el celular.
@@ -217,6 +220,20 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ catalogItemIds: ids, onlyMatching }),
     });
+    const json = await res.json().catch(() => null);
+    setBusy(false);
+    setConfirming(null);
+    if (!res.ok) {
+      setErr(json?.error ?? "No se pudo confirmar.");
+      return;
+    }
+    onChanged();
+  }
+
+  async function confirmUnscanned() {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/fulfillment-lots/${lot.id}/confirm-unscanned`, { method: "POST" });
     const json = await res.json().catch(() => null);
     setBusy(false);
     setConfirming(null);
@@ -570,6 +587,38 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
           ) : (
             <button type="button" className="flex items-center gap-1.5 rounded border border-green bg-green/15 px-3.5 py-2 text-[12.5px] font-bold cursor-pointer" onClick={() => setConfirming("all")}>
               <CheckCircle2 size={14} /> Dar el OK a lo que ya sacaron bien ({matching.length})
+            </button>
+          )}
+        </div>
+      )}
+
+      {canConfirm && unscannedOld.length > 0 && (
+        <div className="mb-2">
+          {confirming === "unscanned" ? (
+            <div className="bg-cloud border border-gold/50 rounded-md p-3">
+              <div className="text-[12.5px] font-bold mb-1">
+                ¿Salieron completos los {unscannedOld.length} {unscannedOld.length === 1 ? "producto" : "productos"} que nadie escaneó?
+              </div>
+              <div className="text-[11.5px] mb-2">
+                Se confirman con la cantidad pedida y se descuentan del stock (Kardex de INVESTOCK). No se puede deshacer. Si alguno no salió o salió incompleto, cancela y confírmalo primero producto por producto con lo que salió de verdad.
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="rounded border border-gold bg-gold px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                  onClick={confirmUnscanned}
+                >
+                  {busy ? "Confirmando…" : "Sí, salieron completos"}
+                </button>
+                <button type="button" className="rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer" onClick={() => setConfirming(null)}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" className="flex items-center gap-1.5 rounded border border-gold bg-gold/15 px-3.5 py-2 text-[12.5px] font-bold cursor-pointer" onClick={() => setConfirming("unscanned")}>
+              <CheckCircle2 size={14} /> Corte de días anteriores: dar por despachado lo que nadie escaneó ({unscannedOld.length})
             </button>
           )}
         </div>
