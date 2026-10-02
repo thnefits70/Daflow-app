@@ -2684,6 +2684,20 @@ model CatalogItemMerge {
   @@index([removedJustCode])
   @@index([officialItemId])
 }
+// Pedido del usuario 2026-10-02: DAFLOW detecta solo posibles productos
+// duplicados (mismo nombre, o uno es el otro con algo más al final) y a
+// Daniel le salen en Inicio para decidir. Si los junta queda en
+// CatalogItemMerge; si dice que NO son el mismo queda acá para que no le
+// vuelva a salir. pairKey = los dos ids ordenados, unidos con ":".
+model CatalogDuplicateReview {
+  id          String   @id @default(cuid())
+  pairKey     String   @unique
+  itemAId     String
+  itemBId     String
+  decidedById String?
+  decidedAt   DateTime @default(now())
+}
+
 
 // Confirmado 2026-09-21 (idea nacida de una conversación con Yair, líder de
 // Fulfillment, sobre por qué el manifiesto de despacho no coincide con lo

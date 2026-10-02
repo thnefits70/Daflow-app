@@ -15,6 +15,7 @@ import { getNewIdBrandingBoard } from "@/lib/newIdBranding";
 import { CLAIM_GAP_DAYS, findPossibleDoubleRegistrations, getSupplierClaimGaps } from "@/lib/reentrySupplierClaim";
 import { ecuadorDay, getCompiledLot, isBackfillLot } from "@/lib/fulfillmentGuides";
 import { holidayName, isWorkingDay, previousWorkingDay } from "@/lib/ecuadorHolidays";
+import { findDuplicateCandidates } from "@/lib/catalogDuplicates";
 import { carrierLabel } from "@/lib/carriers";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
 import { getOpenPurchaseCodesByCatalogItem } from "@/lib/purchases";
@@ -489,6 +490,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   garantia_local_recogida: "Garantía local — confirmar lo que trajo el motorizado",
   garantia_local_resultado: "Tus garantías locales — confirmar si se entregaron",
   manifiestos_tras_feriado: "Manifiestos pendientes después de domingo o feriado",
+  catalogo_posibles_duplicados: "Posibles productos duplicados por revisar",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_pendientes_aprobacion: "Solicitudes de compra por aprobar",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
@@ -3829,6 +3831,19 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (warrantyPickupItem) items.push(warrantyPickupItem);
     const manifestCatchUpItem = await getManifestCatchUpPendingItem("/area/workspace?tab=egresos&otab=solicitud");
     if (manifestCatchUpItem) items.unshift(manifestCatchUpItem);
+    // Pedido del usuario 2026-10-02: Daniel decide él mismo los posibles
+    // productos duplicados (juntar o "no son el mismo").
+    const duplicates = await findDuplicateCandidates().catch(() => []);
+    if (duplicates.length > 0) {
+      items.push({
+        type: "catalogo_posibles_duplicados",
+        icon: "🧩",
+        label: "Posibles productos duplicados — decide si se juntan",
+        meta: duplicates.length === 1 ? `${duplicates[0].a.name} / ${duplicates[0].b.name}` : `${duplicates.length} pares por revisar`,
+        overdue: false,
+        href: "/area/reingreso-mercaderia?tab=productos",
+      });
+    }
     const excessKardexItem = await getPurchaseExcessPendingItem("kardex", "/area/workspace?tab=compras&ptab=inventario");
     if (excessKardexItem) items.push(excessKardexItem);
     const catalogMissingItem = await getCatalogMissingReportPendingItem("/area/reingreso-mercaderia?tab=productos");
@@ -3992,7 +4007,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
+      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

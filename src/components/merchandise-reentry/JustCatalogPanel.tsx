@@ -5,6 +5,7 @@ import { CheckCircle2, AlertTriangle, Clock, Search, Pencil, Check, X } from "lu
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { LegacyUnlinkedItems } from "./LegacyUnlinkedItems";
 import { CatalogItemMergeTool } from "./CatalogItemMergeTool";
+import { CatalogDuplicatesReview } from "./CatalogDuplicatesReview";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type CatalogItemDTO = { id: string; name: string; justCode: string | null; photos: string[]; pendingRegistration: boolean };
@@ -337,6 +338,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
       </div>
 
       <LegacyUnlinkedItems />
+      {canManage && <CatalogDuplicatesReview />}
       <CatalogItemMergeTool items={items} onChanged={load} />
       {canManage && <NichoBackfillButton />}
       {canManage && <MissingReportsQueue />}
