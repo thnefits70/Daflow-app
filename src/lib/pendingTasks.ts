@@ -2524,7 +2524,7 @@ async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingI
   // dice cuánto falta contar o, si ya está todo contado, que solo falta la
   // confirmación de Daniel (que sigue siendo suya) — atrasado a las 3 horas.
   const readyCutoff = new Date(Date.now() - 3 * 60 * 60 * 1000);
-  const progress = new Map<string, { total: number; counted: number; matching: number; lastPickedAt: Date | null }>();
+  const progress = new Map<string, { total: number; counted: number; matching: number; lastPickedAt: Date | null; pieces: number }>();
   await Promise.all(
     rows
       .filter((r) => !isBackfillLot(r))
@@ -2538,6 +2538,8 @@ async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingI
           counted: open.filter((p) => p.picked !== null).length,
           matching: open.filter((p) => p.picked === p.needed).length,
           lastPickedAt: times.length ? new Date(Math.max(...times.map((t) => new Date(t).getTime()))) : null,
+          // Garantías de solo una pieza que Daniel todavía no confirma.
+          pieces: lot.warranty.filter((w) => w.mode === "PIECE" && !w.pieceConfirmedAt).length,
         });
       }),
   );
@@ -2547,7 +2549,7 @@ async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingI
   // faltan contar. Los manifiestos atrasados siguen uno por uno (son pocos).
   const items: PendingItem[] = [];
   const counted: { where: string; matching: number; off: number; late: boolean; day: string }[] = [];
-  const toPick: { where: string; counted: number; total: number; overdue: boolean }[] = [];
+  const toPick: { where: string; counted: number; total: number; overdue: boolean; pieces: number }[] = [];
   for (const r of rows) {
     const [, m, d] = r.day.split("-");
     const overdue = (r.sentAt ?? new Date()) < cutoff;
@@ -2568,7 +2570,7 @@ async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingI
     if (p && p.total > 0 && p.counted === p.total) {
       counted.push({ where, matching: p.matching, off: p.total - p.matching, late: overdue || (!!p.lastPickedAt && p.lastPickedAt < readyCutoff), day: `${d}/${m}` });
     } else {
-      toPick.push({ where, counted: p?.counted ?? 0, total: p?.total ?? 0, overdue });
+      toPick.push({ where, counted: p?.counted ?? 0, total: p?.total ?? 0, overdue, pieces: p?.pieces ?? 0 });
     }
   }
   if (counted.length > 0) {
@@ -2589,7 +2591,7 @@ async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingI
       type: "fulfillment_corte_enviado",
       icon: "🚚",
       label: toPick.length === 1 ? "Corte por despachar" : `${toPick.length} cortes por despachar`,
-      meta: `${toPick.map((t) => `${t.where}${t.total > 0 ? ` (${t.counted}/${t.total})` : ""}`).join(" · ")} · asigna los bloques y confirma lo que salió${late ? " · atrasado" : ""}`,
+      meta: `${toPick.map((t) => `${t.where}${t.total > 0 ? ` (${t.counted}/${t.total})` : t.pieces > 0 ? ` (solo falta confirmar ${t.pieces} garantía${t.pieces === 1 ? "" : "s"} de pieza)` : ""}`).join(" · ")} · asigna los bloques y confirma lo que salió${late ? " · atrasado" : ""}`,
       overdue: late,
       href,
     });
