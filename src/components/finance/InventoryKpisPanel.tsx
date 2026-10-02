@@ -96,12 +96,71 @@ function explainGmroiPoint(idx: number, series: InventoryKpisDataDTO["series"], 
   return `El inventario ${invDir} (de ${money(prev.inventario)} a ${money(pt.inventario)}) y la ganancia bruta del mes ${ubDir} (de ${money(prev.utilidadBruta)} a ${money(pt.utilidadBruta)}). Por eso ese mes generaste $${g.toFixed(1)} de ganancia por cada $1 guardado en inventario.${verdict}`;
 }
 
+// Pedido del usuario 2026-10-02, SOLO INFORMATIVO: el valor de lo que hay hoy
+// en bodega por los dos métodos, para comparar antes de decidir con la
+// contadora si conviene pasar la contabilidad a FIFO. No cambia nada de lo
+// que usa la contabilidad (sigue en promedio).
+function InventoryValuationCard({ valuation }: { valuation: NonNullable<InventoryKpisDataDTO["valuation"]> }) {
+  const [open, setOpen] = useState(false);
+  const diff = valuation.byLots - valuation.byAverage;
+  return (
+    <div className="bg-surface border border-rule rounded-md p-4">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="font-semibold text-[13.5px]">Valor del inventario hoy: promedio vs por lotes (FIFO)</div>
+        <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">Solo informativo</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div>
+          <div className="text-[11px] text-steel">Costo promedio (el que usa la contabilidad)</div>
+          <div className="font-display text-[20px] font-bold">{money(valuation.byAverage)}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-steel">Por lotes / FIFO</div>
+          <div className="font-display text-[20px] font-bold text-gold">{money(valuation.byLots)}</div>
+        </div>
+        <div>
+          <div className="text-[11px] text-steel">Diferencia</div>
+          <div className={`font-display text-[20px] font-bold ${diff >= 0 ? "text-green" : "text-red"}`}>{diff >= 0 ? "+" : "−"}{money(Math.abs(diff))}</div>
+        </div>
+      </div>
+      <button type="button" className="mt-2.5 text-[11.5px] text-blue underline cursor-pointer" onClick={() => setOpen((o) => !o)}>
+        {open ? "Ocultar qué significa" : "¿Qué significa esta información?"}
+      </button>
+      {open && (
+        <div className="mt-2 text-[12px] text-steel flex flex-col gap-1.5">
+          <p>Los dos números responden lo mismo: <b>cuánta plata hay hoy en mercadería en la bodega</b>. Cambia la forma de calcularlo.</p>
+          <p>
+            <b>Costo promedio:</b> mezcla el costo de todas las compras de cada producto en un solo precio. Es el método que usa hoy la
+            contabilidad y el Kardex de INVESTOCK.
+          </p>
+          <p>
+            <b>Por lotes (FIFO):</b> lo primero que entra es lo primero que sale. Cada unidad que queda vale lo que costó la compra de la que
+            salió de verdad. Es el mismo criterio que ya usan los precios de venta (Puesto en bodega).
+          </p>
+          <p>
+            <b>Diferencia:</b> si es positiva, lo que queda en bodega vino de compras más caras (FIFO lo valora más alto y el costo de lo
+            vendido sale más bajo, o sea más utilidad en papel). Si es negativa, pasa lo contrario. En total, a lo largo del tiempo, los dos
+            métodos llegan a lo mismo: solo cambia en qué mes se reconoce el costo.
+          </p>
+          <p>
+            Es solo para comparar. La contabilidad sigue en costo promedio hasta que se decida con la contadora si conviene pasar a FIFO
+            (por ejemplo desde enero de 2027).
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
   if (!data.hasData) {
     return (
-      <div className="text-[13px] text-steel border border-dashed border-rule rounded-md p-6 text-center">
-        Todavía no hay datos suficientes de Finanzas + Inventario para calcular estos KPIs. En cuanto Daniel cargue el
-        primer valor de inventario en &quot;Control de Inventario&quot;, esta pestaña empieza a mostrar información.
+      <div className="flex flex-col gap-3.5">
+        {data.valuation && <InventoryValuationCard valuation={data.valuation} />}
+        <div className="text-[13px] text-steel border border-dashed border-rule rounded-md p-6 text-center">
+          Todavía no hay datos suficientes de Finanzas + Inventario para calcular estos KPIs. En cuanto Daniel cargue el
+          primer valor de inventario en &quot;Control de Inventario&quot;, esta pestaña empieza a mostrar información.
+        </div>
       </div>
     );
   }
@@ -111,6 +170,7 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
 
   return (
     <div className="flex flex-col gap-3.5">
+    {data.valuation && <InventoryValuationCard valuation={data.valuation} />}
     <TabGuide storageKey="inventoriokpis">
       Estos KPIs se calculan solos a partir de lo que Daniel carga en &quot;Control de Inventario&quot; (el valor total cada mes, el Excel de stock por SKU cada semana). Toca el ícono de información de cada tarjeta para ver cómo se calcula y qué significa el color.
     </TabGuide>

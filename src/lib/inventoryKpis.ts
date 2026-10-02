@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { computeDerived, consolidateMonth, workingCapitalDays, type FinanceMonthRaw } from "@/lib/financeKpisCalc";
 import { getNegativeStockProducts, getExpiringLots, getInvestockValueByMonthEnd, type ExpiringLot } from "@/lib/stockKardex";
+import { getInventoryValuationComparison } from "@/lib/sellingCost";
 import {
   gmroi,
   detectOverstockAlert,
@@ -232,6 +233,8 @@ export type InventoryKpisDataDTO = {
   // que se puedan revisar por stock/valor aunque el sistema todavía no tenga
   // base de comparación para marcar "sin movimiento" de verdad.
   latestSnapshotRows: { productCode: string; description: string; avgCost: number; stock: number; costTotal: number }[];
+  // 2026-10-02, solo informativo: valor de hoy por promedio vs por lotes (FIFO).
+  valuation: { byAverage: number; byLots: number } | null;
 };
 
 // Todo lo que necesita la pestaña "Inventario" dentro de KPIs financieros —
@@ -252,6 +255,7 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
     staleEntries: [],
     staleSnapshotPeriod: null,
     latestSnapshotRows: [],
+    valuation: await getInventoryValuationComparison().catch(() => null),
   };
 
   const deptId = await getFinanzasDeptId();
@@ -337,5 +341,6 @@ export async function getInventoryKpisData(): Promise<InventoryKpisDataDTO> {
     staleEntries,
     staleSnapshotPeriod,
     latestSnapshotRows,
+    valuation: empty.valuation,
   };
 }

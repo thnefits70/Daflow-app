@@ -207,3 +207,25 @@ async function replayStockLayers(
   }
   return result;
 }
+
+// Pedido del usuario 2026-10-02, SOLO INFORMATIVO (no cambia la contabilidad):
+// cuánto vale hoy lo que hay en bodega por los dos métodos — promedio
+// ponderado (el que usa el Kardex y la contadora) y por lotes / FIFO (lo que
+// costó cada unidad que de verdad queda, compra por compra) — para ver la
+// diferencia antes de decidir con la contadora si conviene pasar a FIFO.
+export async function getInventoryValuationComparison(): Promise<{ byAverage: number; byLots: number }> {
+  const ids = (await prisma.stockKardexEntry.findMany({ distinct: ["catalogItemId"], select: { catalogItemId: true } })).map((e) => e.catalogItemId);
+  const [layersById, latest] = await Promise.all([
+    replayStockLayers(ids, { includePending: false }),
+    prisma.stockKardexEntry.findMany({
+      where: { catalogItemId: { in: ids } },
+      distinct: ["catalogItemId"],
+      orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
+      select: { balanceAfter: true, avgCostAfter: true },
+    }),
+  ]);
+  const byAverage = latest.reduce((s, e) => s + (e.balanceAfter > 0 ? e.balanceAfter * e.avgCostAfter : 0), 0);
+  let byLots = 0;
+  for (const layers of layersById.values()) for (const l of layers) if (l.qty > 0) byLots += l.qty * l.cost;
+  return { byAverage, byLots };
+}
