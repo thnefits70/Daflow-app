@@ -237,6 +237,16 @@ const URBANO_ROW_RE = /^\s*\d{1,2}\s{2,}(.+?)\s{2,}(\d+)\s*$/;
 // nombre ya viene cortado, lo que sigue en la etiqueta es el resto del
 // nombre, no una variante.
 const SUMMARY_NAME_CUT = 38;
+// …salvo que lo que sigue sea solo un color/talla (real 2026-10-02, Gintracom
+// D002084758: resumen "PARCHE DE CUERO AUTOADHESIVO IMPERMEABLE", justo 40
+// letras, y la etiqueta "… IMPERMEABLE NEGRO" — el NEGRO se perdía).
+const COLOR_OR_SIZE_WORDS = new Set(
+  "negro negra blanco blanca rojo roja azul verde amarillo amarilla rosado rosada rosa gris cafe marron beige morado morada lila naranja dorado dorada plateado plateada celeste fucsia transparente crema vino turquesa xs s m l xl xxl xxxl".split(" ")
+);
+const isColorOrSize = (norm: string) => {
+  const w = norm.split(" ").filter(Boolean);
+  return w.length >= 1 && w.length <= 2 && w.every((x) => COLOR_OR_SIZE_WORDS.has(x));
+};
 
 function variantWithCarriers(label: string, byCarrier: Map<string, number>): { label: string; quantity: number; byCarrier: Record<string, number> } {
   return { label, quantity: [...byCarrier.values()].reduce((a, b) => a + b, 0), byCarrier: Object.fromEntries(byCarrier) };
@@ -570,7 +580,7 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
     const pack = rest ? repeatedNamePack(rest, best.norm, false) : null;
     if (pack) return { code: best.code, variant: pack };
     const repeatsName = rest && best.norm.split(" ").slice(0, 2).every((w) => rest.includes(w));
-    return { code: best.code, variant: rest && !best.cut && !truncated && !repeatsName ? rest : null };
+    return { code: best.code, variant: rest && (!best.cut || isColorOrSize(rest)) && !truncated && !repeatsName ? rest : null };
   };
 
   const hits: LabelHit[] = [];
