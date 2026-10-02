@@ -273,7 +273,9 @@ export function ScannedGuidesList({ guides, items, onChanged }: { guides: ScanGu
               <div className="flex items-center gap-2 text-[12px]">
                 <span className="font-mono font-semibold">{g.guideNumber}</span>
                 <span className="text-steel text-[11px]">{CARRIER_LABEL[g.carrier] ?? g.carrier}{g.shippedDay ? ` · salió ${g.shippedDay.slice(8, 10)}/${g.shippedDay.slice(5, 7)}` : ""}</span>
-                <span className="ml-auto text-steel text-[11px]">{unitsOf(g.id)} un.</span>
+                <span className="ml-auto text-[13px] font-bold tabular-nums">
+                  {unitsOf(g.id)} <span className="text-[11px] font-medium text-steel">un.</span>
+                </span>
                 {removing === g.id ? (
                   <span className="flex items-center gap-1.5">
                     <button type="button" className="text-red text-[11px] font-bold cursor-pointer" onClick={() => remove(g.id)}>Quitar</button>
@@ -320,19 +322,35 @@ export function ScannedProductsDamage({ batchId, items, onChanged }: { batchId: 
   const list = [...products.values()].sort((a, b) => a.name.localeCompare(b.name));
   const totalUnits = list.reduce((s, p) => s + p.units, 0);
   const totalDamaged = list.reduce((s, p) => s + p.damaged, 0);
-  const showList = open || totalDamaged > 0;
+  // Pedido del usuario 2026-10-02: la lista se puede volver a ocultar con
+  // "Ocultar" (como la de guías escaneadas), aunque ya haya dañadas marcadas.
+  const showList = open;
 
   return (
     <div className="bg-surface border border-rule rounded-md p-3 mb-3">
-      <div className="font-display font-bold text-[14px] mb-0.5">Paso 2 · ¿Vino algo dañado?</div>
+      <div className="flex items-center justify-between gap-2 mb-0.5">
+        <div className="font-display font-bold text-[14px]">Paso 2 · ¿Vino algo dañado?</div>
+        {showList && (
+          <button
+            type="button"
+            className="text-[11px] font-semibold text-blue cursor-pointer"
+            onClick={() => {
+              setOpen(false);
+              setEditing(null);
+            }}
+          >
+            Ocultar
+          </button>
+        )}
+      </div>
       <div className="text-[11px] text-steel mb-2.5">
-        {list.length} producto(s) · <span className="text-green font-semibold">{totalUnits - totalDamaged} buenas</span>
-        {totalDamaged > 0 && <span className="text-red font-semibold"> · {totalDamaged} dañadas</span>}
-        {!showList && " · Si no vino nada dañado, envía el lote directo."}
+        {list.length} producto(s) · <span className="text-green font-bold">{totalUnits - totalDamaged} buenas</span>
+        {totalDamaged > 0 && <span className="text-red font-bold"> · {totalDamaged} dañadas</span>}
+        {!showList && totalDamaged === 0 && " · Si no vino nada dañado, envía el lote directo."}
       </div>
       {!showList && (
         <button type="button" className="w-full rounded border border-red/50 px-3 py-2 text-[12.5px] font-semibold text-red cursor-pointer" onClick={() => setOpen(true)}>
-          Sí, marcar productos dañados
+          {totalDamaged > 0 ? "Ver o cambiar productos dañados" : "Sí, marcar productos dañados"}
         </button>
       )}
       {showList && <div className="text-[11px] text-steel mb-2">Toca cada producto que apartaste como dañado y pon cuántos. Lo demás queda como bueno.</div>}
@@ -351,9 +369,14 @@ export function ScannedProductsDamage({ batchId, items, onChanged }: { batchId: 
                   <CatalogCode code={p.code} />
                   <ExpandableName text={p.name} />
                 </div>
-                <div className="text-[11px] text-steel">
-                  {p.units} un.
-                  {p.damaged > 0 && <span className="text-red font-semibold"> · {p.damaged} dañada(s){p.reason ? ` (${p.reason})` : ""}</span>}
+                <div className="text-[11px] text-steel mt-0.5">
+                  <span className="text-[14px] font-bold text-ink tabular-nums">{p.units}</span> un.
+                  {p.damaged > 0 && (
+                    <span className="text-red font-semibold">
+                      {" · "}
+                      <span className="text-[14px] font-bold tabular-nums">{p.damaged}</span> dañada(s){p.reason ? ` (${p.reason})` : ""}
+                    </span>
+                  )}
                 </div>
               </div>
             </button>
