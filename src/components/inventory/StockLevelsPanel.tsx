@@ -505,11 +505,11 @@ const FORMULA_EXPLANATIONS: Record<FormulaKey, { title: string; text: string }> 
     text: "El saldo real de INVESTOCK (el Kardex propio de DAFLOW) en este momento — se calcula solo, sumando lo que ha entrado en Compras y restando lo que ha salido en Egresos. Se actualiza automáticamente, sin que nadie tenga que subir ningún archivo.",
   },
   proveedor: {
-    title: "Precio proveedor",
+    title: "Precio proveedor (sin flete)",
     text: "Lo que cobra el proveedor por una unidad, sin el flete. Sale de las mismas compras que se usan para el Puesto en bodega (lo que queda en bodega, compra por compra).",
   },
   bodega: {
-    title: "Puesto en bodega",
+    title: "Puesto en bodega (proveedor + flete)",
     text: "Lo que te costó cada unidad ya dentro de tu bodega: precio del proveedor + flete. Se calcula con lo que queda en bodega, compra por compra (lo primero que entra es lo primero que sale). Si la última compra salió MÁS CARA, se usa ese costo más caro, para no vender por debajo de lo que costó. Si salió MÁS BARATA, se usa la mezcla de lo que queda, sin bajar tanto como para perder con las unidades caras; cuando esas se venden, baja solo al costo nuevo. Las devoluciones no cuentan como compra. De este número salen todos los demás precios: Benistock, B2B, Dropi y B2C. Si la compra no tuvo flete aparte (o venía incluido), sale igual al precio proveedor.",
   },
   benistock: {
@@ -684,7 +684,6 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", tick);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function loadPendingAdjustments() {
@@ -857,11 +856,18 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
         <span className="flex items-center justify-end gap-1">
           Stock INVESTOCK <FormulaInfoButton open={openFormula === "stock"} onToggle={() => setOpenFormula((k) => (k === "stock" ? null : "stock"))} />
         </span>
-        <span className="flex items-center justify-end gap-1 border-l border-rule pl-3">
-          Proveedor <FormulaInfoButton open={openFormula === "proveedor"} onToggle={() => setOpenFormula((k) => (k === "proveedor" ? null : "proveedor"))} />
+        {/* 2026-10-02, pedido del usuario: el título dice si lleva flete o no. */}
+        <span className="flex flex-col items-end border-l border-rule pl-3">
+          <span className="flex items-center gap-1">
+            Proveedor <FormulaInfoButton open={openFormula === "proveedor"} onToggle={() => setOpenFormula((k) => (k === "proveedor" ? null : "proveedor"))} />
+          </span>
+          <span className="text-[9px] font-normal normal-case tracking-normal text-steel">sin flete</span>
         </span>
-        <span className="flex items-center justify-end gap-1">
-          Puesto en bodega <FormulaInfoButton open={openFormula === "bodega"} onToggle={() => setOpenFormula((k) => (k === "bodega" ? null : "bodega"))} />
+        <span className="flex flex-col items-end">
+          <span className="flex items-center gap-1">
+            Puesto en bodega <FormulaInfoButton open={openFormula === "bodega"} onToggle={() => setOpenFormula((k) => (k === "bodega" ? null : "bodega"))} />
+          </span>
+          <span className="text-[9px] font-normal normal-case tracking-normal text-steel">proveedor + flete</span>
         </span>
         <span className="flex items-center justify-end gap-1">
           Benistock <FormulaInfoButton open={openFormula === "benistock"} onToggle={() => setOpenFormula((k) => (k === "benistock" ? null : "benistock"))} />
