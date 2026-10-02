@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { recordKardexEntry } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
 import { formatMerchandiseOutflowCode, nextMerchandiseOutflowNumber } from "@/lib/merchandiseOutflow";
-import { ecuadorDay, getCompiledLot, isBackfillLot, manifestCode, purchaseDeciderIds } from "@/lib/fulfillmentGuides";
+import { getCompiledLot, isBackfillLot, manifestCode, purchaseDeciderIds } from "@/lib/fulfillmentGuides";
 import { recomputeAutoFillRate } from "@/lib/autoFillRate";
 import { carrierLabel } from "@/lib/carriers";
 import { getInventoryLeadId } from "@/lib/guards";
@@ -192,29 +192,6 @@ export async function confirmPicks(params: { lotId: string; catalogItemIds: stri
   return { ok: true, confirmed };
 }
 
-// Pedido del usuario 2026-10-01: cortes de días anteriores que nadie
-// escaneó (MF-3/MF-4 del 28/09, 158 productos) ya salieron, pero
-// "confirmar igual" los tomaba como 0 y no bajaban del stock. Daniel decide
-// (doble confirmación en pantalla): lo no escaneado se da por despachado
-// completo. Solo para cortes de días pasados — el del día se escanea. Lo
-// que de verdad no salió lo confirma él antes, producto por producto.
-export async function confirmUnscannedAsShipped(params: { lotId: string; userId: string | null }): Promise<Result & { confirmed?: number }> {
-  const lot = await getCompiledLot(params.lotId);
-  if (!lot) return { ok: false, error: "No encontrado." };
-  if (lot.status !== "SENT") return { ok: false, error: "Este corte ya se cerró." };
-  if (lot.backfill) return { ok: false, error: BACKFILL_NO_SCAN };
-  if (lot.day >= ecuadorDay(new Date())) return { ok: false, error: "Los cortes de hoy se escanean — esto es solo para cortes de días anteriores." };
-  const unscanned = lot.picking.filter((p) => p.picked === null && !p.confirmedAt);
-  if (unscanned.length === 0) return { ok: false, error: "No quedan productos sin escanear." };
-  for (const line of unscanned) {
-    await prisma.fulfillmentLotPick.upsert({
-      where: { lotId_catalogItemId: { lotId: params.lotId, catalogItemId: line.catalogItemId } },
-      create: { lotId: params.lotId, catalogItemId: line.catalogItemId, pickedQty: line.needed, pickedById: params.userId },
-      update: {},
-    });
-  }
-  return confirmPicks({ lotId: params.lotId, catalogItemIds: unscanned.map((p) => p.catalogItemId), onlyMatching: true, userId: params.userId });
-}
 
 // Manifiesto atrasado (pedido del usuario 2026-09-29): la mercadería ya
 // salió hace días, así que Daniel confirma todo de una vez — cada producto

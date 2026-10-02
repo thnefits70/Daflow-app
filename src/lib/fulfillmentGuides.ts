@@ -180,8 +180,12 @@ export async function getOrCreateOpenLot(): Promise<{ id: string; corte: number 
 export const BACKFILL_FROM_DAY = "2026-09-21";
 export const BACKFILL_TO_DAY = "2026-09-25";
 
+// Cerrado 2026-10-02 (pedido del usuario): eso fue solo de prueba — todo
+// manifiesto se sube el mismo día, en tiempo real. Ningún día admite ya la
+// carga atrasada; los cortes atrasados que ya existen se siguen mostrando.
 export function isBackfillDay(day: string): boolean {
-  return day >= BACKFILL_FROM_DAY && day <= BACKFILL_TO_DAY;
+  void day;
+  return false;
 }
 
 export function isBackfillLot(lot: { day: string; createdAt: Date }): boolean {
@@ -190,7 +194,7 @@ export function isBackfillLot(lot: { day: string; createdAt: Date }): boolean {
 
 export function backfillDayError(day: string): string | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return "No se pudo leer la fecha del manifiesto.";
-  if (!isBackfillDay(day)) return "Solo los manifiestos del 21 al 25 de septiembre se pueden cargar como atrasados.";
+  if (!isBackfillDay(day)) return "Ya no se cargan manifiestos atrasados: cada manifiesto se sube el mismo día que sale.";
   return null;
 }
 
