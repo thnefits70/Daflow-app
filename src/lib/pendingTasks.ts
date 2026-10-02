@@ -478,6 +478,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   reingreso_mercaderia_verificacion_semanal: "Reingreso de mercadería — lote semanal de dañados por verificar",
   egresos_deterioro_resolucion: "Deterioro en bodega — falta tu decisión",
   lotes_caducidad_alerta: "Productos vencidos o que vencen en 6 meses o menos",
+  ids_sin_marca: "Productos o combos sin marca o sin ID de Dropi",
   reclamos_proveedor_atrasados: "Reclamos al proveedor trabados o pasados por alto",
   danados_doble_registro: "Producto dañado registrado dos veces (devolución + deterioro)",
   ventas_externas_agrupar: "Ventas Externas — asignar quién agrupa",
@@ -2776,6 +2777,36 @@ async function getExpirationLotsPendingItem(href: string): Promise<PendingItem |
   };
 }
 
+// Pedido del usuario 2026-10-02: la marca se pone sola (al crear el producto,
+// o el combo la aprende de su manifiesto — lib/manifestBrand.ts), pero si
+// algún ID queda sin marca o un producto sin ID de Dropi, Daniel lo ve en
+// Inicio y se lo dice al admin, que es quien lo corrige. No cuenta lo que es
+// normal: productos "esperando ID de Dropi" (comprados antes de publicar) ni
+// combos solo de Rocket (código R…, no tienen marca a propósito).
+async function getMissingBrandPendingItem(href: string): Promise<PendingItem | null> {
+  const [products, combos] = await Promise.all([
+    prisma.purchaseCatalogItem.findMany({
+      where: { OR: [{ bodega: null }, { justCode: null, awaitingDropiId: false }] },
+      select: { name: true, justCode: true },
+    }),
+    prisma.dropiCombo.findMany({ where: { bodega: null, NOT: { code: { startsWith: "R" } } }, select: { code: true } }),
+  ]);
+  if (products.length === 0 && combos.length === 0) return null;
+
+  const codes = [...products.map((p) => p.justCode ?? p.name), ...combos.map((c) => c.code)];
+  const parts: string[] = [];
+  if (products.length > 0) parts.push(products.length === 1 ? "1 producto" : `${products.length} productos`);
+  if (combos.length > 0) parts.push(combos.length === 1 ? "1 combo" : `${combos.length} combos`);
+  return {
+    type: "ids_sin_marca",
+    icon: "🏷️",
+    label: "IDs sin marca — avísale al admin para corregirlo",
+    meta: `${parts.join(" · ")}: ${codes.slice(0, 5).join(", ")}${codes.length > 5 ? "…" : ""}`,
+    overdue: false,
+    href,
+  };
+}
+
 // Confirmado 2026-09-28, pedido de Jariel: el proveedor quiere revisar la
 // mercadería antes de decidir — Daniel tiene que armar el paquete de
 // revisión; y si tras revisarla la rechaza y la devuelve, confirmar que
@@ -3756,6 +3787,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (deteriorResolutionItem) items.push(deteriorResolutionItem);
     const expirationLotsItem = await getExpirationLotsPendingItem("/area/reingreso-mercaderia?tab=productos#lotes-caducidad").catch(() => null);
     if (expirationLotsItem) items.push(expirationLotsItem);
+    const missingBrandItem = await getMissingBrandPendingItem("/area/workspace?tab=stock-actual").catch(() => null);
+    if (missingBrandItem) items.push(missingBrandItem);
     const inspectionItem = await getDeteriorInspectionPendingItem("/area/workspace?tab=egresos&otab=seguimiento").catch(() => null);
     if (inspectionItem) items.push(inspectionItem);
     const doubleRegItem = await getDamagedDoubleRegistrationPendingItem("/area/reingreso-mercaderia?tab=danos").catch(() => null);
@@ -3930,7 +3963,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
+      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ids_sin_marca", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
