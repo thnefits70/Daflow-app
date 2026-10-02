@@ -502,11 +502,11 @@ const FORMULA_EXPLANATIONS: Record<FormulaKey, { title: string; text: string }> 
   },
   proveedor: {
     title: "Precio proveedor",
-    text: "Lo que cobra el proveedor por una unidad, tal cual — sin sumarle flete ni nada más. Es el mismo costo real que ya usa el Kardex de INVESTOCK (el promedio ponderado de todas las compras).",
+    text: "Lo que cobra el proveedor por una unidad, sin el flete. Sale de las mismas compras que se usan para el Puesto en bodega (lo que queda en bodega, compra por compra).",
   },
   bodega: {
     title: "Puesto en bodega",
-    text: "Precio proveedor + la parte del flete del lote que le toca a esa unidad. Para productos que nunca pasaron por la calculadora de Análisis de Mercado no se conoce el flete por separado todavía, así que este número sale igual al precio proveedor.",
+    text: "Lo que te costó cada unidad ya dentro de tu bodega: precio del proveedor + flete. Se calcula con lo que queda en bodega, compra por compra (lo primero que entra es lo primero que sale). Si la última compra salió MÁS CARA, se usa ese costo más caro, para no vender por debajo de lo que costó. Si salió MÁS BARATA, se usa la mezcla de lo que queda, sin bajar tanto como para perder con las unidades caras; cuando esas se venden, baja solo al costo nuevo. Las devoluciones no cuentan como compra. De este número salen todos los demás precios: Benistock, B2B, Dropi y B2C. Si la compra no tuvo flete aparte (o venía incluido), sale igual al precio proveedor.",
   },
   benistock: {
     title: "Benistock",

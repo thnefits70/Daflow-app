@@ -64,7 +64,9 @@ export async function resolveCostBasisForCatalogItems(catalogItemIds: string[]):
     const marginPercent = p?.marginPercent ?? DROPI_MARGIN_DEFAULT;
     const stock = pickSellingCost(layersByItem.get(id) ?? [], { insuranceRatePercent, fulfillmentCost, marginPercent });
     if (stock) {
-      byCatalogItemId.set(id, { batchCost: stock.sellingCost, batchUnits: 1, freightCost: null, insuranceRatePercent, fulfillmentCost, marginPercent, costSource: "kardex" });
+      // Proveedor y flete por separado (2026-10-02); proveedor + flete = el
+      // mismo costo de siempre, así que ningún precio cambia.
+      byCatalogItemId.set(id, { batchCost: stock.sellingCost - stock.freightPerUnit, batchUnits: 1, freightCost: stock.freightPerUnit || null, insuranceRatePercent, fulfillmentCost, marginPercent, costSource: "kardex" });
       continue;
     }
     const supplier = p ? pickPrimarySupplierPrice(p.supplierPrices) : null;

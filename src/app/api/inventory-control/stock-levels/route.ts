@@ -53,10 +53,9 @@ export async function GET() {
     // proveedor" y "Puesto en bodega" (costo sin y con flete por unidad) y
     // "Precio Dropi" — este último estimado con el mismo criterio de
     // respaldo de Kardex que ya usan Benistock/B2B/B2C para los ~490
-    // productos que nunca pasaron por la calculadora de Jariel. Para esos
-    // productos no se conoce el flete por separado (freightCost: null), así
-    // que "Puesto en bodega" sale igual a "Precio proveedor" — no es un
-    // error, es la única base de costo que existe hoy para ellos.
+    // productos que nunca pasaron por la calculadora de Jariel.
+    // 2026-10-02: el flete de cada compra ya se separa (sellingCost.ts), así
+    // que "Precio proveedor" sale sin flete y "Puesto en bodega" con flete.
     const base = costBasisByItemId.get(r.catalogItemId) ?? null;
     const pendingAdjustmentQuantity = pendingAdjustmentByItem.get(r.catalogItemId) ?? null;
     if (!base) return { ...r, pendingAdjustmentQuantity };
