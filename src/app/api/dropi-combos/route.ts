@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { componentsMissingDropiId, missingDropiIdMessage } from "@/lib/fulfillmentGuides";
-import { canManageJustCatalog, dbUserId } from "@/lib/guards";
+import { canManageJustCatalog, canViewStockLevels, dbUserId } from "@/lib/guards";
 import { comboCodeUsedByProduct } from "@/lib/comboBrand";
 import {
   resolveCostBasisForCatalogItems,
@@ -28,8 +28,12 @@ const CATALOG_ITEM_SELECT = { id: true, name: true, photos: true, justCode: true
 // código aparece en una hoja de despacho/garantía. Mismo gate que subir el
 // export de Just (canManageJustCatalog: Daniel o admin) — visibilidad
 // exclusiva, no se comparte con el resto de "Base de datos de productos".
+// Pedido del usuario 2026-10-02: quien ve "Stock Actual" (canViewStockLevels,
+// ej. Nairoby de Contabilidad) también necesita leer la lista — si no, la
+// hoja "Combos" del Excel de costos salía vacía. Solo lectura: crear, editar
+// o borrar combos sigue siendo exclusivo de canManageJustCatalog.
 export async function GET() {
-  if (!(await canManageJustCatalog())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canViewStockLevels())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const combos = await prisma.dropiCombo.findMany({
     orderBy: { createdAt: "desc" },
