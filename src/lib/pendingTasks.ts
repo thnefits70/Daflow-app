@@ -16,6 +16,8 @@ import { CLAIM_GAP_DAYS, findPossibleDoubleRegistrations, getSupplierClaimGaps }
 import { ecuadorDay, getCompiledLot, isBackfillLot } from "@/lib/fulfillmentGuides";
 import { holidayName, isWorkingDay, previousWorkingDay } from "@/lib/ecuadorHolidays";
 import { findDuplicateCandidates } from "@/lib/catalogDuplicates";
+import { fullCountCompleted, getActiveCount, getCountView, getDifferences, getSubmittedCounts } from "@/lib/stockCount";
+import { getNegativeStockProducts } from "@/lib/stockKardex";
 import { carrierLabel } from "@/lib/carriers";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
 import { getOpenPurchaseCodesByCatalogItem } from "@/lib/purchases";
@@ -491,6 +493,9 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   garantia_local_resultado: "Tus garantías locales — confirmar si se entregaron",
   manifiestos_tras_feriado: "Manifiestos pendientes después de domingo o feriado",
   catalogo_posibles_duplicados: "Posibles productos duplicados por revisar",
+  conteo_inventario: "Conteo físico de inventario (general o área de la semana)",
+  conteo_inventario_aprobar: "Conteo físico — diferencias por aprobar",
+  stock_negativo: "Productos con stock negativo",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_pendientes_aprobacion: "Solicitudes de compra por aprobar",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
@@ -2648,6 +2653,72 @@ async function getManifestCatchUpPendingItem(href: string): Promise<PendingItem 
   };
 }
 
+// Conteo físico (pedido del usuario 2026-10-02): el conteo abierto (general
+// o el área de la semana) le sale al equipo de Inventario y a Daniel con su
+// avance; a Daniel además le dice cuándo ya puede enviarlo.
+async function getStockCountPendingItem(forLead: boolean): Promise<PendingItem | null> {
+  const count = await getActiveCount(null).catch(() => null);
+  // Antes del conteo general, a Daniel le sale el acceso para iniciarlo.
+  if (!count && forLead && !(await fullCountCompleted())) {
+    return {
+      type: "conteo_inventario",
+      icon: "📋",
+      label: "Conteo general de inventario — inícialo cuando la bodega esté lista",
+      meta: "Antes, confirma todos los cortes pendientes. Tu equipo cuenta a ciegas desde el celular.",
+      overdue: false,
+      href: "/area/conteo-inventario",
+    };
+  }
+  if (!count || count.status !== "COUNTING") return null;
+  const view = await getCountView(count.id);
+  if (!view) return null;
+  const done = view.products.filter((p) => p.countedQty !== null).length;
+  const total = view.products.length;
+  const title = view.kind === "FULL" ? "Conteo general de inventario" : `Conteo semanal · Área ${view.area}`;
+  const all = total > 0 && done === total;
+  // El semanal se atrasa desde el jueves de esa semana.
+  const overdue = view.kind === "WEEKLY_AREA" && !!view.weekStart && ecuadorDay(new Date()) >= new Date(new Date(`${view.weekStart}T12:00:00Z`).getTime() + 3 * 86_400_000).toISOString().slice(0, 10);
+  return {
+    type: "conteo_inventario",
+    icon: "📋",
+    label: forLead && all ? `${title}: ya está todo contado — revísalo y envíalo` : `${title}: cuenta lo que hay en la percha`,
+    meta: `Contados ${done} de ${total} · a ciegas${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href: "/area/conteo-inventario",
+  };
+}
+
+// Al admin: conteos que Daniel envió con diferencias por aprobar.
+async function getStockCountApprovalPendingItem(href: string): Promise<PendingItem | null> {
+  const counts = await getSubmittedCounts();
+  if (counts.length === 0) return null;
+  const diffs = (await Promise.all(counts.map((c) => getDifferences(c.id)))).reduce((sum, d) => sum + d.length, 0);
+  return {
+    type: "conteo_inventario_aprobar",
+    icon: "📋",
+    label: "Conteo físico por aprobar — revisa la lista de diferencias",
+    meta: `${diffs} producto(s) con diferencia · se aprueban juntos`,
+    overdue: true,
+    href,
+  };
+}
+
+// A Daniel, solo después del conteo general (pedido del usuario 2026-10-02):
+// un producto en negativo siempre es algo que salió sin registrarse.
+async function getNegativeStockPendingItem(href: string): Promise<PendingItem | null> {
+  if (!(await fullCountCompleted())) return null;
+  const negative = await getNegativeStockProducts();
+  if (negative.length === 0) return null;
+  return {
+    type: "stock_negativo",
+    icon: "⚠️",
+    label: `${negative.length} producto(s) con stock negativo — algo salió sin registrarse`,
+    meta: negative.slice(0, 3).map((n) => `${n.name} (${n.balance})`).join(" · ") + (negative.length > 3 ? " …" : ""),
+    overdue: true,
+    href,
+  };
+}
+
 // Al asesor: garantías que ya salieron con el motorizado y todavía no
 // confirma si se entregaron (sin eso no se paga el flete).
 async function getMyLocalWarrantyPendingItems(userId: string, href: string): Promise<PendingItem[]> {
@@ -3582,6 +3653,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(nichoBackfillItem ? [nichoBackfillItem] : []),
       ...(purchaseExceptionItem ? [purchaseExceptionItem] : []),
       ...(stockAdjustmentItem ? [stockAdjustmentItem] : []),
+      ...(await getStockCountApprovalPendingItem(invStockHref).then((i) => (i ? [i] : [])).catch(() => [])),
       ...(priceCorrectionItem ? [priceCorrectionItem] : []),
       ...(writeOffApprovalItem ? [writeOffApprovalItem] : []),
       ...(catalogDeleteItem ? [catalogDeleteItem] : []),
@@ -3645,6 +3717,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     teamItems.unshift(...(await getMyFulfillmentBlockPendingItems(actor.userId, "/area/workspace?tab=egresos&otab=solicitud")));
     teamItems.unshift(...(await getMyLocalWarrantyPendingItems(actor.userId, "/area/workspace?tab=ventas-externas&etab=garantias")));
     if (me.department?.code === "INV") {
+      const teamCountItem = await getStockCountPendingItem(false).catch(() => null);
+      if (teamCountItem) teamItems.unshift(teamCountItem);
       const pickupItem = await getLocalWarrantyPickupPendingItem("/area/workspace?tab=ventas-externas&etab=devoluciones");
       if (pickupItem) teamItems.unshift(pickupItem);
       const [receivingItem, replacementItem, urgentUnresolvedItem] = await Promise.all([
@@ -3831,6 +3905,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (externalSalePackItem) items.push(externalSalePackItem);
     const warrantyPickupItem = await getLocalWarrantyPickupPendingItem("/area/workspace?tab=ventas-externas&etab=devoluciones");
     if (warrantyPickupItem) items.push(warrantyPickupItem);
+    const stockCountItem = await getStockCountPendingItem(true).catch(() => null);
+    if (stockCountItem) items.unshift(stockCountItem);
+    const negativeStockItem = await getNegativeStockPendingItem("/area/workspace?tab=stock-actual").catch(() => null);
+    if (negativeStockItem) items.unshift(negativeStockItem);
     const manifestCatchUpItem = await getManifestCatchUpPendingItem("/area/workspace?tab=egresos&otab=solicitud");
     if (manifestCatchUpItem) items.unshift(manifestCatchUpItem);
     // Pedido del usuario 2026-10-02: Daniel decide él mismo los posibles
@@ -4009,7 +4087,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
+      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "conteo_inventario", "stock_negativo", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

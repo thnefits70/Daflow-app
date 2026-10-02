@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, Copy, AlertTriangle, ChevronDown, Bell, SlidersHorizontal, Download } from "lucide-react";
+import { StockCountReview } from "./StockCountReview";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpirationAlerts } from "@/components/merchandise-reentry/ExpirationAlerts";
 import { TabGuide } from "@/components/shared/TabGuide";
@@ -955,6 +956,8 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
           </span>
         </a>
       )}
+
+      {isAdmin && <StockCountReview onApproved={loadRows} />}
 
       {isAdmin && (
         <div className="border border-gold rounded-md mb-3">

@@ -62,6 +62,10 @@ model PlatformSettings {
   // Pedido del usuario 2026-10-02: correlativo propio de Garantías locales
   // (GL-0001, GL-0002...) — mismo patrón atómico que los anteriores.
   lastLocalWarrantyNumber         Int       @default(0)
+  // Pedido del usuario 2026-10-02: cuándo el admin aprobó el conteo general
+  // (StockCount FULL). Desde la semana siguiente arranca el conteo semanal
+  // por áreas y el aviso de stock negativo en Inicio de Daniel.
+  fullStockCountCompletedAt       DateTime?
   // Confirmado 2026-08-25: correlativo propio de Guías Canceladas (GC-0001,
   // GC-0002...) — mismo patrón atómico que los anteriores.
   lastCancelledGuideNumber        Int       @default(0)
@@ -2684,6 +2688,7 @@ model CatalogItemMerge {
   @@index([removedJustCode])
   @@index([officialItemId])
 }
+
 // Pedido del usuario 2026-10-02: DAFLOW detecta solo posibles productos
 // duplicados (mismo nombre, o uno es el otro con algo más al final) y a
 // Daniel le salen en Inicio para decidir. Si los junta queda en
@@ -2697,7 +2702,6 @@ model CatalogDuplicateReview {
   decidedById String?
   decidedAt   DateTime @default(now())
 }
-
 
 // Confirmado 2026-09-21 (idea nacida de una conversación con Yair, líder de
 // Fulfillment, sobre por qué el manifiesto de despacho no coincide con lo
@@ -2788,18 +2792,18 @@ model FulfillmentRequestBatch {
 // dos veces (o dos PDF que comparten guías), la segunda subida se detiene
 // antes de duplicar las cantidades del lote del día.
 model FulfillmentRequestGuide {
-  id          String                  @id @default(cuid())
-  batchId     String
-  batch       FulfillmentRequestBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
-  guideNumber String                  @unique
-  carrier     String
+  id            String                  @id @default(cuid())
+  batchId       String
+  batch         FulfillmentRequestBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  guideNumber   String                  @unique
+  carrier       String
   // Confirmado 2026-09-28 (pedido de Daniel, sí del usuario): códigos de
   // producto que trae la etiqueta de esta guía (Dropi numérico, Rocket con
   // prefijo R) — de ahí sale la marca de la guía para contar guías por
   // marca y transportadora en el corte. Vacío en guías anteriores.
-  codes       String[]                @default([])
+  codes         String[]                @default([])
   // Remitente impreso en la etiqueta (2026-10-01) — ver Store.labelSender.
-  sender      String?
+  sender        String?
   // Pedido del usuario 2026-10-02: productos y cantidades de la etiqueta de
   // esta guía, leídos UNA vez del PDF al guardar el corte (antes cada
   // escaneo de una devolución abría el PDF entero, ~5 s). labelProducts =
@@ -2808,7 +2812,7 @@ model FulfillmentRequestGuide {
   labelProducts Json?
   manifestDay   String?
   labelCachedAt DateTime?
-  createdAt   DateTime                @default(now())
+  createdAt     DateTime                @default(now())
 
   @@index([batchId])
 }
@@ -7534,4 +7538,62 @@ model StockLabelPrint {
   printedAt     DateTime            @default(now())
 
   @@index([catalogItemId])
+}
+
+// ---- Conteo físico de inventario (pedido del usuario 2026-10-02) ----
+// FULL = conteo general de toda la bodega (una vez); WEEKLY_AREA = un área
+// (A–G) distinta cada semana, en rotación, después del general. El equipo
+// cuenta A CIEGAS desde el celular (nunca ve lo que dice el sistema), Daniel
+// revisa y envía, y el admin aprueba las diferencias en una sola lista.
+enum StockCountKind {
+  FULL
+  WEEKLY_AREA
+}
+
+enum StockCountStatus {
+  COUNTING
+  SUBMITTED
+  APPROVED
+}
+
+model StockCount {
+  id        String           @id @default(cuid())
+  kind      StockCountKind
+  status    StockCountStatus @default(COUNTING)
+  // WEEKLY_AREA: el área y el lunes de esa semana (YYYY-MM-DD).
+  area      String?
+  weekStart String?
+
+  startedAt     DateTime  @default(now())
+  startedById   String?
+  submittedAt   DateTime?
+  submittedById String?
+  approvedAt    DateTime?
+  approvedById  String?
+
+  lines StockCountLine[]
+
+  @@unique([kind, weekStart, area])
+  @@index([status])
+}
+
+model StockCountLine {
+  id            String     @id @default(cuid())
+  countId       String
+  count         StockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+  catalogItemId String
+  countedQty    Int
+  countedById   String?
+  countedAt     DateTime   @default(now())
+  // Lo que el sistema esperaba que hubiera EN EL MOMENTO de contar (nunca se
+  // le muestra a quien cuenta): saldo del Kardex − lo ya sacado en cortes
+  // sin confirmar + lo recibido sin aprobar. La diferencia se aplica sobre el
+  // saldo de ese momento, así no se pisa lo que se movió después.
+  expectedQty   Int
+  // Decisión del admin sobre la diferencia (solo si countedQty != expectedQty).
+  decision      String?
+  decidedAt     DateTime?
+
+  @@unique([countId, catalogItemId])
+  @@index([countId])
 }
