@@ -58,7 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!confirmedProductName) return NextResponse.json({ error: "Producto de catálogo no encontrado." }, { status: 400 });
     nameById.set(it.id, confirmedProductName);
     const declarations = (Array.isArray(it.unitDeclarations) ? it.unitDeclarations : []) as unknown as UnitDeclaration[];
-    const unitPriceModes = await computeUnitPriceModes(order.employeeId, confirmedProductName, it.quantity, declarations, catalogItem.justCode, it.id);
+    const unitPriceModes = await computeUnitPriceModes(order.employeeId, { catalogItemId, name: confirmedProductName }, it.quantity, declarations, catalogItem.justCode, it.id);
     unitPriceModesById.set(it.id, unitPriceModes);
   }
 

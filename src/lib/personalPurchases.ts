@@ -53,11 +53,21 @@ export type CostCooldownStatus = { eligible: boolean; lastCostAt: Date | null; a
 // esperaba costo — el cálculo era silencioso. Este status expone la fecha
 // de la última compra a costo y cuándo se vuelve a habilitar, para
 // mostrarlo como aviso en la pantalla de confirmación de bodega.
-export async function getCostCooldownStatus(employeeId: string, confirmedProductName: string, excludeItemId: string | null = null): Promise<CostCooldownStatus> {
+//
+// Confirmado 2026-10-02 (pedido explícito del usuario): el producto se
+// reconoce por su ID del catálogo, no solo por el nombre — un nombre
+// escrito distinto ya no cuenta como "otro producto". El nombre queda como
+// respaldo para compras viejas sin ID. Pedidos rechazados no cuentan.
+export type CooldownProduct = { catalogItemId: string | null; name: string };
+
+export async function getCostCooldownStatus(employeeId: string, product: CooldownProduct, excludeItemId: string | null = null): Promise<CostCooldownStatus> {
   const lastCostItem = await prisma.personalPurchaseItem.findFirst({
     where: {
-      confirmedProductName,
-      order: { employeeId },
+      OR: [
+        ...(product.catalogItemId ? [{ confirmedCatalogItemId: product.catalogItemId }] : []),
+        { confirmedProductName: product.name },
+      ],
+      order: { employeeId, status: { not: "REJECTED" } },
       unitPriceModes: { array_contains: "COST" },
       ...(excludeItemId ? { id: { not: excludeItemId } } : {}),
     },
@@ -71,8 +81,8 @@ export async function getCostCooldownStatus(employeeId: string, confirmedProduct
   return { eligible, lastCostAt: lastCostItem.createdAt, availableAgainAt };
 }
 
-async function costCooldownEligible(employeeId: string, confirmedProductName: string, excludeItemId: string | null): Promise<boolean> {
-  return (await getCostCooldownStatus(employeeId, confirmedProductName, excludeItemId)).eligible;
+async function costCooldownEligible(employeeId: string, product: CooldownProduct, excludeItemId: string | null): Promise<boolean> {
+  return (await getCostCooldownStatus(employeeId, product, excludeItemId)).eligible;
 }
 
 async function isComboJustCode(justCode: string | null): Promise<boolean> {
@@ -86,7 +96,7 @@ async function isComboJustCode(justCode: string | null): Promise<boolean> {
 // PersonalPurchaseItem.unitPriceModes, nunca se recalcula después.
 export async function computeUnitPriceModes(
   employeeId: string,
-  confirmedProductName: string,
+  product: CooldownProduct,
   quantity: number,
   declarations: UnitDeclaration[],
   confirmedJustCode: string | null,
@@ -114,7 +124,7 @@ export async function computeUnitPriceModes(
       modes.push("DROPI");
       continue;
     }
-    if (selfEligible === null) selfEligible = await costCooldownEligible(employeeId, confirmedProductName, excludeItemId);
+    if (selfEligible === null) selfEligible = await costCooldownEligible(employeeId, product, excludeItemId);
     if (selfEligible) {
       modes.push("COST");
       selfCostUnitsGranted++;

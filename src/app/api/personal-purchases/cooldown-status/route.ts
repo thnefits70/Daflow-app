@@ -12,8 +12,9 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const employeeId = searchParams.get("employeeId");
   const productName = searchParams.get("productName");
+  const catalogItemId = searchParams.get("catalogItemId");
   if (!employeeId || !productName) return NextResponse.json({ error: "Faltan datos." }, { status: 400 });
 
-  const status = await getCostCooldownStatus(employeeId, productName);
+  const status = await getCostCooldownStatus(employeeId, { catalogItemId, name: productName });
   return NextResponse.json(status);
 }

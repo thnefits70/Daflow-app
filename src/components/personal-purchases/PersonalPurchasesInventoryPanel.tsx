@@ -100,7 +100,7 @@ export function PersonalPurchasesInventoryPanel() {
         const match = confirmed[it.id];
         const hasSelfUnit = it.unitDeclarations.some((d) => d.relation === "SELF");
         if (!match || !hasSelfUnit || cooldowns[it.id] !== undefined) continue;
-        const url = `/api/personal-purchases/cooldown-status?employeeId=${encodeURIComponent(o.employee.id)}&productName=${encodeURIComponent(match.name)}`;
+        const url = `/api/personal-purchases/cooldown-status?employeeId=${encodeURIComponent(o.employee.id)}&productName=${encodeURIComponent(match.name)}&catalogItemId=${encodeURIComponent(match.id)}`;
         fetch(url)
           .then((r) => (r.ok ? r.json() : null))
           .then((data: CooldownStatus | null) => setCooldowns((c) => ({ ...c, [it.id]: data })));
