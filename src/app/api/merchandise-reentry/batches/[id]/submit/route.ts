@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseReentry, getInventoryLeadId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { autoApproveReadyReentryItems } from "@/lib/merchandiseReentry";
+import { applyScanDamage } from "@/lib/reentryGuideScan";
 
 // La doble confirmación ("¿Estás seguro?" Sí/No) vive del lado del cliente
 // — esta ruta es el único Sí que de verdad congela el lote. A partir de acá
@@ -22,10 +23,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (batch.submittedAt) return NextResponse.json({ error: "Este lote ya fue enviado." }, { status: 409 });
   if (batch.items.length === 0) return NextResponse.json({ error: "Agrega al menos un producto antes de enviar." }, { status: 409 });
 
-  const updated = await prisma.merchandiseReentryBatch.update({
-    where: { id },
-    data: { submittedAt: new Date() },
+  // 2026-10-02: en lotes escaneados, lo marcado como dañado se descuenta de
+  // las buenas de las guías en el mismo paso en que se congela el lote.
+  let damageError: string | null = null;
+  const updated = await prisma.$transaction(async (tx) => {
+    damageError = await applyScanDamage(tx, id);
+    if (damageError) return null;
+    return tx.merchandiseReentryBatch.update({ where: { id, submittedAt: null }, data: { submittedAt: new Date() } });
   });
+  if (!updated) return NextResponse.json({ error: damageError ?? "No se pudo enviar el lote." }, { status: 409 });
 
   // Confirmado 2026-09-29, pedido de Daniel + usuario: lo identificado y sin
   // daño entra solo a INVESTOCK en este momento (ver

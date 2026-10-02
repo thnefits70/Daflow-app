@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Check, Pencil, Plus, Send, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Check, Pencil, Send, Trash2, X } from "lucide-react";
 import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "./ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { ExpandableName } from "@/components/ui/ExpandableName";
+import { GuideScanner, ScannedGuidesList, ScannedProductsDamage, type ScanGuideDTO } from "./ReentryGuideScan";
 
 const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
 
@@ -32,9 +33,12 @@ type ItemDTO = {
   damagedQty: number;
   damageReason: { name: string } | null;
   damageReasonOther: string | null;
+  guideId: string | null;
+  scanDamage: boolean;
+  manualReason: string | null;
 };
 
-type BatchDTO = { id: string; code: string; submittedAt: string | null; items: ItemDTO[] };
+type BatchDTO = { id: string; code: string; submittedAt: string | null; items: ItemDTO[]; guides?: ScanGuideDTO[] };
 
 async function postJson(url: string, body?: unknown) {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
@@ -66,16 +70,19 @@ export function CaptureFlow() {
   // primera vez.
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [relinkError, setRelinkError] = useState("");
+  // 2026-10-02: razón por la que escanear la guía falló — solo con ella se
+  // abre el registro a mano (respaldo).
+  const [manualReason, setManualReason] = useState<string | null>(null);
 
-  function loadDraft() {
+  const loadDraft = useCallback(() => {
     fetch("/api/merchandise-reentry/draft")
       .then((r) => r.json())
       .then((data) => setBatch(data ?? null))
       .catch(() => setBatch(null))
       .finally(() => setLoading(false));
-  }
+  }, []);
 
-  useEffect(loadDraft, []);
+  useEffect(loadDraft, [loadDraft]);
 
   async function confirmScanned() {
     setError("");
@@ -139,6 +146,10 @@ export function CaptureFlow() {
 
   if (loading) return <div className="text-[13px] text-steel">Cargando…</div>;
 
+  // Registrados a mano: lo que no vino de una guía escaneada (ni es la fila
+  // de dañadas de un producto escaneado).
+  const manualItems = batch ? batch.items.filter((i) => !i.guideId && !i.scanDamage) : [];
+
   // Pantalla de éxito tras enviar
   if (sentCode) {
     return (
@@ -147,7 +158,7 @@ export function CaptureFlow() {
           <Check size={20} className="text-green" />
         </div>
         <div className="font-display font-bold text-[15px] mb-1.5">{sentCode} enviado</div>
-        <p className="text-[12.5px] text-steel mb-4">Ya no puedes editar esta información. Daniel la va a revisar.</p>
+        <p className="text-[12.5px] text-steel mb-4">Lo bueno ya entró a INVESTOCK. Daniel revisa solo lo dañado o lo que no se pudo identificar.</p>
         <button type="button" className="text-[12.5px] font-bold text-teal cursor-pointer" onClick={() => { setSentCode(null); setGateAnswer(null); }}>
           Empezar un lote nuevo
         </button>
@@ -194,7 +205,7 @@ export function CaptureFlow() {
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <span className="font-mono text-[11px] font-bold text-teal">{batch.code}</span>
-          <span className="font-mono text-[10px] text-steel bg-cloud rounded-full px-2 py-0.5">{batch.items.length} producto(s) agregados</span>
+          <span className="font-mono text-[10px] text-steel bg-cloud rounded-full px-2 py-0.5">{batch.guides?.length ?? 0} guía(s) · {manualItems.length} a mano</span>
         </div>
         {!adding && !confirmingSubmit && !confirmDeleteBatch && (
           <button type="button" className="flex items-center gap-1 text-[11px] font-semibold text-steel hover:text-red cursor-pointer" onClick={() => setConfirmDeleteBatch(true)}>
@@ -206,7 +217,7 @@ export function CaptureFlow() {
       {confirmDeleteBatch && (
         <div className="bg-red/10 border border-red/40 rounded-md p-3.5 mb-3">
           <div className="font-display font-bold text-[13.5px] mb-1">¿Eliminar todo el lote {batch.code}?</div>
-          <p className="text-[12px] text-steel mb-3">Se van a borrar los {batch.items.length} producto(s) agregados. Esto no se puede deshacer.</p>
+          <p className="text-[12px] text-steel mb-3">Se van a borrar las guías escaneadas y los productos registrados a mano. Esto no se puede deshacer.</p>
           <div className="flex gap-2">
             <button type="button" className="flex-1 rounded border border-rule px-3 py-2 text-[12px] font-semibold cursor-pointer" onClick={() => setConfirmDeleteBatch(false)}>
               No, mantener lote
@@ -218,8 +229,13 @@ export function CaptureFlow() {
         </div>
       )}
 
+      {!adding && <GuideScanner batchId={batch.id} onChanged={loadDraft} onManual={(r) => { setManualReason(r); setAdding(true); }} />}
+      <ScannedGuidesList guides={batch.guides ?? []} items={batch.items} onChanged={loadDraft} />
+      <ScannedProductsDamage batchId={batch.id} items={batch.items} onChanged={loadDraft} />
+
+      {manualItems.length > 0 && <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-1.5">Registrados a mano</div>}
       <div className="flex flex-col gap-2 mb-3">
-        {batch.items.map((item) =>
+        {manualItems.map((item) =>
           confirmDeleteItemId === item.id ? (
             <div key={item.id} className="bg-red/10 border border-red/40 rounded-md p-3">
               <div className="text-[12.5px] font-semibold mb-2">¿Eliminar &quot;{itemName(item)}&quot; del lote?</div>
@@ -254,6 +270,7 @@ export function CaptureFlow() {
                     {item.goodQty > 0 && item.damagedQty > 0 && " · "}
                     {item.damagedQty > 0 && <span className="text-red font-semibold">{item.damagedQty} dañadas</span>}
                   </div>
+                  {item.manualReason && <div className="text-[10.5px] text-steel mt-0.5">Por qué a mano: {item.manualReason}</div>}
                 </div>
                 <button
                   type="button"
@@ -284,24 +301,23 @@ export function CaptureFlow() {
 
       {error && <div className="text-red text-[12px] mb-2">{error}</div>}
 
-      {adding ? (
-        <AddItemForm
-          batchId={batch.id}
-          existingItems={batch.items}
-          onAdded={() => {
-            setAdding(false);
-            loadDraft();
-          }}
-          onCancel={() => setAdding(false)}
-        />
-      ) : (
-        <button
-          type="button"
-          className="w-full flex items-center justify-center gap-1.5 rounded-md border-[1.5px] border-dashed border-rule px-3.5 py-2.5 text-[12.5px] font-semibold cursor-pointer hover:border-teal mb-2.5"
-          onClick={() => setAdding(true)}
-        >
-          <Plus size={14} /> Agregar producto al lote
-        </button>
+      {adding && manualReason && (
+        <>
+          <div className="rounded-md border border-gold/50 bg-gold/10 p-2.5 mb-2 text-[11.5px]">
+            <b>Registro a mano</b> — solo porque: {manualReason}
+          </div>
+          <AddItemForm
+            batchId={batch.id}
+            existingItems={manualItems}
+            manualReason={manualReason}
+            onAdded={() => {
+              setAdding(false);
+              setManualReason(null);
+              loadDraft();
+            }}
+            onCancel={() => { setAdding(false); setManualReason(null); }}
+          />
+        </>
       )}
 
       {!adding && batch.items.length > 0 && !confirmingSubmit && (
@@ -316,7 +332,8 @@ export function CaptureFlow() {
 
       {confirmingSubmit && (
         <div className="bg-surface border border-rule rounded-md p-4">
-          <div className="font-display font-bold text-[14px] mb-3">¿Estás seguro que ingresaste bien detallada la información?</div>
+          <div className="font-display font-bold text-[14px] mb-1.5">¿Ya marcaste todo lo que vino dañado?</div>
+          <p className="text-[12px] text-steel mb-3">Al enviar, lo bueno entra solo a INVESTOCK y lo dañado pasa a Daniel. Ya no se puede editar.</p>
           <div className="flex gap-2">
             <button type="button" className="flex-1 rounded border border-rule px-3 py-2 text-[12.5px] font-semibold cursor-pointer" onClick={() => setConfirmingSubmit(false)}>
               Revisar de nuevo
@@ -338,7 +355,7 @@ export function CaptureFlow() {
 // con la re-vinculación de Daniel en Revisión).
 // Confirmado 2026-09-29, pedido de Daniel + usuario: Joel solo elige el
 // producto y pone la cantidad (lo percha de inmediato) — ya no se toma foto.
-function AddItemForm({ batchId, existingItems, onAdded, onCancel }: { batchId: string; existingItems: ItemDTO[]; onAdded: () => void; onCancel: () => void }) {
+function AddItemForm({ batchId, existingItems, manualReason, onAdded, onCancel }: { batchId: string; existingItems: ItemDTO[]; manualReason: string; onAdded: () => void; onCancel: () => void }) {
   const [selected, setSelected] = useState<MatchCatalogItem | null>(null);
   // Confirmado 2026-09-29, pedido de Daniel + usuario: en lotes abiertos todo
   // el día Joel a veces registraba el mismo producto dos veces (44 casos, con
@@ -403,6 +420,7 @@ function AddItemForm({ batchId, existingItems, onAdded, onCancel }: { batchId: s
         damagedQty: dQty,
         damageReasonName: dQty > 0 ? damageReason : undefined,
         damageReasonOther: dQty > 0 && damageReason === "Otro" ? damageReasonOther.trim() : undefined,
+        manualReason,
       });
       clearAddItemDraft();
       onAdded();

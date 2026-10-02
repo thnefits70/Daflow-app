@@ -63,6 +63,9 @@ const updateSchema = z.object({
   canConfirmMarketingDesign: z.boolean().optional(),
   canConfirmMarketingAdvisor: z.boolean().optional(),
   canAssignCancelledGuideItems: z.boolean().optional(),
+  // Responsable de Reingreso (2026-10-02): solo el admin lo asigna, y solo
+  // una persona a la vez — dárselo a alguien se lo quita a quien lo tenía.
+  isReentryResponsible: z.boolean().optional(),
   canMarkComboCreatedInDropi: z.boolean().optional(),
   canLinkStoreProducts: z.boolean().optional(),
   canPublishMarketProduct: z.boolean().optional(),
@@ -187,6 +190,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.canViewStoreFeedback !== undefined) data.canViewStoreFeedback = d.canViewStoreFeedback;
   if (d.excludeFromRecognition !== undefined) data.excludeFromRecognition = d.excludeFromRecognition;
   if (d.isActive !== undefined) data.isActive = d.isActive;
+  if (d.isReentryResponsible !== undefined) {
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Solo el admin asigna al responsable de reingreso." }, { status: 403 });
+    if (d.isReentryResponsible) await prisma.user.updateMany({ where: { isReentryResponsible: true, id: { not: id } }, data: { isReentryResponsible: false } });
+    data.isReentryResponsible = d.isReentryResponsible;
+  }
   if (d.resetTwoFactor) {
     if (session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     data.twoFactorEnabled = false;

@@ -17,10 +17,14 @@ import { autoApproveReadyReentryItems, maybeMarkBatchClosed, notifyFinanceLeadWe
 // Reingreso de mercadería (devoluciones): la parte buena de cada producto
 // entra a INVESTOCK apenas Daniel termina de aprobar el lote — ya no espera
 // a que Nairoby la "suba a Just" ni al último día laboral de la semana.
+// Cambiado 2026-10-02, pedido del usuario: cada producto entra apenas está
+// aprobado (lo bueno se aprueba solo al enviar), sin esperar a que Daniel
+// resuelva lo dañado del resto del lote. Entra con su costo real
+// (unitCost, el de la guía) o, si se registró a mano, al costo promedio.
 export async function autoRestockApprovedReentryItems(batchId?: string): Promise<number> {
   const items = await prisma.merchandiseReentryItem.findMany({
-    where: { goodQty: { gt: 0 }, justUploadedAt: null, batch: { danielApprovedAt: { not: null }, ...(batchId ? { id: batchId } : {}) } },
-    select: { id: true, batchId: true, catalogItemId: true, goodQty: true },
+    where: { goodQty: { gt: 0 }, justUploadedAt: null, approvedAt: { not: null }, batch: { submittedAt: { not: null }, ...(batchId ? { id: batchId } : {}) } },
+    select: { id: true, batchId: true, catalogItemId: true, goodQty: true, unitCost: true },
     orderBy: { createdAt: "asc" },
   });
   let restocked = 0;
@@ -39,7 +43,7 @@ export async function autoRestockApprovedReentryItems(batchId?: string): Promise
       catalogItemId: item.catalogItemId,
       type: "IN",
       quantity: item.goodQty,
-      unitCost: null,
+      unitCost: item.unitCost ?? null,
       occurredAt: new Date(),
     })
       .then(() => { restocked++; })

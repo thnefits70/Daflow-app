@@ -884,12 +884,20 @@ export async function canPayMerchandisePurchases() {
  * cierra el ciclo — admin sí puede aprobar/cerrar como supervisión general,
  * igual que canRegisterPurchaseInvoices.
  */
+// Pedido del usuario 2026-10-02: solo el "Responsable de reingreso"
+// (isReentryResponsible, lo asigna el admin, hoy Joel) registra devoluciones
+// — ya no todo el equipo de Inventario. Si nadie lo tiene asignado (se fue,
+// se lo quitaron), lo hace el líder de Inventario para que no se trabe.
 export async function canCaptureMerchandiseReentry() {
   const session = await auth();
   if (!session) return false;
-  const user = await purchasesUserContext(session.user.id);
-  if (!user) return false;
-  return isInventoryTeamMember(user);
+  const user = await getGuardUser(session.user.id);
+  if (!user || !user.isActive) return false;
+  if (user.isReentryResponsible) return true;
+  const isInvLead = !!user.isLeader && user.leadsDept?.code === "INV";
+  if (!isInvLead) return false;
+  const assigned = await prisma.user.count({ where: { isReentryResponsible: true, isActive: true } });
+  return assigned === 0;
 }
 
 export async function canApproveMerchandiseReentry() {

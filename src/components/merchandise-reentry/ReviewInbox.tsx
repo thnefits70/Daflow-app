@@ -8,6 +8,10 @@ import { ExpandableName } from "@/components/ui/ExpandableName";
 
 type ItemDTO = {
   id: string;
+  // 2026-10-02: vino de una guía escaneada / es la fila de dañadas de un
+  // producto escaneado — el mismo producto en varias guías no es "repetido".
+  guideId?: string | null;
+  scanDamage?: boolean;
   photoUrls: string[];
   // legacyInventoryName: true SOLO en productos del catálogo que un chico de
   // Inventario registró a mano antes del cierre del 24 de agosto (ver
@@ -59,7 +63,7 @@ function repeatedCatalogIds(items: ItemDTO[]): Set<string> {
   const rep = new Set<string>();
   for (const i of items) {
     const id = i.catalogItem?.id;
-    if (!id) continue;
+    if (!id || i.guideId || i.scanDamage) continue;
     if (seen.has(id)) rep.add(id);
     seen.add(id);
   }

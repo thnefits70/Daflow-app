@@ -42,6 +42,9 @@ export type WarrantySource = {
   labelText: string[];
   lines: WarrantySourceLine[];
   warnings: string[];
+  // Códigos de la guía que no están vinculados a ningún producto de
+  // INVESTOCK (2026-10-02, los usa el Reingreso por escaneo de guía).
+  unresolved?: { code: string; name: string; quantity: number }[];
 };
 
 export type LookupResult = { ok: true; source: WarrantySource } | { ok: false; error: string };
@@ -254,7 +257,9 @@ async function usedByPreviousWarranties(where: { warrantySourceGuide?: string; w
   return used;
 }
 
-async function lookupGuide(guide: string): Promise<LookupResult> {
+// Exportada 2026-10-02: también la usa el Reingreso por escaneo de guía
+// (reentryGuideScan.ts) para saber qué productos traía la guía devuelta.
+export async function lookupGuide(guide: string): Promise<LookupResult> {
   const row = await prisma.fulfillmentRequestGuide.findFirst({
     where: { guideNumber: { equals: guide, mode: "insensitive" } },
     select: {
@@ -318,10 +323,14 @@ async function lookupGuide(guide: string): Promise<LookupResult> {
     if (prev) prev.quantity += qty;
     else byItem.set(item.id, { catalogItemId: item.id, name: item.name, code: item.justCode, photo: item.photos[0] ?? null, quantity: qty, alreadyUsed: 0 });
   };
+  const unresolved: { code: string; name: string; quantity: number }[] = [];
   for (const r of resolved) {
     if (r.resolution.kind === "product") add(r.resolution.catalogItem, r.quantity);
     else if (r.resolution.kind === "combo") for (const comp of r.resolution.components) add(comp.catalogItem, comp.quantity * r.quantity);
-    else warnings.push(`El código ${r.code} (${r.name}) no está vinculado a un producto de INVESTOCK.`);
+    else {
+      warnings.push(`El código ${r.code} (${r.name}) no está vinculado a un producto de INVESTOCK.`);
+      unresolved.push({ code: r.code, name: r.name, quantity: r.quantity });
+    }
   }
 
   const used = await usedByPreviousWarranties({ warrantySourceGuide: row.guideNumber });
@@ -348,6 +357,7 @@ async function lookupGuide(guide: string): Promise<LookupResult> {
       labelText: label ? label.map(lineText).filter(Boolean).slice(0, 45) : [],
       lines: [...byItem.values()],
       warnings,
+      unresolved,
     },
   };
 }

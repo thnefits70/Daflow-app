@@ -90,6 +90,12 @@ export function itemDisplayName(item: { correctedName: string | null; catalogIte
 // momento exacto (no en cada aprobación individual de item) la parte buena
 // del lote vuelve sola al inventario.
 export async function maybeMarkBatchApproved(batchId: string) {
+  // 2026-10-02: lo ya aprobado entra al Kardex de inmediato, aunque el resto
+  // del lote siga esperando a Daniel. Import dinámico para no crear un
+  // ciclo (inventoryAutoFlows importa este archivo).
+  const { autoRestockApprovedReentryItems } = await import("@/lib/inventoryAutoFlows");
+  await autoRestockApprovedReentryItems(batchId).catch((err) => console.error("[maybeMarkBatchApproved] No se pudo reingresar al inventario:", err));
+
   const items = await prisma.merchandiseReentryItem.findMany({ where: { batchId }, select: { approvedAt: true } });
   if (items.length === 0 || items.some((i) => !i.approvedAt)) return;
 
@@ -98,12 +104,9 @@ export async function maybeMarkBatchApproved(batchId: string) {
     .catch(() => null); // ya estaba marcado — no pasa nada
   if (!batch) return;
 
-  // Confirmado 2026-09-23: la parte buena entra sola a INVESTOCK en este
-  // mismo momento (ver inventoryAutoFlows.ts) — Nairoby ya no tiene que
-  // "subirla a Just", así que ya no se le avisa. Import dinámico para no
-  // crear un ciclo (inventoryAutoFlows importa este archivo).
-  const { autoRestockApprovedReentryItems } = await import("@/lib/inventoryAutoFlows");
-  await autoRestockApprovedReentryItems(batchId).catch((err) => console.error("[maybeMarkBatchApproved] No se pudo reingresar al inventario:", err));
+  // Confirmado 2026-09-23: la parte buena entra sola a INVESTOCK (ver
+  // arriba) — Nairoby ya no tiene que "subirla a Just", así que ya no se le
+  // avisa.
 }
 
 // Confirmado 2026-09-29, pedido de Daniel + usuario: Joel selecciona el

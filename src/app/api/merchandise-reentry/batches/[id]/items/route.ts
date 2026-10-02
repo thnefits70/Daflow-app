@@ -22,6 +22,9 @@ const schema = z
     damagedQty: z.number().int().nonnegative(),
     damageReasonName: z.string().trim().optional(),
     damageReasonOther: z.string().trim().max(200).optional(),
+    // 2026-10-02: el registro a mano es solo respaldo — se habilita cuando
+    // escanear la guía falló, y queda guardada la razón que dio DAFLOW.
+    manualReason: z.string().trim().min(1, "El registro a mano solo se usa cuando escanear la guía falló. Actualiza la página y escanea la guía primero.").max(500),
   })
   .refine((d) => !!d.catalogItemId || !!d.declaredName, { message: "Falta el nombre del producto." })
   .refine((d) => d.goodQty + d.damagedQty > 0, { message: "Las cantidades no pueden ser todas cero." })
@@ -65,6 +68,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       damagedQty: d.damagedQty,
       damageReasonId,
       damageReasonOther: d.damagedQty > 0 && !damageReasonId ? d.damageReasonOther ?? d.damageReasonName ?? null : null,
+      manualReason: d.manualReason,
     },
     include: { catalogItem: { select: { name: true, photos: true, justCode: true } }, damageReason: { select: { name: true } } },
   });

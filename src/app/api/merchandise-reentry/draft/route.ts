@@ -15,7 +15,10 @@ export async function GET() {
 
   const draft = await prisma.merchandiseReentryBatch.findFirst({
     where: { createdById: session.user.id, submittedAt: null },
-    include: { items: { include: ITEM_INCLUDE, orderBy: { createdAt: "asc" } } },
+    include: {
+      items: { include: ITEM_INCLUDE, orderBy: { createdAt: "asc" } },
+      guides: { select: { id: true, guideNumber: true, carrier: true, shippedDay: true, warnings: true, createdAt: true }, orderBy: { createdAt: "desc" } },
+    },
     orderBy: { createdAt: "desc" },
   });
   return NextResponse.json(draft);

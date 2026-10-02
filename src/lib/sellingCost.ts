@@ -70,20 +70,50 @@ export function pickSellingCost(
   return { sellingCost, remainingUnits: units, averageRemaining: average, maxRemaining: max, newestCost: newest, freightPerUnit: Math.min(freight, sellingCost) };
 }
 
-function consume(layers: Layer[], qty: number) {
+// Saca `qty` unidades de los grupos más antiguos y devuelve cuánto costaron
+// en total las que sí había (para saber el costo real de una salida).
+function consume(layers: Layer[], qty: number): { qty: number; total: number } {
   let left = qty;
+  let total = 0;
   while (left > 0 && layers.length > 0) {
     const take = Math.min(left, layers[0].qty);
+    total += take * layers[0].cost;
     layers[0].qty -= take;
     left -= take;
     if (layers[0].qty === 0) layers.shift();
   }
+  return { qty: qty - left, total };
 }
 
 // Grupos de unidades que quedan por producto. Si la cuenta no cuadra con el
 // saldo real del Kardex, se devuelve un solo grupo al costo promedio (no se
 // inventa nada).
 export async function getRemainingStockLayers(catalogItemIds: string[]): Promise<Map<string, Layer[]>> {
+  return replayStockLayers(catalogItemIds);
+}
+
+// Pedido del usuario 2026-10-02 (reingreso por escaneo de guía): costo real
+// por unidad de lo que salió en ciertas salidas del Kardex — se recorre el
+// Kardex igual que para los precios (lo primero que entra es lo primero que
+// sale) y se ve de qué compras salieron esas unidades. null si esas salidas
+// no existen o no se pudo saber.
+export async function costOfKardexOutEntries(catalogItemId: string, entryIds: string[]): Promise<number | null> {
+  if (entryIds.length === 0) return null;
+  const wanted = new Set(entryIds);
+  let qty = 0;
+  let total = 0;
+  await replayStockLayers([catalogItemId], { includePending: false, onOut: (entryId, consumed) => {
+    if (!wanted.has(entryId)) return;
+    qty += consumed.qty;
+    total += consumed.total;
+  } });
+  return qty > 0 && total > 0 ? total / qty : null;
+}
+
+async function replayStockLayers(
+  catalogItemIds: string[],
+  opts: { includePending?: boolean; onOut?: (entryId: string, consumed: { qty: number; total: number }) => void } = {}
+): Promise<Map<string, Layer[]>> {
   const ids = [...new Set(catalogItemIds)];
   const result = new Map<string, Layer[]>();
   if (ids.length === 0) return result;
@@ -93,6 +123,7 @@ export async function getRemainingStockLayers(catalogItemIds: string[]): Promise
       where: { catalogItemId: { in: ids } },
       orderBy: [{ catalogItemId: "asc" }, { occurredAt: "asc" }, { createdAt: "asc" }],
       select: {
+        id: true,
         catalogItemId: true,
         type: true,
         unitCost: true,
@@ -102,7 +133,7 @@ export async function getRemainingStockLayers(catalogItemIds: string[]): Promise
         priceCorrection: { select: { requestId: true, kardexAdjustedUnits: true } },
       },
     }),
-    prisma.purchaseRequestReceipt.findMany({
+    opts.includePending === false ? Promise.resolve([]) : prisma.purchaseRequestReceipt.findMany({
       where: { request: { catalogItemId: { in: ids }, status: "RECEIVED_PENDING_REVIEW" }, stockKardexEntry: null },
       orderBy: { confirmedAt: "asc" },
       select: { receivedQuantity: true, request: { select: { catalogItemId: true, unitCost: true, quantity: true, shippingIncluded: true, shippingCostTotal: true } } },
@@ -160,7 +191,8 @@ export async function getRemainingStockLayers(catalogItemIds: string[]): Promise
         lastInRequestId = e.purchaseRequestReceipt.requestId;
       }
     } else if (delta < 0) {
-      consume(layers, -delta);
+      const consumed = consume(layers, -delta);
+      opts.onOut?.(e.id, consumed);
     }
     balance = e.balanceAfter;
     lastAvg = e.avgCostAfter;

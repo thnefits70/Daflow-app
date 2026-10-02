@@ -382,6 +382,10 @@ model User {
   b2bAdvisorTitle        String?
   b2bAdvisorProvisional  Boolean  @default(false)
   b2bAdvisorGrantedFlags String[] @default([])
+  // Pedido del usuario 2026-10-02: única persona que registra el Reingreso
+  // de Mercadería (escanear guías de devolución). Lo asigna el admin; solo
+  // una persona a la vez. Empieza Joel.
+  isReentryResponsible   Boolean  @default(false)
 
   // Confirmado 2026-09-08: pedido explícito del usuario — Daniel registra
   // cada semana la cantidad de almuerzos pedidos (convenio con el
@@ -6096,7 +6100,8 @@ model MerchandiseReentryBatch {
   // buena subida a Just y/o parte dañada dada de baja, según corresponda).
   closedAt DateTime?
 
-  items MerchandiseReentryItem[]
+  items  MerchandiseReentryItem[]
+  guides MerchandiseReentryGuide[]
 
   @@index([submittedAt])
   @@index([danielApprovedAt])
@@ -6210,10 +6215,42 @@ model MerchandiseReentryItem {
   supplierClaimBy   User?                   @relation("MerchandiseReentryItemSupplierClaimBy", fields: [supplierClaimById], references: [id], onDelete: SetNull)
   supplierClaim     MerchandiseOutflowItem? @relation("OutflowItemSourceReentry")
 
+  // Pedido del usuario 2026-10-02: reingreso por escaneo de la guía de
+  // devolución. guideId = la guía de la que salió este producto (null si
+  // se registró a mano). unitCost = costo por unidad con el que vuelve al
+  // Kardex (el real de cuando salió en esa guía); null = costo promedio
+  // del Kardex (registro a mano). manualReason = por qué no se pudo leer la
+  // guía y se registró a mano. scanDamage = fila de "dañadas" que Joel marca
+  // por producto al final del lote escaneado (se descuenta de las buenas al
+  // enviar).
+  guideId      String?
+  guide        MerchandiseReentryGuide? @relation(fields: [guideId], references: [id], onDelete: Cascade)
+  unitCost     Float?
+  manualReason String?
+  scanDamage   Boolean                  @default(false)
+
   createdAt DateTime @default(now())
 
   @@index([batchId])
   @@index([catalogItemId])
+  @@index([guideId])
+}
+
+// Pedido del usuario 2026-10-02: cada guía de devolución escaneada en un
+// lote de reingreso. guideNumber es único en toda la app: la misma guía
+// nunca se puede reingresar dos veces. shippedDay = día en que salió.
+model MerchandiseReentryGuide {
+  id          String                   @id @default(cuid())
+  batchId     String
+  batch       MerchandiseReentryBatch  @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  guideNumber String                   @unique
+  carrier     String
+  shippedDay  String?
+  warnings    String[]                 @default([])
+  createdAt   DateTime                 @default(now())
+  items       MerchandiseReentryItem[]
+
+  @@index([batchId])
 }
 
 // Catálogo reutilizable de motivos de daño (mismo patrón que

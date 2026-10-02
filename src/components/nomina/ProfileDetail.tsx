@@ -59,6 +59,7 @@ type UserProfile = {
   canConfirmMarketingDesign: boolean;
   canConfirmMarketingAdvisor: boolean;
   canAssignCancelledGuideItems: boolean;
+  isReentryResponsible: boolean;
   canMarkComboCreatedInDropi: boolean;
   canLinkStoreProducts: boolean;
   canPublishMarketProduct: boolean;
@@ -1135,6 +1136,19 @@ export function ProfileDetail({
             </div>
             <PermToggle value={p.canAssignCancelledGuideItems} busy={busy} onChange={(v) => save({ canAssignCancelledGuideItems: v })} />
           </div>
+
+          {isAdmin && (
+            <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+              <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+                <Truck size={11} /> ¿Es el responsable de Reingreso de Mercadería?
+              </label>
+              <div className="text-[11px] text-steel mb-2">
+                Es la única persona que registra las devoluciones (escanea las guías que regresan). Solo una persona a la vez: si se lo das a
+                alguien, se le quita a quien lo tenía. Si nadie lo tiene, lo hace el líder de Inventario.
+              </div>
+              <PermToggle value={p.isReentryResponsible} busy={busy} onChange={(v) => save({ isReentryResponsible: v })} />
+            </div>
+          )}
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
             <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
