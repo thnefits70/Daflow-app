@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
-import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, RefreshCw, Copy, AlertTriangle } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, RefreshCw, Copy, AlertTriangle, ChevronDown, Bell, SlidersHorizontal } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { ExpirationAlerts } from "@/components/merchandise-reentry/ExpirationAlerts";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 import { formatDateTime } from "@/lib/formatDateTime";
@@ -575,6 +576,11 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   // para aprobar/rechazar las solicitudes de ajuste de stock que Daniel
   // dejó pendientes (StockAdjustmentTrigger, por fila) — exclusiva del
   // admin, cada solicitud se decide una por una, no hay "aprobar todas".
+  // Pedido del usuario 2026-10-02: los avisos de arriba y la zona de
+  // filtros/buscador quedan plegados; un clic los despliega.
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [expirationCounts, setExpirationCounts] = useState<{ expired: number; soon: number } | null>(null);
   const [pendingAdjustmentsOpen, setPendingAdjustmentsOpen] = useState(false);
   const [pendingAdjustmentsLoading, setPendingAdjustmentsLoading] = useState(false);
   const [pendingAdjustments, setPendingAdjustments] = useState<PendingAdjustmentRow[] | null>(null);
@@ -834,8 +840,53 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
     </>
   );
 
+  const unconfirmedLots = unconfirmedDispatch?.lots ?? 0;
+  const activeFilterCount =
+    (viewMode !== "all" ? 1 : 0) +
+    (marcaFilter ? 1 : 0) +
+    (sinAreaFilter ? 1 : 0) +
+    (sinPrecioFilter ? 1 : 0) +
+    (sinStockFilter ? 1 : 0) +
+    (query.trim() ? 1 : 0);
+
   return (
     <div>
+      <div className="flex items-center gap-2 mb-3">
+        <button
+          type="button"
+          onClick={() => setAlertsOpen((v) => !v)}
+          className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12px] font-semibold cursor-pointer ${alertsOpen ? "border-teal text-teal" : "border-rule text-steel hover:text-ink"}`}
+        >
+          <Bell size={13} /> Avisos
+          {expirationCounts && expirationCounts.expired > 0 && (
+            <span className="text-red">· {expirationCounts.expired} vencido{expirationCounts.expired === 1 ? "" : "s"}</span>
+          )}
+          {expirationCounts && expirationCounts.soon > 0 && (
+            <span className="text-gold">· {expirationCounts.soon} por vencer</span>
+          )}
+          {unconfirmedLots > 0 && (
+            <span className="text-red">· {unconfirmedLots} corte{unconfirmedLots === 1 ? "" : "s"} sin confirmar</span>
+          )}
+          <ChevronDown size={13} className={`transition-transform ${alertsOpen ? "rotate-180" : ""}`} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setFiltersOpen((v) => !v)}
+          className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[12px] font-semibold cursor-pointer ${filtersOpen ? "border-teal text-teal" : "border-rule text-steel hover:text-ink"}`}
+        >
+          <SlidersHorizontal size={13} /> Filtros y buscador
+          {activeFilterCount > 0 && (
+            <span className="text-teal">· {activeFilterCount} activo{activeFilterCount === 1 ? "" : "s"}</span>
+          )}
+          <ChevronDown size={13} className={`transition-transform ${filtersOpen ? "rotate-180" : ""}`} />
+        </button>
+      </div>
+
+      {/* Plegado con "hidden" (no desmontado) para que las alertas de
+          vencimiento carguen igual y su conteo salga en el botón. */}
+      <div className={alertsOpen ? "" : "hidden"}>
+      <ExpirationAlerts onCounts={setExpirationCounts} />
+
       <TabGuide storageKey="stock-actual">
         Acá ves el saldo de INVESTOCK (el Kardex propio de DAFLOW) de cada producto del catálogo, calculado en tiempo real a partir de lo recibido en Compras y lo despachado en Egresos — sin depender de que alguien suba un archivo. Un saldo en rojo significa stock negativo (algo salió sin haber entrado, o hay un error de conteo por revisar).
       </TabGuide>
@@ -927,7 +978,10 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
           )}
         </div>
       )}
+      </div>
 
+      {filtersOpen && (
+      <>
       <div className="flex items-center gap-1.5 mb-3">
         <button
           type="button"
@@ -1064,6 +1118,8 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
           {refreshing ? "Actualizando…" : "Actualizar stock"}
         </button>
       </div>
+      </>
+      )}
 
       {viewMode !== "combos" && (
         <>

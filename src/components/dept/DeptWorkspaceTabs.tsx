@@ -32,7 +32,6 @@ import { MarketingArrivalsPanel } from "@/components/marketing/MarketingArrivals
 import { NewIdBrandingPanel } from "@/components/marketing/NewIdBrandingPanel";
 import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/MerchandiseReentryPanel";
 import { StockLevelsPanel } from "@/components/inventory/StockLevelsPanel";
-import { ExpirationAlerts } from "@/components/merchandise-reentry/ExpirationAlerts";
 import { MerchandiseOutflowPanel } from "@/components/merchandise-outflow/MerchandiseOutflowPanel";
 import { ExternalSalesPanel } from "@/components/external-sales/ExternalSalesPanel";
 import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/SuppliersPanel";
@@ -706,8 +705,8 @@ export function DeptWorkspaceTabs({
       {/* Alertas de vencimiento (solo lectura) para TODOS los que tienen
           acceso a Stock Actual — pedido del usuario 2026-09-23 (antes solo
           quien no era Daniel/admin; ellos además las tienen, con clic, arriba
-          de "Lotes de caducidad"). */}
-      {tab === "stock-actual" && (canManageJustCatalog || canViewStockLevels) && <ExpirationAlerts />}
+          de "Lotes de caducidad"). Desde 2026-10-02 se muestran dentro de
+          StockLevelsPanel, plegadas en "Avisos". */}
       {tab === "stock-actual" && (canManageJustCatalog || canViewStockLevels) && <StockLevelsPanel isAdmin={isAdmin} canEdit={canManageJustCatalog} />}
       {tab === "reingreso" && (canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry) && (
         <MerchandiseReentryPanel

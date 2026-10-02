@@ -26,15 +26,30 @@ function daysUntil(dateIso: string): number {
 // vencidos y de los que vencen en 6 meses o menos, arriba de "Lotes de
 // caducidad". Tocar un producto lo abre para revisar/borrar su lote.
 // Sin onSelect = solo lectura (Bryan, desde Stock Actual).
-export function ExpirationAlerts({ onSelect }: { onSelect?: (catalogItemId: string) => void }) {
+export function ExpirationAlerts({
+  onSelect,
+  onCounts,
+}: {
+  onSelect?: (catalogItemId: string) => void;
+  // Para quien lo muestra plegado (Stock Actual): cuántos vencidos / por
+  // vencer hay, para ponerlo en el botón que lo despliega.
+  onCounts?: (counts: { expired: number; soon: number }) => void;
+}) {
   const [lots, setLots] = useState<AlertLot[] | null>(null);
   const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     fetch("/api/purchase-catalog/expiration-alerts")
       .then((r) => (r.ok ? r.json() : []))
-      .then((d) => setLots(Array.isArray(d) ? d : []))
+      .then((d) => {
+        const list: AlertLot[] = Array.isArray(d) ? d : [];
+        setLots(list);
+        const expiredCount = list.filter((l) => daysUntil(l.expirationDate) < 0).length;
+        onCounts?.({ expired: expiredCount, soon: list.length - expiredCount });
+      })
       .catch(() => setLots([]));
+    // Solo al montar: onCounts no cambia lo que se pide.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!lots || lots.length === 0) return null;
