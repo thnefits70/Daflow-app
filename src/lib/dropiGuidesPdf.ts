@@ -19,10 +19,10 @@ import { getDocumentProxy } from "unpdf";
 // variante. Si las etiquetas no alcanzan a cubrir todo el total, lo que
 // falta se muestra como "Sin leer en guías" — nunca se inventa una variante.
 
-type PdfItem = { str: string; x: number; y: number; w: number };
-type PdfLine = { text: string; items: PdfItem[] };
+export type PdfItem = { str: string; x: number; y: number; w: number };
+export type PdfLine = { text: string; items: PdfItem[] };
 
-async function extractPages(bytes: Uint8Array): Promise<PdfLine[][]> {
+export async function extractPages(bytes: Uint8Array): Promise<PdfLine[][]> {
   // verbosity 0: los PDF de Dropi traen fuentes que pdf.js reporta con
   // miles de advertencias inofensivas ("TT: undefined function").
   const pdf = await getDocumentProxy(bytes, { verbosity: 0 });
@@ -111,7 +111,7 @@ export function tidyVariantLabel(s: string): string {
     .join(" ");
 }
 
-const VARIANT_KEY = /\b(COLOR(?:ES)?|TALLAS?|UNIDAD(?:ES)?|TAMA\S*O|MODELO|SABOR|DISE\S*O|VARIANTE|TONO|CAPACIDAD|MEDIDA|CAJAS?)\s*:\s*/i;
+const VARIANT_KEY = /\b(COLOR(?:ES)?|TALLAS?|UNIDAD(?:ES)?|TAMA\S*O|MODELO|SABOR|DISE\S*O|VARIANTE|TONO|CAPACIDAD|MEDIDA|CAJAS?|CANTIDAD)\s*:\s*/i;
 
 // Variantes de "paquete": Dropi vende un mismo ID madre como "1 Unidad",
 // "2 Unidades", "4 Unidades"… y la tabla resumen cuenta PEDIDOS, no
@@ -129,11 +129,29 @@ export function packSize(variant: string | null | undefined): number | null {
 }
 const packLabel = (n: number) => `Paquete de ${n}`;
 
+// Variante que repite el nombre del producto + "X<n>" = paquete de n
+// (pedido de Daniel 2026-10-02, NEOCELL 146702: en Dropi el mismo ID trae
+// "567g", "567g X2" y "567g X3"). Servientrega/Laar: "NEOCELL … 567g
+// CANTIDAD: NEOCELL … 567g X3  X1"; Gintracom: "1.00 * NEOCELL … 567g
+// NEOCELL … 567g X3". Sin "X<n>" es 1 unidad (solo si la etiqueta lo marca
+// como variante). Devuelve null si no es ese caso.
+function repeatedNamePack(variant: string, name: string, allowPlain: boolean): string | null {
+  const v = normalizeName(variant);
+  const n = normalizeName(name);
+  if (!n || !(v === n || v.startsWith(n + " "))) return null;
+  const rest = v.slice(n.length).trim();
+  const m = rest.match(/^x\s?(\d{1,2})$/);
+  if (m) return Number(m[1]) === 1 ? "1 Unidad" : `${Number(m[1])} Unidades`;
+  return !rest && allowPlain ? "1 Unidad" : null;
+}
+
 function splitVariant(nameWithVariant: string): { name: string; variant: string | null } {
   const m = nameWithVariant.match(VARIANT_KEY);
   if (!m || m.index === undefined) return { name: nameWithVariant.trim(), variant: null };
   const rest = nameWithVariant.slice(m.index + m[0].length).replace(new RegExp(VARIANT_KEY.source, "gi"), "/ ");
-  return { name: nameWithVariant.slice(0, m.index).trim(), variant: rest.trim() || null };
+  const name = nameWithVariant.slice(0, m.index).trim();
+  const variant = rest.trim() || null;
+  return { name, variant: (variant && repeatedNamePack(variant, name, true)) || variant };
 }
 
 // "LAARCOURIER"/"LARCOURRIER" → "LAAR", etc. — un solo nombre por
@@ -547,8 +565,10 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
     const labeled = splitVariant(raw);
     if (labeled.variant) return { code: best.code, variant: labeled.variant };
     // Gintracom a veces repite el nombre completo del producto después del
-    // nombre corto ("NEOCELL Collagen 567g NEOCELL COLLAGEN ... X3") — eso
-    // no es una variante.
+    // nombre corto — eso no es una variante, salvo que termine en "X<n>"
+    // (paquete, ver repeatedNamePack).
+    const pack = rest ? repeatedNamePack(rest, best.norm, false) : null;
+    if (pack) return { code: best.code, variant: pack };
     const repeatsName = rest && best.norm.split(" ").slice(0, 2).every((w) => rest.includes(w));
     return { code: best.code, variant: rest && !best.cut && !truncated && !repeatsName ? rest : null };
   };
