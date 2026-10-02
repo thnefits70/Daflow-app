@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { notifyInventoryLeadExternalSaleReturnReported, saleItemsSummary } from "@/lib/externalSales";
+import { isFreightPayable, notifyInventoryLeadExternalSaleReturnReported, notifyPettyCashFreightPayable, saleItemsSummary } from "@/lib/externalSales";
 
 const schema = z.object({ reason: z.string().trim().min(3, "Contá brevemente qué pasó.") });
 
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       deletedAt: true,
       code: true,
       items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } },
+      kind: true, pickupPersonName: true, freightCost: true, freightPaidAt: true, isContraEntrega: true, paymentConfirmedAt: true,
     },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
@@ -49,6 +50,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   await notifyInventoryLeadExternalSaleReturnReported(sale.code, saleItemsSummary(sale.items));
+  // Garantía local no entregada: el motorizado igual cobra su flete.
+  if (isFreightPayable({ ...sale, returnedAt: updated.returnedAt })) {
+    await notifyPettyCashFreightPayable({ code: sale.code, pickupPersonName: sale.pickupPersonName, freightCost: sale.freightCost!, excludeUserId: sale.advisorId });
+  }
 
   return NextResponse.json(updated);
 }

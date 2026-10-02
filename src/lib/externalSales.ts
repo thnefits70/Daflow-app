@@ -378,15 +378,26 @@ export async function getContraEntregaPaymentOverduePushes(): Promise<ExternalSa
 // mercadería queda conectado únicamente al Kardex propio (INVESTOCK), así
 // que acá mismo, en el momento en que se confirma la entrega, se resta del
 // Kardex igual que hace el envío manual de un lote de Egresos normal.
-export async function createOutflowForExternalSale(sale: { id: string; items: { catalogItemId: string | null; declaredProductName: string; quantity: number }[] }): Promise<string> {
+// Garantía local (pedido del usuario 2026-10-02): el egreso es de GARANTIA
+// y solo lleva lo que de verdad sale del stock — lo que el motorizado
+// recoge (PICKUP) no sale, y "orden incompleta/diferente" no descuenta
+// otra vez (esa unidad ya se descontó en el corte original).
+export async function createOutflowForExternalSale(sale: {
+  id: string;
+  kind?: "SALE" | "WARRANTY";
+  items: { catalogItemId: string | null; declaredProductName: string; quantity: number; warrantyRole?: string | null; discountsStock?: boolean }[];
+}): Promise<string | null> {
+  const isWarranty = sale.kind === "WARRANTY";
+  const outItems = isWarranty ? sale.items.filter((it) => it.warrantyRole !== "PICKUP" && it.discountsStock !== false) : sale.items;
+  if (outItems.length === 0) return null;
   const batchNumber = await nextMerchandiseOutflowNumber();
   const batch = await prisma.merchandiseOutflowBatch.create({
     data: {
       code: formatMerchandiseOutflowCode(batchNumber),
       batchNumber,
-      reason: "VENTA_EXTERNA",
+      reason: isWarranty ? "GARANTIA" : "VENTA_EXTERNA",
       submittedAt: new Date(),
-      items: { create: sale.items.map((it) => ({ catalogItemId: it.catalogItemId, declaredName: it.declaredProductName, quantity: it.quantity })) },
+      items: { create: outItems.map((it) => ({ catalogItemId: it.catalogItemId, declaredName: it.declaredProductName, quantity: it.quantity })) },
     },
     include: { items: { select: { id: true, catalogItemId: true, quantity: true } } },
   });
@@ -413,12 +424,14 @@ export async function createOutflowForExternalSale(sale: { id: string; items: { 
 // quienes pueden pagar el flete desde Caja Chica — Nairoby (Principal) y
 // quien tenga la Secundaria (Jariel). Paga el primero que lo vea; la lista
 // de Caja Chica deja de mostrarlo apenas uno lo paga (freightPaidAt).
-export async function notifyPettyCashFreightPayable(sale: { code: string; pickupPersonName: string; freightCost: number }): Promise<void> {
+export async function notifyPettyCashFreightPayable(sale: { code: string; pickupPersonName: string; freightCost: number; excludeUserId?: string | null }): Promise<void> {
   const financeLeadId = await getFinanceLeadId();
   const secundaria = await prisma.user.findMany({ where: { canManagePettyCashSecundaria: true, isActive: true }, select: { id: true } });
   const recipients: { id: string; box: "principal" | "secundaria" }[] = [];
   if (financeLeadId) recipients.push({ id: financeLeadId, box: "principal" });
   for (const u of secundaria) if (!recipients.some((r) => r.id === u.id)) recipients.push({ id: u.id, box: "secundaria" });
+  // Garantía local: quien la gestionó no se paga a sí mismo el flete.
+  if (sale.excludeUserId) recipients.splice(0, recipients.length, ...recipients.filter((r) => r.id !== sale.excludeUserId));
   await Promise.all(
     recipients.map((r) =>
       notifyOwner(r.id, {
@@ -432,6 +445,21 @@ export async function notifyPettyCashFreightPayable(sale: { code: string; pickup
 
 // Solo aplica si la venta de verdad tiene un flete pendiente de pagar aparte
 // (sin recaudo, flete > 0, pago y recepción confirmados, todavía sin pagar).
-export function isFreightPayable(sale: { isContraEntrega: boolean; freightCost: number | null; paymentConfirmedAt: Date | null; clientReceivedAt: Date | null; freightPaidAt: Date | null; deletedAt: Date | null }): boolean {
-  return !sale.deletedAt && !sale.isContraEntrega && (sale.freightCost ?? 0) > 0 && !!sale.paymentConfirmedAt && !!sale.clientReceivedAt && !sale.freightPaidAt;
+// Garantía local (pedido del usuario 2026-10-02): el motorizado cobra el
+// flete entregue o no, así que basta con que el asesor confirme el
+// resultado (entregada o no entregada) — no depende de ningún pago.
+export function isFreightPayable(sale: {
+  isContraEntrega: boolean;
+  freightCost: number | null;
+  paymentConfirmedAt: Date | null;
+  clientReceivedAt: Date | null;
+  freightPaidAt: Date | null;
+  deletedAt: Date | null;
+  kind?: "SALE" | "WARRANTY";
+  deliveredAt?: Date | null;
+  returnedAt?: Date | null;
+}): boolean {
+  if (sale.deletedAt || sale.freightPaidAt || !((sale.freightCost ?? 0) > 0)) return false;
+  if (sale.kind === "WARRANTY") return !!sale.deliveredAt && (!!sale.clientReceivedAt || !!sale.returnedAt);
+  return !sale.isContraEntrega && !!sale.paymentConfirmedAt && !!sale.clientReceivedAt;
 }

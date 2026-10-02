@@ -97,7 +97,8 @@ export async function GET() {
   if (!(await canDeclareExternalSales()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const sales = await prisma.externalSale.findMany({
-    where: { advisorId: session.user.id },
+    // Las garantías (GL-000X) tienen su propia pestaña.
+    where: { advisorId: session.user.id, kind: "SALE" },
     include: SALE_INCLUDE,
     orderBy: { createdAt: "desc" },
   });

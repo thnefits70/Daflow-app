@@ -161,7 +161,7 @@ function SaleCard({
   return (
     <div className="bg-surface border border-rule rounded-md p-2.5">
       <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-        <span className="font-mono text-[10.5px] font-bold text-teal">{s.code}</span>
+        <span className="font-mono text-[10.5px] font-bold text-teal">{s.code}</span>{s.code.startsWith("GL-") && <span className="font-mono text-[9.5px] font-bold uppercase rounded-full px-1.5 py-0.5 border border-gold/50 bg-gold/15">Garantía</span>}
         <span className="text-[10.5px] text-steel">{s.advisor?.name ?? "—"}</span>
         {s.isContraEntrega && <span className="font-mono text-[8.5px] font-bold uppercase text-blue">Contra entrega</span>}
         {s.deletedAt && <span className="font-mono text-[8.5px] font-bold uppercase text-red">Eliminada</span>}

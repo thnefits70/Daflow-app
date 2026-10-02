@@ -14,8 +14,10 @@ import { ExternalSaleAuditSummary } from "./ExternalSaleAuditSummary";
 import { ExternalSaleHistoryList } from "./ExternalSaleHistoryList";
 import { ExternalSaleReturnInbox } from "./ExternalSaleReturnInbox";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { LocalWarrantyPanel } from "./LocalWarrantyPanel";
+import { WarrantyPickupInbox } from "./WarrantyPickupInbox";
 
-type Tab = "declarar" | "revision" | "pagos" | "facturacion" | "agrupar" | "preparar" | "embalaje" | "entregas" | "devoluciones" | "cierre" | "auditoria" | "historial";
+type Tab = "declarar" | "garantias" | "revision" | "pagos" | "facturacion" | "agrupar" | "preparar" | "embalaje" | "entregas" | "devoluciones" | "cierre" | "auditoria" | "historial";
 
 export function ExternalSalesPanel({
   canDeclare,
@@ -48,12 +50,13 @@ export function ExternalSalesPanel({
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return defaultTab;
     const t = new URLSearchParams(window.location.search).get("etab");
-    const valid: Tab[] = ["declarar", "revision", "pagos", "facturacion", "agrupar", "preparar", "embalaje", "entregas", "devoluciones", "cierre", "auditoria", "historial"];
+    const valid: Tab[] = ["declarar", "garantias", "revision", "pagos", "facturacion", "agrupar", "preparar", "embalaje", "entregas", "devoluciones", "cierre", "auditoria", "historial"];
     return (valid as string[]).includes(t ?? "") ? (t as Tab) : defaultTab;
   });
 
   const tabs: { id: Tab; label: string }[] = [
     ...(canDeclare ? [{ id: "declarar" as const, label: "Declarar" }] : []),
+    ...(canDeclare ? [{ id: "garantias" as const, label: "Garantías" }] : []),
     ...(canReview ? [{ id: "revision" as const, label: "Revisión" }] : []),
     ...(canConfirmPayment ? [{ id: "pagos" as const, label: "Pagos" }] : []),
     ...(canInvoice ? [{ id: "facturacion" as const, label: "Facturación" }] : []),
@@ -89,6 +92,12 @@ export function ExternalSalesPanel({
         <>
           <TabGuide storageKey="externalsales-declarar">Declara acá una venta hecha por fuera de Dropi/Rocket: producto, cantidad, precio, y a quién debe entregarle bodega. Bryan la aprueba antes de seguir. Si te la rechaza, corrige lo que te señaló y reenvíala desde esta misma lista.</TabGuide>
           <ExternalSaleDeclareForm />
+        </>
+      )}
+      {tab === "garantias" && canDeclare && (
+        <>
+          <TabGuide storageKey="externalsales-garantias">Garantías en Guayaquil con nuestro motorizado. Escribe la guía que salió (o la venta VE): DAFLOW copia el cliente, la dirección y los productos. Tú eliges qué falta entregar, el motivo, el cobro y el motorizado. Sigue el mismo camino que una venta externa (agrupar, embalar, motorizado) y el flete se paga por Caja Chica.</TabGuide>
+          <LocalWarrantyPanel />
         </>
       )}
       {tab === "revision" && canReview && (
@@ -136,6 +145,7 @@ export function ExternalSalesPanel({
       {tab === "devoluciones" && (canReceiveReturn || canConfirmReturn) && (
         <>
           <TabGuide storageKey="externalsales-devoluciones">Ventas que el asesor reportó como devueltas por el cliente. Inventario confirma que llegó físicamente y completo; recién con la aprobación de Daniel se suma de nuevo a INVESTOCK.</TabGuide>
+          {canReceiveReturn && <WarrantyPickupInbox />}
           <ExternalSaleReturnInbox canReceive={canReceiveReturn} canConfirm={canConfirmReturn} />
         </>
       )}

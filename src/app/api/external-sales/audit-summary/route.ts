@@ -9,7 +9,8 @@ export async function GET() {
   if (!(await canCloseExternalSale())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const sales = await prisma.externalSale.findMany({
-    where: { nairobyClosedAt: { not: null }, deletedAt: null },
+    // Solo ventas: las garantías locales (GL-000X) no suman como venta.
+    where: { kind: "SALE", nairobyClosedAt: { not: null }, deletedAt: null },
     select: {
       id: true,
       code: true,

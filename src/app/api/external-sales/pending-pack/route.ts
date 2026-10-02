@@ -13,7 +13,8 @@ import { canAssignExternalSalePack } from "@/lib/guards";
 export async function GET() {
   if (!(await canAssignExternalSalePack())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const include = {
-    items: { include: { catalogItem: { select: { name: true, photos: true, justCode: true } } }, orderBy: { createdAt: "asc" as const } },
+    // Garantías: solo lo que sale de bodega (lo que se recoge no está acá).
+    items: { where: { OR: [{ warrantyRole: null }, { warrantyRole: "DELIVER" as const }] }, include: { catalogItem: { select: { name: true, photos: true, justCode: true } } }, orderBy: { createdAt: "asc" as const } },
     advisor: { select: { name: true } },
     guidePrintedBy: { select: { name: true } },
   };

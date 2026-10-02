@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { actorName } from "@/lib/actorName";
+import { auth } from "@/auth";
 import {
   canManagePettyCashPrincipal, canManagePettyCashSecundaria,
   canViewPettyCashPrincipal, canViewPettyCashSecundaria,
@@ -240,18 +241,28 @@ export type PendingMotorizadoFreightDTO = { saleId: string; label: string; freig
 // no existe porque el motorizado se autopaga el flete al cobrar. Cualquiera
 // de las dos cajas (Jariel en Secundaria, Nairoby en Principal) puede
 // pagarlo.
-export async function getPendingMotorizadoFreights(): Promise<PendingMotorizadoFreightDTO[]> {
+// Garantías locales (pedido del usuario 2026-10-02): el flete se paga
+// entregue o no — basta con que el asesor confirme el resultado — y quien
+// gestionó la garantía no ve la suya (no se paga a sí mismo): `viewerId`.
+export async function getPendingMotorizadoFreights(viewerId?: string | null): Promise<PendingMotorizadoFreightDTO[]> {
   const rows = await prisma.externalSale.findMany({
     where: {
       deletedAt: null,
-      isContraEntrega: false,
       freightCost: { gt: 0 },
-      paymentConfirmedAt: { not: null },
       deliveredAt: { not: null },
-      // Confirmado 2026-09-22 (pedido de Marcos): además, el asesor confirmó
-      // que el cliente de verdad recibió el pedido.
-      clientReceivedAt: { not: null },
       freightPaidAt: null,
+      OR: [
+        {
+          kind: "SALE",
+          isContraEntrega: false,
+          paymentConfirmedAt: { not: null },
+          // Confirmado 2026-09-22 (pedido de Marcos): además, el asesor
+          // confirmó que el cliente de verdad recibió el pedido.
+          clientReceivedAt: { not: null },
+        },
+        { kind: "WARRANTY", OR: [{ clientReceivedAt: { not: null } }, { returnedAt: { not: null } }] },
+      ],
+      ...(viewerId ? { NOT: { kind: "WARRANTY", advisorId: viewerId } } : {}),
     },
     select: { id: true, code: true, pickupPersonName: true, freightCost: true, deliveredAt: true },
     orderBy: { deliveredAt: "asc" },
@@ -385,7 +396,7 @@ export async function getPettyCashViewerData(isAdmin: boolean): Promise<PettyCas
     canViewPrincipal ? getPettyCashBoxData("PRINCIPAL") : Promise.resolve(null),
     canViewSecundaria ? getPettyCashBoxData("SECUNDARIA") : Promise.resolve(null),
     canManageSecundaria ? getEligiblePaymentOrdersForFreight() : Promise.resolve([]),
-    canManagePrincipal || canManageSecundaria ? getPendingMotorizadoFreights() : Promise.resolve([]),
+    canManagePrincipal || canManageSecundaria ? auth().then((s) => getPendingMotorizadoFreights(s?.user.id ?? null)) : Promise.resolve([]),
     isAdmin ? getPendingExceptions() : Promise.resolve([]),
   ]);
 

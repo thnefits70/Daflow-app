@@ -131,7 +131,7 @@ export function ExternalSaleDispatchInbox() {
       {sales.map((s) => (
         <div key={s.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
+            <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>{s.code.startsWith("GL-") && <span className="font-mono text-[9.5px] font-bold uppercase rounded-full px-1.5 py-0.5 border border-gold/50 bg-gold/15">Garantía</span>}
             <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
             <span className="text-[10.5px] text-steel/70 ml-auto">{formatDateTime(s.createdAt)}</span>
           </div>
@@ -153,7 +153,7 @@ export function ExternalSaleDispatchInbox() {
           {inProgress.map((s) => (
             <div key={s.id} className="bg-surface border border-rule rounded-md p-3.5">
               <div className="flex items-center gap-2 mb-1.5">
-                <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
+                <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>{s.code.startsWith("GL-") && <span className="font-mono text-[9.5px] font-bold uppercase rounded-full px-1.5 py-0.5 border border-gold/50 bg-gold/15">Garantía</span>}
                 <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
               </div>
               <SaleItems s={s} />

@@ -19,7 +19,9 @@ export async function GET() {
       courierNote: true,
       dispatchAssignedAt: true,
       advisor: { select: { name: true } },
+      // Garantías: solo lo que sale de bodega (lo que se recoge no está acá).
       items: {
+        where: { OR: [{ warrantyRole: null }, { warrantyRole: "DELIVER" as const }] }, 
         select: { id: true, declaredProductName: true, quantity: true, sellerReferencePhotoUrl: true, catalogItem: { select: { name: true, photos: true, justCode: true } } },
         orderBy: { createdAt: "asc" },
       },

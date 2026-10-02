@@ -9,7 +9,8 @@ export async function GET() {
   const sales = await prisma.externalSale.findMany({
     where: { returnedAt: { not: null }, returnConfirmedAt: null, deletedAt: null },
     include: {
-      items: { select: { id: true, declaredProductName: true, quantity: true, catalogItem: { select: { name: true, photos: true, justCode: true } } } },
+      // Garantía no entregada: vuelve solo lo que salió (lo que se iba a recoger nunca se recogió).
+      items: { where: { OR: [{ warrantyRole: null }, { warrantyRole: "DELIVER" }] }, select: { id: true, declaredProductName: true, quantity: true, catalogItem: { select: { name: true, photos: true, justCode: true } } } },
       advisor: { select: { name: true } },
       returnReceivedBy: { select: { name: true } },
     },

@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canAssignExternalSalePack } from "@/lib/guards";
 import { createOutflowForExternalSale, notifyFinanceLeadExternalSaleReadyToClose } from "@/lib/externalSales";
+import { notifyOwner } from "@/lib/notifications";
 
 const schema = z.object({ photoUrl: z.string().min(1).optional() });
 
@@ -28,7 +29,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       paymentConfirmedAt: true,
       advisorId: true,
       code: true,
-      items: { select: { catalogItemId: true, declaredProductName: true, quantity: true } },
+      kind: true,
+      items: { select: { catalogItemId: true, declaredProductName: true, quantity: true, warrantyRole: true, discountsStock: true } },
     },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
@@ -52,8 +54,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { deliveryPhotoUrl: parsed.data.photoUrl ?? null, deliveredAt: new Date(), deliveredById: session.user.id },
   });
 
-  await createOutflowForExternalSale({ id, items: sale.items });
+  await createOutflowForExternalSale({ id, kind: sale.kind, items: sale.items });
   if (sale.paymentConfirmedAt) await notifyFinanceLeadExternalSaleReadyToClose(sale.code);
+  // Garantía local: el asesor coordina con el cliente y confirma el resultado.
+  if (sale.kind === "WARRANTY") {
+    await notifyOwner(sale.advisorId, {
+      title: "🛵 La garantía ya salió con el motorizado",
+      body: `${sale.code} — coordina con el cliente y, cuando el motorizado termine, confirma si se entregó.`,
+      url: "/area/workspace?tab=ventas-externas&etab=garantias",
+    }).catch(() => null);
+  }
 
   return NextResponse.json(updated);
 }

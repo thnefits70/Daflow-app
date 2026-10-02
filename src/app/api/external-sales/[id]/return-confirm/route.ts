@@ -30,7 +30,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       dispatchAssignedToId: true,
       packAssignedToId: true,
       deliveredById: true,
-      items: { select: { catalogItemId: true, quantity: true } },
+      kind: true,
+      items: { select: { catalogItemId: true, quantity: true, warrantyRole: true, discountsStock: true } },
     },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
@@ -43,7 +44,12 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     data: { returnConfirmedAt: new Date(), returnConfirmedById: session.user.id },
   });
 
-  for (const item of sale.items) {
+  // Garantía local no entregada: vuelve al stock solo lo que salió del stock
+  // al entregarla al motorizado (ver createOutflowForExternalSale). Lo que
+  // el cliente se queda por error (UNRECOVERED) ya salió con la guía
+  // original y no vuelve.
+  const returning = sale.kind === "WARRANTY" ? sale.items.filter((it) => it.warrantyRole === "DELIVER" && it.discountsStock) : sale.items;
+  for (const item of returning) {
     if (!item.catalogItemId) continue;
     await recordKardexEntry({
       catalogItemId: item.catalogItemId,

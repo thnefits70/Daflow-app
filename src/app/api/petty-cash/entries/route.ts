@@ -64,13 +64,26 @@ export async function POST(req: NextRequest) {
   // Confirmado 2026-09-22 (pedido de Marcos): deliveredAt solo es la entrega
   // de bodega al motorizado — además hace falta que el asesor confirme que
   // el CLIENTE lo recibió (clientReceivedAt).
-  let externalSale: { id: string; isContraEntrega: boolean; paymentConfirmedAt: Date | null; deliveredAt: Date | null; clientReceivedAt: Date | null; freightPaidAt: Date | null; deletedAt: Date | null } | null = null;
+  let externalSale: { id: string; isContraEntrega: boolean; paymentConfirmedAt: Date | null; deliveredAt: Date | null; clientReceivedAt: Date | null; freightPaidAt: Date | null; deletedAt: Date | null; kind: "SALE" | "WARRANTY"; advisorId: string; returnedAt: Date | null } | null = null;
   if (d.linkedExternalSaleId) {
     externalSale = await prisma.externalSale.findUnique({
       where: { id: d.linkedExternalSaleId },
-      select: { id: true, isContraEntrega: true, paymentConfirmedAt: true, deliveredAt: true, clientReceivedAt: true, freightPaidAt: true, deletedAt: true },
+      select: { id: true, isContraEntrega: true, paymentConfirmedAt: true, deliveredAt: true, clientReceivedAt: true, freightPaidAt: true, deletedAt: true, kind: true, advisorId: true, returnedAt: true },
     });
     if (!externalSale || externalSale.deletedAt) return NextResponse.json({ error: "Venta no encontrada." }, { status: 404 });
+    // Garantía local (pedido del usuario 2026-10-02): el flete se paga
+    // entregue o no, apenas el asesor confirma el resultado — y quien
+    // gestionó la garantía no puede pagarse a sí mismo (si es Jariel, paga
+    // Nairoby).
+    const w = externalSale;
+    if (w.kind === "WARRANTY") {
+      if (w.advisorId === session.user.id) return NextResponse.json({ error: "Tú gestionaste esta garantía: el flete lo paga otra persona (Nairoby)." }, { status: 403 });
+      if (!w.deliveredAt) return NextResponse.json({ error: "El motorizado todavía no sale con esta garantía." }, { status: 409 });
+      if (!w.clientReceivedAt && !w.returnedAt) return NextResponse.json({ error: "El asesor todavía no confirma si la garantía se entregó." }, { status: 409 });
+      if (w.freightPaidAt) return NextResponse.json({ error: "El flete de esta garantía ya fue pagado." }, { status: 409 });
+    }
+  }
+  if (externalSale && externalSale.kind !== "WARRANTY") {
     if (externalSale.isContraEntrega) return NextResponse.json({ error: "Esta venta es con recaudo — el motorizado ya se descuenta el flete solo, no hay nada que pagarle aparte." }, { status: 409 });
     if (!externalSale.paymentConfirmedAt) return NextResponse.json({ error: "Todavía no se confirmó que llegó el pago de esta venta." }, { status: 409 });
     if (!externalSale.deliveredAt) return NextResponse.json({ error: "El motorizado todavía no confirmó que entregó el pedido." }, { status: 409 });

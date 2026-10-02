@@ -159,6 +159,11 @@ export async function POST(req: NextRequest) {
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-reference-photos") {
     allowed = await canDeclareExternalSales();
   }
+  // Pedido del usuario 2026-10-02: fotos/videos que el asesor revisó para
+  // aceptar una garantía local (GL-000X).
+  if (!allowed && session?.user.role === "employee" && folder === "external-sale-warranty-evidence") {
+    allowed = await canDeclareExternalSales();
+  }
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-invoices") {
     allowed = await canInvoiceExternalSale();
   }

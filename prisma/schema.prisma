@@ -59,6 +59,9 @@ model PlatformSettings {
   // Confirmado 2026-08-25: correlativo propio de Ventas Externas (VE-0001,
   // VE-0002...) — mismo patrón atómico que los anteriores.
   lastExternalSaleNumber          Int       @default(0)
+  // Pedido del usuario 2026-10-02: correlativo propio de Garantías locales
+  // (GL-0001, GL-0002...) — mismo patrón atómico que los anteriores.
+  lastLocalWarrantyNumber         Int       @default(0)
   // Confirmado 2026-08-25: correlativo propio de Guías Canceladas (GC-0001,
   // GC-0002...) — mismo patrón atómico que los anteriores.
   lastCancelledGuideNumber        Int       @default(0)
@@ -576,22 +579,23 @@ model User {
   merchandiseOutflowItemsPurchaseException MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemPurchaseExceptionBy")
   merchandiseOutflowItemsNoProofRequested  MerchandiseOutflowItem[]  @relation("MerchandiseOutflowItemNoProofRequestedBy")
 
-  externalSalesAdvised            ExternalSale[] @relation("ExternalSaleAdvisor")
-  externalSalesReviewed           ExternalSale[] @relation("ExternalSaleReviewedBy")
-  externalSalesPaymentConfirmed   ExternalSale[] @relation("ExternalSalePaymentConfirmedBy")
-  externalSalesDispatchAssignedTo ExternalSale[] @relation("ExternalSaleDispatchAssignedTo")
-  externalSalesDispatchAssignedBy ExternalSale[] @relation("ExternalSaleDispatchAssignedBy")
-  externalSalesPrepReadyBy        ExternalSale[] @relation("ExternalSalePrepReadyBy")
-  externalSalesGuidePrintedBy     ExternalSale[] @relation("ExternalSaleGuidePrintedBy")
-  externalSalesPackAssignedTo     ExternalSale[] @relation("ExternalSalePackAssignedTo")
-  externalSalesPackAssignedBy     ExternalSale[] @relation("ExternalSalePackAssignedBy")
-  externalSalesDelivered          ExternalSale[] @relation("ExternalSaleDeliveredBy")
-  externalSalesInvoiceUploadedBy  ExternalSale[] @relation("ExternalSaleInvoiceUploadedBy")
-  externalSalesClosed             ExternalSale[] @relation("ExternalSaleNairobyClosedBy")
-  externalSalesReturnReceivedBy   ExternalSale[] @relation("ExternalSaleReturnReceivedBy")
-  externalSalesReturnConfirmedBy  ExternalSale[] @relation("ExternalSaleReturnConfirmedBy")
-  externalSalesFreightPaidBy      ExternalSale[] @relation("ExternalSaleFreightPaidBy")
-  externalSalesPaymentOverrideBy  ExternalSale[] @relation("ExternalSalePaymentOverrideBy")
+  externalSalesAdvised            ExternalSale[]     @relation("ExternalSaleAdvisor")
+  externalSalesReviewed           ExternalSale[]     @relation("ExternalSaleReviewedBy")
+  externalSalesPaymentConfirmed   ExternalSale[]     @relation("ExternalSalePaymentConfirmedBy")
+  externalSalesDispatchAssignedTo ExternalSale[]     @relation("ExternalSaleDispatchAssignedTo")
+  externalSalesDispatchAssignedBy ExternalSale[]     @relation("ExternalSaleDispatchAssignedBy")
+  externalSalesPrepReadyBy        ExternalSale[]     @relation("ExternalSalePrepReadyBy")
+  externalSalesGuidePrintedBy     ExternalSale[]     @relation("ExternalSaleGuidePrintedBy")
+  externalSalesPackAssignedTo     ExternalSale[]     @relation("ExternalSalePackAssignedTo")
+  externalSalesPackAssignedBy     ExternalSale[]     @relation("ExternalSalePackAssignedBy")
+  externalSalesDelivered          ExternalSale[]     @relation("ExternalSaleDeliveredBy")
+  externalSalesInvoiceUploadedBy  ExternalSale[]     @relation("ExternalSaleInvoiceUploadedBy")
+  externalSalesClosed             ExternalSale[]     @relation("ExternalSaleNairobyClosedBy")
+  externalSalesReturnReceivedBy   ExternalSale[]     @relation("ExternalSaleReturnReceivedBy")
+  externalSalesReturnConfirmedBy  ExternalSale[]     @relation("ExternalSaleReturnConfirmedBy")
+  externalSalesFreightPaidBy      ExternalSale[]     @relation("ExternalSaleFreightPaidBy")
+  externalSalesPaymentOverrideBy  ExternalSale[]     @relation("ExternalSalePaymentOverrideBy")
+  externalSaleItemsPickupReceived ExternalSaleItem[] @relation("ExternalSaleItemPickupReceivedBy")
 
   clientsRegistered            Client[]
   logisticsProvidersRegistered LogisticsProvider[]
@@ -6842,10 +6846,64 @@ model ExternalSale {
   deletedAt   DateTime?
   deletedById String?
 
+  // ---- Garantía local (Guayaquil, motorizado propio) ----
+  // Pedido del usuario 2026-10-02: una garantía usa este mismo recorrido
+  // (agrupar → embalar → motorizado → flete por Caja Chica → cierre), pero
+  // nace aprobada, va vinculada a una guía que de verdad salió (Dropi/Rocket)
+  // o a una venta externa ya entregada (Marcos), lleva el código GL-000X y
+  // cada producto dice si descuenta stock o no (ver ExternalSaleItem.warranty*).
+  kind                      ExternalSaleKind @default(SALE)
+  warrantyNumber            Int?             @unique
+  // Guía original (Dropi/Rocket) o venta externa original — una de las dos.
+  warrantySourceGuide       String?
+  warrantySourceSaleId      String?
+  warrantySourceSale        ExternalSale?    @relation("ExternalSaleWarrantySource", fields: [warrantySourceSaleId], references: [id], onDelete: SetNull)
+  warranties                ExternalSale[]   @relation("ExternalSaleWarrantySource")
+  warrantySourceCarrier     String?
+  // Día en que salió la guía/venta original (para el plazo de 7–10 días).
+  warrantyOriginalShippedAt DateTime?
+  // Recaudo de la guía original — el asesor puede cobrar ese mismo valor.
+  warrantyOriginalCharge    Float?
+  // Entre 7 y 10 días desde el despacho: se permitió con doble confirmación.
+  warrantyLate              Boolean          @default(false)
+  // Fotos/videos que el asesor revisó para aceptar la garantía.
+  warrantyEvidenceUrls      String[]         @default([])
+  // Dirección/ciudad donde se entrega (copiadas de la guía o venta original).
+  deliveryAddress           String?
+  deliveryCity              String?
+  deliveryNotes             String?
+
   @@index([reviewStatus])
   @@index([dispatchAssignedToId])
   @@index([packAssignedToId])
   @@index([advisorId])
+  @@index([warrantySourceGuide])
+  @@index([warrantySourceSaleId])
+}
+
+enum ExternalSaleKind {
+  SALE
+  WARRANTY
+}
+
+// Pedido del usuario 2026-10-02: motivo de garantía, por producto.
+enum WarrantyReason {
+  MAL_FUNCIONAMIENTO
+  PRODUCTO_ROTO
+  ORDEN_INCOMPLETA
+  ORDEN_DIFERENTE
+  // Solo para lo que el motorizado recoge o el cliente se queda: unidades
+  // que salieron de más (no estaban en la guía).
+  ENVIADO_DE_MAS
+}
+
+// DELIVER = se le entrega al cliente. PICKUP = el motorizado lo recoge y lo
+// trae a bodega (dañado, equivocado o de más). UNRECOVERED = producto que
+// se le mandó por error y el cliente se queda (sale del stock al entregar).
+enum WarrantyItemRole {
+  DELIVER
+  PICKUP
+  UNRECOVERED
 }
 
 // Un renglón de producto dentro de una venta externa (ver ExternalSale.items)
@@ -6885,6 +6943,18 @@ model ExternalSaleItem {
   rejectionReason String?
 
   createdAt DateTime @default(now())
+
+  // ---- Solo garantías locales (ExternalSale.kind = WARRANTY) ----
+  warrantyRole       WarrantyItemRole?
+  warrantyReason     WarrantyReason?
+  // false = no baja del stock al entregar (orden incompleta/diferente: esa
+  // unidad nunca salió, ya se descontó en el corte original). Las ventas
+  // normales siempre descuentan.
+  discountsStock     Boolean           @default(true)
+  // PICKUP: bodega confirma que el motorizado lo trajo.
+  pickupReceivedAt   DateTime?
+  pickupReceivedById String?
+  pickupReceivedBy   User?             @relation("ExternalSaleItemPickupReceivedBy", fields: [pickupReceivedById], references: [id], onDelete: SetNull)
 
   @@index([saleId])
 }

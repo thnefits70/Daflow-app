@@ -126,7 +126,7 @@ export function ExternalSaleClosingInbox() {
         return (
         <div key={s.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>
+            <span className="font-mono text-[11px] font-bold text-teal">{s.code}</span>{s.code.startsWith("GL-") && <span className="font-mono text-[9.5px] font-bold uppercase rounded-full px-1.5 py-0.5 border border-gold/50 bg-gold/15">Garantía</span>}
             <span className="text-[11px] text-steel">{s.advisor?.name ?? "—"}</span>
           </div>
           <div className="flex flex-col gap-0.5 mb-1">

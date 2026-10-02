@@ -8,7 +8,8 @@ import { canInvoiceExternalSale } from "@/lib/guards";
 export async function GET() {
   if (!(await canInvoiceExternalSale())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const sales = await prisma.externalSale.findMany({
-    where: { paymentConfirmedAt: { not: null }, invoiceUploadedAt: null, deletedAt: null },
+    // Las garantías locales (GL-000X) no se facturan.
+    where: { kind: "SALE", paymentConfirmedAt: { not: null }, invoiceUploadedAt: null, deletedAt: null },
     include: {
       items: { include: { catalogItem: { select: { name: true, justCode: true } } }, orderBy: { createdAt: "asc" } },
       advisor: { select: { name: true } },

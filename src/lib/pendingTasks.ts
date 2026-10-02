@@ -481,6 +481,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   danados_doble_registro: "Producto dañado registrado dos veces (devolución + deterioro)",
   ventas_externas_agrupar: "Ventas Externas — asignar quién agrupa",
   ventas_externas_embalar: "Ventas Externas — asignar quién embala y entrega",
+  garantia_local_recogida: "Garantía local — confirmar lo que trajo el motorizado",
+  garantia_local_resultado: "Tus garantías locales — confirmar si se entregaron",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_pendientes_aprobacion: "Solicitudes de compra por aprobar",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
@@ -1108,7 +1110,7 @@ async function getMyMotorizadoFreightPendingItems(userId: string, hrefBase: stri
   if (!me) return [];
   const box = me.isLeader && me.leadsDept?.code === "FIN" ? "principal" : me.canManagePettyCashSecundaria ? "secundaria" : null;
   if (!box) return [];
-  const rows = await getPendingMotorizadoFreights();
+  const rows = await getPendingMotorizadoFreights(userId);
   return rows.map((r) => ({
     type: "caja_chica_flete_motorizado",
     icon: "🛵",
@@ -2592,6 +2594,48 @@ async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingI
 // Inicio a lo que tiene que sacar de bodega. Antes solo tenía el aviso único
 // de la campana. Desaparece cuando registró todo lo de su bloque o Daniel
 // cierra el corte.
+// Garantías locales (pedido del usuario 2026-10-02): lo que el motorizado
+// tiene que traer a bodega y nadie de Inventario confirmó todavía.
+async function getLocalWarrantyPickupPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.externalSale.findMany({
+    where: { kind: "WARRANTY", deletedAt: null, deliveredAt: { not: null }, returnedAt: null, items: { some: { warrantyRole: "PICKUP", pickupReceivedAt: null } } },
+    select: { code: true, deliveredAt: true },
+  });
+  if (rows.length === 0) return null;
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const overdue = rows.some((r) => r.deliveredAt! < cutoff);
+  return {
+    type: "garantia_local_recogida",
+    icon: "🛡️",
+    label: "Garantía local — confirma lo que trajo el motorizado",
+    meta: `${rows.length === 1 ? rows[0].code : `${rows.length} garantías`}${overdue ? " · atrasado" : ""}`,
+    overdue,
+    href,
+  };
+}
+
+// Al asesor: garantías que ya salieron con el motorizado y todavía no
+// confirma si se entregaron (sin eso no se paga el flete).
+async function getMyLocalWarrantyPendingItems(userId: string, href: string): Promise<PendingItem[]> {
+  const rows = await prisma.externalSale.findMany({
+    where: { kind: "WARRANTY", advisorId: userId, deletedAt: null, deliveredAt: { not: null }, clientReceivedAt: null, returnedAt: null },
+    select: { code: true, deliveredAt: true, items: { select: { warrantyRole: true, pickupReceivedAt: true } } },
+  });
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  return rows.map((r) => {
+    const waitingPickup = r.items.some((i) => i.warrantyRole === "PICKUP" && !i.pickupReceivedAt);
+    const overdue = r.deliveredAt! < cutoff;
+    return {
+      type: "garantia_local_resultado",
+      icon: "🛡️",
+      label: `Garantía ${r.code}: confirma si se entregó`,
+      meta: `${waitingPickup ? "Bodega aún no confirma lo que trajo el motorizado" : "Ya salió con el motorizado"}${overdue ? " · atrasado" : ""}`,
+      overdue,
+      href,
+    };
+  });
+}
+
 async function getMyFulfillmentBlockPendingItems(userId: string, href: string): Promise<PendingItem[]> {
   const lots = await prisma.fulfillmentLot.findMany({
     where: { status: "SENT", blocks: { some: { assigneeId: userId } } },
@@ -3511,7 +3555,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     teamItems.push(...myPettyCashConfirmationItems);
     if (myPayrollMessageItem) teamItems.push(myPayrollMessageItem);
     teamItems.unshift(...(await getMyFulfillmentBlockPendingItems(actor.userId, "/area/workspace?tab=egresos&otab=solicitud")));
+    teamItems.unshift(...(await getMyLocalWarrantyPendingItems(actor.userId, "/area/workspace?tab=ventas-externas&etab=garantias")));
     if (me.department?.code === "INV") {
+      const pickupItem = await getLocalWarrantyPickupPendingItem("/area/workspace?tab=ventas-externas&etab=devoluciones");
+      if (pickupItem) teamItems.unshift(pickupItem);
       const [receivingItem, replacementItem, urgentUnresolvedItem] = await Promise.all([
         getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario", false),
         getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -3602,6 +3649,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (myPersonalPurchaseStatusItem) items.push(myPersonalPurchaseStatusItem);
   items.push(...myPettyCashConfirmationItems);
   if (myPayrollMessageItem) items.push(myPayrollMessageItem);
+  items.unshift(...(await getMyLocalWarrantyPendingItems(actor.userId, "/area/workspace?tab=ventas-externas&etab=garantias")));
   let monthly = false;
 
   if (me.leadsDept.code === "FIN") {
@@ -3689,6 +3737,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (externalSaleDispatchItem) items.push(externalSaleDispatchItem);
     const externalSalePackItem = await getExternalSalePackPendingItem("/area/workspace?tab=ventas-externas&etab=embalaje");
     if (externalSalePackItem) items.push(externalSalePackItem);
+    const warrantyPickupItem = await getLocalWarrantyPickupPendingItem("/area/workspace?tab=ventas-externas&etab=devoluciones");
+    if (warrantyPickupItem) items.push(warrantyPickupItem);
     const excessKardexItem = await getPurchaseExcessPendingItem("kardex", "/area/workspace?tab=compras&ptab=inventario");
     if (excessKardexItem) items.push(excessKardexItem);
     const catalogMissingItem = await getCatalogMissingReportPendingItem("/area/reingreso-mercaderia?tab=productos");
@@ -3852,7 +3902,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ventas_externas_agrupar", "ventas_externas_embalar", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
+      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
