@@ -42,6 +42,17 @@ export async function GET(req: NextRequest) {
   // semanas de dañados terminadas, reclamos aprobados) — ver
   // inventoryAutoFlows.ts.
   await runInventoryAutoFlows();
+
+  // Pedido del usuario 2026-10-02: los domingos no se trabaja, así que el
+  // barrido de las 8:00 no le manda avisos a nadie (ni los obligatorios).
+  // Lo pendiente sigue en Inicio y se avisa el lunes. Los avisos que nacen
+  // porque alguien hizo algo en DAFLOW ese día sí salen (ese no es este
+  // barrido). El trabajo de fondo sin avisos sigue corriendo.
+  if (new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: "America/Guayaquil" }) === "Sun") {
+    const nichoBackfill = await runNichoAutoBackfill();
+    return NextResponse.json({ ok: true, sunday: true, notified: 0, nichoBackfill });
+  }
+
   // Producto que despierta: normalmente se detecta al subir el manifiesto;
   // esto es el respaldo por si esa revisión falló.
   await detectSuddenDemand().catch(() => null);
