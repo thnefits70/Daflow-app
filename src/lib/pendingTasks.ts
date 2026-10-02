@@ -481,6 +481,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   egresos_deterioro_resolucion: "Deterioro en bodega — falta tu decisión",
   lotes_caducidad_alerta: "Productos vencidos o que vencen en 6 meses o menos",
   ids_sin_marca: "Productos o combos sin marca o sin ID de Dropi",
+  productos_sin_area: "Productos sin área de bodega (A…G)",
   reclamos_proveedor_atrasados: "Reclamos al proveedor trabados o pasados por alto",
   danados_doble_registro: "Producto dañado registrado dos veces (devolución + deterioro)",
   ventas_externas_agrupar: "Ventas Externas — asignar quién agrupa",
@@ -2809,6 +2810,30 @@ async function getMissingBrandPendingItem(href: string): Promise<PendingItem | n
   };
 }
 
+// Pedido del usuario 2026-10-02: los productos sin área de bodega (A…G) solo
+// se veían como "N sin área todavía" dentro de Stock Actual. Ahora Daniel
+// los ve en Inicio y con un clic llega a Stock Actual con el filtro "Sin
+// área" ya puesto. Mismo criterio que sinAreaCount (todo el catálogo); se
+// quita solo cuando ya no queda ninguno, y vuelve si entra uno nuevo.
+async function getMissingWarehouseAreaPendingItem(href: string): Promise<PendingItem | null> {
+  const products = await prisma.purchaseCatalogItem.findMany({
+    where: { warehouseArea: null },
+    select: { name: true, justCode: true },
+    orderBy: { name: "asc" },
+  });
+  if (products.length === 0) return null;
+
+  const codes = products.map((p) => p.justCode ?? p.name);
+  return {
+    type: "productos_sin_area",
+    icon: "📍",
+    label: "Productos sin área de bodega — asígnales A…G",
+    meta: `${products.length === 1 ? "1 producto" : `${products.length} productos`}: ${codes.slice(0, 5).join(", ")}${codes.length > 5 ? "…" : ""}`,
+    overdue: false,
+    href,
+  };
+}
+
 // Confirmado 2026-09-28, pedido de Jariel: el proveedor quiere revisar la
 // mercadería antes de decidir — Daniel tiene que armar el paquete de
 // revisión; y si tras revisarla la rechaza y la devuelve, confirmar que
@@ -3791,6 +3816,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (expirationLotsItem) items.push(expirationLotsItem);
     const missingBrandItem = await getMissingBrandPendingItem("/area/workspace?tab=stock-actual").catch(() => null);
     if (missingBrandItem) items.push(missingBrandItem);
+    const missingAreaItem = await getMissingWarehouseAreaPendingItem("/area/workspace?tab=stock-actual&filtro=sin-area").catch(() => null);
+    if (missingAreaItem) items.push(missingAreaItem);
     const inspectionItem = await getDeteriorInspectionPendingItem("/area/workspace?tab=egresos&otab=seguimiento").catch(() => null);
     if (inspectionItem) items.push(inspectionItem);
     const doubleRegItem = await getDamagedDoubleRegistrationPendingItem("/area/reingreso-mercaderia?tab=danos").catch(() => null);
@@ -3965,7 +3992,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ids_sin_marca", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
+      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

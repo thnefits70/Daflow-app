@@ -11,6 +11,10 @@ import { formatDateTime } from "@/lib/formatDateTime";
 import { WAREHOUSE_AREAS, areaLabel, isWarehouseArea, type WarehouseArea } from "@/lib/warehouseAreas";
 import { ManifestBrandLearner } from "./ManifestBrandLearner";
 
+function fromSinAreaLink() {
+  return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("filtro") === "sin-area";
+}
+
 type PendingAdjustmentRow = {
   id: string;
   catalogItemId: string;
@@ -570,7 +574,10 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   const [sinPrecioFilter, setSinPrecioFilter] = useState(false);
   const [sinStockFilter, setSinStockFilter] = useState(false);
   // 2026-09-26: ver de un clic lo que falta ubicar en un área de la bodega.
-  const [sinAreaFilter, setSinAreaFilter] = useState(false);
+  // Pedido del usuario 2026-10-02: el pendiente "Productos sin área" de
+  // Inicio llega con ?filtro=sin-area — abre los filtros con el chip
+  // "Sin área" ya prendido para que Daniel asigne el área sin buscar.
+  const [sinAreaFilter, setSinAreaFilter] = useState(fromSinAreaLink);
 
   // Confirmado 2026-09-22, pedido explícito del usuario (admin): bandeja
   // para aprobar/rechazar las solicitudes de ajuste de stock que Daniel
@@ -579,7 +586,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   // Pedido del usuario 2026-10-02: los avisos de arriba y la zona de
   // filtros/buscador quedan plegados; un clic los despliega.
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(fromSinAreaLink);
   const [expirationCounts, setExpirationCounts] = useState<{ expired: number; soon: number } | null>(null);
   const [pendingAdjustmentsOpen, setPendingAdjustmentsOpen] = useState(false);
   const [pendingAdjustmentsLoading, setPendingAdjustmentsLoading] = useState(false);
