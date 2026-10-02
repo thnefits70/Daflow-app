@@ -76,13 +76,24 @@ export function ecuadorRestDays(year: number): Map<string, string> {
   put(transferred(utc(year, 7, 25)), "Fundación de Guayaquil");
   put(transferred(utc(year, 8, 10)), "Primer Grito de Independencia");
   put(transferred(utc(year, 10, 9)), "Independencia de Guayaquil");
-  // Difuntos (2/nov) no se mueve; Independencia de Cuenca (3/nov) se
-  // descansa pegada a Difuntos cuando caen lunes-martes (caso 2026), si no
-  // sigue la regla normal.
+  // Difuntos (2/nov) e Independencia de Cuenca (3/nov) se descansan como un
+  // bloque de dos días pegado al fin de semana — así lo trae el calendario
+  // oficial 2025–2030 (Viceministerio de Turismo): lun-mar se queda (2026);
+  // mar-mié → lun-mar (2027); jue-vie se queda (2028); vie-sáb → jue-vie
+  // (2029); sáb-dom → viernes y lunes (2030); dom-lun → lun-mar (2025).
   const nov2 = utc(year, 11, 2);
-  put(nov2, "Día de los Difuntos");
-  const nov3 = utc(year, 11, 3);
-  put(nov2.getUTCDay() === 1 ? nov3 : transferred(nov3), "Independencia de Cuenca");
+  const shift: Record<number, [number, number]> = {
+    1: [0, 0], // lunes-martes
+    2: [-1, -1], // martes-miércoles → lunes-martes
+    3: [1, 1], // miércoles-jueves → jueves-viernes
+    4: [0, 0], // jueves-viernes
+    5: [-1, -1], // viernes-sábado → jueves-viernes
+    6: [-1, 1], // sábado-domingo → viernes y lunes
+    0: [1, 1], // domingo-lunes → lunes-martes
+  };
+  const [s2, s3] = shift[nov2.getUTCDay()];
+  put(addDays(nov2, s2), "Día de los Difuntos");
+  put(addDays(utc(year, 11, 3), s3), "Independencia de Cuenca");
   put(sundayToMonday(utc(year, 12, 25)), "Navidad");
 
   cache.set(year, out);
