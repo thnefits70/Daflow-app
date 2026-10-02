@@ -585,7 +585,25 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
       if (SUMMARY_RE.test(text) || /\(ID:/.test(text)) continue;
 
       // Servientrega / Laar / Veloces: traen el ID de Dropi.
-      const idm = text.match(ID_LABEL_RE);
+      let idm = text.match(ID_LABEL_RE);
+      // Veloces parte un producto largo en dos renglones (real 2026-10-02,
+      // guía V4003182384): "(193889)Funda … COLOR: Mujer" y abajo
+      // "TALLA: M  X1". Se une con los renglones siguientes hasta hallar el
+      // "X<n>", sin pasar a otro "(ID)" ni a "Observaciones".
+      if (!idm && /(?<![\d(])\(\d{3,}\)\s*\S/.test(text)) {
+        let joined = text;
+        for (let j = i + 1; j < lines.length && j <= i + 2; j++) {
+          const next = lines[j].text;
+          if (/\(\d{3,}\)|^\s*(Observaciones|Direcci|Tel[eé]fono|Destinatario)/i.test(next) || GUIDE_RE.test(next)) break;
+          joined += " " + next.trim();
+          const jm = joined.match(ID_LABEL_RE);
+          if (jm) {
+            idm = jm;
+            i = j;
+            break;
+          }
+        }
+      }
       const glued = idm && idm.index! > 0 && !/[\s-]/.test(text[idm.index! - 1]);
       if (idm && (!glued || summary.has(idm[1]))) {
         const { variant } = splitVariant(idm[2]);
