@@ -13,7 +13,8 @@ import { NICHO_AUTO_MONTHLY_BUDGET_USD } from "@/lib/nichoAi";
 import { getReadyToBuyPendingProposalIds } from "@/lib/marketProduct";
 import { getNewIdBrandingBoard } from "@/lib/newIdBranding";
 import { CLAIM_GAP_DAYS, findPossibleDoubleRegistrations, getSupplierClaimGaps } from "@/lib/reentrySupplierClaim";
-import { getCompiledLot, isBackfillLot } from "@/lib/fulfillmentGuides";
+import { ecuadorDay, getCompiledLot, isBackfillLot } from "@/lib/fulfillmentGuides";
+import { holidayName, isWorkingDay, previousWorkingDay } from "@/lib/ecuadorHolidays";
 import { carrierLabel } from "@/lib/carriers";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
 import { getOpenPurchaseCodesByCatalogItem } from "@/lib/purchases";
@@ -483,6 +484,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   ventas_externas_embalar: "Ventas Externas — asignar quién embala y entrega",
   garantia_local_recogida: "Garantía local — confirmar lo que trajo el motorizado",
   garantia_local_resultado: "Tus garantías locales — confirmar si se entregaron",
+  manifiestos_tras_feriado: "Manifiestos pendientes después de domingo o feriado",
   cumpleanos: "Cumpleaños de tu equipo (aviso 1 día antes)",
   compras_pendientes_aprobacion: "Solicitudes de compra por aprobar",
   compras_rechazadas: "Tus solicitudes de compra rechazadas — corregir y reenviar",
@@ -2614,6 +2616,30 @@ async function getLocalWarrantyPickupPendingItem(href: string): Promise<PendingI
   };
 }
 
+// Pedido del usuario 2026-10-02: el primer día de trabajo después de un
+// domingo o feriado (calendario automático de Ecuador), quien sube los
+// manifiestos ve este recordatorio hasta que suba el primero del día — los
+// manifiestos de esos días vencen hoy.
+async function getManifestCatchUpPendingItem(href: string): Promise<PendingItem | null> {
+  const today = ecuadorDay(new Date());
+  const yesterday = new Date(new Date(`${today}T12:00:00Z`).getTime() - 86_400_000).toISOString().slice(0, 10);
+  if (!isWorkingDay(today) || isWorkingDay(yesterday)) return null;
+  const startOfToday = new Date(`${today}T05:00:00.000Z`); // 00:00 en Ecuador
+  const uploaded = await prisma.fulfillmentRequestBatch.count({ where: { requestedAt: { gte: startOfToday } } });
+  if (uploaded > 0) return null;
+  const from = previousWorkingDay(today);
+  const fmt = (d: string) => d.split("-").reverse().slice(0, 2).join("/");
+  const holiday = holidayName(yesterday);
+  return {
+    type: "manifiestos_tras_feriado",
+    icon: "📄",
+    label: "Sube los manifiestos que quedaron pendientes",
+    meta: `Desde el ${fmt(from)}${holiday ? ` (feriado: ${holiday})` : ""} — vencen hoy, súbelos antes del primer corte`,
+    overdue: false,
+    href,
+  };
+}
+
 // Al asesor: garantías que ya salieron con el motorizado y todavía no
 // confirma si se entregaron (sin eso no se paga el flete).
 async function getMyLocalWarrantyPendingItems(userId: string, href: string): Promise<PendingItem[]> {
@@ -3739,6 +3765,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (externalSalePackItem) items.push(externalSalePackItem);
     const warrantyPickupItem = await getLocalWarrantyPickupPendingItem("/area/workspace?tab=ventas-externas&etab=devoluciones");
     if (warrantyPickupItem) items.push(warrantyPickupItem);
+    const manifestCatchUpItem = await getManifestCatchUpPendingItem("/area/workspace?tab=egresos&otab=solicitud");
+    if (manifestCatchUpItem) items.unshift(manifestCatchUpItem);
     const excessKardexItem = await getPurchaseExcessPendingItem("kardex", "/area/workspace?tab=compras&ptab=inventario");
     if (excessKardexItem) items.push(excessKardexItem);
     const catalogMissingItem = await getCatalogMissingReportPendingItem("/area/reingreso-mercaderia?tab=productos");
@@ -3902,7 +3930,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
+      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

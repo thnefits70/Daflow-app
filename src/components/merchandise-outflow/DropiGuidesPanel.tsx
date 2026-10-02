@@ -11,6 +11,7 @@ import { RegisterComboForm } from "./RegisterComboForm";
 import { carrierLabel, sortCarriers } from "@/lib/carriers";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { packCountFromName } from "@/lib/packCount";
+import { holidayName, isManifestLate, manifestDeadline } from "@/lib/ecuadorHolidays";
 
 type ItemLite = MatchCatalogItem;
 type Resolution =
@@ -836,6 +837,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             {data.guides.length} guías{data.carriers.length > 0 ? ` (${sortCarriers(data.carriers).map(carrierLabel).join(", ")})` : ""}
             {data.manifestDate ? ` · manifiesto del ${data.manifestDate.split("-").reverse().join("/")}` : ""} · {rows.length} códigos · {totalUnits} unidades
           </div>
+          <ManifestDeadlineNotice manifestDate={data.manifestDate} />
 
           {data.warnings.length > 0 && (
             // Pedido del usuario 2026-09-25: explicarle a Yair qué no se pudo
@@ -1052,6 +1054,34 @@ function RocketComboLink({
         Cancelar
       </button>
       {err && <div className="w-full text-red text-[11px]">{err}</div>}
+    </div>
+  );
+}
+
+// Pedido del usuario 2026-10-02: el manifiesto se sube el mismo día o, a más
+// tardar, el siguiente día de trabajo según el calendario de Ecuador
+// (sábado → lunes; antes de un feriado → el día que se vuelve). Fuera de
+// plazo se deja subir igual, pero se avisa al administrador.
+function ManifestDeadlineNotice({ manifestDate }: { manifestDate: string | null }) {
+  if (!manifestDate) return null;
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Guayaquil" });
+  if (manifestDate >= today) return null;
+  const fmt = (d: string) => d.split("-").reverse().join("/");
+  const deadline = manifestDeadline(manifestDate);
+  if (isManifestLate(manifestDate, today)) {
+    return (
+      <div className="text-[12px] bg-red/10 border border-red/40 rounded-md p-2.5 mb-3 flex gap-2">
+        <AlertTriangle size={14} className="text-red shrink-0 mt-0.5" />
+        <span>
+          <b>Manifiesto fuera de plazo.</b> Es del {fmt(manifestDate)} y se debía subir hasta el {fmt(deadline)}. Se guarda igual en el corte de hoy y se escanea normal, pero se le avisa al administrador.
+        </span>
+      </div>
+    );
+  }
+  const holiday = holidayName(manifestDate);
+  return (
+    <div className="text-[12px] bg-gold/10 border border-gold/40 rounded-md p-2.5 mb-3">
+      Manifiesto del {fmt(manifestDate)}{holiday ? ` (${holiday})` : ""}: está a tiempo (plazo hasta el {fmt(deadline)}). Entra al corte de hoy y se escanea normal.
     </div>
   );
 }

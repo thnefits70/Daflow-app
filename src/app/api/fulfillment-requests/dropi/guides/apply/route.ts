@@ -2,7 +2,8 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { canSubmitFulfillmentRequest, dbUserId, getInventoryLeadId } from "@/lib/guards";
-import { applyGuidesImport } from "@/lib/fulfillmentGuides";
+import { applyGuidesImport, ecuadorDay } from "@/lib/fulfillmentGuides";
+import { isManifestLate, manifestDeadline } from "@/lib/ecuadorHolidays";
 import { notifyOwner } from "@/lib/notifications";
 import { detectSuddenDemand } from "@/lib/suddenDemand";
 import { notifyDiscontinuedSales } from "@/lib/dropiDiscontinued";
@@ -94,6 +95,21 @@ export async function POST(req: NextRequest) {
       }).catch(() => null);
     }
     return NextResponse.json({ ok: true, batchId: result.batchId, lotId: result.lotId });
+  }
+  // Pedido del usuario 2026-10-02: el manifiesto se sube el mismo día o, a
+  // más tardar, el siguiente día de trabajo (calendario de Ecuador). Si llega
+  // después igual entra al corte de hoy y se escanea normal, pero se le
+  // avisa al administrador.
+  if (input.manifestDate) {
+    const today = ecuadorDay(new Date());
+    if (isManifestLate(input.manifestDate, today)) {
+      const fmt = (d: string) => d.split("-").reverse().join("/");
+      await notifyOwner("admin", {
+        title: "⏰ Manifiesto subido fuera de plazo",
+        body: `Se subió hoy el manifiesto del ${fmt(input.manifestDate)}; el plazo era hasta el ${fmt(manifestDeadline(input.manifestDate))}. Entró al corte de hoy.`,
+        url: "/area/workspace?tab=egresos&otab=solicitud",
+      }).catch(() => null);
+    }
   }
   // Producto que despierta (pedido de Daniel 2026-09-29): se avisa el mismo
   // día en que sube el manifiesto. Si falla, la subida igual queda hecha y el
