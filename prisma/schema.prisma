@@ -2800,6 +2800,14 @@ model FulfillmentRequestGuide {
   codes       String[]                @default([])
   // Remitente impreso en la etiqueta (2026-10-01) — ver Store.labelSender.
   sender      String?
+  // Pedido del usuario 2026-10-02: productos y cantidades de la etiqueta de
+  // esta guía, leídos UNA vez del PDF al guardar el corte (antes cada
+  // escaneo de una devolución abría el PDF entero, ~5 s). labelProducts =
+  // [{ code, name, qty }]; manifestDay = día en que salió (YYYY-MM-DD).
+  // labelCachedAt null = todavía no se leyó.
+  labelProducts Json?
+  manifestDay   String?
+  labelCachedAt DateTime?
   createdAt   DateTime                @default(now())
 
   @@index([batchId])

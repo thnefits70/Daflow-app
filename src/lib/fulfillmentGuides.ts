@@ -73,7 +73,10 @@ export async function findComboByCode(code: string) {
   return combo ? { ...comboResolution(combo), label: combo.label } : null;
 }
 
-export async function resolveGuideLines(lines: ParsedGuidesLine[]): Promise<ResolvedGuideLine[]> {
+// skipSuggestions (2026-10-02): quien solo necesita saber a qué producto o
+// combo corresponde cada código (garantías, reingreso por guía) no carga el
+// catálogo entero para sugerir nombres — eso hacía lento cada escaneo.
+export async function resolveGuideLines(lines: ParsedGuidesLine[], opts: { skipSuggestions?: boolean } = {}): Promise<ResolvedGuideLine[]> {
   // Los códigos de Rocket ("R14599") no son IDs de Dropi: se reconocen por
   // lo que Yair ya vinculó antes (RocketCodeMapping), nunca por justCode.
   const codes = lines.map((l) => l.code).filter((c) => !isRocketCode(c));
@@ -93,7 +96,7 @@ export async function resolveGuideLines(lines: ParsedGuidesLine[]): Promise<Reso
     // producto físico (ej. Pistola de Soldar 118388 y 112139, Licuadora
     // Potente 123676 y 125399), así que se busca en todo el catálogo — los
     // que aún no tienen ID primero (caso pistola hidrolavadora).
-    prisma.purchaseCatalogItem.findMany({ select: ITEM_SELECT, orderBy: { justCode: { sort: "asc", nulls: "first" } } }),
+    opts.skipSuggestions ? Promise.resolve([]) : prisma.purchaseCatalogItem.findMany({ select: ITEM_SELECT, orderBy: { justCode: { sort: "asc", nulls: "first" } } }),
   ]);
   const itemByCode = new Map(items.map((i) => [i.justCode!, i]));
   const comboByCode = new Map(combos.map((c) => [c.code, c]));

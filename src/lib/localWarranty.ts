@@ -257,15 +257,82 @@ async function usedByPreviousWarranties(where: { warrantySourceGuide?: string; w
   return used;
 }
 
+// Pedido del usuario 2026-10-02: los productos de cada guía se leen UNA vez
+// del PDF (al guardar Daniel el corte, y una pasada para las guías viejas) y
+// quedan en FulfillmentRequestGuide.labelProducts — así escanear una
+// devolución no abre el PDF entero cada vez (~5 s). Abre cada PDF del lote
+// una sola vez y llena todas sus guías que falten. Devuelve cuántas llenó.
+export async function cacheGuideLabelsForBatch(batchId: string): Promise<number> {
+  const batch = await prisma.fulfillmentRequestBatch.findUnique({
+    where: { id: batchId },
+    select: { fileUrls: true, source: true, guides: { where: { labelCachedAt: null }, select: { id: true, guideNumber: true, carrier: true, codes: true } } },
+  });
+  if (!batch || batch.guides.length === 0 || batch.fileUrls.length === 0) return 0;
+  const found = new Map<string, { products: LabelProduct[]; manifestDay: string | null }>();
+  let filesRead = 0;
+  for (const url of batch.fileUrls) {
+    let pages: PdfLine[][];
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      pages = await extractPages(new Uint8Array(await res.arrayBuffer()));
+    } catch (e) {
+      console.error("[cacheGuideLabelsForBatch] No se pudo leer el PDF", url, e);
+      continue;
+    }
+    filesRead++;
+    let manifestDay: string | null = null;
+    for (const page of pages) {
+      if (!page.some((l) => /Nro:\s*\d+\s*Guia/i.test(lineText(l)))) continue;
+      const date = page.map(lineText).join(" ").match(/FECHA MANIFIESTO[^:]*:\s*(\d{2})-(\d{2})-(\d{4})/i);
+      if (date) {
+        manifestDay = `${date[3]}-${date[2]}-${date[1]}`;
+        break;
+      }
+    }
+    for (const page of pages) {
+      if (page.some((l) => /Nro:\s*\d+\s*Guia/i.test(lineText(l)))) continue;
+      const text = flat(page.map(lineText).join(" "));
+      for (const g of batch.guides) {
+        if (found.has(g.guideNumber) || !text.includes(g.guideNumber)) continue;
+        const rocket = batch.source === "ROCKET" || g.codes.some(isRocketCode);
+        found.set(g.guideNumber, { products: labelProducts(page, g.carrier, rocket), manifestDay });
+      }
+    }
+  }
+  // Si algún PDF no se pudo abrir, no se marca nada: se reintenta después
+  // (nunca se guarda "vacío" por un error de lectura).
+  if (filesRead < batch.fileUrls.length) return 0;
+  const now = new Date();
+  let filled = 0;
+  for (const g of batch.guides) {
+    const f = found.get(g.guideNumber);
+    // Sin etiqueta en el PDF: se guarda vacío igual (con la fecha) para no
+    // volver a abrir el PDF por esta guía; el escaneo avisa y usa los códigos.
+    await prisma.fulfillmentRequestGuide.update({
+      where: { id: g.id },
+      data: { labelProducts: f?.products ?? [], manifestDay: f?.manifestDay ?? null, labelCachedAt: now },
+    });
+    filled++;
+  }
+  return filled;
+}
+
 // Exportada 2026-10-02: también la usa el Reingreso por escaneo de guía
 // (reentryGuideScan.ts) para saber qué productos traía la guía devuelta.
-export async function lookupGuide(guide: string): Promise<LookupResult> {
+// productsOnly: solo hacen falta productos y fecha (no cliente/dirección):
+// si la guía ya tiene sus productos guardados, no se abre el PDF.
+export async function lookupGuide(guide: string, opts: { productsOnly?: boolean } = {}): Promise<LookupResult> {
   const row = await prisma.fulfillmentRequestGuide.findFirst({
     where: { guideNumber: { equals: guide, mode: "insensitive" } },
     select: {
+      id: true,
       guideNumber: true,
       carrier: true,
       codes: true,
+      labelProducts: true,
+      manifestDay: true,
+      labelCachedAt: true,
       batch: { select: { fileUrls: true, requestedAt: true, source: true, lot: { select: { day: true, status: true } } } },
     },
   });
@@ -274,19 +341,26 @@ export async function lookupGuide(guide: string): Promise<LookupResult> {
   if (!lot || lot.status === "DRAFT") return { ok: false, error: `La guía ${row.guideNumber} todavía no salió: su corte no se ha enviado a Inventario.` };
 
   const warnings: string[] = [];
-  const { summary, label } = await findGuideInPdfs(row.batch.fileUrls, row.guideNumber);
+  const cached = opts.productsOnly && row.labelCachedAt ? ((row.labelProducts ?? []) as LabelProduct[]) : null;
+  const { summary, label } = cached ? { summary: { city: null, charge: null, manifestDay: row.manifestDay }, label: null } : await findGuideInPdfs(row.batch.fileUrls, row.guideNumber);
   // Fecha del manifiesto (o del corte si no se pudo leer), al mediodía de
   // Ecuador para no caer en el día anterior.
   const shippedAt = new Date(`${summary?.manifestDay ?? lot.day}T17:00:00.000Z`);
-  if (!label) warnings.push("No se encontró la etiqueta de esta guía en el PDF guardado.");
+  if (cached ? cached.length === 0 : !label) warnings.push("No se encontró la etiqueta de esta guía en el PDF guardado.");
 
   const rocket = row.batch.source === "ROCKET" || row.codes.some(isRocketCode);
   const client = label ? labelClient(label, row.carrier) : { name: null, address: null, phone: null, notes: null };
-  let products = label ? labelProducts(label, row.carrier, rocket) : [];
+  let products = cached ?? (label ? labelProducts(label, row.carrier, rocket) : []);
+  // Ya que se abrió el PDF, se guarda para la próxima vez.
+  if (!cached && !row.labelCachedAt && label) {
+    await prisma.fulfillmentRequestGuide
+      .update({ where: { id: row.id }, data: { labelProducts: products, manifestDay: summary?.manifestDay ?? null, labelCachedAt: new Date() } })
+      .catch(() => null);
+  }
 
   // Productos sin código en la etiqueta (Gintracom/Urbano): se asignan a los
   // códigos que ya se guardaron de esa guía, por nombre.
-  const codeResolutions = await resolveGuideLines(row.codes.map((code) => asLine(code, "", 1)));
+  const codeResolutions = await resolveGuideLines(row.codes.map((code) => asLine(code, "", 1)), { skipSuggestions: true });
   const nameOfCode = new Map(
     codeResolutions.map((r) => [
       r.code,
@@ -316,7 +390,7 @@ export async function lookupGuide(guide: string): Promise<LookupResult> {
     }
   }
 
-  const resolved = await resolveGuideLines(products.filter((p) => p.code).map((p) => asLine(p.code!, p.name, p.qty)));
+  const resolved = await resolveGuideLines(products.filter((p) => p.code).map((p) => asLine(p.code!, p.name, p.qty)), { skipSuggestions: true });
   const byItem = new Map<string, WarrantySourceLine>();
   const add = (item: { id: string; name: string; photos: string[]; justCode: string | null }, qty: number) => {
     const prev = byItem.get(item.id);

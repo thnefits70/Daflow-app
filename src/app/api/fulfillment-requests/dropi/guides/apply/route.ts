@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { canSubmitFulfillmentRequest, dbUserId, getInventoryLeadId } from "@/lib/guards";
 import { applyGuidesImport, ecuadorDay } from "@/lib/fulfillmentGuides";
+import { cacheGuideLabelsForBatch } from "@/lib/localWarranty";
 import { isManifestLate, manifestDeadline } from "@/lib/ecuadorHolidays";
 import { notifyOwner } from "@/lib/notifications";
 import { detectSuddenDemand } from "@/lib/suddenDemand";
@@ -80,6 +81,10 @@ export async function POST(req: NextRequest) {
   // (en segundo plano: no demora el guardado). Ver lib/manifestBrand.ts.
   const comboCodes = input.rows.flatMap((r) => (r.decision.kind === "combo" && r.decision.comboCode ? [r.code, r.decision.comboCode] : [r.code]));
   after(() => learnBrandsForNewCombos(comboCodes, input.fileUrls).catch(() => null));
+  // Productos y cantidades de cada guía, leídos una vez del PDF (pedido del
+  // usuario 2026-10-02): así escanear una devolución en Reingreso es
+  // instantáneo. En segundo plano, no demora el guardado.
+  after(() => cacheGuideLabelsForBatch(result.batchId).catch(() => null));
   // Producto dado de baja que igual se vendió (pedido del usuario 2026-09-30):
   // Heidy lo da de baja en Dropi, Daniel/Bryan/Jariel quedan al tanto.
   if (result.discontinuedCount > 0) await notifyDiscontinuedSales(result.batchId).catch(() => null);

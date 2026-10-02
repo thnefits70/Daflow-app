@@ -80,7 +80,7 @@ export async function scanGuideIntoBatch(params: { batchId: string; raw: string;
   }
 
   // 4. Qué productos y cuántos traía (del PDF guardado de ese corte).
-  const looked = await lookupGuide(row.guideNumber);
+  const looked = await lookupGuide(row.guideNumber, { productsOnly: true });
   if (!looked.ok) return { ok: false, reason: `${looked.error} Regístrala a mano.`, allowManual: true };
   const src = looked.source;
   const unresolved = src.unresolved ?? [];
