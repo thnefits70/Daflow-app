@@ -26,7 +26,7 @@ type Row = {
   discardReturned: (DiscardInfo & { why: "urgente" | "vencido" }) | null;
 };
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
-type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean };
+type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null };
 
 const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = [
   {
@@ -441,6 +441,13 @@ export function PurchaseSuggestionsPanel() {
 
   return (
     <div>
+      {/* Pedido del usuario 2026-10-02: conteo físico del 5 al 8 de octubre. */}
+      {data.countPausedUntil && (
+        <div className="bg-amber/10 border border-amber/40 rounded-md px-3 py-2 text-[12px] text-steel mb-3">
+          <b className="text-amber">Conteo físico en curso.</b> Hasta que termine, el stock puede no ser real: no se mandan avisos de compras y esta lista no sale en Inicio.
+          Los avisos vuelven el {fmtDate(data.countPausedUntil)} a las 8:00.
+        </div>
+      )}
       <div className="bg-teal/10 border border-teal/30 rounded-md px-3 py-2 text-[12px] text-steel mb-4">
         Cuánto se vende sale de los pedidos de Dropi que sube Daniel y de las ventas externas de los últimos{" "}
         <b className="text-ink">{days} día{days === 1 ? "" : "s"}</b>

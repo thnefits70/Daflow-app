@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { canActOnPurchaseReceiving, canApprovePurchaseRequests, canReportSupplierStockout, canSubmitPurchaseRequests, dbUserId } from "@/lib/guards";
-import { canDiscardSuggestions, getPurchaseSuggestions, getSuggestionAudiencesForUser } from "@/lib/purchaseSuggestions";
+import { canDiscardSuggestions, getPurchaseSuggestions, getSuggestionAudiencesForUser, isPhysicalCountPause, PHYSICAL_COUNT_UNTIL } from "@/lib/purchaseSuggestions";
 
 // "Qué comprar" (confirmado 2026-09-29, idea de Daniel) — quien compra
 // (Jariel, Nairoby), Daniel (le llegan los urgentes sin atender), quien
@@ -19,5 +19,6 @@ export async function GET() {
     canReportSupplierStockout(),
     canDiscardSuggestions(dbUserId(session.user.id), isAdmin),
   ]);
-  return NextResponse.json({ ...data, audiences, canReportStockout, canDiscard });
+  const countPausedUntil = isPhysicalCountPause() ? PHYSICAL_COUNT_UNTIL.toISOString() : null;
+  return NextResponse.json({ ...data, audiences, canReportStockout, canDiscard, countPausedUntil });
 }

@@ -40,6 +40,14 @@ export const SUPPLIER_RECHECK_DAYS = 15;
 // al líder de Análisis de Mercado y al admin); el descarte vale 30 días, o
 // hasta que un producto que era "pronto" se ponga urgente.
 export const COLD_ESCALATE_DAYS = 7;
+// Pedido del usuario 2026-10-02: conteo físico de lunes 5 a jueves 8 de
+// octubre. Hasta que termine el stock no es confiable, así que "Qué comprar"
+// no manda avisos ni sale en Inicio (la pestaña sigue visible, con aviso).
+// Vuelve solo el viernes 9 a las 8:00.
+export const PHYSICAL_COUNT_UNTIL = new Date("2026-10-09T08:00:00-05:00");
+export function isPhysicalCountPause(now = new Date()): boolean {
+  return now < PHYSICAL_COUNT_UNTIL;
+}
 export const COLD_WEEK_AHEAD_DAYS = 7;
 export const DISCARD_VALID_DAYS = 30;
 export const DISCARD_REASONS: Record<string, string> = {
@@ -369,18 +377,16 @@ export function buildSuggestionNotice(s: PurchaseSuggestions, audience: Suggesti
       overdue: week.some((r) => r.escalated),
     };
   }
+  // Pedido del usuario 2026-10-02: a Jariel solo lo que de verdad es urgente
+  // (sin "pronto" ni productos nuevos, que tienen su propio pendiente), para
+  // no saturarlo. Los "sin proveedor" solo cuentan el día que toca preguntar.
   const rows = s.hot;
   const urgent = rows.filter((r) => r.status === "urgente");
-  const soon = rows.filter((r) => r.status === "pronto");
-  const news = s.newProducts.length;
-  // Los "sin proveedor" solo cuentan el día que toca preguntar (cada 15 días).
   const ask = rows.filter((r) => r.status === "preguntar_proveedor").length;
-  if (urgent.length === 0 && soon.length === 0 && news === 0 && ask === 0) return null;
+  if (urgent.length === 0 && ask === 0) return null;
   const parts = [
-    ask ? `${ask} por preguntar al proveedor` : null,
     urgent.length ? plural(urgent.length, "urgente", "urgentes") : null,
-    soon.length ? `${soon.length} pronto` : null,
-    news ? plural(news, "nuevo", "nuevos") : null,
+    ask ? `${ask} por preguntar al proveedor` : null,
   ].filter(Boolean);
   const top = urgent
     .slice(0, 3)
@@ -406,6 +412,7 @@ export const PURCHASE_SUGGESTIONS_HREF = "/area/workspace?tab=compras&ptab=que-c
 
 // Para el cron de las 8:00: un aviso por persona, con su resumen.
 export async function getPurchaseSuggestionPushes(): Promise<{ ownerId: string; type: string; title: string; body: string; url: string }[]> {
+  if (isPhysicalCountPause()) return [];
   const [s, hotIds, financeLeadId, inventoryLeadId] = await Promise.all([getPurchaseSuggestions(), getHotBuyerIds(), getFinanceLeadId(), getInventoryLeadId()]);
   const out: { ownerId: string; type: string; title: string; body: string; url: string }[] = [];
   const add = (ids: (string | null)[], audience: SuggestionAudience) => {
@@ -422,6 +429,7 @@ export async function getPurchaseSuggestionPushes(): Promise<{ ownerId: string; 
 
 // Tarjetas de Inicio de esta persona (Jariel, Nairoby o Daniel).
 export async function getPurchaseSuggestionPendingItems(userId: string, href: string = PURCHASE_SUGGESTIONS_HREF) {
+  if (isPhysicalCountPause()) return [];
   const audiences = await getSuggestionAudiencesForUser(userId);
   if (audiences.length === 0) return [];
   const s = await getPurchaseSuggestions();
