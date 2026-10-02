@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getFinanceLeadId, getInventoryLeadId } from "@/lib/guards";
 import { formatPurchaseRequestCode, OPEN_PURCHASE_STATUSES, openPurchaseWhere } from "@/lib/purchases";
 import { getReadyToBuyPendingProposalIds } from "@/lib/marketProduct";
+import { notifyOwner } from "@/lib/notifications";
 
 // Confirmado 2026-09-29, idea de Daniel aprobada por el usuario: "Qué
 // comprar". Compras calientes (30 o menos, más los productos nuevos que
@@ -30,6 +31,22 @@ export const ESCALATE_DAYS = 3;
 // normal. Tampoco se escala a Daniel: no hay nada que comprar. Una compra
 // nueva del producto también lo devuelve a lo normal.
 export const SUPPLIER_RECHECK_DAYS = 15;
+// Pedido del usuario 2026-10-02 (compras frías, Nairoby): comprar bien lleva
+// análisis, así que su lista es semanal — aviso solo los lunes, tarjeta en
+// Inicio toda la semana con lo que hay que comprar o descartar ESA semana
+// (urgente, o se vuelve urgente en los próximos 7 días). Si un urgente de su
+// lista pasa 7 días sin comprarse ni descartarse, se avisa a Daniel. Puede
+// decir "No hace falta comprarlo" con motivo y doble confirmación (le llega
+// al líder de Análisis de Mercado y al admin); el descarte vale 30 días, o
+// hasta que un producto que era "pronto" se ponga urgente.
+export const COLD_ESCALATE_DAYS = 7;
+export const COLD_WEEK_AHEAD_DAYS = 7;
+export const DISCARD_VALID_DAYS = 30;
+export const DISCARD_REASONS: Record<string, string> = {
+  NO_DEMAND: "No hay demanda del producto",
+  NO_SALES: "El producto ya no tiene ventas",
+  OTHER: "Otro motivo",
+};
 const WINDOW_DAYS = 30;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -38,7 +55,10 @@ export { OPEN_PURCHASE_STATUSES };
 
 // preguntar_proveedor = toca preguntar si el proveedor ya lo tiene;
 // sin_proveedor = marcado sin proveedor, esperando los 15 días.
-export type SuggestionStatus = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "no_sale" | "en_compra";
+// descartado = Nairoby dijo "No hace falta comprarlo" (solo compras frías).
+export type SuggestionStatus = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "descartado" | "no_sale" | "en_compra";
+
+export type DiscardInfo = { id: string; reason: string; reasonLabel: string; note: string | null; byName: string | null; at: string };
 
 export type SuggestionRow = {
   catalogItemId: string;
@@ -60,6 +80,11 @@ export type SuggestionRow = {
   suggestedQty: number | null;
   // Marca "Ningún proveedor lo tiene" vigente: cuándo se marcó y cuándo se vuelve a preguntar.
   supplierOut: { reportId: string; since: string; askAt: string } | null;
+  // Compras frías: hay que comprarlo o descartarlo esta semana.
+  thisWeek: boolean;
+  // Descarte vigente, o el último que ya dejó de valer (y por qué volvió).
+  discard: DiscardInfo | null;
+  discardReturned: (DiscardInfo & { why: "urgente" | "vencido" }) | null;
 };
 
 export type NewProductRow = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
@@ -71,7 +96,7 @@ export type PurchaseSuggestions = {
   newProducts: NewProductRow[];
 };
 
-const STATUS_ORDER: Record<SuggestionStatus, number> = { preguntar_proveedor: 0, urgente: 1, pronto: 2, sin_proveedor: 3, en_compra: 4, no_sale: 5 };
+const STATUS_ORDER: Record<SuggestionStatus, number> = { preguntar_proveedor: 0, urgente: 1, pronto: 2, sin_proveedor: 3, en_compra: 4, descartado: 5, no_sale: 6 };
 
 function sortRows(rows: SuggestionRow[]): SuggestionRow[] {
   return rows.sort((a, b) => {
@@ -104,9 +129,10 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   const windowStart = new Date(Math.max(now.getTime() - WINDOW_DAYS * DAY_MS, firstBatch?.requestedAt.getTime() ?? now.getTime()));
   const windowDays = Math.max(1, (now.getTime() - windowStart.getTime()) / DAY_MS);
 
-  const [balances, balancesBefore, dropiSales, externalSales, openPurchases, readyIds] = await Promise.all([
+  const [balances, balancesBefore, balancesBeforeCold, dropiSales, externalSales, openPurchases, readyIds] = await Promise.all([
     latestBalances(),
     latestBalances(new Date(now.getTime() - ESCALATE_DAYS * DAY_MS)),
+    latestBalances(new Date(now.getTime() - COLD_ESCALATE_DAYS * DAY_MS)),
     prisma.fulfillmentRequestItem.groupBy({
       by: ["catalogItemId"],
       where: { batch: { requestedAt: { gte: windowStart } }, OR: [{ warrantyMode: null }, { warrantyMode: { not: "PIECE" } }] },
@@ -142,7 +168,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   // Pedido del usuario 2026-10-02: un stock negativo es un error de conteo,
   // no una compra urgente — se sacan de la lista hasta que se corrija.
   const candidateIds = [...balances.entries()].filter(([, bal]) => bal >= 0 && bal <= COLD_MAX).map(([id]) => id);
-  const [items, lastPurchases, stockoutReports] = await Promise.all([
+  const [items, lastPurchases, stockoutReports, discards] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({
       where: { id: { in: candidateIds }, awaitingDropiId: false },
       select: { id: true, name: true, photos: true, justCode: true },
@@ -159,7 +185,14 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       orderBy: [{ catalogItemId: "asc" }, { reportedAt: "desc" }],
       select: { id: true, catalogItemId: true, reportedAt: true, supplierCheckedAt: true, supplierBackAt: true },
     }),
+    prisma.purchaseSuggestionDiscard.findMany({
+      where: { catalogItemId: { in: candidateIds }, undoneAt: null, discardedAt: { gte: new Date(now.getTime() - 2 * DISCARD_VALID_DAYS * DAY_MS) } },
+      distinct: ["catalogItemId"],
+      orderBy: [{ catalogItemId: "asc" }, { discardedAt: "desc" }],
+      select: { id: true, catalogItemId: true, reason: true, note: true, statusAtDiscard: true, discardedAt: true, discardedBy: { select: { name: true } } },
+    }),
   ]);
+  const discardByItem = new Map(discards.map((d) => [d.catalogItemId, d]));
   const supplierByItem = new Map(lastPurchases.map((p) => [p.catalogItemId, p.supplier]));
   const lastPurchaseAt = new Map(lastPurchases.map((p) => [p.catalogItemId, p.createdAt]));
   // La marca sigue vigente mientras no diga "Ya lo tiene" ni haya una compra posterior.
@@ -182,7 +215,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
     const supplier = supplierByItem.get(item.id) ?? null;
     const urgentDays = supplier?.paymentMode === "CREDITO" ? URGENT_DAYS_CREDIT_SUPPLIER : URGENT_DAYS;
     const supplierOut = supplierOutByItem.get(item.id) ?? null;
-    const status: SuggestionStatus = openPurchase
+    const baseStatus: SuggestionStatus = openPurchase
       ? "en_compra"
       : perDay === 0
         ? "no_sale"
@@ -193,9 +226,30 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
           : daysLeft! <= urgentDays
             ? "urgente"
             : "pronto";
-    // Ya era urgente hace 3 días (con el stock de ese día y la venta de hoy).
-    const before = balancesBefore.get(item.id);
+    // Descarte de Nairoby: solo en compras frías y solo sobre urgente/pronto.
+    const isCold = stock > HOT_MAX;
+    const d = discardByItem.get(item.id);
+    let discard: DiscardInfo | null = null;
+    let discardReturned: SuggestionRow["discardReturned"] = null;
+    if (d && isCold) {
+      const info: DiscardInfo = {
+        id: d.id,
+        reason: d.reason,
+        reasonLabel: DISCARD_REASONS[d.reason] ?? d.reason,
+        note: d.note,
+        byName: d.discardedBy?.name ?? null,
+        at: d.discardedAt.toISOString(),
+      };
+      const expired = now.getTime() - d.discardedAt.getTime() > DISCARD_VALID_DAYS * DAY_MS;
+      const turnedUrgent = d.statusAtDiscard === "pronto" && baseStatus === "urgente";
+      if (!expired && !turnedUrgent) discard = info;
+      else if (baseStatus === "urgente" || baseStatus === "pronto") discardReturned = { ...info, why: turnedUrgent ? "urgente" : "vencido" };
+    }
+    const status: SuggestionStatus = discard && (baseStatus === "urgente" || baseStatus === "pronto") ? "descartado" : baseStatus;
+    // Ya era urgente hace 3 días (7 en compras frías) con el stock de ese día y la venta de hoy.
+    const before = (isCold ? balancesBeforeCold : balancesBefore).get(item.id);
     const escalated = status === "urgente" && before !== undefined && Math.max(0, before) / perDay <= urgentDays;
+    const thisWeek = isCold && (status === "urgente" || (status === "pronto" && daysLeft !== null && daysLeft <= urgentDays + COLD_WEEK_AHEAD_DAYS));
     // Si con lo que hay ya alcanza para todo ese tiempo, todavía no se sugiere nada.
     const needed = Math.ceil(perDay * (urgentDays + COVER_DAYS_AFTER_ARRIVAL) - Math.max(0, stock));
     const suggestedQty = status !== "en_compra" && status !== "no_sale" && needed > 0 ? needed : null;
@@ -215,6 +269,9 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       urgentDays,
       suggestedQty,
       supplierOut: supplierOut ? { reportId: supplierOut.reportId, since: supplierOut.since.toISOString(), askAt: supplierOut.askAt.toISOString() } : null,
+      thisWeek,
+      discard: status === "descartado" ? discard : null,
+      discardReturned,
     };
     (stock <= HOT_MAX ? hot : cold).push(row);
   }
@@ -288,15 +345,34 @@ export function buildSuggestionNotice(s: PurchaseSuggestions, audience: Suggesti
       type: "compras_urgentes_sin_atender",
       icon: "🚨",
       label: "Compras urgentes sin atender",
-      meta: `${plural(rows.length, "producto", "productos")} urgente${rows.length === 1 ? "" : "s"} hace ${ESCALATE_DAYS}+ días sin comprar`,
-      body: `Hace ${ESCALATE_DAYS} días o más que están urgentes y nadie los compró: ${names}${more}.`,
+      meta: `${plural(rows.length, "producto", "productos")} urgente${rows.length === 1 ? "" : "s"} sin comprar (${ESCALATE_DAYS}+ días en calientes, ${COLD_ESCALATE_DAYS}+ en frías)`,
+      body: `Están urgentes desde hace días (${ESCALATE_DAYS}+ en compras calientes, ${COLD_ESCALATE_DAYS}+ en frías) y nadie los compró ni los descartó: ${names}${more}.`,
       overdue: true,
     };
   }
-  const rows = audience === "hot" ? s.hot : s.cold;
+  if (audience === "cold") {
+    const week = s.cold.filter((r) => r.thisWeek);
+    if (week.length === 0) return null;
+    const urgentCold = week.filter((r) => r.status === "urgente").length;
+    const names = week
+      .slice(0, 3)
+      .map((r) => `${r.name} (${daysText(r.daysLeft)}${r.suggestedQty ? `, comprar ~${r.suggestedQty}` : ""})`)
+      .join("; ");
+    const meta = `${plural(week.length, "producto", "productos")} por comprar o descartar esta semana${urgentCold ? ` · ${urgentCold} urgente${urgentCold === 1 ? "" : "s"}` : ""}`;
+    return {
+      audience,
+      type: "compras_frias",
+      icon: "❄️",
+      label: "Compras frías de esta semana",
+      meta,
+      body: `${meta}. ${names}${week.length > 3 ? ` y ${week.length - 3} más` : ""}.`,
+      overdue: week.some((r) => r.escalated),
+    };
+  }
+  const rows = s.hot;
   const urgent = rows.filter((r) => r.status === "urgente");
   const soon = rows.filter((r) => r.status === "pronto");
-  const news = audience === "hot" ? s.newProducts.length : 0;
+  const news = s.newProducts.length;
   // Los "sin proveedor" solo cuentan el día que toca preguntar (cada 15 días).
   const ask = rows.filter((r) => r.status === "preguntar_proveedor").length;
   if (urgent.length === 0 && soon.length === 0 && news === 0 && ask === 0) return null;
@@ -317,9 +393,9 @@ export function buildSuggestionNotice(s: PurchaseSuggestions, audience: Suggesti
     .join("; ");
   return {
     audience,
-    type: audience === "hot" ? "compras_calientes" : "compras_frias",
-    icon: audience === "hot" ? "🔥" : "❄️",
-    label: audience === "hot" ? "Compras calientes" : "Compras frías",
+    type: "compras_calientes",
+    icon: "🔥",
+    label: "Compras calientes",
     meta: parts.join(" · "),
     body: `${parts.join(" · ")}${top ? `. Primero: ${top}` : ""}${askNames ? `. ¿El proveedor ya tiene: ${askNames}?` : "."}`,
     overdue: urgent.some((r) => r.escalated),
@@ -338,7 +414,8 @@ export async function getPurchaseSuggestionPushes(): Promise<{ ownerId: string; 
     for (const id of ids) if (id) out.push({ ownerId: id, type: n.type, title: `DAFLOW · ${n.label}`, body: n.body, url: PURCHASE_SUGGESTIONS_HREF });
   };
   add(hotIds, "hot");
-  add([financeLeadId], "cold");
+  // Compras frías: el aviso sale solo los lunes (en Inicio se queda toda la semana).
+  if (new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: "America/Guayaquil" }) === "Mon") add([financeLeadId], "cold");
   add([inventoryLeadId], "escalation");
   return out;
 }
@@ -352,4 +429,71 @@ export async function getPurchaseSuggestionPendingItems(userId: string, href: st
     .map((a) => buildSuggestionNotice(s, a))
     .filter((n): n is SuggestionNotice => !!n)
     .map((n) => ({ type: n.type, icon: n.icon, label: n.label, meta: n.meta, overdue: n.overdue, href }));
+}
+
+// ---- "No hace falta comprarlo" (pedido del usuario 2026-10-02) -----------
+
+// Líder de Análisis de Mercado (hoy Bryan Ríos): recibe cada descarte.
+async function getMarketAnalysisLeadId(): Promise<string | null> {
+  const lead = await prisma.user.findFirst({ where: { isActive: true, isLeader: true, leadsDept: { code: "MKT" } }, select: { id: true } });
+  return lead?.id ?? null;
+}
+
+async function adminSuggestionsHref(): Promise<string> {
+  const com = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
+  return com ? `/admin/dept/${com.id}?tab=compras&ptab=que-comprar` : "/admin";
+}
+
+// Quién puede descartar: Nairoby (su lista son las compras frías) y el admin.
+export async function canDiscardSuggestions(userId: string | null, isAdmin: boolean): Promise<boolean> {
+  if (isAdmin) return true;
+  if (!userId) return false;
+  return (await getFinanceLeadId()) === userId;
+}
+
+export async function discardSuggestion(params: {
+  catalogItemId: string;
+  reason: string;
+  note: string | null;
+  userId: string | null;
+  actorName: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!DISCARD_REASONS[params.reason]) return { ok: false, error: "Elige un motivo." };
+  const note = params.note?.trim() || null;
+  if (params.reason === "OTHER" && (!note || note.length < 5)) return { ok: false, error: "Describe por qué no hace falta comprarlo (mínimo 5 letras)." };
+  const s = await getPurchaseSuggestions();
+  const row = s.cold.find((r) => r.catalogItemId === params.catalogItemId);
+  if (!row || (row.status !== "urgente" && row.status !== "pronto")) return { ok: false, error: "Este producto ya no está por comprar en compras frías — recarga la lista." };
+
+  await prisma.purchaseSuggestionDiscard.create({
+    data: {
+      catalogItemId: row.catalogItemId,
+      reason: params.reason,
+      note,
+      statusAtDiscard: row.status,
+      stockAtDiscard: row.stock,
+      daysLeftAtDiscard: row.daysLeft,
+      discardedById: params.userId,
+    },
+  });
+
+  const why = `${DISCARD_REASONS[params.reason]}${note ? ` — ${note}` : ""}`;
+  const days = row.daysLeft === null ? "" : row.daysLeft < 1 ? ", se acaba hoy" : `, alcanza ${Math.floor(row.daysLeft)} días`;
+  const body = `${params.actorName} dijo que no hace falta comprar ${row.name}${row.status === "urgente" ? " (estaba URGENTE)" : ""}. Motivo: ${why}. Quedan ${row.stock}${days}.`;
+  const [mktLeadId, adminHref] = await Promise.all([getMarketAnalysisLeadId(), adminSuggestionsHref()]);
+  if (mktLeadId && mktLeadId !== params.userId) {
+    await notifyOwner(mktLeadId, { title: "Compra fría descartada", body, url: PURCHASE_SUGGESTIONS_HREF }).catch(() => null);
+  }
+  await notifyOwner("admin", { title: "Compra fría descartada", body, url: adminHref }).catch(() => null);
+  return { ok: true };
+}
+
+// "Volver a la lista": deshace un descarte antes de tiempo.
+export async function undoDiscard(params: { discardId: string; userId: string | null }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const updated = await prisma.purchaseSuggestionDiscard.updateMany({
+    where: { id: params.discardId, undoneAt: null },
+    data: { undoneAt: new Date(), undoneById: params.userId },
+  });
+  if (updated.count === 0) return { ok: false, error: "Este descarte ya no está vigente." };
+  return { ok: true };
 }

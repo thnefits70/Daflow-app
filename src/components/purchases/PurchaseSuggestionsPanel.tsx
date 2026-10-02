@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
-type Status = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "no_sale" | "en_compra";
+type Status = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "descartado" | "no_sale" | "en_compra";
+type DiscardInfo = { id: string; reason: string; reasonLabel: string; note: string | null; byName: string | null; at: string };
 type Row = {
   catalogItemId: string;
   name: string;
@@ -20,9 +21,12 @@ type Row = {
   urgentDays: number;
   suggestedQty: number | null;
   supplierOut: { reportId: string; since: string; askAt: string } | null;
+  thisWeek: boolean;
+  discard: DiscardInfo | null;
+  discardReturned: (DiscardInfo & { why: "urgente" | "vencido" }) | null;
 };
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
-type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean };
+type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean };
 
 const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = [
   {
@@ -37,6 +41,12 @@ const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = 
     status: "sin_proveedor",
     title: "🚫 Ningún proveedor lo tiene",
     hint: "No te llegan avisos de estos productos. Cada 15 días se te pregunta si el proveedor ya lo tiene",
+    tone: "text-steel",
+  },
+  {
+    status: "descartado",
+    title: "🗑️ No hace falta comprarlos",
+    hint: "Se descartaron con un motivo. Vuelven solos a los 30 días, o antes si estaban en \"pronto\" y se ponen urgentes",
     tone: "text-steel",
   },
   { status: "en_compra", title: "🛒 Ya en compra", hint: "Ya hay una compra abierta — no hace falta pedirlo otra vez", tone: "text-teal" },
@@ -66,7 +76,105 @@ function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" });
 }
 
-function RowLine({ r, canReportStockout, onChanged }: { r: Row; canReportStockout: boolean; onChanged: () => void }) {
+// Pedido del usuario 2026-10-02: motivos fijos + "Otro" con descripción.
+const DISCARD_REASONS: { key: string; label: string }[] = [
+  { key: "NO_DEMAND", label: "No hay demanda del producto" },
+  { key: "NO_SALES", label: "El producto ya no tiene ventas" },
+  { key: "OTHER", label: "Otro motivo" },
+];
+
+// "No hace falta comprarlo" con doble confirmación: primero el motivo, después
+// una segunda pantalla "¿Estás seguro?" para que no sea un clic por error.
+function DiscardForm({ r, onDone, onCancel }: { r: Row; onDone: () => void; onCancel: () => void }) {
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [step, setStep] = useState<"form" | "confirm">("form");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const label = DISCARD_REASONS.find((x) => x.key === reason)?.label ?? "";
+  const canNext = !!reason && (reason !== "OTHER" || note.trim().length >= 5);
+  const daysTxt = r.daysLeft === null ? "" : r.daysLeft < 1 ? " y se acaba hoy" : ` y alcanza para ${Math.floor(r.daysLeft)} días`;
+
+  function submit() {
+    setBusy(true);
+    setError(null);
+    fetch("/api/purchase-suggestions/discard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ catalogItemId: r.catalogItemId, reason, note: note.trim() || null }),
+    })
+      .then((res) => res.json().then((j) => ({ ok: res.ok, j })))
+      .then(({ ok, j }) => {
+        if (!ok) setError(j.error ?? "No se pudo guardar.");
+        else onDone();
+      })
+      .catch(() => setError("No se pudo guardar."))
+      .finally(() => setBusy(false));
+  }
+
+  if (step === "confirm") {
+    return (
+      <div className="mt-2 bg-red/10 border border-red/40 rounded-md p-2.5">
+        <div className="text-[12.5px] font-bold text-red">¿Estás seguro de que NO hace falta comprar {r.name}?</div>
+        <div className="text-[12px] text-steel mt-1">
+          Quedan {r.stock}
+          {daysTxt}
+          {r.status === "urgente" ? " — está URGENTE" : ""}. Motivo: <b className="text-ink">{label}</b>
+          {note.trim() ? ` — ${note.trim()}` : ""}. Le llega al líder de Análisis de Mercado y al administrador.
+        </div>
+        {error && <div className="text-[11.5px] text-red mt-1">{error}</div>}
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          <button type="button" disabled={busy} onClick={submit} className="rounded bg-red px-2.5 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-50">
+            {busy ? "Guardando…" : "Sí, no hace falta comprarlo"}
+          </button>
+          <button type="button" disabled={busy} onClick={() => setStep("form")} className="rounded border border-rule px-2.5 py-1.5 text-[11.5px] text-steel cursor-pointer">
+            Volver
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-2 bg-surface border border-rule rounded-md p-2.5">
+      <div className="text-[12px] font-semibold text-ink mb-1.5">¿Por qué no hace falta comprarlo?</div>
+      <div className="flex flex-wrap gap-1.5">
+        {DISCARD_REASONS.map((x) => (
+          <button
+            key={x.key}
+            type="button"
+            onClick={() => setReason(x.key)}
+            className={`rounded-full border px-2.5 py-1 text-[11.5px] cursor-pointer ${reason === x.key ? "border-teal bg-teal/15 text-teal font-semibold" : "border-rule text-steel hover:text-ink"}`}
+          >
+            {x.label}
+          </button>
+        ))}
+      </div>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        rows={2}
+        maxLength={500}
+        placeholder={reason === "OTHER" ? "Describe por qué (obligatorio)" : "Detalle (opcional)"}
+        className="w-full mt-2 rounded border border-rule bg-surface2 px-2 py-1.5 text-[12px] text-ink"
+      />
+      <div className="flex flex-wrap gap-1.5 mt-1.5">
+        <button type="button" disabled={!canNext} onClick={() => setStep("confirm")} className="rounded bg-teal px-2.5 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-50">
+          Continuar
+        </button>
+        <button type="button" onClick={onCancel} className="rounded border border-rule px-2.5 py-1.5 text-[11.5px] text-steel cursor-pointer">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged }: { r: Row; canReportStockout: boolean; canDiscard: boolean; isCold: boolean; onChanged: () => void }) {
+  const [discarding, setDiscarding] = useState(false);
+  function undo() {
+    if (!r.discard || !window.confirm(`¿Volver a poner ${r.name} en la lista de compras frías?`)) return;
+    fetch(`/api/purchase-suggestions/discard/${r.discard.id}/undo`, { method: "POST" }).then(() => onChanged());
+  }
   const days = fmtDaysLeft(r.daysLeft);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +234,31 @@ function RowLine({ r, canReportStockout, onChanged }: { r: Row; canReportStockou
             {r.supplierName ? `Última compra: ${r.supplierName}` : ""}
           </div>
         )}
-        {r.escalated && <div className="text-[11.5px] text-red font-semibold mt-0.5">Urgente hace 3 días o más sin comprar — ya se avisó a Daniel</div>}
+        {r.thisWeek && <div className="text-[11.5px] text-amber font-semibold mt-0.5">Comprar o descartar esta semana</div>}
+        {r.escalated && <div className="text-[11.5px] text-red font-semibold mt-0.5">Urgente hace {isCold ? 7 : 3} días o más sin comprar — ya se avisó a Daniel</div>}
+        {r.discard && (
+          <div className="text-[11.5px] text-steel mt-0.5">
+            Descartado el {fmtDate(r.discard.at)}
+            {r.discard.byName ? ` por ${r.discard.byName}` : ""}: {r.discard.reasonLabel}
+            {r.discard.note ? ` — ${r.discard.note}` : ""}
+          </div>
+        )}
+        {r.discardReturned && (
+          <div className="text-[11.5px] text-amber mt-0.5">
+            Se descartó el {fmtDate(r.discardReturned.at)} ({r.discardReturned.reasonLabel}
+            {r.discardReturned.note ? ` — ${r.discardReturned.note}` : ""}). Volvió porque {r.discardReturned.why === "urgente" ? "se puso urgente" : "pasaron 30 días"}.
+          </div>
+        )}
+        {discarding && (
+          <DiscardForm
+            r={r}
+            onCancel={() => setDiscarding(false)}
+            onDone={() => {
+              setDiscarding(false);
+              onChanged();
+            }}
+          />
+        )}
         {r.supplierOut && (
           <div className="text-[11.5px] text-steel mt-0.5">
             Sin proveedor desde el {fmtDate(r.supplierOut.since)}
@@ -135,6 +267,20 @@ function RowLine({ r, canReportStockout, onChanged }: { r: Row; canReportStockou
         )}
         {error && <div className="text-[11.5px] text-red mt-0.5">{error}</div>}
       </div>
+      {canDiscard && isCold && !discarding && (r.status === "urgente" || r.status === "pronto") && (
+        <button
+          type="button"
+          onClick={() => setDiscarding(true)}
+          className="shrink-0 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold text-steel hover:text-red hover:border-red"
+        >
+          No hace falta comprarlo
+        </button>
+      )}
+      {canDiscard && r.discard && (
+        <button type="button" onClick={undo} className="shrink-0 rounded border border-rule px-2.5 py-1.5 text-[11.5px] font-semibold text-steel hover:text-ink hover:border-teal">
+          Volver a la lista
+        </button>
+      )}
       {canReportStockout && r.status === "preguntar_proveedor" && r.supplierOut && (
         <div className="shrink-0 flex flex-col sm:flex-row gap-1.5">
           <button
@@ -167,18 +313,47 @@ function RowLine({ r, canReportStockout, onChanged }: { r: Row; canReportStockou
   );
 }
 
-function List({ title, sub, rows, newProducts, open, canReportStockout, onChanged }: { title: string; sub: string; rows: Row[]; newProducts?: NewProduct[]; open: boolean; canReportStockout: boolean; onChanged: () => void }) {
+function List({
+  title,
+  sub,
+  rows,
+  newProducts,
+  open,
+  canReportStockout,
+  canDiscard = false,
+  isCold = false,
+  onChanged,
+}: {
+  title: string;
+  sub: string;
+  rows: Row[];
+  newProducts?: NewProduct[];
+  open: boolean;
+  canReportStockout: boolean;
+  canDiscard?: boolean;
+  isCold?: boolean;
+  onChanged: () => void;
+}) {
   const [showNoSale, setShowNoSale] = useState(false);
+  const [showDiscarded, setShowDiscarded] = useState(false);
+  const week = isCold ? rows.filter((r) => r.thisWeek).length : 0;
   return (
     <details open={open} className="bg-surface border border-rule rounded-md mb-4">
       <summary className="cursor-pointer px-4 py-3 text-[14px] font-bold text-ink">
         {title} <span className="text-[12px] font-normal text-steel">· {sub}</span>
       </summary>
       <div className="px-4 pb-4">
+        {/* Pedido del usuario 2026-10-02: la lista de Nairoby es semanal. */}
+        {isCold && (
+          <div className="mt-2 text-[12px] text-steel bg-amber/10 border border-amber/30 rounded-md px-2.5 py-1.5">
+            Esta semana: <b className="text-ink">{week} producto{week === 1 ? "" : "s"}</b> por comprar o descartar (urgentes y los que se vuelven urgentes antes del
+            próximo lunes). El aviso llega los lunes; esta lista se queda en Inicio toda la semana.
+          </div>
+        )}
         {GROUPS.map((g) => {
           const list = rows.filter((r) => r.status === g.status);
           if (list.length === 0) return null;
-          const collapsed = g.status === "no_sale" && !showNoSale;
+          const collapsed = (g.status === "no_sale" && !showNoSale) || (g.status === "descartado" && !showDiscarded);
           return (
             <div key={g.status} className="mt-3">
               <div className="flex items-baseline justify-between gap-2 mb-1.5">
@@ -190,12 +365,17 @@ function List({ title, sub, rows, newProducts, open, canReportStockout, onChange
                     {showNoSale ? "Ocultar" : "Ver"}
                   </button>
                 )}
+                {g.status === "descartado" && (
+                  <button type="button" className="text-[12px] text-teal cursor-pointer" onClick={() => setShowDiscarded((v) => !v)}>
+                    {showDiscarded ? "Ocultar" : "Ver"}
+                  </button>
+                )}
               </div>
               <div className="text-[11.5px] text-steel mb-1.5">{g.hint}</div>
               {!collapsed && (
                 <div className="bg-surface2 border border-rule rounded-md">
                   {list.map((r) => (
-                    <RowLine key={r.catalogItemId} r={r} canReportStockout={canReportStockout} onChanged={onChanged} />
+                    <RowLine key={r.catalogItemId} r={r} canReportStockout={canReportStockout} canDiscard={canDiscard} isCold={isCold} onChanged={onChanged} />
                   ))}
                 </div>
               )}
@@ -257,7 +437,7 @@ export function PurchaseSuggestionsPanel() {
   const onlyHot = data.audiences.includes("hot") && !data.audiences.includes("cold");
   const hotFirst = !onlyCold;
   const hot = <List key="hot" title="🔥 Compras calientes" sub="30 unidades o menos · Jariel" rows={data.hot} newProducts={data.newProducts} open={!onlyCold} canReportStockout={data.canReportStockout} onChanged={load} />;
-  const cold = <List key="cold" title="❄️ Compras frías" sub="31 a 60 unidades · Nairoby" rows={data.cold} open={!onlyHot} canReportStockout={data.canReportStockout} onChanged={load} />;
+  const cold = <List key="cold" title="❄️ Compras frías" sub="31 a 60 unidades · Nairoby" rows={data.cold} open={!onlyHot} canReportStockout={data.canReportStockout} canDiscard={data.canDiscard} isCold onChanged={load} />;
 
   return (
     <div>

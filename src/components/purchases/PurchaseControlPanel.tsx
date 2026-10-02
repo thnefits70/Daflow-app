@@ -98,7 +98,7 @@ export function PurchaseControlPanel({
     ...(canSubmit || canReview ? [{ key: "comparar" as Tab, label: "Historial de precios de compra" }] : []),
     // Confirmado 2026-09-29 (idea de Daniel): compras calientes/frías según
     // lo que de verdad se vende — quien compra, Daniel y el admin.
-    ...(isAdmin || canSubmit || canApproveReceiving ? [{ key: "que-comprar" as Tab, label: "Qué comprar" }] : []),
+    ...(isAdmin || canSubmit || canApproveReceiving || canReview ? [{ key: "que-comprar" as Tab, label: "Qué comprar" }] : []),
     ...(canCreateNew ? [{ key: "solicitar" as Tab, label: "Solicitar" }] : canSubmitEmergency ? [{ key: "solicitar" as Tab, label: "🚨 Emergencia" }] : []),
     ...(canSubmit || canViewOwnPurchases ? [{ key: "mias" as Tab, label: "Mis solicitudes" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Bandeja de aprobación" }] : []),

@@ -432,6 +432,8 @@ model User {
   unfoundWinningProductsCreated                    UnfoundWinningProduct[]               @relation("UnfoundWinningProductCreatedBy")
   supplierStockoutReportsReported                  SupplierStockoutReport[]              @relation("SupplierStockoutReportReportedBy")
   supplierStockoutReportsResolved                  SupplierStockoutReport[]              @relation("SupplierStockoutReportResolvedBy")
+  purchaseSuggestionDiscards                       PurchaseSuggestionDiscard[]           @relation("PurchaseSuggestionDiscardBy")
+  purchaseSuggestionDiscardsUndone                 PurchaseSuggestionDiscard[]           @relation("PurchaseSuggestionDiscardUndoneBy")
   marketProductPriceChangesMade                    MarketProductPriceChange[]            @relation("MarketProductPriceChangeChangedBy")
   purchaseRequestsPaidBy                           PurchaseRequest[]                     @relation("PurchaseRequestPaidBy")
   purchaseRequestsInvoicedBy                       PurchaseRequest[]                     @relation("PurchaseRequestInvoicedBy")
@@ -2005,6 +2007,7 @@ model PurchaseCatalogItem {
   // Confirmado 2026-09-23: reportes de Compras de que este producto ya no
   // se consigue con ningún proveedor (ver SupplierStockoutReport).
   supplierStockoutReports        SupplierStockoutReport[]
+  purchaseSuggestionDiscards     PurchaseSuggestionDiscard[]
   // Confirmado 2026-09-23: brandeo del ID (ver NewIdBranding).
   newIdBranding                  NewIdBranding?
   // Confirmado 2026-09-29: avisos de "Producto que despierta" (ver SuddenDemandAlert).
@@ -2416,6 +2419,38 @@ enum SupplierStockoutResolutionAction {
   CLOSED_DROPI_ID
   STOCK_ZEROED
   OTHER
+}
+
+// Pedido del usuario 2026-10-02: en "Qué comprar", Nairoby (compras frías)
+// puede decir "No hace falta comprarlo" con un motivo y doble confirmación.
+// Le avisa al líder de Análisis de Mercado y al admin. Un descarte deja de
+// valer a los 30 días, o antes si el producto era "pronto" y se pone urgente.
+// reason: NO_DEMAND (no hay demanda), NO_SALES (ya no tiene ventas), OTHER
+// (note obligatoria, validado en el endpoint).
+model PurchaseSuggestionDiscard {
+  id            String              @id @default(cuid())
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+
+  reason String
+  note   String?
+
+  // Cómo estaba el producto al descartarlo (para el aviso y la auditoría).
+  statusAtDiscard   String
+  stockAtDiscard    Int
+  daysLeftAtDiscard Float?
+
+  discardedById String?
+  discardedBy   User?    @relation("PurchaseSuggestionDiscardBy", fields: [discardedById], references: [id], onDelete: SetNull)
+  discardedAt   DateTime @default(now())
+
+  // "Volver a la lista": el descarte deja de valer antes de tiempo.
+  undoneAt   DateTime?
+  undoneById String?
+  undoneBy   User?     @relation("PurchaseSuggestionDiscardUndoneBy", fields: [undoneById], references: [id], onDelete: SetNull)
+
+  @@index([catalogItemId])
+  @@index([discardedAt])
 }
 
 model SupplierStockoutReport {
