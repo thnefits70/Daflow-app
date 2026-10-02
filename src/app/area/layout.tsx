@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AreaGateShell } from "@/components/dept/AreaGateShell";
 import { MarketingArrivalAlert } from "@/components/marketing/MarketingArrivalAlert";
+import { CountedLotsGate } from "@/components/merchandise-outflow/CountedLots";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
 import { getEmployeeSidebarFlags } from "@/lib/employeeSidebarFlags";
@@ -105,10 +106,12 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
 
   let leaderAlerts: { id: string; processTitle: string; pendingCount: number; teamSize: number }[] = [];
   let ledDeptName: string | null = null;
+  let ledDeptCode: string | null = null;
   if (currentUser.isLeader && currentUser.leadsDeptId) {
     const ledDept = await prisma.department.findUnique({ where: { id: currentUser.leadsDeptId } });
     if (ledDept) {
       ledDeptName = ledDept.name;
+      ledDeptCode = ledDept.code;
       const teamUsers = await prisma.user.findMany({ where: { deptId: ledDept.id, isActive: true }, select: { id: true } });
       const updates = await prisma.processUpdate.findMany({
         where: { process: { deptId: ledDept.id } },
@@ -175,6 +178,8 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       weeklyCheckinLockout={weeklyCheckinLockout}
     >
       {children}
+      {/* Pedido del usuario 2026-10-01: cortes contados sin confirmar +24 h. */}
+      {ledDeptCode === "INV" && <CountedLotsGate />}
       {(currentUser.canConfirmMarketingDesign || currentUser.canConfirmMarketingAdvisor) && (
         <MarketingArrivalAlert canConfirmDesign={currentUser.canConfirmMarketingDesign} canConfirmAdvisor={currentUser.canConfirmMarketingAdvisor} />
       )}

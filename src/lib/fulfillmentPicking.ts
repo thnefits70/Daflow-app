@@ -407,3 +407,96 @@ export async function assignBlock(params: { lotId: string; carrier: string; assi
   }
   return { ok: true };
 }
+
+// ---- Cortes contados sin confirmar (pedido del usuario 2026-10-01) -------
+// Daniel tenía 13 cortes en Inicio y los confirmaba uno por uno, así que el
+// stock de INVESTOCK quedaba días atrasado. Ahora: una sola fila en Inicio,
+// un botón para confirmar de una vez todo lo que cuadra en los cortes ya
+// contados, una pantalla que no se salta pasadas 24 horas y aviso al admin.
+// La decisión sigue siendo de Daniel: nada se confirma solo.
+export const COUNTED_LOT_GRACE_HOURS = 24;
+
+export type CountedLot = { id: string; day: string; corte: number; matching: number; off: number; readySince: Date };
+
+export async function getCountedUnconfirmedLots(): Promise<CountedLot[]> {
+  const rows = await prisma.fulfillmentLot.findMany({
+    where: { status: "SENT" },
+    select: { id: true, day: true, corte: true, sentAt: true, createdAt: true },
+    orderBy: [{ day: "asc" }, { corte: "asc" }],
+  });
+  const out: CountedLot[] = [];
+  for (const r of rows) {
+    if (isBackfillLot(r)) continue;
+    const lot = await getCompiledLot(r.id);
+    if (!lot) continue;
+    const open = lot.picking.filter((p) => !p.confirmedAt);
+    if (open.length === 0 || open.some((p) => p.picked === null)) continue;
+    const times = open.map((p) => (p.pickedAt ? new Date(p.pickedAt).getTime() : 0)).filter((t) => t > 0);
+    out.push({
+      id: r.id,
+      day: r.day,
+      corte: r.corte,
+      matching: open.filter((p) => p.picked === p.needed).length,
+      off: open.filter((p) => p.picked !== p.needed).length,
+      readySince: times.length ? new Date(Math.max(...times)) : (r.sentAt ?? r.createdAt),
+    });
+  }
+  return out;
+}
+
+export function overdueCountedLots(lots: CountedLot[], now = new Date()): CountedLot[] {
+  const cutoff = now.getTime() - COUNTED_LOT_GRACE_HOURS * 60 * 60 * 1000;
+  return lots.filter((l) => l.readySince.getTime() < cutoff);
+}
+
+// "Confirmar todos los que cuadran": en cada corte ya contado, confirma solo
+// los productos donde lo sacado = lo pedido. Lo que no cuadra queda para que
+// Daniel lo revise producto por producto.
+export async function confirmAllMatchingInCountedLots(userId: string | null): Promise<{ ok: true; lots: number; confirmed: number; errors: string[] }> {
+  const lots = await getCountedUnconfirmedLots();
+  let confirmed = 0;
+  let touched = 0;
+  const errors: string[] = [];
+  for (const l of lots) {
+    if (l.matching === 0) continue;
+    const lot = await getCompiledLot(l.id);
+    if (!lot) continue;
+    const ids = lot.picking.filter((p) => !p.confirmedAt && p.picked === p.needed).map((p) => p.catalogItemId);
+    const res = await confirmPicks({ lotId: l.id, catalogItemIds: ids, onlyMatching: true, userId });
+    if (!res.ok) {
+      errors.push(`Corte ${l.corte} del ${l.day.split("-").reverse().join("/")}: ${res.error}`);
+      continue;
+    }
+    touched++;
+    confirmed += res.confirmed ?? 0;
+  }
+  return { ok: true, lots: touched, confirmed, errors };
+}
+
+// Pantalla que no se salta: si Daniel escribe por qué todavía no confirma,
+// le llega al admin y la pantalla no vuelve a salir por unas horas. El
+// motivo queda en la campana del admin (sin tabla nueva).
+export const DELAY_REASON_TITLE = "Cortes sin confirmar: motivo de Daniel";
+export const DELAY_SNOOZE_HOURS = 8;
+
+export async function isCountedLotsGateSnoozed(): Promise<boolean> {
+  const since = new Date(Date.now() - DELAY_SNOOZE_HOURS * 60 * 60 * 1000);
+  const n = await prisma.notification.count({ where: { ownerId: "admin", title: DELAY_REASON_TITLE, createdAt: { gte: since } } });
+  return n > 0;
+}
+
+// El admin ve los cortes desde la página de INVESTOCK, no desde /area.
+export async function adminLotHref(): Promise<string> {
+  const inv = await prisma.department.findUnique({ where: { code: "INV" }, select: { id: true } });
+  return inv ? `/admin/dept/${inv.id}?tab=egresos&otab=solicitud` : "/admin";
+}
+
+export async function submitCountedLotsDelayReason(reason: string): Promise<void> {
+  const overdue = overdueCountedLots(await getCountedUnconfirmedLots());
+  const list = overdue.map((l) => `Corte ${l.corte} del ${l.day.split("-").reverse().join("/")}`).join(", ");
+  await notifyOwner("admin", {
+    title: DELAY_REASON_TITLE,
+    body: `${overdue.length} corte(s) contados sin confirmar${list ? ` (${list})` : ""}. Motivo: ${reason}`,
+    url: await adminLotHref(),
+  });
+}

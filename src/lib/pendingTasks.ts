@@ -23,6 +23,7 @@ import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
 import { DISCONTINUED_URL, getDiscontinuedOrderPendingCount, getDiscontinuedPendingCount } from "@/lib/dropiDiscontinued";
 import { formerLeaderIdsFor, isSummaryComplete } from "@/lib/formerLeaders";
 import { getUnlinkedShanghaiCount } from "@/lib/storeTracking";
+import { adminLotHref, getCountedUnconfirmedLots, overdueCountedLots } from "@/lib/fulfillmentPicking";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -536,7 +537,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
 // "analisis_mercado_liberar_kardex" (confirmado 2026-09-28, pedido explícito
 // del usuario): mercadería ya en bodega que no aparece en INVESTOCK hasta que
 // Bryan la libere — se le pasó por semanas porque solo tenía un aviso único.
-export const MANDATORY_PUSH_TYPES = new Set(["colaborador_del_mes", "cambio_proveedor_rechazo", "analisis_mercado_liberar_kardex"]);
+export const MANDATORY_PUSH_TYPES = new Set(["fulfillment_cortes_sin_confirmar", "kardex_atrasado_cortes", "kardex_atrasado_recepciones", "kardex_atrasado_liberar", "colaborador_del_mes", "cambio_proveedor_rechazo", "analisis_mercado_liberar_kardex"]);
 
 // Each department's admin-leader feedback meeting falls on a different
 // weekday — confirmed by the user 2026-07-21: Análisis de Mercado (Bryan)
@@ -2530,43 +2531,60 @@ async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingI
         });
       }),
   );
-  return rows.map((r) => {
+  // Pedido del usuario 2026-10-01: Daniel tenía 13 filas de cortes y se
+  // perdían entre lo demás. Ahora una sola fila roja con todos los cortes ya
+  // contados (arriba de todo, aviso obligatorio) y una sola con los que
+  // faltan contar. Los manifiestos atrasados siguen uno por uno (son pocos).
+  const items: PendingItem[] = [];
+  const counted: { where: string; matching: number; off: number; late: boolean; day: string }[] = [];
+  const toPick: { where: string; counted: number; total: number; overdue: boolean }[] = [];
+  for (const r of rows) {
     const [, m, d] = r.day.split("-");
     const overdue = (r.sentAt ?? new Date()) < cutoff;
     const where = `Corte ${r.corte} del ${d}/${m}`;
     // Manifiesto atrasado (2026-09-29): ya salió, solo falta confirmarlo.
     if (isBackfillLot(r)) {
-      return {
+      items.push({
         type: "fulfillment_corte_enviado",
         icon: "🚚",
         label: "Manifiesto atrasado por confirmar",
         meta: `${where} · ya salió, confirma de una vez para descontarlo del stock${overdue ? " · atrasado" : ""}`,
         overdue,
         href,
-      };
+      });
+      continue;
     }
     const p = progress.get(r.id);
     if (p && p.total > 0 && p.counted === p.total) {
-      const late = overdue || (!!p.lastPickedAt && p.lastPickedAt < readyCutoff);
-      const off = p.total - p.matching;
-      return {
-        type: "fulfillment_corte_enviado",
-        icon: "✅",
-        label: "Corte contado — falta tu confirmación",
-        meta: `${where} · ${p.matching} cuadran${off > 0 ? `, ${off} no cuadran` : ""} · mientras no confirmes, no baja del stock${late ? " · atrasado" : ""}`,
-        overdue: late,
-        href,
-      };
+      counted.push({ where, matching: p.matching, off: p.total - p.matching, late: overdue || (!!p.lastPickedAt && p.lastPickedAt < readyCutoff), day: `${d}/${m}` });
+    } else {
+      toPick.push({ where, counted: p?.counted ?? 0, total: p?.total ?? 0, overdue });
     }
-    return {
+  }
+  if (counted.length > 0) {
+    const matching = counted.reduce((s, c) => s + c.matching, 0);
+    const off = counted.reduce((s, c) => s + c.off, 0);
+    items.unshift({
+      type: "fulfillment_cortes_sin_confirmar",
+      icon: "🛑",
+      label: `${counted.length} corte${counted.length === 1 ? "" : "s"} contado${counted.length === 1 ? "" : "s"} sin confirmar — stock desactualizado desde el ${counted[0].day}`,
+      meta: `${matching} cuadran (confírmalos de un clic)${off > 0 ? ` · ${off} no cuadran` : ""} · mientras no confirmes, no baja del stock`,
+      overdue: true,
+      href,
+    });
+  }
+  if (toPick.length > 0) {
+    const late = toPick.some((t) => t.overdue);
+    items.push({
       type: "fulfillment_corte_enviado",
       icon: "🚚",
-      label: "Corte por despachar",
-      meta: `${where} · ${p && p.total > 0 ? `contados ${p.counted} de ${p.total} · ` : ""}asigna los bloques y confirma lo que salió${overdue ? " · atrasado" : ""}`,
-      overdue,
+      label: toPick.length === 1 ? "Corte por despachar" : `${toPick.length} cortes por despachar`,
+      meta: `${toPick.map((t) => `${t.where}${t.total > 0 ? ` (${t.counted}/${t.total})` : ""}`).join(" · ")} · asigna los bloques y confirma lo que salió${late ? " · atrasado" : ""}`,
+      overdue: late,
       href,
-    };
-  });
+    });
+  }
+  return items;
 }
 
 // Confirmado 2026-09-26: pedido del usuario — quien tiene un bloque del
@@ -3267,6 +3285,65 @@ async function getImprovementPlanPendingClosureApprovalItems(href: string): Prom
   });
 }
 
+// Pedido del usuario 2026-10-01: Daniel no confirmaba cortes ya contados y el
+// stock de INVESTOCK quedaba días atrás. Si algo que mueve el Kardex espera
+// más de 24 horas a una persona, se le avisa al admin para que hable con ella:
+// cortes contados (Daniel), compras recibidas sin aprobar (Daniel) y
+// productos nuevos sin "Liberar al Kardex" (Bryan). La decisión sigue siendo
+// de cada uno; esto solo avisa.
+async function getKardexDelayAdminItems(): Promise<PendingItem[]> {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const daysSince = (d: Date) => Math.max(1, Math.floor((Date.now() - d.getTime()) / (24 * 60 * 60 * 1000)));
+  const [counted, receipts, releases, comDept, mktDept, lotsHref] = await Promise.all([
+    getCountedUnconfirmedLots().then((l) => overdueCountedLots(l)),
+    prisma.purchaseRequest.findMany({
+      where: { status: "RECEIVED_PENDING_REVIEW", receipt: { confirmedAt: { lt: cutoff } } },
+      select: { groupId: true, receipt: { select: { confirmedAt: true } } },
+    }),
+    getMarketProductKardexReleasePendingRows().then((rows) => rows.filter((r) => r.since < cutoff)),
+    prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } }),
+    prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } }),
+    adminLotHref(),
+  ]);
+  const items: PendingItem[] = [];
+  if (counted.length > 0) {
+    const oldest = counted.reduce((m, l) => (l.readySince < m ? l.readySince : m), counted[0].readySince);
+    items.push({
+      type: "kardex_atrasado_cortes",
+      icon: "🛑",
+      label: "Daniel no confirma cortes ya contados",
+      meta: `${counted.length} corte${counted.length === 1 ? "" : "s"} contado${counted.length === 1 ? "" : "s"} hace ${daysSince(oldest)}+ día(s) · el stock no baja hasta que confirme`,
+      overdue: true,
+      href: lotsHref,
+    });
+  }
+  if (receipts.length > 0) {
+    const groups = new Set(receipts.map((r) => r.groupId)).size;
+    const oldest = receipts.reduce((m, r) => (r.receipt!.confirmedAt! < m ? r.receipt!.confirmedAt! : m), receipts[0].receipt!.confirmedAt!);
+    items.push({
+      type: "kardex_atrasado_recepciones",
+      icon: "🛑",
+      label: "Daniel no aprueba mercadería ya recibida",
+      meta: `${groups} solicitud${groups === 1 ? "" : "es"} recibida${groups === 1 ? "" : "s"} por su equipo hace ${daysSince(oldest)}+ día(s) · no entra al stock hasta que apruebe`,
+      overdue: true,
+      href: comDept ? `/admin/dept/${comDept.id}?tab=compras` : "/admin",
+    });
+  }
+  if (releases.length > 0) {
+    const oldest = releases.reduce((m, r) => (r.since < m ? r.since : m), releases[0].since);
+    const units = releases.reduce((s, r) => s + r.units, 0);
+    items.push({
+      type: "kardex_atrasado_liberar",
+      icon: "🛑",
+      label: "Bryan no libera productos nuevos al Kardex",
+      meta: `${releases.length} producto${releases.length === 1 ? "" : "s"} (${units} u.) esperando hace ${daysSince(oldest)}+ día(s) · aparecen con stock 0 hasta que los libere`,
+      overdue: true,
+      href: mktDept ? `/admin/dept/${mktDept.id}?tab=analisis-mercado&ptab=trazabilidad` : "/admin",
+    });
+  }
+  return items;
+}
+
 // ---------------- Entry point ----------------
 // Each person only ever sees what's specifically assigned to them — admin
 // gets Feedback semanal (the one thing only admin can write), a department
@@ -3381,6 +3458,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(nairobySalaryItem ? [nairobySalaryItem] : []),
       ...adminPlanItems.map((i) => ({ ...i, type: "plan_mejora_admin" })),
     ];
+    // Pedido del usuario 2026-10-01: lo que no entra al Kardex porque alguien
+    // no confirmó en 24 horas va arriba de todo (y sale en el aviso de las 8:00).
+    items.unshift(...(await getKardexDelayAdminItems()));
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
   }
@@ -3689,6 +3769,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   // Confirmado 2026-09-29 (idea de Daniel): compras frías a Nairoby, y a
   // Daniel los urgentes que llevan 3+ días sin comprarse.
   items.unshift(...(await getPurchaseSuggestionPendingItems(actor.userId)));
+  // Pedido del usuario 2026-10-01: los cortes contados sin confirmar van
+  // siempre arriba de todo en el Inicio de Daniel.
+  const countedIdx = items.findIndex((i) => i.type === "fulfillment_cortes_sin_confirmar");
+  if (countedIdx > 0) items.unshift(...items.splice(countedIdx, 1));
   // Confirmado 2026-09-29 (pedido de Daniel): Producto que despierta — Daniel,
   // Bryan Rios, Yair; Nairoby solo si el producto tiene 31 a 60 en bodega.
   items.unshift(...(await getSuddenDemandPendingItems(actor.userId)));

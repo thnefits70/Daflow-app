@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { DropiGuidesPanel } from "./DropiGuidesPanel";
 import { CompiledResult, type CompiledBatch } from "./fulfillmentRequestShared";
 import { fmtDay, LotHistoryList, LotView, type CompiledLot, type LotListItem } from "./LotView";
+import { CountedLotsBar } from "./CountedLots";
 
 // Confirmado 2026-09-23 (diseño acordado con el usuario): todo se organiza
 // por CORTE — Yair sube los PDF de guías de ese horario, revisa y envía el
@@ -89,6 +90,8 @@ export function FulfillmentRequestPanel({ canSubmit }: { canSubmit: boolean }) {
   return (
     <div>
       {loading && <div className="text-[12px] text-steel mb-4">Cargando cortes…</div>}
+      {/* Pedido del usuario 2026-10-01: confirmar de una vez lo que cuadra (solo Daniel). */}
+      {canSubmit && <CountedLotsBar onConfirmed={() => loadLots(lot?.id ?? null, lot?.status)} />}
       {loadErr && (
         <div className="text-[12px] text-red bg-red/10 border border-red/30 rounded-md p-2.5 mb-4">
           {loadErr}{" "}
