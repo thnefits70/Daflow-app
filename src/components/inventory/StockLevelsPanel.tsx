@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
-import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, RefreshCw, Copy, AlertTriangle, ChevronDown, Bell, SlidersHorizontal } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, RefreshCw, Copy, AlertTriangle, ChevronDown, Bell, SlidersHorizontal, Download } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpirationAlerts } from "@/components/merchandise-reentry/ExpirationAlerts";
 import { TabGuide } from "@/components/shared/TabGuide";
@@ -781,6 +781,33 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   const sinStockCount = rows.filter((r) => r.balance === 0).length;
   const sinAreaCount = rows.filter((r) => r.warehouseArea == null).length;
 
+  // Pedido del usuario 2026-10-02 (para Nairoby, Contabilidad): bajar en
+  // Excel el ID, nombre y costo del proveedor para cruzarlo con la IA y
+  // sacar el costo de venta sin buscar producto por producto. Respeta el
+  // buscador/filtros (sin filtros = todo); los combos van en otra hoja.
+  async function downloadCostsExcel() {
+    const XLSX = await import("xlsx");
+    const wb = XLSX.utils.book_new();
+    const productSheet = XLSX.utils.aoa_to_sheet([
+      ["ID del producto", "Producto", "Marca", "Precio de costo del proveedor"],
+      ...sorted.map((r) => [r.justCode ?? "", r.name, r.bodega ? MARCA_LABELS[r.bodega] : "", r.providerPrice ?? ""]),
+    ]);
+    productSheet["!cols"] = [{ wch: 14 }, { wch: 50 }, { wch: 20 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, productSheet, "Productos");
+    const comboSheet = XLSX.utils.aoa_to_sheet([
+      ["ID del combo", "Combo", "Productos que trae", "Precio de costo del proveedor"],
+      ...filteredCombos.map((c) => [
+        c.code,
+        c.label ?? "",
+        c.components.map((k) => `${k.quantity} x ${k.catalogItem.justCode ?? ""} ${k.catalogItem.name}`).join(" + "),
+        c.providerPrice ?? "",
+      ]),
+    ]);
+    comboSheet["!cols"] = [{ wch: 14 }, { wch: 40 }, { wch: 60 }, { wch: 16 }];
+    XLSX.utils.book_append_sheet(wb, comboSheet, "Combos");
+    XLSX.writeFile(wb, `costos-proveedor-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+
   // Confirmado 2026-09-16, bug real reportado por el usuario: este
   // encabezado solo vivía en la sección de productos — al elegir "Solo
   // combos" (que oculta esa sección) el encabezado desaparecía con ella.
@@ -1116,6 +1143,15 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
         >
           <RefreshCw size={13} className={`shrink-0 ${refreshing ? "animate-spin" : ""}`} />
           {refreshing ? "Actualizando…" : "Actualizar stock"}
+        </button>
+        <button
+          type="button"
+          onClick={downloadCostsExcel}
+          title="ID, nombre y precio de costo del proveedor (respeta el buscador y los filtros)"
+          className="flex items-center gap-1.5 rounded border border-rule px-2.5 py-1.5 text-[12px] font-semibold whitespace-nowrap cursor-pointer"
+        >
+          <Download size={13} className="shrink-0" />
+          Descargar Excel
         </button>
       </div>
       </>
