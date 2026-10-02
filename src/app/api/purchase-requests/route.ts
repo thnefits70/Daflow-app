@@ -285,12 +285,14 @@ export async function GET(req: NextRequest) {
   // lectura vía canViewOwnPurchaseHistory (ver guards.ts). El filtro por
   // requestedById de abajo no cambia, así que nunca ve solicitudes ajenas.
   if (!(await canViewOwnPurchaseHistory())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  // Pedido del usuario 2026-10-01: sin tope — con `take: 50` (cada producto
+  // de una compra es una fila) a Jariel ya no le salían las compras del mes
+  // pasado en su historial, ni filtrando por proveedor o fecha.
   const isAdmin = session.user.role === "admin";
   const rows = await prisma.purchaseRequest.findMany({
     where: isAdmin ? {} : { requestedById: session.user.id },
     orderBy: { requestedAt: "desc" },
     include: purchaseRequestInclude,
-    take: 50,
   });
 
   return NextResponse.json(rows);
