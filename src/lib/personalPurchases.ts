@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { bodegaUnitCost, computeMarketProductSalePrice, pickPrimarySupplierPrice, DROPI_MARGIN_DEFAULT, DROPI_FULFILLMENT_DEFAULT } from "@/lib/marketProduct";
-import { getCurrentStockByItemIds } from "@/lib/stockKardex";
+import { bodegaUnitCost, computeMarketProductSalePrice, resolveCostBasisForCatalogItems, DROPI_MARGIN_DEFAULT } from "@/lib/marketProduct";
 import { addBusinessDays } from "@/lib/businessHours";
 
 // Confirmado 2026-08-18: rediseño completo — el precio al costo por unidad
@@ -147,43 +146,20 @@ export type AutoUnitPricing = { costUnitPrice: number; dropiUnitPrice: number };
 // (pedido explícito del usuario) — no se les da un tratamiento aparte. Si un
 // producto no tiene ninguna de las 2 fuentes, queda AUSENTE del mapa — el
 // llamador nunca debe inventar un valor, el pedido se queda esperando.
+// Corregido 2026-10-02, pedido del usuario: compras personales se había
+// quedado con el promedio del Kardex / costo fijo de la propuesta cuando el
+// 2026-09-30 Stock Actual pasó a calcular el costo según lo que QUEDA en
+// bodega (sellingCost.ts). Ahora usa exactamente la misma base
+// (resolveCostBasisForCatalogItems), así "Puesto en bodega" y "Precio
+// Dropi" salen iguales que en Stock Actual.
 export async function resolveAutoUnitPricing(catalogItemIds: string[]): Promise<Map<string, AutoUnitPricing>> {
-  const ids = [...new Set(catalogItemIds)];
-  if (ids.length === 0) return new Map();
-
-  const [proposals, stockByItem] = await Promise.all([
-    prisma.marketProductProposal.findMany({
-      where: { catalogItemId: { in: ids } },
-      include: { supplierPrices: true },
-    }),
-    getCurrentStockByItemIds(ids),
-  ]);
-
-  const proposalById = new Map(
-    proposals
-      .filter((p) => p.catalogItemId && pickPrimarySupplierPrice(p.supplierPrices))
-      .map((p) => {
-        const supplier = pickPrimarySupplierPrice(p.supplierPrices)!;
-        return [
-          p.catalogItemId!,
-          { batchCost: supplier.batchCost, batchUnits: supplier.batchUnits, freightCost: supplier.freightCost, insuranceRatePercent: p.insuranceRatePercent, fulfillmentCost: p.fulfillmentCost, marginPercent: p.marginPercent },
-        ] as const;
-      })
-  );
-
+  const basisById = await resolveCostBasisForCatalogItems(catalogItemIds);
   const result = new Map<string, AutoUnitPricing>();
-  for (const id of ids) {
-    const proposal = proposalById.get(id);
-    if (proposal) {
-      result.set(id, { costUnitPrice: bodegaUnitCost(proposal.batchCost, proposal.freightCost, proposal.batchUnits), dropiUnitPrice: computeMarketProductSalePrice(proposal) });
-      continue;
-    }
-    const kardexAvgCost = stockByItem.get(id)?.avgCost ?? 0;
-    if (!(kardexAvgCost > 0)) continue;
-    const base = { batchCost: kardexAvgCost, batchUnits: 1, freightCost: null };
+  for (const [id, basis] of basisById) {
+    if (!(basis.batchCost > 0)) continue;
     result.set(id, {
-      costUnitPrice: bodegaUnitCost(base.batchCost, base.freightCost, base.batchUnits),
-      dropiUnitPrice: computeMarketProductSalePrice({ ...base, insuranceRatePercent: 6, fulfillmentCost: DROPI_FULFILLMENT_DEFAULT, marginPercent: DROPI_MARGIN_DEFAULT }),
+      costUnitPrice: bodegaUnitCost(basis.batchCost, basis.freightCost, basis.batchUnits),
+      dropiUnitPrice: computeMarketProductSalePrice({ ...basis, marginPercent: basis.marginPercent ?? DROPI_MARGIN_DEFAULT }),
     });
   }
   return result;
