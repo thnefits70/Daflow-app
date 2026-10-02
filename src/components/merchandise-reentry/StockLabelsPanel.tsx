@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
-import { Search, Printer } from "lucide-react";
+import { Search, Printer, CheckCheck } from "lucide-react";
+import type { StockLabelPrintSummary } from "@/app/api/stock-label-prints/route";
 
 type CatalogItem = { id: string; name: string; justCode: string | null; pendingRegistration: boolean };
 
@@ -20,14 +21,61 @@ export function StockLabelsPanel() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [qrByCode, setQrByCode] = useState<Record<string, string>>({});
+  // Pedido de Daniel 2026-10-02: cuántas veces se imprimió cada QR y cuáles
+  // aún no tienen etiqueta (arriba). "Imprimir" pregunta antes, porque cada
+  // confirmación cuenta aunque luego se cancele la impresora.
+  const [prints, setPrints] = useState<StockLabelPrintSummary>({});
+  const [confirming, setConfirming] = useState<"print" | "manual" | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/purchase-catalog").then((r) => (r.ok ? r.json() : [])).then(setItems).catch(() => setItems([]));
+    fetch("/api/stock-label-prints").then((r) => (r.ok ? r.json() : {})).then(setPrints).catch(() => setPrints({}));
   }, []);
 
-  const filtered = query.trim()
+  const isPrinted = (i: CatalogItem) => !!prints[i.id];
+  const matches = query.trim()
     ? items.filter((i) => i.name.toLowerCase().includes(query.toLowerCase()) || (i.justCode ?? "").toLowerCase().includes(query.toLowerCase()))
     : items;
+  const notPrinted = matches.filter((i) => !isPrinted(i));
+  const printed = matches.filter(isPrinted);
+  const filtered = [...notPrinted, ...printed];
+
+  async function register(manual: boolean) {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/stock-label-prints", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ catalogItemIds: [...selected], manual }),
+      });
+      if (!res.ok) throw new Error();
+      setPrints(await fetch("/api/stock-label-prints").then((r) => (r.ok ? r.json() : prints)));
+      setConfirming(null);
+      if (manual) setSelected(new Set());
+      else window.print();
+    } catch {
+      setError("No se pudo guardar. Intenta de nuevo.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function printLabel(i: CatalogItem): string {
+    const p = prints[i.id];
+    if (!p) return "Sin imprimir";
+    if (p.count === 0) return "Ya impreso (antes)";
+    const times = p.count === 1 ? "Impreso 1 vez" : `Impreso ${p.count} veces`;
+    return p.manual ? `${times} + antes` : times;
+  }
+  function printTitle(i: CatalogItem): string | undefined {
+    const p = prints[i.id];
+    if (!p) return undefined;
+    const when = new Date(p.lastAt).toLocaleString("es-EC", { timeZone: "America/Guayaquil", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    return `Última vez: ${when} — ${p.lastBy}`;
+  }
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -68,11 +116,59 @@ export function StockLabelsPanel() {
           type="button"
           disabled={selected.size === 0}
           className="flex items-center gap-1.5 rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-          onClick={() => window.print()}
+          onClick={() => setConfirming("print")}
         >
           <Printer size={13} /> Imprimir ({selected.size})
         </button>
       </div>
+
+      {/* Botón momentáneo (pedido de Daniel 2026-10-02): marcar las etiquetas
+          que ya imprimió antes de este registro. Él avisa cuando ya no lo
+          necesite, para quitarlo. */}
+      <div className="flex flex-wrap items-center gap-2 mb-3 print:hidden">
+        <button
+          type="button"
+          disabled={selected.size === 0}
+          className="flex items-center gap-1.5 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold text-ink cursor-pointer disabled:opacity-60"
+          onClick={() => setConfirming("manual")}
+        >
+          <CheckCheck size={13} /> Ya los tengo impresos ({selected.size})
+        </button>
+        <span className="text-[11.5px] text-steel">Marca los que ya están pegados en percha, sin imprimirlos de nuevo.</span>
+      </div>
+
+      {confirming && (
+        <div className="mb-3 rounded-md border border-amber-500/60 bg-amber-500/10 px-3 py-2.5 text-[12.5px] print:hidden">
+          <div className="font-semibold text-ink mb-1">¿Estás seguro?</div>
+          <div className="text-steel mb-2">
+            {confirming === "print"
+              ? `Se van a imprimir ${selected.size} etiqueta(s) y quedarán contadas como impresas (aunque después canceles la impresora).`
+              : `Se van a marcar ${selected.size} producto(s) como "ya impresos antes". No se imprime nada.`}
+          </div>
+          {error && <div className="text-red-500 mb-2">{error}</div>}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={saving}
+              className="rounded border border-blue bg-blue px-3 py-1 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+              onClick={() => register(confirming === "manual")}
+            >
+              {saving ? "Guardando…" : confirming === "print" ? "Sí, imprimir" : "Sí, marcar"}
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              className="rounded border border-rule px-3 py-1 text-[12px] font-semibold text-ink cursor-pointer"
+              onClick={() => {
+                setConfirming(null);
+                setError(null);
+              }}
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
 
       <label className="flex items-center gap-2 text-[12.5px] px-2 py-1 mb-1 rounded hover:bg-cloud cursor-pointer print:hidden">
         <input
@@ -91,13 +187,31 @@ export function StockLabelsPanel() {
       </label>
 
       <div className="max-h-64 overflow-y-auto flex flex-col gap-1 print:hidden">
-        {filtered.map((i) => (
-          <label key={i.id} className="flex items-center gap-2 text-[12.5px] px-2 py-1 rounded hover:bg-cloud cursor-pointer">
-            <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggle(i.id)} />
-            <span className="flex-1">
-              {i.name} <span className="text-steel font-mono text-[11px]">({stockCodeFor(i)})</span>
-            </span>
-          </label>
+        {filtered.map((i, idx) => (
+          <div key={i.id}>
+            {idx === 0 && notPrinted.length > 0 && (
+              <div className="flex items-center justify-between px-2 pt-1 pb-0.5 text-[11.5px] font-bold text-amber-500">
+                <span>Aún sin imprimir ({notPrinted.length})</span>
+                <button
+                  type="button"
+                  className="text-[11.5px] font-semibold text-blue cursor-pointer"
+                  onClick={() => setSelected((prev) => new Set([...prev, ...notPrinted.map((x) => x.id)]))}
+                >
+                  Marcar estos
+                </button>
+              </div>
+            )}
+            {idx === notPrinted.length && printed.length > 0 && <div className="px-2 pt-2 pb-0.5 text-[11.5px] font-bold text-steel">Ya impresos ({printed.length})</div>}
+            <label className="flex items-center gap-2 text-[12.5px] px-2 py-1 rounded hover:bg-cloud cursor-pointer">
+              <input type="checkbox" checked={selected.has(i.id)} onChange={() => toggle(i.id)} />
+              <span className="flex-1">
+                {i.name} <span className="text-steel font-mono text-[11px]">({stockCodeFor(i)})</span>
+              </span>
+              <span title={printTitle(i)} className={`shrink-0 text-[11px] font-semibold ${isPrinted(i) ? "text-steel" : "text-amber-500"}`}>
+                {printLabel(i)}
+              </span>
+            </label>
+          </div>
         ))}
       </div>
 

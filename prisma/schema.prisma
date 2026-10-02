@@ -626,6 +626,7 @@ model User {
   improvementPlanClosuresRequested ImprovementPlan[]       @relation("ImprovementPlanClosureRequestedBy")
   improvementPlanClosuresApproved  ImprovementPlan[]       @relation("ImprovementPlanClosureApprovedBy")
   improvementPlanReviewsCreated    ImprovementPlanReview[] @relation("ImprovementPlanReviewCreatedBy")
+  stockLabelPrints                 StockLabelPrint[]       @relation("StockLabelPrintBy")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -2020,6 +2021,8 @@ model PurchaseCatalogItem {
   newIdBranding                  NewIdBranding?
   // Confirmado 2026-09-29: avisos de "Producto que despierta" (ver SuddenDemandAlert).
   suddenDemandAlerts             SuddenDemandAlert[]
+  // Confirmado 2026-10-02: cada impresión de su etiqueta de percha (ver StockLabelPrint).
+  stockLabelPrints               StockLabelPrint[]
 }
 
 // Confirmado 2026-09-29 (pedido de Daniel, sí del usuario): un producto que
@@ -7492,4 +7495,21 @@ model SupplierSheetNote {
   updatedAt      DateTime         @updatedAt
 
   @@index([supplierId, updatedAt])
+}
+
+// Pedido de Daniel 2026-10-02 (Etiquetas de percha): cuántas veces se
+// imprimió el QR de cada producto y cuáles aún no tienen etiqueta. Una fila
+// por producto cada vez que se confirma "Imprimir". `manual` = Daniel lo
+// marcó con "Ya los tengo impresos" (etiquetas impresas antes de este
+// registro), no cuenta como impresión.
+model StockLabelPrint {
+  id            String              @id @default(cuid())
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  manual        Boolean             @default(false)
+  printedById   String?
+  printedBy     User?               @relation("StockLabelPrintBy", fields: [printedById], references: [id], onDelete: SetNull)
+  printedAt     DateTime            @default(now())
+
+  @@index([catalogItemId])
 }
