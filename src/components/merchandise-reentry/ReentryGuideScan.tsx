@@ -96,9 +96,9 @@ export function GuideScanner({ batchId, onChanged, onManual }: { batchId: string
 
   return (
     <div className="bg-surface border border-teal/40 rounded-md p-3.5 mb-3">
-      <div className="font-display font-bold text-[14px] mb-1">Escanea la guía de cada devolución</div>
+      <div className="font-display font-bold text-[14px] mb-1">Paso 1 · Escanea la guía de cada devolución</div>
       <p className="text-[11.5px] text-steel mb-3">
-        Una tras otra, sin revisar nada. DAFLOW agrega solo los productos que traía cada guía. Al final marcas solo lo que vino dañado.
+        Una tras otra, sin revisar nada. DAFLOW agrega solo los productos que traía cada guía.
       </p>
 
       {cameraOn ? (
@@ -298,8 +298,13 @@ export function ScannedGuidesList({ guides, items, onChanged }: { guides: ScanGu
 
 // Productos que trajeron las guías del lote, sumados. Joel toca solo los que
 // vinieron dañados; todo lo demás se toma como bueno.
+// Pedido del usuario 2026-10-02: Joel recién sabe qué vino dañado después
+// de escanear todo y apartar físicamente lo dañado. Por eso la lista queda
+// cerrada: si no hubo nada dañado, envía directo; si hubo, la abre y marca
+// solo esos productos con su cantidad.
 export function ScannedProductsDamage({ batchId, items, onChanged }: { batchId: string; items: ScanItemDTO[]; onChanged: () => void }) {
   const [editing, setEditing] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const products = new Map<string, { id: string; name: string; photo: string | null; code: string | null; units: number; damaged: number; reason: string | null }>();
   for (const i of items) {
     if (!i.catalogItemId || !(i.guideId || i.scanDamage)) continue;
@@ -315,16 +320,23 @@ export function ScannedProductsDamage({ batchId, items, onChanged }: { batchId: 
   const list = [...products.values()].sort((a, b) => a.name.localeCompare(b.name));
   const totalUnits = list.reduce((s, p) => s + p.units, 0);
   const totalDamaged = list.reduce((s, p) => s + p.damaged, 0);
+  const showList = open || totalDamaged > 0;
 
   return (
     <div className="bg-surface border border-rule rounded-md p-3 mb-3">
-      <div className="text-[12.5px] font-semibold mb-0.5">Productos del lote</div>
+      <div className="font-display font-bold text-[14px] mb-0.5">Paso 2 · ¿Vino algo dañado?</div>
       <div className="text-[11px] text-steel mb-2.5">
-        <span className="text-green font-semibold">{totalUnits - totalDamaged} buenas</span>
+        {list.length} producto(s) · <span className="text-green font-semibold">{totalUnits - totalDamaged} buenas</span>
         {totalDamaged > 0 && <span className="text-red font-semibold"> · {totalDamaged} dañadas</span>}
-        {" · "}Toca un producto solo si vino dañado.
+        {!showList && " · Si no vino nada dañado, envía el lote directo."}
       </div>
-      <div className="flex flex-col gap-1.5">
+      {!showList && (
+        <button type="button" className="w-full rounded border border-red/50 px-3 py-2 text-[12.5px] font-semibold text-red cursor-pointer" onClick={() => setOpen(true)}>
+          Sí, marcar productos dañados
+        </button>
+      )}
+      {showList && <div className="text-[11px] text-steel mb-2">Toca cada producto que apartaste como dañado y pon cuántos. Lo demás queda como bueno.</div>}
+      <div className={`flex flex-col gap-1.5 ${showList ? "" : "hidden"}`}>
         {list.map((p) => (
           <div key={p.id} className={`rounded-md border p-2 ${p.damaged > 0 ? "border-red/40 bg-red/5" : "border-rule"}`}>
             <button type="button" className="w-full flex items-center gap-2.5 text-left cursor-pointer" onClick={() => setEditing(editing === p.id ? null : p.id)}>
