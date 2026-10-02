@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canManageAdminPayments } from "@/lib/guards";
 import { readAdminPaymentDeclaration } from "@/lib/adminPaymentAi";
-import { formatLunchMotivo } from "@/lib/lunchPayments";
+import { formatLunchMotivo, getLastLunchPayee } from "@/lib/lunchPayments";
 import { pushOwnerId } from "@/lib/pushOwner";
 import { notifyOwner } from "@/lib/notifications";
 
@@ -55,14 +55,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const isAdmin = session.user.role === "admin";
+  // Registros viejos (o hechos sin abrir "a quién pagar") llegan sin
+  // proveedor: se completa con el último usado en almuerzos.
+  const fallbackPayee = submission.payeeId ? null : await getLastLunchPayee();
 
   const created = await prisma.adminPaymentRequest.create({
     data: {
       type: "VARIABLE",
       motivo,
       monto: submission.monto,
-      payeeId: submission.payeeId,
-      bankAccountId: submission.bankAccountId,
+      payeeId: submission.payeeId ?? fallbackPayee?.payeeId ?? null,
+      bankAccountId: submission.payeeId ? submission.bankAccountId : fallbackPayee?.bankAccountId ?? null,
       declarationFileUrl: parsed.data.invoiceFileUrl,
       declarationFileName: parsed.data.invoiceFileName ?? null,
       declarationAiMatch,

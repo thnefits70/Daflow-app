@@ -41,7 +41,33 @@ export async function getLunchDefaults(): Promise<LunchDefaultsDTO> {
     next.setUTCDate(next.getUTCDate() + 1);
     suggestedWeekStart = next.toISOString().slice(0, 10);
   }
-  return { payeeId: last?.payeeId ?? null, bankAccountId: last?.bankAccountId ?? null, suggestedWeekStart };
+  const fallback = last?.payeeId ? null : await getLastLunchPayee();
+  return {
+    payeeId: last?.payeeId ?? fallback?.payeeId ?? null,
+    bankAccountId: last?.payeeId ? last.bankAccountId : fallback?.bankAccountId ?? null,
+    suggestedWeekStart,
+  };
+}
+
+// 2026-10-02: Daniel nunca abre "a quién pagar" (queda colapsado), así que el
+// registro se guardaba sin proveedor y la cadena de defaults arrastraba el
+// vacío semana a semana — el admin veía "Agregar beneficiario y cuenta
+// bancaria" en cada pago de almuerzos. Si no hay proveedor en el registro, se
+// usa el último asignado a un pago de almuerzos (aunque lo haya puesto el
+// admin a mano en la pantalla de pagos).
+export async function getLastLunchPayee(): Promise<{ payeeId: string; bankAccountId: string | null } | null> {
+  const fromSubmission = await prisma.lunchWeekSubmission.findFirst({
+    where: { payeeId: { not: null } },
+    orderBy: { weekEnd: "desc" },
+    select: { payeeId: true, bankAccountId: true },
+  });
+  if (fromSubmission?.payeeId) return { payeeId: fromSubmission.payeeId, bankAccountId: fromSubmission.bankAccountId };
+  const fromRequest = await prisma.adminPaymentRequest.findFirst({
+    where: { lunchWeekStart: { not: null }, payeeId: { not: null } },
+    orderBy: { lunchWeekStart: "desc" },
+    select: { payeeId: true, bankAccountId: true },
+  });
+  return fromRequest?.payeeId ? { payeeId: fromRequest.payeeId, bankAccountId: fromRequest.bankAccountId } : null;
 }
 
 const MONTH_NAMES_ES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
