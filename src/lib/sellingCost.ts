@@ -21,7 +21,9 @@ import { effectiveUnitCost } from "@/lib/purchases";
 // Las llegadas que bodega ya registró pero Daniel todavía no aprobó (aún no
 // están en el Kardex) también cuentan: la mercadería ya está en bodega.
 
-type Layer = { qty: number; cost: number };
+// returned: unidades que volvieron a bodega (devolución/reingreso) — no son
+// una compra, así que nunca cuentan como "la última compra".
+type Layer = { qty: number; cost: number; returned?: boolean };
 
 export type RemainingStockCost = {
   sellingCost: number;
@@ -51,7 +53,9 @@ export function pickSellingCost(
   const units = live.reduce((s, l) => s + l.qty, 0);
   const average = live.reduce((s, l) => s + l.qty * l.cost, 0) / units;
   const max = Math.max(...live.map((l) => l.cost));
-  const newest = live[live.length - 1].cost;
+  // Corregido 2026-10-02: una devolución que entra después de una compra
+  // cara ya no tapa a esa compra — "la más nueva" es la última COMPRA.
+  const newest = (live.filter((l) => !l.returned).at(-1) ?? live[live.length - 1]).cost;
   const sellingCost = newest >= max ? newest : Math.max(average, breakEvenBasis(max, params.insuranceRatePercent, params.fulfillmentCost, params.marginPercent));
   return { sellingCost, remainingUnits: units, averageRemaining: average, maxRemaining: max, newestCost: newest };
 }
@@ -105,7 +109,7 @@ export async function getRemainingStockLayers(catalogItemIds: string[]): Promise
   const flush = () => {
     if (current === null) return;
     const sum = layers.reduce((s, l) => s + l.qty, 0);
-    const list = sum === Math.max(balance, 0) ? layers.map(({ qty, cost }) => ({ qty, cost })) : balance > 0 ? [{ qty: balance, cost: lastAvg }] : [];
+    const list = sum === Math.max(balance, 0) ? layers.map(({ qty, cost, returned }) => ({ qty, cost, returned })) : balance > 0 ? [{ qty: balance, cost: lastAvg }] : [];
     result.set(current, list.length > 0 ? list : [{ qty: 0, cost: lastInCost || lastAvg }]);
   };
 
@@ -132,7 +136,7 @@ export async function getRemainingStockLayers(catalogItemIds: string[]): Promise
       for (const l of layers) if (l.requestId && l.requestId === e.priceCorrection?.requestId) l.cost += diff;
       if (lastInRequestId && lastInRequestId === e.priceCorrection?.requestId) lastInCost += diff;
     } else if (delta > 0) {
-      layers.push({ qty: delta, cost: e.unitCost ?? e.avgCostAfter, requestId: e.purchaseRequestReceipt?.requestId });
+      layers.push({ qty: delta, cost: e.unitCost ?? e.avgCostAfter, requestId: e.purchaseRequestReceipt?.requestId, returned: !e.purchaseRequestReceipt });
       if (e.purchaseRequestReceipt && e.unitCost) {
         lastInCost = e.unitCost;
         lastInRequestId = e.purchaseRequestReceipt.requestId;
