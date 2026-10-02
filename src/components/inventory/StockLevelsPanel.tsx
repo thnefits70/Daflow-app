@@ -668,6 +668,25 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Pedido del usuario 2026-10-02: el stock se actualiza solo cada 30 s
+  // mientras la pantalla está a la vista (para todos los que la ven), y al
+  // volver a la pestaña del navegador — así el Excel siempre sale con el
+  // stock real. Con la pestaña oculta no consulta nada.
+  useEffect(() => {
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
+      loadRows();
+      loadCombos();
+    };
+    const id = window.setInterval(tick, 30_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function loadPendingAdjustments() {
     setPendingAdjustmentsLoading(true);
     setPendingAdjustmentsError("");
