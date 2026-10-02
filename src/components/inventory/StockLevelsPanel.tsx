@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
-import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, RefreshCw, Copy, AlertTriangle, ChevronDown, Bell, SlidersHorizontal, Download } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, Copy, AlertTriangle, ChevronDown, Bell, SlidersHorizontal, Download } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpirationAlerts } from "@/components/merchandise-reentry/ExpirationAlerts";
 import { TabGuide } from "@/components/shared/TabGuide";
@@ -595,34 +595,23 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
   const [reviewingAdjustmentId, setReviewingAdjustmentId] = useState<string | null>(null);
 
   const [combos, setCombos] = useState<ComboRow[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
+  // Con la actualización cada 30 s, un fallo de red no debe vaciar la tabla:
+  // se queda con lo último que cargó (solo queda vacía si nunca cargó).
   function loadRows() {
     return fetch("/api/inventory-control/stock-levels", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : { rows: [] }))
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data) => {
         setRows(data.rows);
         setUnconfirmedDispatch(data.unconfirmedDispatch ?? null);
-        setLastLoadedAt(new Date());
       })
-      .catch(() => setRows([]));
+      .catch(() => setRows((prev) => prev ?? []));
   }
 
   function loadCombos() {
     return fetch("/api/dropi-combos", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : []))
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then(setCombos)
-      .catch(() => setCombos([]));
-  }
-
-  // Pedido del usuario 2026-09-28: botón "Actualizar stock" para ver los
-  // números reales de INVESTOCK sin recargar toda la página. Búsqueda,
-  // filtros y orden se quedan como estaban.
-  async function refreshStock() {
-    if (refreshing) return;
-    setRefreshing(true);
-    await Promise.all([loadRows(), loadCombos()]);
-    setRefreshing(false);
+      .catch(() => {});
   }
 
   async function updateProductMarca(catalogItemId: string, bodega: Marca | null) {
@@ -1166,16 +1155,6 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
             </select>
           </label>
         )}
-        <button
-          type="button"
-          onClick={refreshStock}
-          disabled={refreshing}
-          title={lastLoadedAt ? `Última actualización: ${formatDateTime(lastLoadedAt)}` : undefined}
-          className="flex items-center gap-1.5 rounded border border-rule px-2.5 py-1.5 text-[12px] font-semibold whitespace-nowrap cursor-pointer disabled:opacity-60 disabled:cursor-wait"
-        >
-          <RefreshCw size={13} className={`shrink-0 ${refreshing ? "animate-spin" : ""}`} />
-          {refreshing ? "Actualizando…" : "Actualizar stock"}
-        </button>
         <button
           type="button"
           onClick={downloadCostsExcel}
