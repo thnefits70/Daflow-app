@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { parseGuidesPdf } from "@/lib/dropiGuidesPdf";
-import { learnBrandsFromManifest, type ManifestBrandConflict } from "@/lib/manifestBrand";
+import { learnBrandsFromFiles } from "@/lib/manifestBrand";
 
 export const maxDuration = 60;
 
@@ -35,26 +34,6 @@ export async function POST(req: NextRequest) {
   const batch = await prisma.fulfillmentRequestBatch.findUnique({ where: { id: parsed.data.batchId }, select: { fileUrls: true } });
   if (!batch) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
 
-  const combos: string[] = [];
-  const products: string[] = [];
-  const conflicts: ManifestBrandConflict[] = [];
-  let unread = 0;
-  for (const url of batch.fileUrls) {
-    try {
-      const res = await fetch(url);
-      if (!res.ok) {
-        unread++;
-        continue;
-      }
-      const r = await parseGuidesPdf(new Uint8Array(await res.arrayBuffer()));
-      if (r.source !== "DROPI") continue;
-      const learned = await learnBrandsFromManifest([...r.lines.map((l) => l.code), ...r.warranty.map((w) => w.code)]);
-      combos.push(...learned.combos);
-      products.push(...learned.products);
-      conflicts.push(...learned.conflicts);
-    } catch {
-      unread++;
-    }
-  }
+  const { combos, products, conflicts, unread } = await learnBrandsFromFiles(batch.fileUrls);
   return NextResponse.json({ combos, products, conflicts, unread });
 }

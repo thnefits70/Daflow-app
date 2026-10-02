@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { canSubmitFulfillmentRequest, dbUserId, getInventoryLeadId } from "@/lib/guards";
@@ -6,6 +6,10 @@ import { applyGuidesImport } from "@/lib/fulfillmentGuides";
 import { notifyOwner } from "@/lib/notifications";
 import { detectSuddenDemand } from "@/lib/suddenDemand";
 import { notifyDiscontinuedSales } from "@/lib/dropiDiscontinued";
+import { learnBrandsForNewCombos } from "@/lib/manifestBrand";
+
+// Holgura para releer los PDF en segundo plano (marca de combos nuevos).
+export const maxDuration = 300;
 
 const carrierCounts = z.record(z.string().max(40), z.number().int().nonnegative());
 const variantSchema = z.object({ label: z.string().trim().min(1).max(120), quantity: z.number().int().positive(), byCarrier: carrierCounts.optional() });
@@ -71,6 +75,10 @@ export async function POST(req: NextRequest) {
   if (backfill && !input.manifestDate) return NextResponse.json({ error: "No se pudo leer la fecha del manifiesto en el PDF." }, { status: 400 });
   const result = await applyGuidesImport({ ...input, backfillDay: backfill ? input.manifestDate : null }, dbUserId(session.user.id));
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  // Combos / IDs alternos recién registrados toman la marca de su manifiesto
+  // (en segundo plano: no demora el guardado). Ver lib/manifestBrand.ts.
+  const comboCodes = input.rows.flatMap((r) => (r.decision.kind === "combo" && r.decision.comboCode ? [r.code, r.decision.comboCode] : [r.code]));
+  after(() => learnBrandsForNewCombos(comboCodes, input.fileUrls).catch(() => null));
   // Producto dado de baja que igual se vendió (pedido del usuario 2026-09-30):
   // Heidy lo da de baja en Dropi, Daniel/Bryan/Jariel quedan al tanto.
   if (result.discontinuedCount > 0) await notifyDiscontinuedSales(result.batchId).catch(() => null);

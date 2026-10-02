@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { MarketProductBodega } from "@/generated/prisma/client";
+import { parseGuidesPdf } from "@/lib/dropiGuidesPdf";
 
 // Confirmado 2026-09-28 con el usuario: cada PDF de guías que descarga Yair
 // es el manifiesto de UNA marca en Dropi (su cuenta), y cada ID (producto o
@@ -44,4 +45,39 @@ export async function learnBrandsFromManifest(codes: string[]): Promise<Manifest
     ...products.filter((p) => p.bodega && p.bodega !== brand).map((p) => ({ kind: "producto" as const, code: p.justCode!, name: p.name, stored: p.bodega!, manifest: brand })),
   ];
   return { brand, combos: newCombos.map((c) => c.code), products: newProducts.map((p) => p.justCode!), conflicts };
+}
+
+// Vuelve a leer PDFs de guías ya subidos (uno por manifiesto, así cada uno da
+// su propia marca) y aprende la marca de sus IDs. Lo usan el botón del admin
+// y el guardado del corte.
+export async function learnBrandsFromFiles(fileUrls: string[]): Promise<ManifestLearnResult & { unread: number }> {
+  const out: ManifestLearnResult & { unread: number } = { brand: null, combos: [], products: [], conflicts: [], unread: 0 };
+  for (const url of fileUrls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        out.unread++;
+        continue;
+      }
+      const r = await parseGuidesPdf(new Uint8Array(await res.arrayBuffer()));
+      if (r.source !== "DROPI") continue;
+      const learned = await learnBrandsFromManifest([...r.lines.map((l) => l.code), ...r.warranty.map((w) => w.code)]);
+      out.combos.push(...learned.combos);
+      out.products.push(...learned.products);
+      out.conflicts.push(...learned.conflicts);
+    } catch {
+      out.unread++;
+    }
+  }
+  return out;
+}
+
+// Pedido del usuario 2026-10-02: los combos e IDs alternos nuevos quedaban
+// "Sin marca" porque la marca se aprende al LEER el PDF, y en ese momento el
+// combo todavía no existía (se registra después, al revisar o al guardar el
+// corte). Al guardar el corte se vuelve a leer la subida si alguno de sus
+// combos quedó sin marca.
+export async function learnBrandsForNewCombos(codes: string[], fileUrls: string[]): Promise<void> {
+  const missing = await prisma.dropiCombo.count({ where: { code: { in: [...new Set(codes)] }, bodega: null } });
+  if (missing > 0) await learnBrandsFromFiles(fileUrls);
 }
