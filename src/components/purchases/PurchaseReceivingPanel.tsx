@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, X, AlertTriangle, Truck, Package } from "lucide-react";
@@ -353,6 +353,9 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
 
   // ---------------- Reclamo posterior al cierre ----------------
   const [receivedRows, setReceivedRows] = useState<ReceivedRow[]>([]);
+  const [receivedHasMore, setReceivedHasMore] = useState(false);
+  const [receivedLoadingMore, setReceivedLoadingMore] = useState(false);
+  const [receivedQuery, setReceivedQuery] = useState("");
   const [lateClaimsReview, setLateClaimsReview] = useState<LateClaimReview[]>([]);
 
   const [lateOpenId, setLateOpenId] = useState<string | null>(null); // ReceivedRow.id con el formulario abierto
@@ -425,9 +428,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   function load() {
     fetch("/api/purchase-requests?view=receiving").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
     fetch("/api/purchase-requests/urgent-resolutions/pending-replacements").then((r) => (r.ok ? r.json() : [])).then(setPendingReplacements).catch(() => setPendingReplacements([]));
-    if (canApprove || canReceiveTeam || isAdmin) {
-      fetch("/api/purchase-requests?view=received").then((r) => (r.ok ? r.json() : [])).then(setReceivedRows).catch(() => setReceivedRows([]));
-    }
+    if (canApprove || canReceiveTeam || isAdmin) loadReceived(false);
     if (canApprove || isAdmin) {
       fetch("/api/purchase-requests/urgent-reports/pending-review").then((r) => (r.ok ? r.json() : [])).then(setPendingUrgentReports).catch(() => setPendingUrgentReports([]));
       fetch("/api/purchase-requests/urgent-reports/pending-excess-kardex").then((r) => (r.ok ? r.json() : [])).then(setPendingExcessKardex).catch(() => setPendingExcessKardex([]));
@@ -436,6 +437,40 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(load, [canApprove, canReceiveTeam, isAdmin]);
+
+  // Pedido del usuario 2026-10-01: antes solo las últimas 40 recibidas — ahora
+  // por páginas ("Ver más") y con buscador (nombre o ID) que busca en todo lo
+  // recibido, no solo en lo que ya está en pantalla.
+  function loadReceived(append: boolean) {
+    const offset = append ? receivedRows.length : 0;
+    if (append) setReceivedLoadingMore(true);
+    const p = new URLSearchParams({ view: "received", offset: String(offset) });
+    if (receivedQuery.trim()) p.set("q", receivedQuery.trim());
+    fetch(`/api/purchase-requests?${p}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { rows: ReceivedRow[]; hasMore: boolean } | null) => {
+        const data = d?.rows ?? [];
+        setReceivedRows((cur) => {
+          if (!append) return data;
+          const seen = new Set(cur.map((r) => r.id));
+          return [...cur, ...data.filter((r) => !seen.has(r.id))];
+        });
+        setReceivedHasMore(!!d?.hasMore);
+      })
+      .catch(() => !append && setReceivedRows([]))
+      .finally(() => setReceivedLoadingMore(false));
+  }
+  const receivedQueryMounted = useRef(false);
+  useEffect(() => {
+    if (!receivedQueryMounted.current) {
+      receivedQueryMounted.current = true;
+      return;
+    }
+    if (!(canApprove || canReceiveTeam || isAdmin)) return;
+    const t = setTimeout(() => loadReceived(false), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [receivedQuery]);
 
   async function openLateClaim(row: ReceivedRow) {
     setLateOpenId(row.id);
@@ -2306,11 +2341,21 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
         );
       })}
 
-      {(canReceiveTeam || canApprove || isAdmin) && receivedRows.length > 0 && (
+      {(canReceiveTeam || canApprove || isAdmin) && (receivedRows.length > 0 || receivedQuery.trim() !== "") && (
         <div className="mt-4">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">
             Mercadería recibida — reportar daño encontrado después
           </div>
+          <input
+            type="search"
+            className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px] mb-2.5"
+            placeholder="Buscar por nombre o ID del producto…"
+            value={receivedQuery}
+            onChange={(e) => setReceivedQuery(e.target.value)}
+          />
+          {receivedRows.length === 0 && (
+            <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[13px]">Ningún producto recibido coincide con la búsqueda.</div>
+          )}
           <div className="flex flex-col gap-2.5">
             {receivedRows.map((row) => {
               const openClaim = row.urgentReports.find((c) => !c.rejectedAt);
@@ -2435,6 +2480,11 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
               );
             })}
           </div>
+          {receivedHasMore && (
+            <button type="button" disabled={receivedLoadingMore} onClick={() => loadReceived(true)} className="mt-2.5 w-full rounded-md border border-rule bg-surface py-2 text-[12.5px] font-semibold text-blue cursor-pointer disabled:opacity-60">
+              {receivedLoadingMore ? "Cargando…" : "Ver más"}
+            </button>
+          )}
         </div>
       )}
     </div>

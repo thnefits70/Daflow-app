@@ -790,33 +790,68 @@ export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit
   const [canPettyCashSecundaria, setCanPettyCashSecundaria] = useState(false);
   // Confirmado 2026-09-15, pedido explícito de Jariel: con muchas solicitudes
   // acumuladas, necesitaba poder acotar la lista por proveedor y por rango
-  // de fechas en vez de desplazarse por todas. Solo filtra lo que ya está en
-  // pantalla — no vuelve a pedir nada al servidor.
+  // de fechas en vez de desplazarse por todas.
+  // Pedido del usuario 2026-10-01: los filtros ahora los aplica el servidor y
+  // la lista llega por páginas ("Ver más") — antes filtraba solo lo que ya
+  // había en pantalla, y como el servidor cortaba en 50 filas, las compras
+  // del mes pasado no aparecían ni filtrando.
   const [supplierFilter, setSupplierFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [supplierOptions, setSupplierOptions] = useState<{ id: string; name: string }[]>([]);
+
+  function pageUrl(offset: number) {
+    const p = new URLSearchParams({ view: "mine", offset: String(offset) });
+    if (supplierFilter) p.set("supplierId", supplierFilter);
+    if (dateFrom) p.set("from", new Date(dateFrom + "T00:00:00").toISOString());
+    if (dateTo) p.set("to", new Date(dateTo + "T23:59:59.999").toISOString());
+    return `/api/purchase-requests?${p}`;
+  }
 
   useEffect(() => {
-    fetch("/api/purchase-requests?view=mine").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
     fetch("/api/petty-cash/permissions").then((r) => (r.ok ? r.json() : null)).then((d) => setCanPettyCashSecundaria(!!d?.canSecundaria)).catch(() => {});
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch(pageUrl(0))
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { rows: Row[]; total: number; hasMore: boolean; suppliers: { id: string; name: string }[] } | null) => {
+        if (cancelled) return;
+        setRows(d?.rows ?? []);
+        setTotal(d?.total ?? 0);
+        setHasMore(!!d?.hasMore);
+        if (d) setSupplierOptions(d.suppliers);
+      })
+      .catch(() => !cancelled && setRows([]));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supplierFilter, dateFrom, dateTo]);
+
+  async function loadMore() {
+    if (!rows) return;
+    setLoadingMore(true);
+    const d = await fetch(pageUrl(groupRows(rows).length)).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    setLoadingMore(false);
+    if (!d) return;
+    setRows((cur) => {
+      const seen = new Set((cur ?? []).map((r) => r.id));
+      return [...(cur ?? []), ...(d.rows as Row[]).filter((r) => !seen.has(r.id))];
+    });
+    setTotal(d.total);
+    setHasMore(d.hasMore);
+  }
+
   if (!rows) return <div className="text-steel text-[13px]">Cargando…</div>;
-  if (rows.length === 0) return <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">Todavía no has enviado ninguna solicitud.</div>;
+  const hasFilters = !!(supplierFilter || dateFrom || dateTo);
+  if (rows.length === 0 && !hasFilters) return <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">Todavía no has enviado ninguna solicitud.</div>;
 
-  const allGroups = groupRows(rows);
-
-  const supplierOptions = [...new Map(allGroups.map((g) => [g[0].supplier.id, g[0].supplier.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
-
-  const fromTime = dateFrom ? new Date(dateFrom + "T00:00:00").getTime() : null;
-  const toTime = dateTo ? new Date(dateTo + "T23:59:59").getTime() : null;
-  const groups = allGroups.filter((g) => {
-    if (supplierFilter && g[0].supplier.id !== supplierFilter) return false;
-    const t = new Date(g[0].requestedAt).getTime();
-    if (fromTime !== null && t < fromTime) return false;
-    if (toTime !== null && t > toTime) return false;
-    return true;
-  });
+  const groups = groupRows(rows);
 
   function updateGroup(groupId: string, patch: Partial<Row>) {
     setRows((rs) => rs && rs.map((r) => (r.groupId === groupId ? { ...r, ...patch } : r)));
@@ -829,7 +864,7 @@ export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit
           <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Proveedor</label>
           <select className="rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]" value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
             <option value="">Todos</option>
-            {supplierOptions.map(([id, name]) => (
+            {supplierOptions.map(({ id, name }) => (
               <option key={id} value={id}>{name}</option>
             ))}
           </select>
@@ -842,12 +877,12 @@ export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit
           <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Hasta</label>
           <input type="date" className="rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         </div>
-        {(supplierFilter || dateFrom || dateTo) && (
+        {hasFilters && (
           <button type="button" className="text-[12px] font-semibold text-blue cursor-pointer mb-1.5" onClick={() => { setSupplierFilter(""); setDateFrom(""); setDateTo(""); }}>
             Limpiar filtros
           </button>
         )}
-        <div className="text-[11.5px] text-steel mb-1.5 ml-auto">{groups.length} de {allGroups.length} solicitud{allGroups.length === 1 ? "" : "es"}</div>
+        <div className="text-[11.5px] text-steel mb-1.5 ml-auto">{groups.length} de {total} solicitud{total === 1 ? "" : "es"}</div>
       </div>
       {groups.length === 0 ? (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">Ninguna solicitud coincide con estos filtros.</div>
@@ -857,6 +892,11 @@ export function MyPurchaseRequests({ onResubmit, isAdmin = false }: { onResubmit
             <GroupCard key={g[0].groupId} g={g} onGroupUpdate={updateGroup} onResubmit={onResubmit} isAdmin={isAdmin} canPettyCashSecundaria={canPettyCashSecundaria} />
           ))}
         </div>
+      )}
+      {hasMore && (
+        <button type="button" disabled={loadingMore} onClick={loadMore} className="mt-3 w-full rounded-md border border-rule bg-surface py-2 text-[12.5px] font-semibold text-blue cursor-pointer disabled:opacity-60">
+          {loadingMore ? "Cargando…" : `Ver más (${total - groups.length} restantes)`}
+        </button>
       )}
     </div>
   );

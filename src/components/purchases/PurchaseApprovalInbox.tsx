@@ -238,11 +238,28 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   // adelante) — uno que sigue en APPROVED todavía no tiene nada "aplicado".
   const [appliedCreditsByGroup, setAppliedCreditsByGroup] = useState<Record<string, { id: string; amount: number; reason: string }[]>>({});
 
-  function loadHistory() {
-    fetch("/api/purchase-requests?view=approval-history")
-      .then((r) => (r.ok ? r.json() : []))
-      .then(async (data: HistoryRow[]) => {
-        setHistoryRows(data);
+  // Pedido del usuario 2026-10-01: antes solo las últimas 100 filas — ahora
+  // llega por páginas ("Ver más"), sin tope, y el crédito aplicado se busca
+  // solo para los grupos de la página nueva.
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyTotal, setHistoryTotal] = useState(0);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+
+  function loadHistory(append = false) {
+    const offset = append && historyRows ? groupRows(historyRows).length : 0;
+    if (append) setHistoryLoadingMore(true);
+    fetch(`/api/purchase-requests?view=approval-history&offset=${offset}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(async (d: { rows: HistoryRow[]; total: number; hasMore: boolean } | null) => {
+        const data = d?.rows ?? [];
+        setHistoryRows((cur) => {
+          if (!append || !cur) return data;
+          const seen = new Set(cur.map((r) => r.id));
+          return [...cur, ...data.filter((r) => !seen.has(r.id))];
+        });
+        setHistoryTotal(d?.total ?? 0);
+        setHistoryHasMore(!!d?.hasMore);
+        setHistoryLoadingMore(false);
         const paidGroups = groupRows(data).filter((g) => g[0].status !== "APPROVED" && g[0].status !== "REJECTED");
         const entries = await Promise.all(
           paidGroups.map(async (g) => {
@@ -252,9 +269,12 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
             return [groupId, res.ok ? d.applied ?? [] : []] as const;
           })
         );
-        setAppliedCreditsByGroup(Object.fromEntries(entries));
+        setAppliedCreditsByGroup((cur) => (append ? { ...cur, ...Object.fromEntries(entries) } : Object.fromEntries(entries)));
       })
-      .catch(() => setHistoryRows((cur) => cur ?? []));
+      .catch(() => {
+        setHistoryLoadingMore(false);
+        setHistoryRows((cur) => cur ?? []);
+      });
   }
 
   // Corregido 2026-09-03: Bryan reportó que lo que acababa de aprobar/
@@ -267,7 +287,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   // que no haya cambiado nada).
   function openSubTab(next: "pending" | "history") {
     setSubTab(next);
-    if (next === "history") loadHistory();
+    if (next === "history") loadHistory(false);
   }
 
   // Confirmado 2026-08-13: fix — esta pantalla no tenía en cuenta el
@@ -689,6 +709,11 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                 </div>
               );
             })}
+            {historyHasMore && (
+              <button type="button" disabled={historyLoadingMore} onClick={() => loadHistory(true)} className="mt-1 w-full rounded-md border border-rule bg-surface py-2 text-[12.5px] font-semibold text-blue cursor-pointer disabled:opacity-60">
+                {historyLoadingMore ? "Cargando…" : `Ver más (${historyTotal - historyGroups.length} restantes)`}
+              </button>
+            )}
           </div>
         )}
       </div>

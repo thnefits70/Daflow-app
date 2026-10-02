@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { z } from "zod";
+import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { linkReadyToBuyProposalsToGroup } from "@/lib/marketProduct";
@@ -9,6 +10,49 @@ import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestN
 import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
+
+// Pedido del usuario 2026-10-01: a Jariel no le salían en "Mis solicitudes"
+// las compras del mes pasado — los historiales tenían un tope fijo (50/100/40
+// filas) y lo viejo simplemente desaparecía. Ahora no hay tope, pero tampoco
+// se trae todo de una vez (con los años sería lento): se carga por páginas
+// ("Ver más") y los filtros se aplican en el servidor, así que buscar algo
+// viejo siempre lo encuentra aunque no esté en la primera página.
+const HISTORY_PAGE_SIZE = 30;
+
+function pageParams(req: NextRequest) {
+  const offset = Math.max(0, parseInt(req.nextUrl.searchParams.get("offset") ?? "0", 10) || 0);
+  const limit = Math.min(100, Math.max(1, parseInt(req.nextUrl.searchParams.get("limit") ?? "", 10) || HISTORY_PAGE_SIZE));
+  return { offset, limit };
+}
+
+function dateParam(req: NextRequest, name: string) {
+  const v = req.nextUrl.searchParams.get(name);
+  if (!v) return null;
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Página por COMPRA (groupId), nunca por fila: una compra de varios productos
+// son varias filas y no debe quedar partida entre dos páginas. Solo se leen
+// los groupId (liviano); el include completo se pide únicamente para la página.
+async function pagePurchaseGroups(where: Prisma.PurchaseRequestWhereInput, sortBy: "requestedAt" | "reviewedAt", offset: number, limit: number) {
+  const groups =
+    sortBy === "requestedAt"
+      ? await prisma.purchaseRequest.groupBy({ by: ["groupId"], where, _max: { requestedAt: true }, orderBy: { _max: { requestedAt: "desc" } } })
+      : await prisma.purchaseRequest.groupBy({ by: ["groupId"], where, _max: { reviewedAt: true }, orderBy: { _max: { reviewedAt: "desc" } } });
+  const pageIds = groups.slice(offset, offset + limit).map((g) => g.groupId);
+  const order = new Map(pageIds.map((id, i) => [id, i]));
+  const rows =
+    pageIds.length === 0
+      ? []
+      : await prisma.purchaseRequest.findMany({
+          where: { AND: [where, { groupId: { in: pageIds } }] },
+          orderBy: { requestedAt: "desc" },
+          include: purchaseRequestInclude,
+        });
+  rows.sort((a, b) => order.get(a.groupId)! - order.get(b.groupId)!);
+  return { rows, total: groups.length, hasMore: offset + limit < groups.length };
+}
 
 // status: "approval" (bandeja admin), "receiving" (Inventario), "invoicing"
 // (Finanzas), "audit" (admin, historial de solo lectura), "mine" (lo que yo
@@ -50,13 +94,10 @@ export async function GET(req: NextRequest) {
     if (session.user.role !== "admin" && !(await canApprovePurchaseRequests())) {
       return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     }
-    const rows = await prisma.purchaseRequest.findMany({
-      where: { status: { in: ["APPROVED", "REJECTED", "PAID", "RECEIVED_PENDING_REVIEW", "RECEIVED"] } },
-      orderBy: { reviewedAt: "desc" },
-      take: 100,
-      include: purchaseRequestInclude,
-    });
-    return NextResponse.json(rows);
+    const { offset, limit } = pageParams(req);
+    return NextResponse.json(
+      await pagePurchaseGroups({ status: { in: ["APPROVED", "REJECTED", "PAID", "RECEIVED_PENDING_REVIEW", "RECEIVED"] } }, "reviewedAt", offset, limit)
+    );
   }
 
   if (view === "receiving") {
@@ -101,10 +142,21 @@ export async function GET(req: NextRequest) {
   // que el botón sepa si ya hay uno en curso.
   if (view === "received") {
     if (!(await canConfirmPurchaseReceiving())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    // Pedido del usuario 2026-10-01: antes solo las últimas 40 — ahora por
+    // páginas, con búsqueda por nombre o ID para encontrar algo recibido hace
+    // meses sin tener que pasar página por página.
+    const { offset, limit } = pageParams(req);
+    const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
     const rows = await prisma.purchaseRequest.findMany({
-      where: { status: "RECEIVED" },
-      orderBy: { receipt: { confirmedAt: "desc" } },
-      take: 40,
+      where: {
+        status: "RECEIVED",
+        ...(q
+          ? { catalogItem: { OR: [{ name: { contains: q, mode: "insensitive" } }, { justCode: { contains: q, mode: "insensitive" } }] } }
+          : {}),
+      },
+      orderBy: [{ receipt: { confirmedAt: "desc" } }, { id: "desc" }],
+      skip: offset,
+      take: limit + 1,
       select: {
         id: true,
         requestNumber: true,
@@ -121,7 +173,7 @@ export async function GET(req: NextRequest) {
         },
       },
     });
-    return NextResponse.json(rows);
+    return NextResponse.json({ rows: rows.slice(0, limit), hasMore: rows.length > limit });
   }
 
   if (view === "invoicing") {
@@ -285,17 +337,29 @@ export async function GET(req: NextRequest) {
   // lectura vía canViewOwnPurchaseHistory (ver guards.ts). El filtro por
   // requestedById de abajo no cambia, así que nunca ve solicitudes ajenas.
   if (!(await canViewOwnPurchaseHistory())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-  // Pedido del usuario 2026-10-01: sin tope — con `take: 50` (cada producto
-  // de una compra es una fila) a Jariel ya no le salían las compras del mes
-  // pasado en su historial, ni filtrando por proveedor o fecha.
+  // Pedido del usuario 2026-10-01: sin tope (con `take: 50` a Jariel ya no le
+  // salían las compras del mes pasado) — por páginas, con los filtros de
+  // proveedor y fechas aplicados acá para que encuentren cualquier compra.
   const isAdmin = session.user.role === "admin";
-  const rows = await prisma.purchaseRequest.findMany({
-    where: isAdmin ? {} : { requestedById: session.user.id },
-    orderBy: { requestedAt: "desc" },
-    include: purchaseRequestInclude,
+  const base: Prisma.PurchaseRequestWhereInput = isAdmin ? {} : { requestedById: session.user.id };
+  const supplierId = req.nextUrl.searchParams.get("supplierId");
+  const from = dateParam(req, "from");
+  const to = dateParam(req, "to");
+  const where: Prisma.PurchaseRequestWhereInput = {
+    ...base,
+    ...(supplierId ? { supplierId } : {}),
+    ...(from || to ? { requestedAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
+  };
+  const { offset, limit } = pageParams(req);
+  const [page, suppliers] = await Promise.all([
+    pagePurchaseGroups(where, "requestedAt", offset, limit),
+    // Lista completa de proveedores para el filtro (no solo los de la página).
+    prisma.purchaseRequest.findMany({ where: base, distinct: ["supplierId"], select: { supplier: { select: { id: true, name: true } } } }),
+  ]);
+  return NextResponse.json({
+    ...page,
+    suppliers: suppliers.map((s) => s.supplier).sort((a, b) => a.name.localeCompare(b.name)),
   });
-
-  return NextResponse.json(rows);
 }
 
 // Confirmado 2026-07-31: una cotización suele traer varios productos — se
