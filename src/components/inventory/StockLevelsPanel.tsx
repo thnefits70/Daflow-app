@@ -511,7 +511,7 @@ const FORMULA_EXPLANATIONS: Record<FormulaKey, { title: string; text: string }> 
   },
   bodega: {
     title: "Puesto en bodega (proveedor + flete)",
-    text: "Lo que te costó cada unidad ya dentro de tu bodega: precio del proveedor + flete. Se calcula con lo que queda en bodega, compra por compra (lo primero que entra es lo primero que sale). Si la última compra salió MÁS CARA, se usa ese costo más caro, para no vender por debajo de lo que costó. Si salió MÁS BARATA, se usa la mezcla de lo que queda, sin bajar tanto como para perder con las unidades caras; cuando esas se venden, baja solo al costo nuevo. Las devoluciones no cuentan como compra. De este número salen todos los demás precios: Benistock, B2B, Dropi y B2C. Si la compra no tuvo flete aparte (o venía incluido), sale igual al precio proveedor.",
+    text: "Lo que te costó cada unidad ya dentro de tu bodega: precio del proveedor + flete. Se calcula con lo que queda en bodega, compra por compra (lo primero que entra es lo primero que sale). Si la última compra salió MÁS CARA, se usa ese costo más caro, para no vender por debajo de lo que costó. Si salió MÁS BARATA, se usa la mezcla de lo que queda, sin bajar tanto como para perder con las unidades caras; cuando esas se venden, baja solo al costo nuevo. Las devoluciones no cuentan como compra. Va en dorado porque de este número salen todos los demás precios: Benistock, B2B, Dropi y B2C. Si la compra no tuvo flete aparte (o venía incluido), sale igual al precio proveedor.",
   },
   benistock: {
     title: "Benistock",
@@ -853,7 +853,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
           </span>
           <span className="text-[9px] font-normal normal-case tracking-normal text-steel">sin flete</span>
         </span>
-        <span className="flex flex-col items-end">
+        <span className="flex flex-col items-end text-gold">
           <span className="flex items-center gap-1">
             Puesto en bodega <FormulaInfoButton open={openFormula === "bodega"} onToggle={() => setOpenFormula((k) => (k === "bodega" ? null : "bodega"))} />
           </span>
@@ -1264,9 +1264,11 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                     <DeclareCostButton catalogItemId={r.catalogItemId} onDeclared={loadRows} />
                   )}
                 </span>
+                {/* 2026-10-02, pedido del usuario: Puesto en bodega en dorado — es la
+                    base de la que salen todos los demás precios. */}
                 <CopyableAmount
                   value={r.bodegaPrice}
-                  className={"text-right font-mono text-[13px] text-steel"}
+                  className={"text-right font-mono text-[13px] font-bold text-gold"}
                 />
                 <CopyableAmount
                   value={r.benistockPrice}
@@ -1408,7 +1410,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                       />
                       <CopyableAmount
                         value={combo.bodegaPrice}
-                        className={"text-right font-mono text-[13px] text-steel"}
+                        className={"text-right font-mono text-[13px] font-bold text-gold"}
                       />
                       <CopyableAmount
                         value={combo.benistockPrice}
