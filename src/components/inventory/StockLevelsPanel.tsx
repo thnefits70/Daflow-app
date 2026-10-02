@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
-import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, Copy, AlertTriangle, ChevronDown, Bell, SlidersHorizontal, Download } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, Copy, AlertTriangle, ChevronDown, Bell, SlidersHorizontal, Download, LineChart } from "lucide-react";
 import { StockCountReview } from "./StockCountReview";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpirationAlerts } from "@/components/merchandise-reentry/ExpirationAlerts";
@@ -11,6 +11,8 @@ import { ExpandableName } from "@/components/ui/ExpandableName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { WAREHOUSE_AREAS, areaLabel, isWarehouseArea, type WarehouseArea } from "@/lib/warehouseAreas";
 import { ManifestBrandLearner } from "./ManifestBrandLearner";
+import { CombinedPriceChart, PriceHistoryBreakdownList } from "@/components/purchases/PriceTrendChart";
+import type { SupplierPriceHistory } from "@/lib/purchases";
 
 function fromSinAreaLink() {
   return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("filtro") === "sin-area";
@@ -550,6 +552,20 @@ function FormulaInfoButton({ open, onToggle }: { open: boolean; onToggle: () => 
 // semana subida (Control de Inventario).
 export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?: boolean; canEdit?: boolean }) {
   const [rows, setRows] = useState<StockRow[] | null>(null);
+  // Pedido del usuario 2026-10-02: clic en el nombre del producto (solo
+  // admin) abre TODO su historial de precio de compra en el tiempo, un color
+  // por proveedor — misma gráfica combinada de Control de Compras.
+  const [priceHistoryFor, setPriceHistoryFor] = useState<{ name: string; justCode: string | null } | null>(null);
+  const [priceHistory, setPriceHistory] = useState<SupplierPriceHistory[] | null>(null);
+
+  function openPriceHistory(r: { catalogItemId: string; name: string; justCode: string | null }) {
+    setPriceHistoryFor({ name: r.name, justCode: r.justCode });
+    setPriceHistory(null);
+    fetch(`/api/purchase-catalog/${r.catalogItemId}/supplier-comparison`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: SupplierPriceHistory[]) => setPriceHistory(data))
+      .catch(() => setPriceHistory([]));
+  }
   // Pedido del usuario 2026-10-01: cortes contados que Daniel aún no confirma.
   const [unconfirmedDispatch, setUnconfirmedDispatch] = useState<{ lots: number; units: number; since: string | null } | null>(null);
   const [query, setQuery] = useState("");
@@ -1221,7 +1237,18 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                 <span className="text-[12.5px] flex flex-col min-w-0">
                   <span className="flex items-center gap-1.5 min-w-0">
                     <CatalogCode code={r.justCode} />
-                    <ExpandableName text={r.name} />
+                    {isAdmin ? (
+                      <button
+                        type="button"
+                        title={`${r.name} · Clic para ver el historial de precio`}
+                        className="truncate text-left cursor-pointer hover:underline hover:text-teal"
+                        onClick={() => openPriceHistory(r)}
+                      >
+                        {r.name}
+                      </button>
+                    ) : (
+                      <ExpandableName text={r.name} />
+                    )}
                   </span>
                   {/* Confirmado 2026-09-29, pedido de Daniel + usuario (opción A):
                       aprobado en Análisis de Mercado pero nunca comprado — no
@@ -1453,6 +1480,48 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                   );
                 })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {priceHistoryFor && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setPriceHistoryFor(null)}>
+          <div className="bg-surface border border-rule rounded-md p-4 max-w-[640px] w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="flex items-center gap-1.5 text-[13px] font-bold min-w-0">
+                <LineChart size={14} className="text-teal shrink-0" />
+                <span className="min-w-0">
+                  Historial de precio — {priceHistoryFor.justCode ? `${priceHistoryFor.justCode} · ` : ""}
+                  {priceHistoryFor.name}
+                </span>
+              </div>
+              <button type="button" className="text-steel text-[12px] cursor-pointer shrink-0" onClick={() => setPriceHistoryFor(null)}>
+                Cerrar
+              </button>
+            </div>
+            {priceHistory === null ? (
+              <div className="text-steel text-[12px] py-8 text-center">Cargando historial…</div>
+            ) : priceHistory.length === 0 ? (
+              <div className="text-steel text-[12px] py-8 text-center">Todavía no hay compras registradas de este producto.</div>
+            ) : (
+              (() => {
+                const points = priceHistory
+                  .flatMap((s) => s.history)
+                  .sort((a, b) => new Date(a.paidAt ?? a.date).getTime() - new Date(b.paidAt ?? b.date).getTime());
+                return (
+                  <>
+                    <CombinedPriceChart suppliers={priceHistory} />
+                    <div className="text-[10px] text-steel-dim text-center mt-1">
+                      {points.length} {points.length === 1 ? "compra" : "compras"} · {priceHistory.length}{" "}
+                      {priceHistory.length === 1 ? "proveedor" : "proveedores"} · precio unitario con flete
+                    </div>
+                    <div className="overflow-y-auto min-h-0">
+                      <PriceHistoryBreakdownList points={points} />
+                    </div>
+                  </>
+                );
+              })()
+            )}
           </div>
         </div>
       )}
