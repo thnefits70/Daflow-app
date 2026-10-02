@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { isAutoWarrantyMonth } from "@/lib/warrantyKpiConstants";
 import { isAutoReturnRateMonth } from "@/lib/returnRateConstants";
 import { prisma } from "@/lib/prisma";
-import { isFixedHoliday, evaluationDeadline, adminConfirmDeadline, summaryFieldsFromScores } from "@/lib/recognition";
+import { evaluationDeadline, adminConfirmDeadline, summaryFieldsFromScores } from "@/lib/recognition";
 import { addBusinessHours } from "@/lib/businessHours";
 import { getPettyCashBoxData, getPendingMotorizadoFreights, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
 import { getUpcomingBirthdays } from "@/lib/birthdays";
@@ -292,7 +292,9 @@ export async function getRecognitionLockout(evaluatorIsAdmin: boolean, leaderDep
 // same "weekend" definition as recognition.ts's isBusinessDay (which treats
 // Saturday as off, for a different, unrelated deadline).
 function isCompanyBusinessDay(date: Date): boolean {
-  return date.getUTCDay() !== 0 && !isFixedHoliday(date);
+  // Calendario automático de Ecuador (2026-10-02): domingo, feriados con
+  // traslado y sábado de fin de semana largo no cuentan.
+  return isWorkingDay(date.toISOString().slice(0, 10));
 }
 
 function nthDayOfMonth(month: string, day: number): Date {

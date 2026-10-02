@@ -1,3 +1,5 @@
+import { holidayName } from "@/lib/ecuadorHolidays";
+
 export type PillarKey =
   | "resultados"
   | "excelencia"
@@ -521,16 +523,13 @@ function isWeekend(date: Date): boolean {
   return day === 0 || day === 6;
 }
 
-// Fixed-date Ecuadorian national holidays only ("MM-DD"). Movable holidays
-// (Carnaval, Viernes Santo) and the "traslado de feriados" law that shifts
-// some of these to the nearest Monday/Friday aren't modeled — this is a
-// reasonable approximation for a 1-2 day grace extension, not a fully
-// authoritative calendar.
-const FIXED_ECUADOR_HOLIDAYS = ["01-01", "05-01", "05-24", "08-10", "10-09", "11-02", "11-03", "12-25"];
-
+// Pedido del usuario 2026-10-02: un solo calendario de feriados en todo
+// DAFLOW — el automático de src/lib/ecuadorHolidays.ts (Ley de Feriados con
+// traslados, Carnaval/Viernes Santo por Pascua, 25 de julio de Guayaquil),
+// calculado solo para cualquier año. Antes era una lista fija de fechas que
+// no sabía cuándo un feriado se movía.
 export function isFixedHoliday(date: Date): boolean {
-  const md = `${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
-  return FIXED_ECUADOR_HOLIDAYS.includes(md);
+  return holidayName(date.toISOString().slice(0, 10)) !== null;
 }
 
 export function isBusinessDay(date: Date): boolean {

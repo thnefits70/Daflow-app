@@ -1,4 +1,4 @@
-import { isFixedHoliday } from "@/lib/recognition";
+import { isWorkingDay } from "@/lib/ecuadorHolidays";
 
 // Horario laboral real de la empresa, confirmado 2026-08-05 — único
 // horario usado en todo el sistema para cualquier cálculo de "horas
@@ -12,8 +12,9 @@ const SATURDAY_WINDOW = { start: 8.5, end: 12.5 };
 
 function dayWindow(d: Date): { start: number; end: number } | null {
   const day = d.getUTCDay(); // ya en "hora de Ecuador desplazada"
-  if (day === 0) return null; // domingo
-  if (isFixedHoliday(d)) return null;
+  // Domingo, feriado (calendario automático de Ecuador) o sábado de fin de
+  // semana largo (2026-10-02, ver ecuadorHolidays.ts).
+  if (!isWorkingDay(d.toISOString().slice(0, 10))) return null;
   return day === 6 ? SATURDAY_WINDOW : WEEKDAY_WINDOW;
 }
 
