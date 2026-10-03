@@ -209,6 +209,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   const [busyGroup, setBusyGroup] = useState<string | null>(null);
   const [rejectingGroup, setRejectingGroup] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [cancelProposalIds, setCancelProposalIds] = useState<string[]>([]);
   const [approvingGroup, setApprovingGroup] = useState<string | null>(null);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
@@ -520,11 +521,12 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
     await fetch(`/api/purchase-requests/group/${groupId}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "reject", rejectReason: rejectReason.trim() || undefined }),
+      body: JSON.stringify({ action: "reject", rejectReason: rejectReason.trim() || undefined, cancelProposalCatalogItemIds: cancelProposalIds }),
     });
     setBusyGroup(null);
     setRejectingGroup(null);
     setRejectReason("");
+    setCancelProposalIds([]);
     setHistoryRows(null);
     load();
     router.refresh();
@@ -1065,11 +1067,31 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
             rejectingGroup === groupId ? (
               <div>
                 <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2" rows={2} placeholder="Motivo del rechazo (opcional)" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+                {/* Pedido del usuario 2026-10-03 (AM-0018): rechazar la compra no
+                    cierra la propuesta de Análisis de Mercado — se pregunta aquí
+                    por cada producto nuevo que todavía no está en Dropi. */}
+                {g.some((r) => r.catalogItem.awaitingDropiId) && (
+                  <div className="bg-surface2 border border-rule rounded-md p-2.5 mb-2 text-[12px]">
+                    <div className="text-steel mb-1.5">
+                      Rechazar la compra no cancela el producto: su propuesta en Análisis de Mercado sigue aprobada, para comprarlo otro día (por ejemplo, a otro precio). Marca solo si el producto ya no se va a vender:
+                    </div>
+                    {g.filter((r) => r.catalogItem.awaitingDropiId).map((r) => (
+                      <label key={r.id} className="flex items-center gap-2 cursor-pointer py-0.5">
+                        <input
+                          type="checkbox"
+                          checked={cancelProposalIds.includes(r.catalogItemId)}
+                          onChange={(e) => setCancelProposalIds((ids) => (e.target.checked ? [...ids, r.catalogItemId] : ids.filter((x) => x !== r.catalogItemId)))}
+                        />
+                        <span><b className="text-ink">{r.catalogItem.name}</b> ya no va: cancelar también su propuesta</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <button type="button" disabled={busyGroup === groupId} className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => reject(groupId)}>
                     Confirmar rechazo
                   </button>
-                  <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setRejectingGroup(null)}>Cancelar</button>
+                  <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => { setRejectingGroup(null); setCancelProposalIds([]); }}>Cancelar</button>
                 </div>
               </div>
             ) : approvingGroup === groupId ? (

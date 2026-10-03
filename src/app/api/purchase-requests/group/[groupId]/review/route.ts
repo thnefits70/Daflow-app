@@ -7,8 +7,16 @@ import { releaseCreditsForGroup, getReservedCreditsForGroup, getAvailableCredits
 import { canActOnPurchaseApproval } from "@/lib/guards";
 import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
 import { notifySupplierShippingTeamOfNewOrders } from "@/lib/supplierShippingPush";
+import { cancelMarketProposal } from "@/lib/marketProposalCancel";
 
-const schema = z.object({ action: z.enum(["approve", "reject"]), rejectReason: z.string().trim().optional() });
+// cancelProposalCatalogItemIds: pedido del usuario 2026-10-03 (AM-0018) — al
+// rechazar, Bryan marca qué productos nuevos de Análisis de Mercado "ya no
+// van"; su propuesta se cancela en el mismo paso (ver marketProposalCancel).
+const schema = z.object({
+  action: z.enum(["approve", "reject"]),
+  rejectReason: z.string().trim().optional(),
+  cancelProposalCatalogItemIds: z.array(z.string()).optional(),
+});
 
 // Confirmado 2026-07-31: una cotización con varios productos se aprueba o
 // rechaza COMO UNA SOLA compra — aplica a todas las filas del groupId a la
@@ -66,6 +74,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   // quedar libre de inmediato.
   if (parsed.data.action === "reject") {
     await releaseCreditsForGroup(groupId);
+  }
+
+  // Solo productos de ESTA solicitud. Si una propuesta no se puede cancelar
+  // (ej. otra compra viva del mismo producto), el rechazo igual queda hecho
+  // y la propuesta sigue aprobada — se puede cancelar luego en Trazabilidad.
+  if (parsed.data.action === "reject" && parsed.data.cancelProposalCatalogItemIds?.length) {
+    const ids = parsed.data.cancelProposalCatalogItemIds.filter((id) => rows.some((r) => r.catalogItemId === id));
+    const proposals = await prisma.marketProductProposal.findMany({ where: { catalogItemId: { in: ids }, status: "APPROVED" }, select: { id: true } });
+    const reason = parsed.data.rejectReason || "Compra rechazada — el producto ya no va";
+    for (const p of proposals) {
+      await cancelMarketProposal({ proposalId: p.id, reason, actorUserId: actorId }).catch(() => null);
+    }
   }
 
   const names = rows.map((r) => r.catalogItem.name).join(", ");
