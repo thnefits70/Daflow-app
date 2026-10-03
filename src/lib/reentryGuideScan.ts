@@ -101,8 +101,10 @@ export async function scanGuideIntoBatch(params: { batchId: string; raw: string;
         })
       : [];
     const entryIds = outItems.map((o) => o.stockKardexEntry?.id).filter((x): x is string => !!x);
+    // Pedido del usuario 2026-10-03: si no se encuentra la salida, NO se le
+    // avisa a Joel (es un dato de costo, no le sirve al escanear). Queda
+    // registrado igual: unitCost null = vuelve al costo promedio del Kardex.
     const cost = await costOfKardexOutEntries(line.catalogItemId, entryIds);
-    if (cost === null) warnings.push(`No se encontró la salida de "${line.name}" en el corte del ${lot.day}: vuelve al costo promedio del Kardex.`);
     costs.set(line.catalogItemId, cost);
   }
 

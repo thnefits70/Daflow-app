@@ -21,7 +21,11 @@ export async function GET() {
     },
     orderBy: { createdAt: "desc" },
   });
-  return NextResponse.json(draft);
+  if (!draft) return NextResponse.json(draft);
+  // Guías escaneadas antes del 2026-10-03 guardaron el aviso de costo
+  // ("No se encontró la salida…"): se oculta, es financiero y Joel no lo usa.
+  const guides = draft.guides.map((g) => ({ ...g, warnings: g.warnings.filter((w) => !w.startsWith("No se encontró la salida de")) }));
+  return NextResponse.json({ ...draft, guides });
 }
 
 // Confirmado 2026-08-19: el lote SOLO existe si el candado inicial se
