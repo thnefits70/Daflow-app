@@ -20,7 +20,11 @@ export function duplicatePairKey(aId: string, bId: string): string {
 
 export async function findDuplicateCandidates(): Promise<DuplicateCandidate[]> {
   const [items, reviewed] = await Promise.all([
-    prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, justCode: true, photos: true } }),
+    // Fuera los que todavía esperan su ID de Dropi (Análisis de Mercado): no
+    // son producto real de bodega y juntarlos está bloqueado igual
+    // (catalogItemMerge.ts). Caso AM-0018 "Casco de Gateo para Bebe",
+    // 2026-10-03. Si luego reciben su ID y siguen pareciéndose, salen solos.
+    prisma.purchaseCatalogItem.findMany({ where: { awaitingDropiId: false }, select: { id: true, name: true, justCode: true, photos: true } }),
     prisma.catalogDuplicateReview.findMany({ select: { pairKey: true } }),
   ]);
   const done = new Set(reviewed.map((r) => r.pairKey));
