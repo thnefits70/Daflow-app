@@ -129,6 +129,15 @@ export function packSize(variant: string | null | undefined): number | null {
 }
 const packLabel = (n: number) => `Paquete de ${n}`;
 
+// Unidades físicas de una línea de etiqueta: pedidos × tamaño del paquete
+// ("Papel Adhesivo UNIDAD: 2 Unidades X1" = 2 rollos). Igual que cuenta el
+// corte; lo usa el Reingreso por escaneo (caso Joel 2026-10-03, guía
+// 189835365: marcaba 1 y llegaron 2).
+export function labelLineUnits(rawName: string, orders: number): number {
+  const { variant } = splitVariant(rawName);
+  return orders * (packSize(variant ? tidyVariantLabel(variant) : null) ?? 1);
+}
+
 // Variante que repite el nombre del producto + "X<n>" = paquete de n
 // (pedido de Daniel 2026-10-02, NEOCELL 146702: en Dropi el mismo ID trae
 // "567g", "567g X2" y "567g X3"). Servientrega/Laar: "NEOCELL … 567g

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { extractPages, normalizeName, isRocketCode, ROCKET_PREFIX, type PdfLine, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
+import { extractPages, normalizeName, isRocketCode, labelLineUnits, ROCKET_PREFIX, type PdfLine, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
 import { resolveGuideLines } from "@/lib/fulfillmentGuides";
 import { significantWords } from "@/lib/justCatalog";
 import { notifyOwner } from "@/lib/notifications";
@@ -393,7 +393,8 @@ export async function lookupGuide(guide: string, opts: { productsOnly?: boolean 
     }
   }
 
-  const resolved = await resolveGuideLines(products.filter((p) => p.code).map((p) => asLine(p.code!, p.name, p.qty)), { skipSuggestions: true });
+  // Paquetes ("UNIDAD: 2 Unidades"): cuentan las unidades físicas, no el pedido.
+  const resolved = await resolveGuideLines(products.filter((p) => p.code).map((p) => asLine(p.code!, p.name, labelLineUnits(p.name, p.qty))), { skipSuggestions: true });
   const byItem = new Map<string, WarrantySourceLine>();
   const add = (item: { id: string; name: string; photos: string[]; justCode: string | null }, qty: number) => {
     const prev = byItem.get(item.id);
