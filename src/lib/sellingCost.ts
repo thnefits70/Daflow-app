@@ -26,7 +26,9 @@ import { effectiveUnitCost } from "@/lib/purchases";
 // freight: la parte del costo que es flete (por unidad) — cost ya la incluye.
 // Pedido del usuario 2026-10-02: para mostrar "Precio proveedor" sin flete y
 // "Puesto en bodega" con flete por separado en Stock Actual.
-type Layer = { qty: number; cost: number; returned?: boolean; freight?: number };
+// unknownCost: unidades que entraron sin costo conocido (devoluciones antes de
+// la primera compra) — toman el costo de la siguiente compra real.
+type Layer = { qty: number; cost: number; returned?: boolean; freight?: number; unknownCost?: boolean };
 
 export type RemainingStockCost = {
   sellingCost: number;
@@ -62,7 +64,8 @@ export function pickSellingCost(
   // cara ya no tapa a esa compra — "la más nueva" es la última COMPRA.
   const newestLayer = live.filter((l) => !l.returned).at(-1) ?? live[live.length - 1];
   const newest = newestLayer.cost;
-  const usesNewest = newest >= max;
+  // Con tolerancia: diferencias de redondeo (0.0000000001) no cuentan como "más caro".
+  const usesNewest = newest >= max - 1e-6;
   const sellingCost = usesNewest ? newest : Math.max(average, breakEvenBasis(max, params.insuranceRatePercent, params.fulfillmentCost, params.marginPercent));
   // El flete sigue al mismo criterio: el de la última compra si se usa esa,
   // si no el promedio del flete de lo que queda.
@@ -121,7 +124,9 @@ async function replayStockLayers(
   const [entries, pendingReceipts] = await Promise.all([
     prisma.stockKardexEntry.findMany({
       where: { catalogItemId: { in: ids } },
-      orderBy: [{ catalogItemId: "asc" }, { occurredAt: "asc" }, { createdAt: "asc" }],
+      // id al final: algunas cargas iniciales tienen la misma hora exacta y
+      // sin desempate el orden (y el costo) cambiaba de una consulta a otra.
+      orderBy: [{ catalogItemId: "asc" }, { occurredAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
       select: {
         id: true,
         catalogItemId: true,
@@ -148,10 +153,18 @@ async function replayStockLayers(
   let lastInCost = 0;
   let lastInFreight = 0;
   let lastInRequestId: string | undefined;
+  // Pedido del usuario 2026-10-02: el Kardex cuenta como $0 las unidades que
+  // entraron sin costo (devoluciones antes de la primera compra) y eso baja
+  // su promedio (ej. Bolso Antirobo: 7 a $0 + 200 a $3.25 = $3.14). El
+  // Kardex NO se toca (contador); solo para los precios se lleva acá el
+  // mismo promedio pero sin contar esas unidades como $0. Las devoluciones
+  // que entraron al promedio del Kardex y los cortes con Just usan este.
+  let cleanAvg = 0;
+  let prevKardexAvg = 0;
   const flush = () => {
     if (current === null) return;
     const sum = layers.reduce((s, l) => s + l.qty, 0);
-    const list = sum === Math.max(balance, 0) ? layers.map(({ qty, cost, returned, freight }) => ({ qty, cost, returned, freight })) : balance > 0 ? [{ qty: balance, cost: lastAvg }] : [];
+    const list = sum === Math.max(balance, 0) ? layers.map(({ qty, cost, returned, freight, unknownCost }) => ({ qty, cost, returned, freight, unknownCost })) : balance > 0 ? [{ qty: balance, cost: cleanAvg || lastAvg }] : [];
     result.set(current, list.length > 0 ? list : [{ qty: 0, cost: lastInCost || lastAvg, freight: lastInCost ? lastInFreight : 0 }]);
   };
 
@@ -164,27 +177,52 @@ async function replayStockLayers(
       lastInCost = 0;
       lastInFreight = 0;
       lastInRequestId = undefined;
+      cleanAvg = 0;
+      prevKardexAvg = 0;
     }
     const delta = e.balanceAfter - balance;
     if (e.type === "SEED" && balance === 0) {
-      layers = [{ qty: e.balanceAfter, cost: e.unitCost ?? e.avgCostAfter }];
+      const cost = e.unitCost ?? e.avgCostAfter;
+      layers = [{ qty: e.balanceAfter, cost, unknownCost: cost <= 0 }];
+      cleanAvg = cost;
     } else if (e.type === "JUST_CUTOVER_SYNC" || e.type === "CUTOVER_CORRECTION") {
-      // Punto de partida nuevo: el saldo y costo que quedaron.
-      layers = e.balanceAfter > 0 ? [{ qty: e.balanceAfter, cost: e.avgCostAfter }] : [];
+      // Punto de partida nuevo: el saldo y costo que quedaron. Si el corte
+      // no cambió el promedio, se usa el promedio sin unidades a $0.
+      const cost = cleanAvg > 0 && Math.abs(e.avgCostAfter - prevKardexAvg) < 1e-9 ? cleanAvg : e.avgCostAfter;
+      layers = e.balanceAfter > 0 ? [{ qty: e.balanceAfter, cost, unknownCost: cost <= 0 }] : [];
+      cleanAvg = cost;
     } else if (e.type === "COST_DECLARATION") {
       for (const l of layers) {
         l.cost = e.unitCost ?? e.avgCostAfter;
         l.freight = 0;
+        l.unknownCost = l.cost <= 0;
       }
+      cleanAvg = e.unitCost ?? e.avgCostAfter;
     } else if (e.type === "PRICE_CORRECTION") {
       // Corrige solo las unidades de esa compra que siguen en bodega.
       const diff = e.unitCost ?? 0;
       for (const l of layers) if (l.requestId && l.requestId === e.priceCorrection?.requestId) l.cost += diff;
       if (lastInRequestId && lastInRequestId === e.priceCorrection?.requestId) lastInCost += diff;
+      cleanAvg += e.avgCostAfter - prevKardexAvg;
     } else if (delta > 0) {
       const req = e.purchaseRequestReceipt?.request;
       const freight = req ? Math.max(0, effectiveUnitCost(req) - req.unitCost) : 0;
-      layers.push({ qty: delta, cost: e.unitCost ?? e.avgCostAfter, requestId: e.purchaseRequestReceipt?.requestId, returned: !e.purchaseRequestReceipt, freight });
+      const isPurchase = !!e.purchaseRequestReceipt;
+      // Una devolución sin costo propio entra al promedio del Kardex de ese
+      // momento — acá se le pone el promedio sin unidades a $0 (0 = aún no
+      // se sabe, lo llena la siguiente compra).
+      const tookAverage = !isPurchase && (!e.unitCost || Math.abs(e.unitCost - prevKardexAvg) < 1e-9);
+      const cost = tookAverage ? cleanAvg : (e.unitCost ?? e.avgCostAfter);
+      if (isPurchase && cost > 0) {
+        for (const l of layers) {
+          if (!l.unknownCost) continue;
+          l.cost = cost;
+          l.freight = freight;
+          l.unknownCost = false;
+        }
+      }
+      if (cost > 0) cleanAvg = cleanAvg > 0 && balance > 0 ? (balance * cleanAvg + delta * cost) / (balance + delta) : cost;
+      layers.push({ qty: delta, cost, requestId: e.purchaseRequestReceipt?.requestId, returned: !isPurchase, freight, unknownCost: cost <= 0 });
       if (e.purchaseRequestReceipt && e.unitCost) {
         lastInCost = e.unitCost;
         lastInFreight = freight;
@@ -196,13 +234,23 @@ async function replayStockLayers(
     }
     balance = e.balanceAfter;
     lastAvg = e.avgCostAfter;
+    prevKardexAvg = e.avgCostAfter;
   }
   flush();
 
   for (const r of pendingReceipts) {
     const list = (result.get(r.request.catalogItemId) ?? []).filter((l) => l.qty > 0);
     const cost = effectiveUnitCost(r.request);
-    list.push({ qty: r.receivedQuantity, cost, freight: Math.max(0, cost - r.request.unitCost) });
+    const freight = Math.max(0, cost - r.request.unitCost);
+    if (cost > 0) {
+      for (const l of list) {
+        if (!l.unknownCost) continue;
+        l.cost = cost;
+        l.freight = freight;
+        l.unknownCost = false;
+      }
+    }
+    list.push({ qty: r.receivedQuantity, cost, freight });
     result.set(r.request.catalogItemId, list);
   }
   return result;
