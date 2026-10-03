@@ -278,6 +278,10 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
   });
   if (!batch || batch.guides.length === 0 || batch.fileUrls.length === 0) return 0;
   const found = new Map<string, { products: LabelProduct[]; manifestDay: string | null }>();
+  // Revisión automática del corte (pedido del usuario 2026-10-03, ver corteIssues).
+  const issues: string[] = [];
+  const registered = new Set(// Todas las de DAFLOW: una guía re-subida en otro corte ya está registrada.
+    (await prisma.fulfillmentRequestGuide.findMany({ select: { guideNumber: true } })).map((g) => g.guideNumber.toUpperCase()));
   let filesRead = 0;
   for (const url of batch.fileUrls) {
     let pages: PdfLine[][];
@@ -294,7 +298,9 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
     // salida nunca cuentan distinto un paquete.
     let corte: ReturnType<typeof parseGuidesPages>["guideUnits"] = {};
     try {
-      corte = parseGuidesPages(pages).guideUnits;
+      const parsed = parseGuidesPages(pages);
+      corte = parsed.guideUnits;
+      issues.push(...corteIssues(parsed, decodeURIComponent(url.split("/").pop() ?? "PDF").replace(/^[0-9a-f-]{36}-/, ""), registered));
     } catch (e) {
       console.error("[cacheGuideLabelsForBatch] No se pudo interpretar el PDF como corte", url, e);
     }
@@ -342,7 +348,38 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
     });
     filled++;
   }
+  const empty = batch.guides.filter((g) => !(found.get(g.guideNumber)?.products.length));
+  if (empty.length) issues.push(`${empty.length} guía(s) sin ningún producto leído en su etiqueta (ej. ${empty.slice(0, 3).map((g) => g.guideNumber).join(", ")}): si regresan, no se podrán escanear.`);
+  if (issues.length) {
+    await prisma.fulfillmentRequestBatch.update({ where: { id: batchId }, data: { parseWarnings: { push: issues.map((i) => `Revisión automática: ${i}`) } } }).catch(() => null);
+    await notifyOwner("admin", {
+      title: "⚠ Un corte no cuadra con sus guías",
+      body: `${issues.slice(0, 3).join(" · ")}${issues.length > 3 ? ` · y ${issues.length - 3} más` : ""}. Puede ser un formato nuevo de etiqueta: pásale este aviso a Claude para ajustar la lectura.`,
+      url: "/admin",
+    }).catch(() => null);
+  }
   return filled;
+}
+
+// Revisión automática de cada corte (pedido del usuario 2026-10-03, tras
+// hallar a mano paquetes mal contados y 28 guías de Urbano sin registrar):
+// lo que dicen las guías una por una tiene que sumar lo mismo que el total
+// del corte, y cada guía del PDF tiene que quedar registrada. Si no, algo del
+// PDF no se leyó (casi siempre un formato nuevo de Dropi/transportadora).
+export function corteIssues(r: ReturnType<typeof parseGuidesPages>, file: string, registered: Set<string>): string[] {
+  const out: string[] = [];
+  const byGuides = new Map<string, number>();
+  for (const list of Object.values(r.guideUnits)) for (const u of list) byGuides.set(u.code, (byGuides.get(u.code) ?? 0) + u.units);
+  const byCorte = new Map<string, { name: string; qty: number }>();
+  for (const l of r.lines) byCorte.set(l.code, { name: l.name, qty: (byCorte.get(l.code)?.qty ?? 0) + l.quantity });
+  for (const w of r.warranty) byCorte.set(w.code, { name: byCorte.get(w.code)?.name ?? w.name, qty: (byCorte.get(w.code)?.qty ?? 0) + w.quantity });
+  const diffs = [...new Set([...byCorte.keys(), ...byGuides.keys()])]
+    .map((code) => ({ code, name: byCorte.get(code)?.name ?? code, corte: byCorte.get(code)?.qty ?? 0, guias: byGuides.get(code) ?? 0 }))
+    .filter((d) => d.corte !== d.guias);
+  if (diffs.length) out.push(`${file}: ${diffs.slice(0, 4).map((d) => `${d.name} (corte ${d.corte}, guías ${d.guias})`).join("; ")}${diffs.length > 4 ? ` y ${diffs.length - 4} más` : ""}`);
+  const missing = r.guides.map((g) => g.number).filter((n) => !registered.has(n.toUpperCase()));
+  if (missing.length) out.push(`${file}: ${missing.length} guía(s) del PDF no quedaron registradas (ej. ${missing.slice(0, 3).join(", ")})`);
+  return out;
 }
 
 // Exportada 2026-10-02: también la usa el Reingreso por escaneo de guía
