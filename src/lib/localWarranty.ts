@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { extractPages, normalizeName, isRocketCode, labelLineUnits, parseGuidesPages, ROCKET_PREFIX, type PdfLine, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
+import { extractPages, normalizeName, isRocketCode, labelLineUnits, parseGuidesPages, rocketNameCode, ROCKET_NAME_PREFIX, ROCKET_PREFIX, type PdfLine, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
 import { resolveGuideLines } from "@/lib/fulfillmentGuides";
 import { significantWords } from "@/lib/justCatalog";
 import { notifyOwner } from "@/lib/notifications";
@@ -321,6 +321,12 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
   // Si algún PDF no se pudo abrir, no se marca nada: se reintenta después
   // (nunca se guarda "vacío" por un error de lectura).
   if (filesRead < batch.fileUrls.length) return 0;
+  // Etiqueta de Gintracom de Rocket sin ID ("RN:<nombre>"): se une al ID de
+  // Rocket del mismo nombre en otra guía del lote, igual que el corte
+  // (parse/route.ts). Caso 2026-10-03: RKT000040043 closet → R14487.
+  const rocketIdByName = new Map<string, string>();
+  for (const f of found.values()) for (const p of f.products) if (p.code && /^R\d+$/.test(p.code)) rocketIdByName.set(rocketNameCode(p.name), p.code);
+  for (const f of found.values()) for (const p of f.products) if (p.code?.startsWith(ROCKET_NAME_PREFIX)) p.code = rocketIdByName.get(p.code) ?? p.code;
   const now = new Date();
   let filled = 0;
   for (const g of batch.guides) {
@@ -351,6 +357,7 @@ export async function lookupGuide(guide: string, opts: { productsOnly?: boolean 
       labelProducts: true,
       manifestDay: true,
       labelCachedAt: true,
+      batchId: true,
       batch: { select: { fileUrls: true, requestedAt: true, source: true, lot: { select: { day: true, status: true } } } },
     },
   });
@@ -402,7 +409,8 @@ export async function lookupGuide(guide: string, opts: { productsOnly?: boolean 
     return { ...p, code: best };
   });
   for (const code of row.codes) {
-    if (!products.some((p) => p.code === code)) {
+    // Un "RN:<nombre>" ya unido a su ID de Rocket cuenta como leído.
+    if (!products.some((p) => p.code === code || (code.startsWith(ROCKET_NAME_PREFIX) && rocketNameCode(p.name) === code))) {
       products.push({ code, name: nameOfCode.get(code) ?? code, qty: 1 });
       warnings.push(`No se pudo leer la cantidad de "${nameOfCode.get(code) || code}" en la etiqueta: se toma 1.`);
     }
@@ -417,7 +425,22 @@ export async function lookupGuide(guide: string, opts: { productsOnly?: boolean 
     else byItem.set(item.id, { catalogItemId: item.id, name: item.name, code: item.justCode, photo: item.photos[0] ?? null, quantity: qty, alreadyUsed: 0 });
   };
   const unresolved: { code: string; name: string; quantity: number }[] = [];
+  // Lo que salió de verdad manda sobre el vínculo de hoy (caso 2026-10-03,
+  // guía 189872130: el 29/09 el código 137853 salió como 1 aire acondicionado
+  // y después se volvió combo con soporte + mini ventilador). Si en el corte
+  // de esta guía el código salió como UN producto, se devuelve ese producto.
+  const corteItems = await prisma.fulfillmentRequestItem.findMany({
+    where: { batchId: row.batchId, warrantyGuide: null, OR: [{ sourceCode: { in: resolved.map((r) => r.code) } }, { fromComboCode: { in: resolved.map((r) => r.code) } }] },
+    select: { sourceCode: true, fromComboCode: true, catalogItem: { select: { id: true, name: true, photos: true, justCode: true } } },
+  });
   for (const r of resolved) {
+    const asCombo = corteItems.some((i) => i.fromComboCode === r.code);
+    const plain = corteItems.filter((i) => i.sourceCode === r.code && !i.fromComboCode);
+    const plainIds = new Set(plain.map((i) => i.catalogItem.id));
+    if (!asCombo && plainIds.size === 1 && !(r.resolution.kind === "product" && plainIds.has(r.resolution.catalogItem.id))) {
+      add(plain[0].catalogItem, r.quantity);
+      continue;
+    }
     if (r.resolution.kind === "product") add(r.resolution.catalogItem, r.quantity);
     else if (r.resolution.kind === "combo") for (const comp of r.resolution.components) add(comp.catalogItem, comp.quantity * r.quantity);
     else {
