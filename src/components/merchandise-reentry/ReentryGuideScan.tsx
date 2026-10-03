@@ -30,7 +30,7 @@ export type ScanItemDTO = {
 };
 
 type ScanResponse = { ok: true; guideNumber: string; units: number; warnings: string[] } | { ok: false; reason: string; allowManual: boolean };
-type Feedback = { kind: "ok" | "fail"; text: string; warnings?: string[]; allowManual?: boolean; raw?: string };
+type Feedback = { kind: "ok" | "fail" | "info"; text: string; warnings?: string[]; allowManual?: boolean; raw?: string };
 
 const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
 // Una pistola lectora "escribe" el número completo en milisegundos; si tardó
@@ -55,7 +55,11 @@ export function GuideScanner({ batchId, onChanged, onManual }: { batchId: string
     if (fb?.kind === "fail") playSound("error");
     setFeedbackState(fb);
   };
-  const recent = useRef<Map<string, number>>(new Map());
+  // Guías ya leídas en esta pantalla: si la cámara se queda sobre la misma
+  // guía y la vuelve a leer, se ignora en silencio (antes, pasados 8 s, salía
+  // el aviso rojo "Ya escaneaste…" con sonido de error — reporte de Joel
+  // 2026-10-03).
+  const seen = useRef<Set<string>>(new Set());
 
   // Pistola lectora (escribe como un teclado y termina con Enter).
   const [pistol, setPistol] = useState("");
@@ -64,11 +68,8 @@ export function GuideScanner({ batchId, onChanged, onManual }: { batchId: string
   function enqueue(raw: string) {
     const key = raw.trim().toUpperCase();
     if (!key) return;
-    // La cámara vuelve a leer la misma etiqueta apenas se reabre: se ignora
-    // en silencio si es la misma de hace unos segundos.
-    const last = recent.current.get(key);
-    if (last && nowMs() - last < 8000) return;
-    recent.current.set(key, nowMs());
+    if (seen.current.has(key)) return;
+    seen.current.add(key);
     queueRef.current.push(key);
     setPending(queueRef.current.length);
     processNext();
@@ -88,10 +89,17 @@ export function GuideScanner({ batchId, onChanged, onManual }: { batchId: string
         const data = (await r.json().catch(() => null)) as (ScanResponse & { error?: string }) | null;
         if (!r.ok || !data) setFeedback({ kind: "fail", text: data?.error ?? "No se pudo registrar la guía. Vuelve a escanearla." });
         else if (data.ok) setFeedback({ kind: "ok", text: `Guía ${data.guideNumber} · ${data.units} unidad(es)`, warnings: data.warnings });
+        // Ya estaba en el lote (escaneada antes de recargar la página): no es
+        // un error, solo se avisa en gris y sin sonido de error.
+        else if (data.reason.startsWith("Ya escaneaste")) setFeedback({ kind: "info", text: `Guía ${raw} ya estaba en este lote — sigue con la siguiente.` });
         else setFeedback({ kind: "fail", text: data.reason, allowManual: data.allowManual, raw });
         if (data?.ok) onChanged();
       })
-      .catch(() => setFeedback({ kind: "fail", text: "Sin conexión. Vuelve a escanear la guía." }))
+      .catch(() => {
+        // Se puede volver a escanear la misma guía.
+        seen.current.delete(raw);
+        setFeedback({ kind: "fail", text: "Sin conexión. Vuelve a escanear la guía." });
+      })
       .finally(() => {
         queueRef.current.shift();
         setPending(queueRef.current.length);
@@ -160,9 +168,9 @@ export function GuideScanner({ batchId, onChanged, onManual }: { batchId: string
       )}
 
       {feedback && (
-        <div className={`mt-2.5 rounded-md border p-2.5 text-[12px] ${feedback.kind === "ok" ? "border-green/40 bg-green/10" : "border-red/40 bg-red/10"}`}>
+        <div className={`mt-2.5 rounded-md border p-2.5 text-[12px] ${feedback.kind === "ok" ? "border-green/40 bg-green/10" : feedback.kind === "info" ? "border-rule bg-cloud" : "border-red/40 bg-red/10"}`}>
           <div className="flex items-start gap-1.5">
-            {feedback.kind === "ok" ? <Check size={14} className="text-green mt-0.5 shrink-0" /> : <AlertTriangle size={14} className="text-red mt-0.5 shrink-0" />}
+            {feedback.kind === "fail" ? <AlertTriangle size={14} className="text-red mt-0.5 shrink-0" /> : <Check size={14} className={`${feedback.kind === "ok" ? "text-green" : "text-steel"} mt-0.5 shrink-0`} />}
             <span className="font-semibold">{feedback.text}</span>
           </div>
           {feedback.warnings?.map((w) => (
