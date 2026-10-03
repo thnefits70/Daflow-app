@@ -210,6 +210,9 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   const [rejectingGroup, setRejectingGroup] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [cancelProposalIds, setCancelProposalIds] = useState<string[]>([]);
+  // Pedido del usuario 2026-10-03: qué productos de la solicitud se rechazan
+  // (todos por defecto = rechazar todo con un clic, como antes).
+  const [rejectRowIds, setRejectRowIds] = useState<string[]>([]);
   const [approvingGroup, setApprovingGroup] = useState<string | null>(null);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingProof, setUploadingProof] = useState(false);
@@ -516,14 +519,34 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
     router.refresh();
   }
 
-  async function reject(groupId: string) {
+  function startReject(g: Row[]) {
+    setRejectingGroup(g[0].groupId);
+    setRejectRowIds(g.map((r) => r.id));
+    setCancelProposalIds([]);
+    setRejectReason("");
+  }
+
+  async function reject(g: Row[]) {
+    const groupId = g[0].groupId;
+    const selected = g.filter((r) => rejectRowIds.includes(r.id));
+    if (selected.length === 0) { setErr("Marca al menos un producto para rechazar."); return; }
+    // Solo los marcados que se rechazan pueden cancelar su propuesta.
+    const cancelIds = cancelProposalIds.filter((id) => selected.some((r) => r.catalogItemId === id));
     setBusyGroup(groupId);
-    await fetch(`/api/purchase-requests/group/${groupId}/review`, {
+    setErr("");
+    const partial = selected.length < g.length;
+    const res = await fetch(partial ? `/api/purchase-requests/group/${groupId}/reject-items` : `/api/purchase-requests/group/${groupId}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "reject", rejectReason: rejectReason.trim() || undefined, cancelProposalCatalogItemIds: cancelProposalIds }),
+      body: JSON.stringify(
+        partial
+          ? { rowIds: selected.map((r) => r.id), rejectReason: rejectReason.trim() || undefined, cancelProposalCatalogItemIds: cancelIds }
+          : { action: "reject", rejectReason: rejectReason.trim() || undefined, cancelProposalCatalogItemIds: cancelIds }
+      ),
     });
     setBusyGroup(null);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo rechazar."); return; }
+    setRejectRowIds([]);
     setRejectingGroup(null);
     setRejectReason("");
     setCancelProposalIds([]);
@@ -1066,16 +1089,44 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
             {effectiveCanAct(groupId) ? (
             rejectingGroup === groupId ? (
               <div>
+                {/* Pedido del usuario 2026-10-03: con varios productos, Bryan elige
+                    cuáles rechaza. Todos marcados = rechazar toda la solicitud
+                    (un clic, como antes); si quedan sin marcar, esos siguen
+                    pendientes y los aprueba después (ver reject-items). */}
+                {g.length > 1 && (
+                  <div className="bg-surface2 border border-rule rounded-md p-2.5 mb-2 text-[12px]">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="text-steel">¿Qué productos rechazas? Los que dejes sin marcar siguen pendientes para que los apruebes.</span>
+                      <button
+                        type="button"
+                        className="shrink-0 text-blue font-semibold cursor-pointer"
+                        onClick={() => setRejectRowIds(rejectRowIds.length === g.length ? [] : g.map((r) => r.id))}
+                      >
+                        {rejectRowIds.length === g.length ? "Quitar todos" : "Marcar todos"}
+                      </button>
+                    </div>
+                    {g.map((r) => (
+                      <label key={r.id} className="flex items-center gap-2 cursor-pointer py-0.5">
+                        <input
+                          type="checkbox"
+                          checked={rejectRowIds.includes(r.id)}
+                          onChange={(e) => setRejectRowIds((ids) => (e.target.checked ? [...ids, r.id] : ids.filter((x) => x !== r.id)))}
+                        />
+                        <span><b className="text-ink">{r.catalogItem.name}</b> · {r.quantity} un.</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
                 <textarea className="w-full rounded border border-rule px-2.5 py-2 text-[12.5px] mb-2" rows={2} placeholder="Motivo del rechazo (opcional)" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
                 {/* Pedido del usuario 2026-10-03 (AM-0018): rechazar la compra no
                     cierra la propuesta de Análisis de Mercado — se pregunta aquí
-                    por cada producto nuevo que todavía no está en Dropi. */}
-                {g.some((r) => r.catalogItem.awaitingDropiId) && (
+                    por cada producto nuevo (aún no en Dropi) que se rechaza. */}
+                {g.some((r) => r.catalogItem.awaitingDropiId && rejectRowIds.includes(r.id)) && (
                   <div className="bg-surface2 border border-rule rounded-md p-2.5 mb-2 text-[12px]">
                     <div className="text-steel mb-1.5">
                       Rechazar la compra no cancela el producto: su propuesta en Análisis de Mercado sigue aprobada, para comprarlo otro día (por ejemplo, a otro precio). Marca solo si el producto ya no se va a vender:
                     </div>
-                    {g.filter((r) => r.catalogItem.awaitingDropiId).map((r) => (
+                    {g.filter((r) => r.catalogItem.awaitingDropiId && rejectRowIds.includes(r.id)).map((r) => (
                       <label key={r.id} className="flex items-center gap-2 cursor-pointer py-0.5">
                         <input
                           type="checkbox"
@@ -1087,11 +1138,12 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                     ))}
                   </div>
                 )}
+                {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                 <div className="flex items-center gap-2">
-                  <button type="button" disabled={busyGroup === groupId} className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => reject(groupId)}>
-                    Confirmar rechazo
+                  <button type="button" disabled={busyGroup === groupId || rejectRowIds.length === 0} className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => reject(g)}>
+                    {rejectRowIds.length >= g.length ? "Rechazar toda la solicitud" : `Rechazar ${rejectRowIds.length} de ${g.length} productos`}
                   </button>
-                  <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => { setRejectingGroup(null); setCancelProposalIds([]); }}>Cancelar</button>
+                  <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => { setRejectingGroup(null); setCancelProposalIds([]); setRejectRowIds([]); setErr(""); }}>Cancelar</button>
                 </div>
               </div>
             ) : approvingGroup === groupId ? (
@@ -1241,7 +1293,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                 <button type="button" disabled={busyGroup === groupId} className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => startApprove(groupId)}>
                   Aprobar
                 </button>
-                <button type="button" disabled={busyGroup === groupId} className="rounded border border-rule px-3.5 py-1.5 text-[12.5px] font-semibold text-steel cursor-pointer" onClick={() => setRejectingGroup(groupId)}>
+                <button type="button" disabled={busyGroup === groupId} className="rounded border border-rule px-3.5 py-1.5 text-[12.5px] font-semibold text-steel cursor-pointer" onClick={() => startReject(g)}>
                   Rechazar
                 </button>
               </div>
