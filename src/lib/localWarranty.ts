@@ -231,7 +231,7 @@ async function findGuideInPdfs(fileUrls: string[], guide: string) {
     let label: PdfLine[] | null = null;
     let manifestDay: string | null = null;
     for (const page of pages) {
-      const isSummary = page.some((l) => /Nro:\s*\d+\s*Guia/i.test(lineText(l)));
+      const isSummary = page.some((l) => /Nro:\s*\d*\s*Guia/i.test(lineText(l)));
       if (isSummary) {
         // "FECHA MANIFIESTO (DD/MM/YYYY): 24-09-2026" — la fecha real en que
         // salió (el corte puede ser de otro día, p. ej. los atrasados).
@@ -297,7 +297,7 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
     }
     let manifestDay: string | null = null;
     for (const page of pages) {
-      if (!page.some((l) => /Nro:\s*\d+\s*Guia/i.test(lineText(l)))) continue;
+      if (!page.some((l) => /Nro:\s*\d*\s*Guia/i.test(lineText(l)))) continue;
       const date = page.map(lineText).join(" ").match(/FECHA MANIFIESTO[^:]*:\s*(\d{2})-(\d{2})-(\d{4})/i);
       if (date) {
         manifestDay = `${date[3]}-${date[2]}-${date[1]}`;
@@ -305,7 +305,7 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
       }
     }
     for (const page of pages) {
-      if (page.some((l) => /Nro:\s*\d+\s*Guia/i.test(lineText(l)))) continue;
+      if (page.some((l) => /Nro:\s*\d*\s*Guia/i.test(lineText(l)))) continue;
       const text = flat(page.map(lineText).join(" "));
       for (const g of batch.guides) {
         if (found.has(g.guideNumber) || !text.includes(g.guideNumber)) continue;

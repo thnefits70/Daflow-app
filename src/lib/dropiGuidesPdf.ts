@@ -242,6 +242,23 @@ const SUMMARY_RE = /\(ID:\s*(\d+)\)\s*-\s*\(SKU:[^)]*\)\s*-\s*(.+?)\s+(\d+)\s*$/
 // 2026-10-01 (corte MF-0019): desde la guía 10 Dropi puede pegar el número
 // a "Guia" ("Nro: 10Guia: LC55622371") — con \s+ esa guía se perdía.
 const GUIDE_RE = /Nro:\s*\d+\s*Guia:\s*([A-Z0-9-]+?)(?=\s|Ciudad|$)/i;
+// Otra relación de Urbano (real 2026-09-28, documento-28-09-2026_1047.pdf):
+// el encabezado "Nro:  Guia:  Valor de Recaudo: …" va solo y el número viene
+// en una fila de abajo ("1  WYB184531402  20.00  RECAUDO"). Sin esto esas 9
+// guías nunca se registraron y su devolución no se podía escanear.
+const GUIDE_HEADER_RE = /^\s*Nro:\s*Guia:/i;
+const GUIDE_ROW_RE = /^\s*\d+\s+([A-Z]{0,4}\d{6,}[A-Z0-9]*)\b/i;
+// Número de guía de una línea de la relación (cualquiera de los dos formatos).
+function summaryGuideAt(lines: PdfLine[], i: number): string | null {
+  const g = lines[i].text.match(GUIDE_RE);
+  if (g) return g[1].toUpperCase();
+  for (let j = i - 1; j >= Math.max(0, i - 2); j--) {
+    if (!GUIDE_HEADER_RE.test(lines[j].text)) continue;
+    const r = lines[i].text.match(GUIDE_ROW_RE);
+    return r ? r[1].toUpperCase() : null;
+  }
+  return null;
+}
 const CARRIER_RE = /TRANSPORTADORA:\s*([A-Z0-9 ]+?)\s*$/i;
 const DATE_RE = /FECHA MANIFIESTO \(DD\/MM\/YYYY\):\s*(\d{2})-(\d{2})-(\d{4})/;
 // Greedy a propósito: "(103511)CUATRO ALMOHADAS X4 X1" → la cantidad es el
@@ -515,7 +532,7 @@ export async function parseDropiGuidesPdf(bytes: Uint8Array): Promise<ParsedGuid
 // bloque = páginas "Guia:" + su tabla + sus etiquetas; si TODAS las guías de
 // un bloque ya salieron antes en el PDF, el bloque entero se ignora.
 function dropRepeatedDropiBlocks(pages: PdfLine[][]): { pages: PdfLine[][]; repeated: string[] } {
-  const guidesOf = (lines: PdfLine[]) => lines.map((l) => l.text.match(GUIDE_RE)?.[1].toUpperCase()).filter((g): g is string => !!g);
+  const guidesOf = (lines: PdfLine[]) => lines.map((_, i) => summaryGuideAt(lines, i)).filter((g): g is string => !!g);
   const blocks: PdfLine[][][] = [];
   let prevHadGuides = false;
   for (const lines of pages) {
@@ -581,15 +598,17 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
   // Primera pasada: resumen + guías (las etiquetas sin ID se identifican
   // contra los nombres del resumen, así que tiene que existir completo antes).
   for (const lines of pages) {
-    for (const l of lines) {
+    for (const [i, l] of lines.entries()) {
       const c = l.text.match(CARRIER_RE);
       if (c) carrier = normalizeCarrier(c[1]);
       const d = l.text.match(DATE_RE);
       if (d && !manifestDate) manifestDate = `${d[3]}-${d[2]}-${d[1]}`;
-      const g = l.text.match(GUIDE_RE);
+      const g = summaryGuideAt(lines, i);
       if (g) {
-        guides.set(g[1].toUpperCase(), { carrier, warranty: false });
-        if (/CON\s+RECAUDO/i.test(l.text)) conRecaudo.push(g[1].toUpperCase());
+        guides.set(g, { carrier, warranty: false });
+        // Relación partida: "CON" va al final del encabezado y "RECAUDO" en la fila.
+        const split = !GUIDE_RE.test(l.text) && /RECAUDO/i.test(l.text) && lines.slice(Math.max(0, i - 2), i).some((x) => GUIDE_HEADER_RE.test(x.text) && /CON\s*$/i.test(x.text));
+        if (/CON\s+RECAUDO/i.test(l.text) || split) conRecaudo.push(g);
       }
       const s = l.text.match(SUMMARY_RE);
       if (s) {
@@ -658,7 +677,7 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
   pages.forEach((lines, p) => {
     for (let i = 0; i < lines.length; i++) {
       const text = lines[i].text;
-      if (GUIDE_RE.test(text)) continue;
+      if (summaryGuideAt(lines, i)) continue;
       const compact = text.replace(/[\s*]/g, "").toUpperCase();
       for (const g of guideTokens) if (compact.includes(g)) guideSpots.push({ guide: g, page: p, line: i });
       if (/orden\s+de\s+garant/i.test(text)) garantiaSpots.push({ page: p, line: i });
