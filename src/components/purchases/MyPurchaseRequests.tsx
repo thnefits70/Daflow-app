@@ -25,6 +25,8 @@ type Row = {
   totalCost: number;
   requestedAt: string;
   rejectReason: string | null;
+  rejectionClosedAt: string | null;
+  rejectionClosedNote: string | null;
   attemptNumber: number;
   catalogItem: { id: string; name: string; photos: string[]; justCode: string | null };
   quoteImageUrl: string | null;
@@ -670,6 +672,25 @@ function GroupCard({
   // revisar (ver shipping-pay/route.ts).
   const showShippingSection = !rejected && !g[0].shippingIncluded && g[0].shippingPaymentTiming === "ON_DELIVERY" && g[0].status !== "PENDING_APPROVAL";
 
+  const [closingRejection, setClosingRejection] = useState(false);
+  async function closeRejection() {
+    const note = prompt("¿Por qué no se reenvía? (ej. era duplicada, el proveedor no baja el precio, ya no se necesita)");
+    if (!note?.trim()) return;
+    setClosingRejection(true);
+    const res = await fetch(`/api/purchase-requests/group/${groupId}/close-rejection`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    }).catch(() => null);
+    setClosingRejection(false);
+    if (!res?.ok) {
+      const d = await res?.json().catch(() => null);
+      alert(d?.error ?? "No se pudo cerrar.");
+      return;
+    }
+    onGroupUpdate(groupId, { rejectionClosedAt: new Date().toISOString(), rejectionClosedNote: note.trim() });
+  }
+
   async function remindPayment() {
     const target = g.find((r) => r.status === "APPROVED") ?? g[0];
     await fetch(`/api/purchase-requests/${target.id}/remind-payment`, { method: "POST" }).catch(() => null);
@@ -716,13 +737,31 @@ function GroupCard({
       {rejected ? (
         <div>
           <div className="text-[12px] text-red mb-2">Rechazada{g[0].rejectReason ? ` — ${g[0].rejectReason}` : ""}</div>
-          <button
-            type="button"
-            className="rounded border border-blue bg-blue px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer"
-            onClick={() => onResubmit(buildResubmitDraft(g))}
-          >
-            Corregir y reenviar
-          </button>
+          {g[0].rejectionClosedAt ? (
+            <div className="text-[11.5px] text-steel">
+              Cerrada sin reenviar{g[0].rejectionClosedNote ? ` — ${g[0].rejectionClosedNote}` : ""} · {formatDateTime(g[0].rejectionClosedAt)}
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="rounded border border-blue bg-blue px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer"
+                onClick={() => onResubmit(buildResubmitDraft(g))}
+              >
+                Corregir y reenviar
+              </button>
+              {/* Pedido del usuario 2026-10-03: cerrar un rechazo que no se va a
+                  reenviar (ej. "por duplicado") — deja de salir en Inicio. */}
+              <button
+                type="button"
+                disabled={closingRejection}
+                className="rounded border border-rule px-3 py-1.5 text-[12px] font-semibold text-steel cursor-pointer disabled:opacity-60"
+                onClick={closeRejection}
+              >
+                No se reenvía
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <>

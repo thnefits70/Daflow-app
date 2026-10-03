@@ -39,6 +39,7 @@ type Proposal = {
   calculatedSalePrice: number;
   status: "PENDING_APPROVAL" | "REJECTED" | "APPROVED";
   rejectReason: string | null;
+  rejectionSeenAt?: string | null;
   proposedAt: string;
   proposedBy: { name: string } | null;
   reviewedAt: string | null;
@@ -1222,6 +1223,19 @@ function MyProposalsView() {
               )}
               {p.status === "REJECTED" && p.rejectReason && (
                 <div className="text-[12px] text-red mb-2">Motivo: {p.rejectReason}</div>
+              )}
+              {/* Pedido del usuario 2026-10-03: le sale en Inicio hasta "Enterado". */}
+              {p.status === "REJECTED" && !p.rejectionSeenAt && (
+                <button
+                  type="button"
+                  className="mb-2 rounded border border-rule px-3 py-1 text-[12px] font-semibold text-steel cursor-pointer"
+                  onClick={async () => {
+                    const res = await fetch(`/api/market-products/${p.id}/seen-rejection`, { method: "POST" }).catch(() => null);
+                    if (res?.ok) setRows((rs) => rs?.map((x) => (x.id === p.id ? { ...x, rejectionSeenAt: new Date().toISOString() } : x)) ?? rs);
+                  }}
+                >
+                  Enterado
+                </button>
               )}
               {p.status === "APPROVED" && (
                 <ol className="text-[12.5px] text-steel space-y-0.5">

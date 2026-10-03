@@ -529,6 +529,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_aprobacion: "Análisis de Mercado — propuestas por aprobar",
   analisis_mercado_sin_compra: "Análisis de Mercado — aprobados con compra rechazada",
   analisis_mercado_listo_comprar: "Análisis de Mercado — productos listos para comprar",
+  analisis_mercado_rechazadas: "Análisis de Mercado — mis propuestas rechazadas",
+  analisis_mercado_aprobadas_sin_compra: "Análisis de Mercado — mis propuestas aprobadas sin compra",
   analisis_mercado_brandear: "Nuevos IDs por brandear",
   analisis_mercado_sin_id: "Productos de Compras sin ID de Dropi",
   seguimiento_tiendas_sin_tienda: "Seguimiento de tiendas — productos de Shanghai sin tienda",
@@ -1504,6 +1506,55 @@ async function getPurchaseShippingPendingItem(href: string): Promise<PendingItem
   };
 }
 
+// Pedido del usuario 2026-10-03: quien propone en Análisis de Mercado (hoy
+// Jariel) ve en Inicio sus propuestas rechazadas hasta marcar "Enterado"
+// (rejectionSeenAt) y, solo informativo, las aprobadas a las que todavía no
+// se les hizo ninguna compra (las "listo para comprar" ya tienen su propio
+// pendiente, getMarketProductReadyToBuyPendingItem).
+async function getMarketProposerPendingItems(userId: string): Promise<PendingItem[]> {
+  const href = "/area/workspace?tab=analisis-mercado&ptab=mispropuestas";
+  const [rejected, approved] = await Promise.all([
+    // Desde 2026-10-03 (updatedAt: también cubre las canceladas después de
+    // aprobadas) — las rechazadas antes ya las vio por notificación.
+    prisma.marketProductProposal.findMany({
+      where: { proposedById: userId, status: "REJECTED", rejectionSeenAt: null, updatedAt: { gte: new Date("2026-10-03T00:00:00-05:00") } },
+      select: { code: true, productName: true },
+    }),
+    prisma.marketProductProposal.findMany({
+      where: { proposedById: userId, status: "APPROVED", readyToBuyAt: null, publishedAt: null, catalogItemId: { not: null } },
+      select: { code: true, productName: true, catalogItemId: true },
+    }),
+  ]);
+  const items: PendingItem[] = [];
+  if (rejected.length > 0) {
+    items.push({
+      type: "analisis_mercado_rechazadas",
+      icon: "📝",
+      label: "Propuestas rechazadas — revisa el motivo",
+      meta: rejected.length === 1 ? `${rejected[0].code} ${rejected[0].productName}` : `${rejected.length} propuestas`,
+      overdue: false,
+      href,
+    });
+  }
+  if (approved.length > 0) {
+    const withPurchase = new Set(
+      (await prisma.purchaseRequest.findMany({ where: { catalogItemId: { in: approved.map((a) => a.catalogItemId!) } }, select: { catalogItemId: true } })).map((p) => p.catalogItemId)
+    );
+    const noPurchase = approved.filter((a) => !withPurchase.has(a.catalogItemId!));
+    if (noPurchase.length > 0) {
+      items.push({
+        type: "analisis_mercado_aprobadas_sin_compra",
+        icon: "✅",
+        label: "Propuestas aprobadas — todavía sin compra",
+        meta: noPurchase.length === 1 ? `${noPurchase[0].code} ${noPurchase[0].productName}` : `${noPurchase.length} propuestas`,
+        overdue: false,
+        href,
+      });
+    }
+  }
+  return items;
+}
+
 // Confirmado 2026-08-17: pedido explícito del usuario — Bryan (o cualquier
 // otro delegado de Control de Compras, hoy o en el futuro) quiere ver en
 // Inicio, con un solo clic, sus PROPIAS solicitudes de compra que quedaron
@@ -1523,6 +1574,7 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
       shippingCarrierPending: true,
       bankAccountChangeRequestedAt: true,
       requestedAt: true,
+      rejectionClosedAt: true,
       supplier: { select: { paymentMode: true } },
     },
   });
@@ -1534,12 +1586,14 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const items: PendingItem[] = [];
 
-  const rejected = groups.filter((g) => g.status === "REJECTED");
+  // Pedido del usuario 2026-10-03: las que se cerraron con "No se reenvía"
+  // (close-rejection) ya no cuentan.
+  const rejected = groups.filter((g) => g.status === "REJECTED" && !g.rejectionClosedAt);
   if (rejected.length > 0) {
     items.push({
       type: "compras_rechazadas",
       icon: "🔁",
-      label: "Solicitudes de compra rechazadas — corregir y reenviar",
+      label: "Solicitudes de compra rechazadas — corregir y reenviar, o cerrar si no va",
       meta: `${rejected.length} solicitud${rejected.length === 1 ? "" : "es"} · atrasado`,
       overdue: true,
       href,
@@ -1580,11 +1634,19 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
   // para compras personales) — solo mantiene visible "ya se pagó, sigue en
   // curso" hasta que Inventario la reciba (status pasa a RECEIVED y deja de
   // matchear el filtro).
-  const paidTracking = groups.filter((g) => g.status === "PAID" || g.status === "RECEIVED_PENDING_REVIEW");
+  // Pedido del usuario 2026-10-03: también las APROBADAS (antes desaparecían
+  // de Inicio entre aprobar y pagar). Crédito (CHEN) no pasa por pago.
+  const paidTracking = groups.filter((g) => g.status === "APPROVED" || g.status === "PAID" || g.status === "RECEIVED_PENDING_REVIEW");
   if (paidTracking.length > 0) {
-    const statusLabel = (s: string) =>
-      s === "PAID" ? "Pagada — esperando que Inventario confirme la recepción" : "Inventario ya recibió — falta la aprobación final de Daniel";
-    const meta = paidTracking.length === 1 ? statusLabel(paidTracking[0].status) : `${paidTracking.length} solicitudes en curso`;
+    const statusLabel = (g: (typeof groups)[number]) =>
+      g.status === "APPROVED"
+        ? g.supplier.paymentMode === "CREDITO"
+          ? "Aprobada — esperando que llegue la mercadería"
+          : "Aprobada — esperando el pago"
+        : g.status === "PAID"
+          ? "Pagada — esperando que Inventario confirme la recepción"
+          : "Inventario ya recibió — falta la aprobación final de Daniel";
+    const meta = paidTracking.length === 1 ? statusLabel(paidTracking[0]) : `${paidTracking.length} solicitudes en curso`;
     items.push({
       type: "compras_pago_seguimiento",
       icon: "📦",
@@ -3851,6 +3913,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       const storeTrackingItem = await getStoreTrackingUnlinkedPendingItem();
       if (storeTrackingItem) teamItems.push(storeTrackingItem);
     }
+    // Pedido del usuario 2026-10-03: se autofiltra por proposedById.
+    teamItems.push(...(await getMarketProposerPendingItems(actor.userId)));
     // Confirmado 2026-09-03: Jariel (transición Bryan→Jariel en Compras) es
     // delegado vía canManagePurchases pero no lidera ningún departamento —
     // mismo criterio de elegibilidad que canSubmitPurchaseRequests
@@ -4057,6 +4121,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   // verdad tiene solicitudes de compra propias con algo pendiente.
   const purchaseRequesterItems = await getPurchaseRequesterPendingItems(actor.userId, "/area/workspace?tab=compras&ptab=mias");
   items.push(...purchaseRequesterItems);
+  items.push(...(await getMarketProposerPendingItems(actor.userId)));
 
   const supplierExchangeGestorItem = await getSupplierExchangeGestorPendingItem(actor.userId, "/area/workspace?tab=egresos&otab=proveedor");
   if (supplierExchangeGestorItem) items.push(supplierExchangeGestorItem);
@@ -4160,7 +4225,7 @@ export async function getPossiblePendingTypesForActor(
       if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion", "compras_excedente_confirmar");
       // Confirmado 2026-09-18: Jariel es miembro de MKT (canProposeMarketProduct)
       // pero no su líder — mismo criterio que el resto de este bloque.
-      if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar");
+      if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar", "analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
       if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio");
       if (me.canMarkComboCreatedInDropi) types.push("combos_semana");
