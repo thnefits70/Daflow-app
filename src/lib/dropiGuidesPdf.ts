@@ -220,7 +220,20 @@ export type ParsedGuidesPdf = {
   // leer bien se le explica a Yair en la misma pantalla (y queda guardado)
   // para ir ajustando la lectura en el camino.
   warnings: string[];
+  // Unidades FÍSICAS por guía (paquetes ya multiplicados), con la misma
+  // lectura que el corte. El Reingreso por escaneo las usa tal cual para no
+  // contar distinto que la salida (caso Joel 2026-10-03, guía 189835365:
+  // "UNIDAD: 2 Unidades X1" contaba 1 y llegaron 2).
+  guideUnits: Record<string, { code: string; name: string; units: number }[]>;
 };
+
+// Suma unidades de un producto dentro de la guía.
+function addGuideUnits(map: ParsedGuidesPdf["guideUnits"], guide: string, code: string, name: string, units: number) {
+  const list = (map[guide] ??= []);
+  const prev = list.find((x) => x.code === code);
+  if (prev) prev.units += units;
+  else list.push({ code, name, units });
+}
 
 const SUMMARY_RE = /\(ID:\s*(\d+)\)\s*-\s*\(SKU:[^)]*\)\s*-\s*(.+?)\s+(\d+)\s*$/;
 // 2026-09-29 (manifiestos del 22–25/09): algunas relaciones de Dropi vienen
@@ -342,12 +355,14 @@ function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuide
   }
 
   const codesByGuide = new Map<string, Set<string>>();
+  const guideUnits: ParsedGuidesPdf["guideUnits"] = {};
   const add = (code: string, rawName: string, orders: number, guide: string, carrier: string, isWarranty: boolean) => {
     if (!codesByGuide.has(guide)) codesByGuide.set(guide, new Set());
     codesByGuide.get(guide)!.add(code);
     const { name, variant: rawVariant } = splitVariant(rawName);
     const n = packSize(rawVariant ? tidyVariantLabel(rawVariant) : null);
     const qty = orders * (n ?? 1);
+    addGuideUnits(guideUnits, guide, code, name, qty);
     const variant = n ? packLabel(n) : rawVariant;
     if (isWarranty) {
       warranty.push({ guide, carrier, code, name, quantity: qty, variant: variant ? tidyVariantLabel(variant) : null });
@@ -455,6 +470,7 @@ function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuide
     unreadWarrantyGuides: [...guides.entries()].filter(([n, v]) => v.warranty && !warranty.some((w) => w.guide === n)).map(([n]) => n),
     uncertainWarrantyGuides: [...uncertain],
     warnings,
+    guideUnits,
   };
 }
 
@@ -462,8 +478,12 @@ function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuide
 // tabla resumen "(ID: …) - (SKU: …)") o de Rocket (etiquetas "ROC." /
 // "ROCKET ECOMFULLFILMENT"), y lo lee con el formato que corresponde.
 // `warrantyFile`: Yair marcó este PDF como el de la sección Garantías de Dropi.
-export async function parseGuidesPdf(bytes: Uint8Array, { warrantyFile = false }: { warrantyFile?: boolean } = {}): Promise<ParsedGuidesPdf & { source: "DROPI" | "ROCKET" }> {
-  const pages = await extractPages(bytes);
+export async function parseGuidesPdf(bytes: Uint8Array, opts: { warrantyFile?: boolean } = {}): Promise<ParsedGuidesPdf & { source: "DROPI" | "ROCKET" }> {
+  return parseGuidesPages(await extractPages(bytes), opts);
+}
+
+// Igual que parseGuidesPdf, con las páginas ya extraídas.
+export function parseGuidesPages(pages: PdfLine[][], { warrantyFile = false }: { warrantyFile?: boolean } = {}): ParsedGuidesPdf & { source: "DROPI" | "ROCKET" } {
   const hasDropiSummary = pages.some((lines) => lines.some((l) => SUMMARY_RE.test(l.text)));
   // RKT…: un PDF con solo etiquetas de Gintracom de Rocket no trae "ROC." ni
   // "ROCKET" en ningún lado (caso real 2026-09-26: etiquetas_1790429953).
@@ -761,11 +781,14 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
   const ordersRead = new Map<string, number>(); // code → pedidos leídos en etiquetas
   const packExtra = new Map<string, Map<string, number>>(); // code → transportadora → unidades extra por paquetes
   const codesByGuide = new Map<string, Set<string>>();
+  const guideUnits: ParsedGuidesPdf["guideUnits"] = {};
   for (const h of hits) {
     const hg = guideOf(h);
     if (hg) {
       if (!codesByGuide.has(hg)) codesByGuide.set(hg, new Set());
       codesByGuide.get(hg)!.add(h.code);
+      const n = packSize(h.variant ? tidyVariantLabel(h.variant) : null);
+      addGuideUnits(guideUnits, hg, h.code, summary.get(h.code)?.name ?? h.code, h.qty * (n ?? 1));
     }
     const g = warrantyGuides.size > 0 ? hg : null;
     if (warrantyFile || (g && warrantyGuides.has(g))) {
@@ -937,6 +960,7 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
     unreadWarrantyGuides: [...warrantyGuides].filter((g) => !readWarranty.has(g)),
     uncertainWarrantyGuides,
     warnings,
+    guideUnits,
   };
 }
 

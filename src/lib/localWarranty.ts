@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { extractPages, normalizeName, isRocketCode, labelLineUnits, ROCKET_PREFIX, type PdfLine, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
+import { extractPages, normalizeName, isRocketCode, labelLineUnits, parseGuidesPages, ROCKET_PREFIX, type PdfLine, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
 import { resolveGuideLines } from "@/lib/fulfillmentGuides";
 import { significantWords } from "@/lib/justCatalog";
 import { notifyOwner } from "@/lib/notifications";
@@ -171,7 +171,10 @@ function labelClient(lines: PdfLine[], carrier: string): LabelClient {
   return out;
 }
 
-type LabelProduct = { code: string | null; name: string; qty: number };
+// physical: qty ya son unidades físicas (paquetes multiplicados, lectura del
+// corte). Sin él (guardado antes del 2026-10-03 o leído a mano) qty son
+// pedidos y se multiplica con labelLineUnits.
+type LabelProduct = { code: string | null; name: string; qty: number; physical?: boolean };
 
 // Productos de la etiqueta de ESA guía (cantidad incluida).
 function labelProducts(lines: PdfLine[], carrier: string, rocket: boolean): LabelProduct[] {
@@ -284,6 +287,14 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
       continue;
     }
     filesRead++;
+    // Unidades por guía con la MISMA lectura del corte: así el reingreso y la
+    // salida nunca cuentan distinto un paquete.
+    let corte: ReturnType<typeof parseGuidesPages>["guideUnits"] = {};
+    try {
+      corte = parseGuidesPages(pages).guideUnits;
+    } catch (e) {
+      console.error("[cacheGuideLabelsForBatch] No se pudo interpretar el PDF como corte", url, e);
+    }
     let manifestDay: string | null = null;
     for (const page of pages) {
       if (!page.some((l) => /Nro:\s*\d+\s*Guia/i.test(lineText(l)))) continue;
@@ -299,7 +310,11 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
       for (const g of batch.guides) {
         if (found.has(g.guideNumber) || !text.includes(g.guideNumber)) continue;
         const rocket = batch.source === "ROCKET" || g.codes.some(isRocketCode);
-        found.set(g.guideNumber, { products: labelProducts(page, g.carrier, rocket), manifestDay });
+        const fromCorte = corte[g.guideNumber.toUpperCase()];
+        const products: LabelProduct[] = fromCorte?.length
+          ? fromCorte.map((u) => ({ code: u.code, name: u.name, qty: u.units, physical: true }))
+          : labelProducts(page, g.carrier, rocket);
+        found.set(g.guideNumber, { products, manifestDay });
       }
     }
   }
@@ -394,7 +409,7 @@ export async function lookupGuide(guide: string, opts: { productsOnly?: boolean 
   }
 
   // Paquetes ("UNIDAD: 2 Unidades"): cuentan las unidades físicas, no el pedido.
-  const resolved = await resolveGuideLines(products.filter((p) => p.code).map((p) => asLine(p.code!, p.name, labelLineUnits(p.name, p.qty))), { skipSuggestions: true });
+  const resolved = await resolveGuideLines(products.filter((p) => p.code).map((p) => asLine(p.code!, p.name, p.physical ? p.qty : labelLineUnits(p.name, p.qty))), { skipSuggestions: true });
   const byItem = new Map<string, WarrantySourceLine>();
   const add = (item: { id: string; name: string; photos: string[]; justCode: string | null }, qty: number) => {
     const prev = byItem.get(item.id);
