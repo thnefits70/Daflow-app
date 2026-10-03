@@ -39,7 +39,7 @@ const LOCAL_REASON_CATEGORY: Record<string, string> = {
   ORDEN_DIFERENTE: "Pedido diferente",
 };
 
-function monthRange(month: string): { from: Date; to: Date } {
+export function monthRange(month: string): { from: Date; to: Date } {
   const [y, m] = month.split("-").map(Number);
   return { from: new Date(Date.UTC(y, m - 1, 1) + GYE_OFFSET_MS), to: new Date(Date.UTC(y, m, 1) + GYE_OFFSET_MS) };
 }
@@ -132,7 +132,7 @@ export async function getTopWarrantyProducts(limit = 5): Promise<WarrantyProduct
     .slice(0, limit);
 }
 
-export type WarrantyCostMonth = { month: string; warranties: number; productCost: number; freight: number; total: number; reserve: number };
+export type WarrantyCostMonth = { month: string; warranties: number; productCost: number; freight: number; total: number; reserve: number; soldCost: number };
 
 // Cuánto costaron las garantías del mes contra lo que guardó el seguro (6%
 // del costo de lo vendido en los cortes). Producto al costo puesto en bodega
@@ -182,6 +182,7 @@ export async function getWarrantyCostMonth(month: string): Promise<WarrantyCostM
     freight: round2(freight),
     total: round2(productCost + freight),
     reserve: round2((soldCost * DROPI_INSURANCE_DEFAULT) / 100),
+    soldCost: round2(soldCost),
   };
 }
 

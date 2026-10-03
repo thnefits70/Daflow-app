@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FinanceDashboard } from "./FinanceDashboard";
 import { FinanceUploadPanel } from "./FinanceUploadPanel";
 import { InventoryKpisPanel } from "./InventoryKpisPanel";
+import { LossCoveragePanel } from "./LossCoveragePanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
 
@@ -20,11 +21,11 @@ export function FinanceKpiWorkspace({
   data: FinanceKpiDataDTO;
   editable: boolean;
 }) {
-  const [subTab, setSubTab] = useState<"dashboard" | "inventario" | "plantilla">("dashboard");
+  const [subTab, setSubTab] = useState<"dashboard" | "inventario" | "perdidas" | "plantilla">("dashboard");
 
   return (
     <div>
-      <div className="flex gap-2 mb-5">
+      <div className="flex gap-2 mb-5 flex-wrap">
         <button
           type="button"
           className={`px-4 py-2 text-[12.5px] font-semibold rounded-t-md border border-b-0 cursor-pointer ${
@@ -43,6 +44,19 @@ export function FinanceKpiWorkspace({
         >
           📦 Inventario
         </button>
+        {/* Pedido del usuario 2026-10-03: solo admin y Nairoby (lossCoverage
+            llega null para el resto). */}
+        {data.lossCoverage && (
+          <button
+            type="button"
+            className={`px-4 py-2 text-[12.5px] font-semibold rounded-t-md border border-b-0 cursor-pointer ${
+              subTab === "perdidas" ? "bg-surface text-ink border-rule" : "bg-cloud text-steel border-rule"
+            }`}
+            onClick={() => setSubTab("perdidas")}
+          >
+            🛡️ Pérdidas vs 6%
+          </button>
+        )}
         {editable && (
           <button
             type="button"
@@ -69,6 +83,7 @@ export function FinanceKpiWorkspace({
         </>
       )}
       {subTab === "inventario" && <InventoryKpisPanel data={data.inventoryKpis} />}
+      {subTab === "perdidas" && data.lossCoverage && <LossCoveragePanel data={data.lossCoverage} />}
       {subTab === "plantilla" && editable && (
         <>
           <TabGuide storageKey="kpis-plantilla">
