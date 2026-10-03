@@ -38,7 +38,7 @@ export default async function AdminHomePage() {
       getWarrantyReasonChart(),
       getWarrantyReasonMonthlyTrend(),
       getTopWarrantyProducts(),
-      getWarrantyLossOverview(true),
+      getWarrantyLossOverview(),
       getStoreFeedbackAggregate(),
       getStoreFeedbackTrend(),
       getTeamLearningPathResults(),

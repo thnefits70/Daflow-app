@@ -71,7 +71,7 @@ export function Dashboard({
   warrantyReasonChart?: PieSlice[];
   warrantyReasonTrend?: WarrantyReasonTrendSeries[];
   // Pedido del usuario 2026-10-03 — ver lib/warrantyInsights.ts. warrantyCost
-  // solo llega para admin y Nairoby.
+  // llega para todos (total + producto + fletes; nunca el 6%).
   warrantyProducts?: WarrantyProductRow[];
   warrantyCost?: WarrantyLossOverview | null;
   storeFeedback?: StoreFeedbackAggregate | null;

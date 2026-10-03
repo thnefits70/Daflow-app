@@ -204,20 +204,20 @@ export async function getWarrantyCostOverview(): Promise<{ current: WarrantyCost
 }
 
 // Pedido del usuario 2026-10-03: TODO el equipo ve en Inicio cuánto se
-// perdió en garantías (en dólares). El detalle producto/fletes solo lo ven
-// el admin y Nairoby; el 6% nunca sale en Inicio (vive en KPIs financieros).
-// Se recorta acá en el servidor para que esos datos ni lleguen a la página.
-export type WarrantyLossMonth = { month: string; warranties: number; total: number; productCost: number | null; freight: number | null };
+// perdió en garantías (total + producto dañado + fletes perdidos). El 6% nunca
+// sale en Inicio (vive en KPIs financieros) — se recorta acá en el servidor
+// para que ni llegue a la página.
+export type WarrantyLossMonth = { month: string; warranties: number; total: number; productCost: number; freight: number };
 export type WarrantyLossOverview = { current: WarrantyLossMonth; previous: WarrantyLossMonth | null };
 
-export async function getWarrantyLossOverview(withDetail: boolean): Promise<WarrantyLossOverview> {
+export async function getWarrantyLossOverview(): Promise<WarrantyLossOverview> {
   const { current, previous } = await getWarrantyCostOverview();
   const strip = (m: WarrantyCostMonth): WarrantyLossMonth => ({
     month: m.month,
     warranties: m.warranties,
     total: m.total,
-    productCost: withDetail ? m.productCost : null,
-    freight: withDetail ? m.freight : null,
+    productCost: m.productCost,
+    freight: m.freight,
   });
   return { current: strip(current), previous: previous ? strip(previous) : null };
 }

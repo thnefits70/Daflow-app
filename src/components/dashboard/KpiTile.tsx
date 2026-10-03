@@ -452,38 +452,35 @@ function usd(n: number) {
   return `${n.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// Pedido del usuario 2026-10-03: pérdidas por garantías en ROJO para que
-// quien lo vea se alerte. TODO el equipo ve el total en dólares; el detalle
-// producto/fletes solo llega para admin y Nairoby (productCost/freight null
-// para el resto, ver getWarrantyLossOverview). El 6% nunca sale en Inicio.
+// Pedido del usuario 2026-10-03: pérdidas por garantías SIEMPRE en rojo y
+// visibles (sin exagerar) para que quien lo vea se alerte. TODO el equipo ve
+// el total y su detalle (producto dañado + fletes perdidos). El 6% nunca
+// sale en Inicio (vive en KPIs financieros, solo admin y Nairoby).
 export function WarrantyCostTile({ current, previous }: { current: WarrantyLossMonth; previous: WarrantyLossMonth | null }) {
-  const detail = current.productCost != null && current.freight != null;
   return (
-    <div className="bg-surface border border-rule rounded-lg p-4">
+    <div className="bg-red/5 border border-red/30 rounded-lg p-4">
       <div className="flex items-center gap-1.5 flex-wrap mb-2">
-        <span className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-steel">Pérdidas por garantías</span>
+        <span className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-red">Pérdidas por garantías</span>
         <KpiInfoTip>
           <b className="text-ink">Cuánto dinero se perdió este mes por garantías.</b> Cuando un cliente recibe un producto dañado, roto, incompleto o equivocado, hay que mandarle otro nuevo de bodega y pagar el flete de enviar y de recoger. Esa plata no regresa: cada garantía que se evita es dinero que se queda en la empresa. Se actualiza solo cada vez que se registra una garantía nueva.
         </KpiInfoTip>
       </div>
       <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
-        <span className={`font-display text-[22px] font-bold leading-none ${current.total > 0 ? "text-red" : ""}`}>{usd(current.total)}</span>
+        <span className="font-display text-[26px] font-bold leading-none text-red">${usd(current.total)}</span>
         <span className="text-[11px] text-steel">perdidos este mes</span>
       </div>
       <div className="text-[10.5px] text-steel">{formatMonthShort(current.month)} · {current.warranties} garantía{current.warranties === 1 ? "" : "s"}</div>
-      {detail && (
-        <div className="text-[11.5px] flex flex-col gap-0.5 mt-2.5">
-          <div className="flex justify-between"><span className="text-steel">Producto reemplazado</span><span>{usd(current.productCost!)}</span></div>
-          <div className="flex justify-between"><span className="text-steel">Fletes (promedio $6)</span><span>{usd(current.freight!)}</span></div>
-          <div className={`flex justify-between font-semibold ${current.total > 0 ? "text-red" : "text-ink"}`}>
-            <span>Total en pérdidas</span>
-            <span>{usd(current.total)}</span>
-          </div>
+      <div className="text-[11.5px] flex flex-col gap-0.5 mt-2.5">
+        <div className="flex justify-between"><span className="text-steel">Producto dañado reemplazado</span><span className="text-red">${usd(current.productCost)}</span></div>
+        <div className="flex justify-between"><span className="text-steel">Fletes perdidos (envío y recogida)</span><span className="text-red">${usd(current.freight)}</span></div>
+        <div className="flex justify-between font-semibold text-red pt-1 mt-0.5 border-t border-red/20">
+          <span>Total en pérdidas</span>
+          <span>${usd(current.total)}</span>
         </div>
-      )}
+      </div>
       {previous && (
         <div className="text-[10.5px] text-steel mt-2 pt-2 border-t border-dashed border-rule">
-          Mes anterior ({formatMonthShort(previous.month)}): {usd(previous.total)} en pérdidas
+          Mes anterior ({formatMonthShort(previous.month)}): <b className="text-red">${usd(previous.total)}</b> en pérdidas
         </div>
       )}
     </div>

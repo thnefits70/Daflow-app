@@ -18,7 +18,7 @@ import { getStoreFeedbackAggregate, getStoreFeedbackTrend, getStoreFeedbackStore
 import { getDuePeriodicReminders } from "@/lib/periodicReminders";
 import { getMyLearningPaths, summarizeMyLearningPaths } from "@/lib/learningPaths";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
-import { canViewInventoryKpisHome, canJustifyFillRate, canManageStoreFeedback, canUseWeeklyCheckin, canViewReturnRateDetail, canViewWarrantyCost } from "@/lib/guards";
+import { canViewInventoryKpisHome, canJustifyFillRate, canManageStoreFeedback, canUseWeeklyCheckin, canViewReturnRateDetail } from "@/lib/guards";
 import { getTopWarrantyProducts, getWarrantyLossOverview } from "@/lib/warrantyInsights";
 import { getInventoryKpisData } from "@/lib/inventoryKpis";
 import { getActiveImprovementPlanForCollaborator } from "@/lib/improvementPlan";
@@ -84,14 +84,13 @@ export default async function AreaHomePage() {
   ]);
   if (!dept) redirect("/api/auth/force-logout");
 
-  const [canJustifyFillRateFlag, canViewReturnDetail, canSeeWarrantyCost] = await Promise.all([
+  const [canJustifyFillRateFlag, canViewReturnDetail] = await Promise.all([
     fillRateBreakdown ? canJustifyFillRate() : Promise.resolve(false),
     canViewReturnRateDetail(),
-    canViewWarrantyCost(),
   ]);
   // Pedido del usuario 2026-10-03: todo el equipo ve cuánto se perdió en
-  // garantías; el detalle producto/fletes solo admin y Nairoby.
-  const warrantyCost = await getWarrantyLossOverview(canSeeWarrantyCost);
+  // garantías (total + producto + fletes).
+  const warrantyCost = await getWarrantyLossOverview();
   // Confirmado 2026-08-31: pedido explícito del usuario — acceso directo
   // en Inicio, un clic, al chat con Mary (ver WeeklyCheckinPanel, montada
   // globalmente en area/layout.tsx solo para líderes de un área con
