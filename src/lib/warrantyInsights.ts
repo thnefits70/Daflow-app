@@ -136,7 +136,7 @@ export type WarrantyCostMonth = { month: string; warranties: number; productCost
 
 // Cuánto costaron las garantías del mes contra lo que guardó el seguro (6%
 // del costo de lo vendido en los cortes). Producto al costo puesto en bodega
-// de hoy; flete promedio $6 por envío (y $6 más si se recogió algo). En las
+// de hoy; flete promedio $7 por envío (y $7 más si se recogió algo). En las
 // locales se usa el flete real si se registró.
 export async function getWarrantyCostMonth(month: string): Promise<WarrantyCostMonth> {
   const { from, to } = monthRange(month);

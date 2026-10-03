@@ -13,8 +13,9 @@ export const WARRANTY_CITY = "GUAYAQUIL";
 
 // Pedido del usuario 2026-10-02: recoger el producto dañado es opcional y
 // solo conviene si vale más que el flete de recogida. El flete cambia según
-// distancia y sector — se usa este promedio ($6, confirmado por el usuario).
-export const WARRANTY_PICKUP_FREIGHT_AVG = 6;
+// distancia y sector — se usa este promedio ($7 para garantías locales o por
+// Dropi, confirmado por Bryan 2026-10-03).
+export const WARRANTY_PICKUP_FREIGHT_AVG = 7;
 
 export function formatWarrantyCode(n: number): string {
   return `GL-${String(n).padStart(4, "0")}`;
