@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
-import { RefreshCw } from "lucide-react";
 
 // Pedido 2026-10-03: Joel seguía usando una versión vieja del escáner porque
 // tenía DAFLOW abierto en el celular desde antes de publicar la mejora (el
@@ -11,8 +10,9 @@ import { RefreshCw } from "lucide-react";
 //  - al cambiar de pantalla → carga la nueva al instante (igual se salía de
 //    esa pantalla, no se pierde nada);
 //  - al volver a DAFLOW tras un rato fuera → se recarga sola, salvo que la
-//    persona haya escrito algo en esa pantalla: ahí sale un aviso con botón
-//    "Actualizar" para que no pierda lo escrito.
+//    persona haya escrito algo en esa pantalla (para no borrárselo): ahí
+//    espera al siguiente cambio de pantalla.
+// Sin avisos ni botones — pedido del usuario: debe ser automático.
 
 const CURRENT = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
 const POLL_MS = 5 * 60_000;
@@ -21,7 +21,6 @@ const AWAY_MS = 30_000; // tiempo fuera para recargar sola al volver
 
 export function AppVersionWatcher() {
   const pathname = usePathname();
-  const [stale, setStale] = useState(false);
   const staleRef = useRef(false);
   const dirtyRef = useRef(false);
   const firstPath = useRef(true);
@@ -52,7 +51,6 @@ export function AppVersionWatcher() {
         const { version } = (await r.json()) as { version?: string };
         if (version && version !== "dev" && version !== CURRENT) {
           staleRef.current = true;
-          setStale(true);
           return true;
         }
       } catch {
@@ -101,18 +99,5 @@ export function AppVersionWatcher() {
     };
   }, []);
 
-  if (!stale) return null;
-  return (
-    <div className="fixed top-2 left-1/2 -translate-x-1/2 z-[1000] w-[calc(100%-32px)] max-w-md rounded-md border border-teal/50 bg-navy px-3 py-2 shadow-lg flex items-center gap-2.5">
-      <RefreshCw size={14} className="text-teal shrink-0" />
-      <span className="text-[12px] text-white flex-1">Hay una versión nueva de DAFLOW. Guarda lo que estés haciendo y actualiza.</span>
-      <button
-        type="button"
-        className="rounded bg-teal px-2.5 py-1 text-[12px] font-bold text-navy cursor-pointer shrink-0"
-        onClick={() => window.location.reload()}
-      >
-        Actualizar
-      </button>
-    </div>
-  );
+  return null;
 }
