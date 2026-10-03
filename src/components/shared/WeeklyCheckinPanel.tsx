@@ -32,8 +32,8 @@ type SpeechWindow = Window & {
 // con bitácora semanal (nunca para el resto del equipo, ver area/layout.tsx)
 // y solo tiene UNA conversación activa a la vez — la de la semana en curso —
 // así que no necesita props ni una vista de "lista".
-// Posición bottom-left (Nancy usa bottom-right) para no chocar si alguien
-// llega a ver ambos widgets en la misma sesión.
+// Posición bottom-left por defecto (Nancy usa bottom-right) para no chocar
+// si alguien llega a ver ambos widgets; se puede arrastrar a la derecha.
 //
 // `embedded` (pedido explícito del usuario 2026-09-22): cuando un líder
 // lleva 3+ semanas sin gestión, WeeklyCheckinFullLockGate.tsx reutiliza
@@ -49,6 +49,11 @@ type SpeechWindow = Window & {
 // dentro de su chat de Feedback semanal. En ambos modos el nombre "Mary" se
 // ve en el encabezado y sobre cada respuesta suya.
 const HELP_STORAGE_KEY = "mary-help-chat";
+// Pedido del usuario 2026-10-03: en celular el botón flotante tapaba
+// opciones de la esquina inferior izquierda — se puede arrastrar a la otra
+// esquina inferior y se queda ahí (por dispositivo, localStorage).
+const SIDE_STORAGE_KEY = "mary-fab-side";
+const DRAG_THRESHOLD = 8;
 
 export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { embedded?: boolean; mode?: "checkin" | "help" } = {}) {
   const isHelp = mode === "help";
@@ -66,6 +71,10 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
   const [listening, setListening] = useState(false);
   const [micSupported, setMicSupported] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [side, setSide] = useState<"left" | "right">("left");
+  const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
@@ -87,7 +96,49 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
     setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
     const sw = window as SpeechWindow;
     setMicSupported(!!(sw.SpeechRecognition || sw.webkitSpeechRecognition));
+    try {
+      if (localStorage.getItem(SIDE_STORAGE_KEY) === "right") setSide("right");
+    } catch {
+      // Sin almacenamiento: queda en la esquina por defecto.
+    }
   }, []);
+
+  function onFabPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    if (e.button !== 0) return;
+    dragStartRef.current = { x: e.clientX, y: e.clientY, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+
+  function onFabPointerMove(e: React.PointerEvent<HTMLButtonElement>) {
+    const start = dragStartRef.current;
+    if (!start) return;
+    const dx = e.clientX - start.x;
+    const dy = e.clientY - start.y;
+    if (!start.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+    start.moved = true;
+    setDrag({ dx, dy });
+  }
+
+  // Al soltar, se pega a la esquina inferior más cercana (izq./der.).
+  function onFabPointerUp(e: React.PointerEvent<HTMLButtonElement>) {
+    const start = dragStartRef.current;
+    dragStartRef.current = null;
+    if (!start?.moved) return;
+    suppressClickRef.current = true;
+    setDrag(null);
+    const next = e.clientX < window.innerWidth / 2 ? "left" : "right";
+    setSide(next);
+    try {
+      localStorage.setItem(SIDE_STORAGE_KEY, next);
+    } catch {
+      // Sin almacenamiento: la posición vale solo para esta visita.
+    }
+  }
+
+  function onFabPointerCancel() {
+    dragStartRef.current = null;
+    setDrag(null);
+  }
 
   function toggleListening() {
     const sw = window as SpeechWindow;
@@ -316,11 +367,26 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
 
       <button
         type="button"
-        className="fixed bottom-5 left-5 z-[150] w-13 h-13 rounded-full bg-teal text-navy shadow-2xl cursor-pointer flex items-center justify-center hover:brightness-110"
-        style={{ width: 52, height: 52 }}
-        title={isHelp ? "Pregúntale a Mary" : "Mary · Feedback semanal"}
+        className={`fixed bottom-5 ${side === "left" ? "left-5" : "right-5"} z-[150] w-13 h-13 rounded-full bg-teal text-navy shadow-2xl cursor-pointer flex items-center justify-center hover:brightness-110 select-none ${drag ? "opacity-80" : ""}`}
+        style={{
+          width: 52,
+          height: 52,
+          touchAction: "none",
+          transform: drag ? `translate(${drag.dx}px, ${drag.dy}px)` : undefined,
+        }}
+        title={`${isHelp ? "Pregúntale a Mary" : "Mary · Feedback semanal"} (arrástrame a la otra esquina)`}
         aria-label={isHelp ? "Pregúntale a Mary" : "Mary · Feedback semanal"}
-        onClick={() => setOpen((v) => !v)}
+        onPointerDown={onFabPointerDown}
+        onPointerMove={onFabPointerMove}
+        onPointerUp={onFabPointerUp}
+        onPointerCancel={onFabPointerCancel}
+        onClick={() => {
+          if (suppressClickRef.current) {
+            suppressClickRef.current = false;
+            return;
+          }
+          setOpen((v) => !v);
+        }}
       >
         {open ? <X size={22} /> : <HeaderIcon size={22} />}
       </button>
