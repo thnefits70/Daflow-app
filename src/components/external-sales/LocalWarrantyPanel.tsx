@@ -7,6 +7,7 @@ import {
   EXTRA_REASONS,
   WARRANTY_MAX_DAYS,
   WARRANTY_NORMAL_DAYS,
+  WARRANTY_PICKUP_FREIGHT_AVG,
   WARRANTY_REASONS,
   anyReasonLabel,
   reasonDiscountsStock,
@@ -330,15 +331,7 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
                         {/* Pedido del usuario 2026-10-02: recoger cuesta un flete aparte —
                             DAFLOW recomienda según el costo real del producto. */}
                         {(st.reason === "MAL_FUNCIONAMIENTO" || st.reason === "PRODUCTO_ROTO") && l.pickupMinQty != null && (
-                          Number(st.qty) >= l.pickupMinQty ? (
-                            <div className="text-[12px] text-teal flex gap-1">
-                              <CheckCircle2 size={13} className="shrink-0 mt-0.5" /> Conviene recogerlo: el producto vale más que el flete de recogida.
-                            </div>
-                          ) : (
-                            <div className="text-[12px] text-gold flex gap-1">
-                              <AlertTriangle size={13} className="shrink-0 mt-0.5" /> No conviene recogerlo: el flete de recogida cuesta más que el producto. Recógelo solo si crees que el producto puede estar bien o para cambiarlo con el proveedor.
-                            </div>
-                          )
+                          <PickupAdvice worth={Number(st.qty) >= l.pickupMinQty} minQty={l.pickupMinQty} />
                         )}
                       </div>
                     )}
@@ -538,6 +531,40 @@ type WarrantyRow = {
   deletedAt: string | null;
   items: { id: string; quantity: number; warrantyRole: string | null; warrantyReason: string | null; discountsStock: boolean; declaredProductName: string; pickupReceivedAt: string | null; pickupReceivedBy: { name: string } | null; catalogItem: { name: string } | null }[];
 };
+
+// Pedido del usuario 2026-10-02: recomendación de recoger o no el producto
+// dañado, con un "¿Por qué?" que se abre al tocarlo. Sin el costo del
+// producto — solo el flete promedio, que es público para el asesor.
+function PickupAdvice({ worth, minQty }: { worth: boolean; minQty: number }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`text-[12px] ${worth ? "text-teal" : "text-gold"}`}>
+      <div className="flex gap-1">
+        {worth ? <CheckCircle2 size={13} className="shrink-0 mt-0.5" /> : <AlertTriangle size={13} className="shrink-0 mt-0.5" />}
+        <span>
+          {worth ? "Conviene recogerlo." : "No conviene recogerlo."}{" "}
+          <button type="button" className="underline font-semibold cursor-pointer" onClick={() => setOpen((o) => !o)}>
+            {open ? "Ocultar" : "¿Por qué?"}
+          </button>
+        </span>
+      </div>
+      {open && (
+        <div className="mt-1 ml-4.5 rounded border border-rule bg-cloud p-2 text-ink">
+          <div>Recoger el producto cuesta un flete de unos ${WARRANTY_PICKUP_FREIGHT_AVG} (es un promedio: cambia según la distancia y el sector).</div>
+          {worth ? (
+            <div className="mt-1">Lo que se recoge vale más que ese flete. Si lo traemos, perdemos solo el flete y recuperamos el producto para repararlo, cambiarlo con el proveedor o volver a venderlo si está bien.</div>
+          ) : (
+            <div className="mt-1">
+              Lo que se recoge vale menos que ese flete: pagaríamos más por traerlo que lo que vale. Es mejor que el cliente se quede con el dañado.
+              <div className="mt-1">Recógelo igual solo si crees que el producto puede estar bien (por ejemplo, el cliente quiere quedarse con dos) o si se puede cambiar con el proveedor.</div>
+            </div>
+          )}
+          {minQty > 1 && <div className="mt-1 text-steel">Se cuenta la cantidad: desde {minQty} unidades juntas ya vale más que el flete.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function statusOf(w: WarrantyRow): string {
   if (w.deletedAt) return "Cancelada";
