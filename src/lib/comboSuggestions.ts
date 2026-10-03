@@ -22,6 +22,16 @@ const COMBO_MATCH_AI_MODEL = "claude-sonnet-5";
 // - Un combo vive en una sola marca: la misma "huella" (productos×cantidad)
 //   nunca se repite, ni contra otra sugerencia ni contra un combo ya
 //   registrado en Stock Actual.
+//
+// Pedido del usuario 2026-10-03 (reemplaza la corrida de cada noche): la IA
+// trabaja UNA sola vez por semana, el lunes a la medianoche (ver vercel.json).
+// - Lo que la asesora B2B no mandó a aprobación en la semana pasa a
+//   DESCARTADO (no se borra) y entra la lista nueva con TODOS los ganadores.
+// - La lista queda fija toda la semana; nadie presiona nada.
+// - La IA aprende: se le pasa lo que Bryan aprobó, lo que rechazó (con su
+//   motivo), lo que la asesora no eligió y cuánto se vendió de verdad cada
+//   combo ya creado en Dropi.
+// - Cada combo trae una breve explicación (aiReason) de por qué podría ganar.
 
 // "Funcionó" = 8+ despachos en la semana (umbral de Daniel, 2026-08-31).
 export const LOW_ROTATION_THRESHOLD = 8;
@@ -31,21 +41,20 @@ export const WINNER_30D_THRESHOLD = 200;
 // En combos de 3 el de baja salida debe ser de los que casi no se movieron.
 export const VERY_LOW_THRESHOLD = 3;
 export const COMBO_NAME_MAX_WORDS = 4;
-// Un ganador con 3 sugerencias abiertas ya no se le vuelve a preguntar a la
-// IA hasta que la asesora B2B las mande o se descarten — evita gastar en
-// repetir lo mismo cada noche.
-const MAX_OPEN_PER_WINNER = 3;
 // Tope de productos de baja salida por consulta (los más lentos primero).
 const MAX_LOW_IN_PROMPT = 200;
 const WINNER_CHUNK_SIZE = 20;
 // 2026-10-03: con 4096 tokens la IA se quedaba sin espacio (el modelo piensa
 // antes de responder y eso cuenta en el tope) — todas las respuestas desde el
 // 1 de octubre llegaron cortadas, el JSON no se podía leer y se guardaban 0
-// combos. Tope amplio + máximo de combos por respuesta.
+// combos. Tope amplio + máximo de combos por respuesta (por cada grupo de 20
+// ganadores).
 const COMBO_MATCH_MAX_TOKENS = 16000;
-const MAX_COMBOS_PER_CALL = 10;
-
-const OPEN_STATUSES = ["SUGERIDO", "SELECCIONADO", "PENDIENTE_APROBACION"] as const;
+const MAX_COMBOS_PER_CALL = 20;
+const AI_REASON_MAX_CHARS = 400;
+// Cuánto historial de decisiones se le pasa a la IA para aprender.
+const LEARNING_DAYS = 90;
+const LEARNING_MAX_PER_GROUP = 25;
 
 export type ComboPart = { catalogItemId: string; quantity: number; fromComboCode: string | null };
 
@@ -169,14 +178,17 @@ Arma combos que tengan sentido real para venderse juntos. Reglas OBLIGATORIAS:
 4. Deben complementarse en uso real (ej. licuadora + vasos térmicos). Compartir nicho por sí solo no basta.
 5. A cada combo ponle un nombre en español, llamativo, con efecto "wow", de máximo ${COMBO_NAME_MAX_WORDS} palabras, sin marcas ni la palabra "combo".
 6. Dale un puntaje de 0 a 100 de qué tan probable es que se venda bien.
+7. Explica en "reason", en español sencillo y en máximo 2 oraciones cortas: por qué el ganador se está vendiendo, por qué el de baja salida lo complementa y por qué juntos podrían ser un combo ganador.
+
+Si te paso "Historial de decisiones", aprende de él: arma más combos del estilo de los APROBADOS y de los que más se VENDIERON, y evita el estilo de los RECHAZADOS (lee su motivo) y de los NO ELEGIDOS.
 
 Sé exigente: pocos combos buenos valen más que muchos dudosos (máximo ${MAX_COMBOS_PER_CALL} por respuesta). Un producto puede estar en más de un combo.
 
 Responde ÚNICAMENTE con JSON (sin markdown):
-{ "combos": [{ "winners": [0], "low": 2, "score": 85, "name": "Batido Express Total" }] }
+{ "combos": [{ "winners": [0], "low": 2, "score": 85, "name": "Batido Express Total", "reason": "La licuadora se vende mucho esta semana. Los vasos térmicos casi no salen, pero son el complemento natural para llevar el batido." }] }
 Los números son la posición (desde 0) en cada lista. Si nada tiene sentido: { "combos": [] }.`;
 
-type AiCombo = { winners: number[]; low: number; score: number; name: string | null };
+type AiCombo = { winners: number[]; low: number; score: number; name: string | null; reason: string | null };
 
 function parseAiCombos(raw: string): AiCombo[] {
   let text = raw.trim();
@@ -201,12 +213,13 @@ function parseAiCombos(raw: string): AiCombo[] {
       low: r.low,
       score: typeof r.score === "number" ? Math.max(0, Math.min(100, Math.round(r.score))) : 50,
       name: clampComboName(r.name),
+      reason: typeof r.reason === "string" && r.reason.trim() ? r.reason.trim().slice(0, AI_REASON_MAX_CHARS) : null,
     });
   }
   return out;
 }
 
-async function askAi(winners: Candidate[], lows: Candidate[], actorId: string): Promise<AiCombo[]> {
+async function askAi(winners: Candidate[], lows: Candidate[], learning: string, actorId: string): Promise<AiCombo[]> {
   try {
     const client = getAnthropicClient();
     const w = winners.map((c, i) => `${i}. ${c.name} (${c.nicho ?? "sin nicho"})`).join("\n");
@@ -215,7 +228,7 @@ async function askAi(winners: Candidate[], lows: Candidate[], actorId: string): 
       model: COMBO_MATCH_AI_MODEL,
       max_tokens: COMBO_MATCH_MAX_TOKENS,
       system: COMBO_MATCH_SYSTEM_PROMPT,
-      messages: [{ role: "user", content: `Ganadores:\n${w}\n\nDe baja salida:\n${l}` }],
+      messages: [{ role: "user", content: `Ganadores:\n${w}\n\nDe baja salida:\n${l}${learning ? `\n\nHistorial de decisiones:\n${learning}` : ""}` }],
     });
     await logAiUsage({
       feature: "combo_sugerencias_match",
@@ -234,6 +247,49 @@ async function askAi(winners: Candidate[], lows: Candidate[], actorId: string): 
   }
 }
 
+// ---- Aprendizaje ----------------------------------------------------------
+
+// Pedido del usuario 2026-10-03: cada semana la IA ve qué se aprobó, qué se
+// rechazó (y por qué), qué no eligió la asesora y cuánto se vendió de verdad
+// cada combo ya creado — para sugerir más de lo que funciona.
+async function buildLearningNotes(): Promise<string> {
+  const rows = await prisma.comboSuggestion.findMany({
+    where: { status: { in: ["APROBADO", "CREADO_EN_DROPI", "RECHAZADO", "DESCARTADO"] }, generatedAt: { gte: daysAgo(LEARNING_DAYS) } },
+    orderBy: { generatedAt: "desc" },
+    select: {
+      status: true,
+      suggestedName: true,
+      nicho: true,
+      rejectReason: true,
+      items: { select: { quantity: true, catalogItem: { select: { name: true } } } },
+      dropiCombo: { select: { code: true, components: { select: { catalogItemId: true, quantity: true } } } },
+    },
+  });
+  if (rows.length === 0) return "";
+  const created = rows.filter((r) => r.dropiCombo).map((r) => r.dropiCombo!);
+  const sales = created.length > 0 ? await comboSales(created) : new Map<string, { units7: number; units30: number }>();
+  const line = (r: (typeof rows)[number], extra: string) =>
+    `- "${r.suggestedName ?? "sin nombre"}" (${r.nicho}): ${r.items.map((i) => `${i.quantity > 1 ? `${i.quantity}× ` : ""}${i.catalogItem.name}`).join(" + ")}${extra}`;
+  const approved = rows.filter((r) => r.status === "APROBADO" || r.status === "CREADO_EN_DROPI").slice(0, LEARNING_MAX_PER_GROUP);
+  const rejected = rows.filter((r) => r.status === "RECHAZADO").slice(0, LEARNING_MAX_PER_GROUP);
+  const discarded = rows.filter((r) => r.status === "DESCARTADO").slice(0, LEARNING_MAX_PER_GROUP);
+  const parts: string[] = [];
+  if (approved.length > 0) {
+    parts.push(
+      "APROBADOS por el líder:\n" +
+        approved
+          .map((r) => {
+            const sold = r.dropiCombo ? Math.floor(sales.get(r.dropiCombo.code)?.units30 ?? 0) : null;
+            return line(r, sold === null ? "" : ` · se vendió ${sold} veces en los últimos 30 días`);
+          })
+          .join("\n")
+    );
+  }
+  if (rejected.length > 0) parts.push("RECHAZADOS por el líder:\n" + rejected.map((r) => line(r, ` · motivo: ${r.rejectReason ?? "sin motivo"}`)).join("\n"));
+  if (discarded.length > 0) parts.push("NO ELEGIDOS por la asesora:\n" + discarded.map((r) => line(r, "")).join("\n"));
+  return parts.join("\n\n");
+}
+
 // ---- Armado ---------------------------------------------------------------
 
 // actorId: quién disparó la corrida (registro de gasto de IA) — "system"
@@ -243,7 +299,10 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
   // 2026-10-01 (pedido del usuario): ya no se usan ATOM ni la lista manual
   // de baja rotación — todo sale de los cortes. Esos datos viejos quedan
   // guardados pero no entran al armado.
-  const [out7, out30, catalog, combos, latestBalances, openRows, existingFps] = await Promise.all([
+  // Renovación del lunes: lo que la asesora no mandó a aprobación en toda la
+  // semana deja de verse (queda como DESCARTADO para que la IA aprenda).
+  await prisma.comboSuggestion.updateMany({ where: { status: "SUGERIDO" }, data: { status: "DESCARTADO" } });
+  const [out7, out30, catalog, combos, latestBalances, existingFps, learning] = await Promise.all([
     sumKardexOut(since7),
     sumKardexOut(daysAgo(30)),
     prisma.purchaseCatalogItem.findMany({ select: { id: true, name: true, nicho: true, justCode: true } }),
@@ -253,8 +312,8 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
       orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
       select: { catalogItemId: true, balanceAfter: true },
     }),
-    prisma.comboSuggestion.groupBy({ by: ["winnerCatalogItemId"], where: { status: { in: [...OPEN_STATUSES] } }, _count: { _all: true } }),
     prisma.comboSuggestion.findMany({ where: { fingerprint: { not: null } }, select: { fingerprint: true } }),
+    buildLearningNotes(),
   ]);
   const sales = await comboSales(combos);
   // Regla del usuario 2026-09-23: un combo solo lleva productos con su ID
@@ -282,9 +341,7 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
     });
   }
 
-  // Ganadores que ya tienen suficientes sugerencias abiertas no se repiten.
-  const openByWinner = new Map(openRows.map((r) => [r.winnerCatalogItemId, r._count._all]));
-  const winnerList = [...winners.values()].filter((w) => (openByWinner.get(w.parts[0].catalogItemId) ?? 0) < MAX_OPEN_PER_WINNER);
+  const winnerList = [...winners.values()];
 
   // Baja salida: todo lo que tiene stock en bodega y salió menos de 8 en 7
   // días (incluye los que salieron 0).
@@ -307,7 +364,7 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
 
   const chunks: Candidate[][] = [];
   for (let i = 0; i < winnerList.length; i += WINNER_CHUNK_SIZE) chunks.push(winnerList.slice(i, i + WINNER_CHUNK_SIZE));
-  const results = await Promise.all(chunks.map((chunk) => askAi(chunk, lowList, actorId)));
+  const results = await Promise.all(chunks.map((chunk) => askAi(chunk, lowList, learning, actorId)));
 
   // Huellas ya usadas: sugerencias de antes + combos registrados en Stock
   // Actual (de cualquier marca) — un combo nunca se repite en otra marca.
@@ -337,6 +394,7 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
             lowRotationCatalogItemId: lowId,
             matchScore: ai.score,
             suggestedName: ai.name,
+            aiReason: ai.reason,
             fingerprint: fp,
             items: {
               create: [

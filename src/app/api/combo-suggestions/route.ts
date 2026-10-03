@@ -16,7 +16,8 @@ export async function GET(req: NextRequest) {
   const statusParam = req.nextUrl.searchParams.get("status");
   const status = statusParam && VALID_STATUSES.includes(statusParam as ComboSuggestionStatus) ? (statusParam as ComboSuggestionStatus) : null;
   const suggestions = await prisma.comboSuggestion.findMany({
-    where: status ? { status } : undefined,
+    // DESCARTADO = no elegido en su semana; solo sirve para que la IA aprenda.
+    where: status ? { status } : { status: { not: "DESCARTADO" } },
     orderBy: { generatedAt: "desc" },
     include: {
       items: { include: { catalogItem: { select: CATALOG_SELECT } }, orderBy: { role: "asc" } },

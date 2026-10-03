@@ -19,6 +19,7 @@ type Suggestion = {
   nicho: string;
   matchScore: number | null;
   suggestedName: string | null;
+  aiReason: string | null;
   bodega: Marca | null;
   approvedDropiPrice: number | null;
   status: "SUGERIDO" | "SELECCIONADO" | "PENDIENTE_APROBACION" | "APROBADO" | "RECHAZADO" | "CREADO_EN_DROPI";
@@ -119,6 +120,17 @@ function Header({ s }: { s: Suggestion }) {
   );
 }
 
+// Pedido del usuario 2026-10-03: por qué la IA cree que este combo puede
+// ganar, para que la asesora y Bryan decidan con esa información.
+function AiReason({ s }: { s: Suggestion }) {
+  if (!s.aiReason) return null;
+  return (
+    <div className="mt-1.5 text-[11.5px] leading-relaxed bg-cloud rounded px-2.5 py-1.5">
+      <b className="text-ink">Por qué puede ganar:</b> <span className="text-steel">{s.aiReason}</span>
+    </div>
+  );
+}
+
 function PriceLine({ s, price }: { s: Suggestion; price: number | null }) {
   const p = s.pricing;
   if (price === null) return <div className="text-[11.5px] text-red">Falta el costo de algún producto — no se puede calcular el precio.</div>;
@@ -148,10 +160,6 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
   const [rejectReason, setRejectReason] = useState("");
   const [brandById, setBrandById] = useState<Record<string, Marca | "">>({});
   const [codeById, setCodeById] = useState<Record<string, string>>({});
-  const [recalculating, setRecalculating] = useState(false);
-  const [recalcMsg, setRecalcMsg] = useState("");
-  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
-  const [discarding, setDiscarding] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch("/api/combo-suggestions");
@@ -170,9 +178,6 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
   const approved = (suggestions ?? []).filter((s) => s.status === "APROBADO");
   const created = (suggestions ?? []).filter((s) => s.status === "CREADO_EN_DROPI");
   const sendable = (s: Suggestion) => s.pricing?.dropiPrice != null;
-  // Aprobadas con el sistema viejo (sin marca): no se pueden publicar.
-  const oldApproved = approved.filter((s) => !s.bodega).length;
-  const discardable = suggested.filter((s) => s.status === "SUGERIDO").length + oldApproved;
 
   // Pedido del usuario (2026-09-04): marcar de un clic todas las de un mismo
   // color de probabilidad.
@@ -230,36 +235,6 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
     if (await post(`/api/combo-suggestions/${id}/mark-created`, { dropiCode: (codeById[id] ?? "").trim() }, "No se pudo guardar.")) load();
   }
 
-  async function recalculate() {
-    setRecalculating(true);
-    setRecalcMsg("");
-    setErr("");
-    const res = await fetch("/api/combo-suggestions/recalculate", { method: "POST" });
-    const data = await res.json().catch(() => null);
-    setRecalculating(false);
-    if (!res.ok) {
-      setErr(data?.error ?? "No se pudo recalcular.");
-      return;
-    }
-    setRecalcMsg(data.created > 0 ? `${data.created} combo${data.created === 1 ? "" : "s"} nuevo${data.created === 1 ? "" : "s"}.` : "Sin novedades por ahora.");
-    load();
-  }
-
-  async function discardUnreviewed() {
-    setDiscarding(true);
-    setErr("");
-    const res = await fetch("/api/combo-suggestions/discard-unreviewed", { method: "POST" });
-    const data = await res.json().catch(() => null);
-    setDiscarding(false);
-    setConfirmingDiscard(false);
-    if (!res.ok) {
-      setErr(data?.error ?? "No se pudo descartar.");
-      return;
-    }
-    setRecalcMsg(`${data.deleted} descartada${data.deleted === 1 ? "" : "s"}.`);
-    load();
-  }
-
   if (suggestions === null) return <div className="text-[12.5px] text-steel">Cargando…</div>;
 
   const sendButton = (cls: string) => (
@@ -272,35 +247,6 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
     <div className="flex flex-col gap-5">
       {err && <div className="text-red text-[12.5px]">{err}</div>}
 
-      {/* Pedido del usuario 2026-10-01: el botón para limpiar lo viejo quedaba
-          debajo de los aprobados viejos y no se encontraba — va arriba. */}
-      {canApprove && discardable > 0 && (
-        <div className="bg-gold/10 border border-gold/35 rounded-md p-3.5 flex items-center justify-between gap-3 flex-wrap">
-          <div className="text-[12.5px]">
-            <b>{discardable} combos del sistema anterior</b>
-            <span className="text-steel">
-              {" "}
-              ({discardable - oldApproved} sin revisar{oldApproved > 0 ? ` + ${oldApproved} aprobados sin marca ni precio` : ""}). Lo ya creado en Dropi no se toca.
-            </span>
-          </div>
-          {confirmingDiscard ? (
-            <span className="flex items-center gap-2 text-[12px]">
-              ¿Seguro? No se puede deshacer.
-              <button type="button" disabled={discarding} className="rounded border border-red bg-red px-3 py-1 font-bold text-white cursor-pointer disabled:opacity-60" onClick={discardUnreviewed}>
-                {discarding ? "Descartando…" : "Sí, descartar"}
-              </button>
-              <button type="button" className="text-steel cursor-pointer" onClick={() => setConfirmingDiscard(false)}>
-                No
-              </button>
-            </span>
-          ) : (
-            <button type="button" className="rounded border border-red/60 px-3 py-1.5 text-[12px] font-semibold text-red cursor-pointer" onClick={() => setConfirmingDiscard(true)}>
-              Descartar los {discardable}
-            </button>
-          )}
-        </div>
-      )}
-
       {canApprove && pendingApproval.length > 0 && (
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">
@@ -311,6 +257,7 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
               <div key={s.id} className="bg-surface border border-gold/40 rounded-md p-3.5">
                 <Header s={s} />
                 <Products s={s} />
+                <AiReason s={s} />
                 <div className="mt-1.5">
                   <PriceLine s={s} price={s.pricing?.dropiPrice ?? null} />
                 </div>
@@ -423,20 +370,13 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
       <div>
         <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel">Combos sugeridos</div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {recalcMsg && <span className="text-[11px] text-steel">{recalcMsg}</span>}
-            {recalculating && <span className="text-[11px] text-steel">Puede tardar unos minutos…</span>}
-            <button type="button" disabled={recalculating} className="rounded border border-rule px-2.5 py-1 text-[11px] font-semibold cursor-pointer disabled:opacity-60" onClick={recalculate}>
-              {recalculating ? "Armando…" : "Armar ahora"}
-            </button>
-          </div>
         </div>
         <div className="text-[11.5px] text-steel mb-2">
-          Se arman solos cada noche: 1 ganador + 1 de baja salida, o 2 ganadores + 1 que casi no se mueve, siempre del mismo nicho.
+          Se arman solos cada lunes con los productos ganadores reales: 1 ganador + 1 de baja salida, o 2 ganadores + 1 que casi no se mueve, siempre del mismo nicho. La lista queda toda la semana; el próximo lunes se renueva y lo que no se mandó a aprobación sale de la lista.
           {canMarkCreated ? " Elige cuáles mandar a aprobación." : " La asesora B2B elige cuáles mandar a aprobación."}
         </div>
         {suggested.length === 0 ? (
-          <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[12.5px]">No hay combos sugeridos todavía.</div>
+          <div className="border-[1.5px] border-dashed border-rule rounded-md p-6 text-center text-steel text-[12.5px]">No hay combos sugeridos esta semana. La próxima lista sale el lunes.</div>
         ) : (
           <>
             {canMarkCreated && (
@@ -474,6 +414,7 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
                   <div className="flex-1 min-w-0">
                     <Header s={s} />
                     <Products s={s} />
+                    <AiReason s={s} />
                     <div className="mt-1">
                       <PriceLine s={s} price={s.pricing?.dropiPrice ?? null} />
                     </div>

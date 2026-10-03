@@ -2174,6 +2174,10 @@ enum ComboSuggestionStatus {
   APROBADO
   RECHAZADO
   CREADO_EN_DROPI
+  // Pedido del usuario 2026-10-03: la lista se renueva cada lunes — lo que
+  // la asesora B2B no mandó a aprobación en toda la semana queda acá (no se
+  // borra: la IA aprende que no convenció y la huella no se repite).
+  DESCARTADO
 }
 
 // Confirmado 2026-08-31: pareja sugerida (producto Rentable de ATOM + producto
@@ -2234,6 +2238,11 @@ model ComboSuggestion {
   // Nombre llamativo (máx. 4 palabras) sugerido por la IA en la misma
   // consulta que arma el combo.
   suggestedName String?
+
+  // Pedido del usuario 2026-10-03: breve explicación de la IA — por qué el
+  // ganador se vende, por qué el de baja salida lo complementa y por qué el
+  // combo podría ser ganador. Misma consulta, sin costo extra.
+  aiReason String?
 
   // Marca elegida por el líder de Análisis de Mercado al aprobar (una sola).
   bodega MarketProductBodega?

@@ -533,6 +533,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   seguimiento_tiendas_sin_tienda: "Seguimiento de tiendas — productos de Shanghai sin tienda",
   analisis_mercado_compra_en_camino: "Ya se está comprando — publícalo en Dropi",
   precio_dropi_cambio: "Cambió el precio mínimo de un producto publicado en Dropi",
+  combos_semana: "Combos sugeridos de la semana por revisar",
   fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
   fulfillment_bloque_asignado: "Bloque del corte asignado — sacar de bodega",
   compras_calientes: "Compras calientes (30 unidades o menos)",
@@ -1721,6 +1722,22 @@ async function getDropiPriceChangesPendingItem(href: string): Promise<PendingIte
     // Una subida es urgente: con el precio viejo se gana menos del 20%.
     overdue: up > 0,
     href,
+  };
+}
+
+// Pedido del usuario 2026-10-03: cada lunes la IA deja la lista de combos de
+// la semana (ver comboSuggestions.ts). La asesora B2B la ve con un clic desde
+// Inicio; el aviso se va solo cuando ya no quedan combos sin mandar.
+async function getWeeklyComboSuggestionsPendingItem(): Promise<PendingItem | null> {
+  const count = await prisma.comboSuggestion.count({ where: { status: "SUGERIDO" } });
+  if (count === 0) return null;
+  return {
+    type: "combos_semana",
+    icon: "🧩",
+    label: "Combos sugeridos de esta semana",
+    meta: `${count} combo${count === 1 ? "" : "s"} para elegir cuáles mandar a aprobación`,
+    overdue: false,
+    href: "/area/workspace?tab=analisis-mercado&otab=combos",
   };
 }
 
@@ -3702,6 +3719,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       canResolveSupplierStockout: true,
       canPublishMarketProduct: true,
       canLinkStoreProducts: true,
+      canMarkComboCreatedInDropi: true,
       leadsDept: { select: { code: true, name: true, trackWeeklyMetric: true } },
       department: { select: { code: true } },
     },
@@ -3779,6 +3797,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (inTransitItem) teamItems.unshift(inTransitItem);
       const priceChangeItem = await getDropiPriceChangesPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
       if (priceChangeItem) teamItems.unshift(priceChangeItem);
+    }
+    if (me.canMarkComboCreatedInDropi) {
+      const combosItem = await getWeeklyComboSuggestionsPendingItem();
+      if (combosItem) teamItems.push(combosItem);
     }
     if (me.canLinkStoreProducts) {
       const storeTrackingItem = await getStoreTrackingUnlinkedPendingItem();
@@ -4074,6 +4096,7 @@ export async function getPossiblePendingTypesForActor(
         canConfirmMarketingDesign: true,
         canPublishMarketProduct: true,
         canLinkStoreProducts: true,
+        canMarkComboCreatedInDropi: true,
         leadsDept: { select: { code: true, trackWeeklyMetric: true } },
         department: { select: { code: true } },
       },
@@ -4093,6 +4116,7 @@ export async function getPossiblePendingTypesForActor(
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar");
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
       if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio");
+      if (me.canMarkComboCreatedInDropi) types.push("combos_semana");
       if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
       if (me.department?.code === "INV") types.push("fulfillment_bloque_asignado");
       if (me.canManagePurchases && me.department?.code === "MKT") types.push("compras_calientes");
@@ -4102,6 +4126,7 @@ export async function getPossiblePendingTypesForActor(
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
     if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio");
+      if (me.canMarkComboCreatedInDropi) types.push("combos_semana");
     if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
     if (me.leadsDept.code === "FIN") types.push("compras_frias");
     if (me.leadsDept.code === "INV") types.push("compras_urgentes_sin_atender");
