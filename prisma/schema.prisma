@@ -2364,6 +2364,9 @@ model MarketProductProposal {
   reviewedById String?
   reviewedBy   User?                @relation("MarketProductProposalReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   reviewedAt   DateTime?
+  // Pedido del usuario 2026-10-03: quien propuso marca "Enterado" de un
+  // rechazo — hasta entonces le sale en Inicio.
+  rejectionSeenAt DateTime?
   // Decisión de Bryan al aprobar — ambos null hasta entonces.
   bodega       MarketProductBodega?
   isPublic     Boolean?
@@ -3331,6 +3334,11 @@ model PurchaseRequest {
   reviewedById String?
   reviewedBy   User?     @relation("PurchaseRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   reviewedAt   DateTime?
+  // Pedido del usuario 2026-10-03: quien pidió la compra puede cerrar un
+  // rechazo que NO se va a reenviar (ej. "por duplicado", "el otro está más
+  // barato") — deja de salirle en Inicio como "corregir y reenviar".
+  rejectionClosedAt   DateTime?
+  rejectionClosedNote String?
 
   paidAt                    DateTime?
   paidById                  String?
