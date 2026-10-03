@@ -12,7 +12,7 @@ import {
 } from "@/lib/dashboard";
 import { getStoreFeedbackAggregate, getStoreFeedbackTrend, getStoreFeedbackStoreDetails } from "@/lib/storeFeedback";
 import { getTopReturnProducts } from "@/lib/returnRate";
-import { getTopWarrantyProducts, getWarrantyCostOverview } from "@/lib/warrantyInsights";
+import { getTopWarrantyProducts, getWarrantyLossOverview } from "@/lib/warrantyInsights";
 import { getTeamLearningPathResults } from "@/lib/learningPaths";
 import { getAiSpendOverview } from "@/lib/aiUsage";
 import { getPurchaseMerchandisePaymentsShortcut } from "@/lib/pendingTasks";
@@ -38,7 +38,7 @@ export default async function AdminHomePage() {
       getWarrantyReasonChart(),
       getWarrantyReasonMonthlyTrend(),
       getTopWarrantyProducts(),
-      getWarrantyCostOverview(),
+      getWarrantyLossOverview(true),
       getStoreFeedbackAggregate(),
       getStoreFeedbackTrend(),
       getTeamLearningPathResults(),

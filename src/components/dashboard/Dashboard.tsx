@@ -10,7 +10,7 @@ import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
 import { CommissionProgressCard } from "./CommissionProgressCard";
 import { FillRateTile, ReturnProductsTile, ReturnRateTile, WarrantyCostTile, WarrantyMonthTile, WarrantyProductsTile } from "./KpiTile";
-import type { WarrantyCostMonth, WarrantyProductRow } from "@/lib/warrantyInsights";
+import type { WarrantyLossOverview, WarrantyProductRow } from "@/lib/warrantyInsights";
 import type { TopReturnProducts } from "@/lib/returnRate";
 import { FillRateBreakdownCard } from "./FillRateBreakdownCard";
 import { AiSpendWidget } from "./AiSpendWidget";
@@ -73,7 +73,7 @@ export function Dashboard({
   // Pedido del usuario 2026-10-03 — ver lib/warrantyInsights.ts. warrantyCost
   // solo llega para admin y Nairoby.
   warrantyProducts?: WarrantyProductRow[];
-  warrantyCost?: { current: WarrantyCostMonth; previous: WarrantyCostMonth | null } | null;
+  warrantyCost?: WarrantyLossOverview | null;
   storeFeedback?: StoreFeedbackAggregate | null;
   storeFeedbackTrend?: StoreFeedbackTrendPoint[];
   storeFeedbackDetails?: StoreFeedbackStoreDetail[];
