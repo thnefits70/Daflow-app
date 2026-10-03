@@ -6290,6 +6290,11 @@ model MerchandiseReentryItem {
   unitCost     Float?
   manualReason String?
   scanDamage   Boolean                  @default(false)
+  // Pedido del usuario 2026-10-03: unidades que salieron en la guía pero NO
+  // regresaron (devolución incompleta). En borrador va en la fila scanDamage
+  // del producto; al enviar se pasa a las filas de guía (de dónde faltó) y se
+  // descuenta de las buenas — nunca entran al stock. Se avisa a Daniel.
+  missingQty   Int                      @default(0)
 
   createdAt DateTime @default(now())
 

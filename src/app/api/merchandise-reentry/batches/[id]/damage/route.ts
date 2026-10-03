@@ -36,11 +36,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const scanned = await prisma.merchandiseReentryItem.aggregate({ where: { batchId: id, guideId: { not: null }, catalogItemId: d.catalogItemId }, _sum: { goodQty: true } });
   const total = scanned._sum.goodQty ?? 0;
   if (total === 0) return NextResponse.json({ error: "Este producto no vino en ninguna guía escaneada de este lote." }, { status: 409 });
-  if (d.damagedQty > total) return NextResponse.json({ error: `Solo llegaron ${total} unidad(es) de este producto en las guías escaneadas.` }, { status: 409 });
-
-  const existing = await prisma.merchandiseReentryItem.findFirst({ where: { batchId: id, scanDamage: true, catalogItemId: d.catalogItemId }, select: { id: true } });
+  const existing = await prisma.merchandiseReentryItem.findFirst({ where: { batchId: id, scanDamage: true, catalogItemId: d.catalogItemId }, select: { id: true, missingQty: true } });
+  const missing = existing?.missingQty ?? 0;
+  if (d.damagedQty + missing > total) return NextResponse.json({ error: `Solo llegaron ${total - missing} unidad(es) de este producto en las guías escaneadas.` }, { status: 409 });
   if (d.damagedQty === 0) {
-    if (existing) await prisma.merchandiseReentryItem.delete({ where: { id: existing.id } });
+    // La fila sigue si todavía marca faltantes.
+    if (existing && missing === 0) await prisma.merchandiseReentryItem.delete({ where: { id: existing.id } });
+    else if (existing) await prisma.merchandiseReentryItem.update({ where: { id: existing.id }, data: { damagedQty: 0, damageReasonId: null, damageReasonOther: null } });
     return NextResponse.json({ ok: true });
   }
 

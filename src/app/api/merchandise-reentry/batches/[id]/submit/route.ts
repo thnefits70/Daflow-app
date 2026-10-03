@@ -52,5 +52,20 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     }).catch(() => null);
   }
 
+  // Pedido del usuario 2026-10-03: devolución incompleta — Daniel sabe qué
+  // no regresó y de qué guía, para reclamarlo.
+  const missing = await prisma.merchandiseReentryItem.findMany({
+    where: { batchId: id, missingQty: { gt: 0 }, guideId: { not: null } },
+    select: { missingQty: true, catalogItem: { select: { name: true } }, guide: { select: { guideNumber: true, carrier: true } } },
+  });
+  const missingLeadId = missing.length > 0 ? await getInventoryLeadId() : null;
+  if (missingLeadId) {
+    await notifyOwner(missingLeadId, {
+      title: "Devolución incompleta: faltaron productos",
+      body: `${batch.code} — ${missing.map((m) => `${m.missingQty} × ${m.catalogItem?.name ?? "producto"} (guía ${m.guide?.guideNumber}, ${m.guide?.carrier})`).join("; ")}. No entraron al stock: reclámalo a la transportadora.`,
+      url: "/area/reingreso-mercaderia?tab=historial",
+    }).catch(() => null);
+  }
+
   return NextResponse.json(updated);
 }

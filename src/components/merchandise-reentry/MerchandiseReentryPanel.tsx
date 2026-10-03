@@ -44,6 +44,7 @@ export function MerchandiseReentryPanel({
     else if (t === "danos" && (canApprove || canClose)) setTab("danos");
     else if (t === "productos" && (canApprove || canClose)) setTab("productos");
     else if (t === "capturar" && canCapture) setTab("capturar");
+    else if (t === "historial") setTab("historial");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

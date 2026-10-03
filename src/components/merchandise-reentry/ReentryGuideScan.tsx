@@ -25,6 +25,7 @@ export type ScanItemDTO = {
   declaredName: string | null;
   goodQty: number;
   damagedQty: number;
+  missingQty: number;
   damageReason: { name: string } | null;
   damageReasonOther: string | null;
 };
@@ -314,13 +315,15 @@ export function ScannedGuidesList({ guides, items, onChanged }: { guides: ScanGu
 // solo esos productos con su cantidad.
 export function ScannedProductsDamage({ batchId, items, onChanged }: { batchId: string; items: ScanItemDTO[]; onChanged: () => void }) {
   const [editing, setEditing] = useState<string | null>(null);
+  const [mode, setMode] = useState<"damaged" | "missing">("damaged");
   const [open, setOpen] = useState(false);
-  const products = new Map<string, { id: string; name: string; photo: string | null; code: string | null; units: number; damaged: number; reason: string | null }>();
+  const products = new Map<string, { id: string; name: string; photo: string | null; code: string | null; units: number; damaged: number; missing: number; reason: string | null }>();
   for (const i of items) {
     if (!i.catalogItemId || !(i.guideId || i.scanDamage)) continue;
-    const p = products.get(i.catalogItemId) ?? { id: i.catalogItemId, name: i.catalogItem?.name ?? "Producto", photo: i.catalogItem?.photos[0] ?? null, code: i.catalogItem?.justCode ?? null, units: 0, damaged: 0, reason: null };
+    const p = products.get(i.catalogItemId) ?? { id: i.catalogItemId, name: i.catalogItem?.name ?? "Producto", photo: i.catalogItem?.photos[0] ?? null, code: i.catalogItem?.justCode ?? null, units: 0, damaged: 0, missing: 0, reason: null };
     if (i.scanDamage) {
       p.damaged += i.damagedQty;
+      p.missing += i.missingQty;
       p.reason = i.damageReason?.name ?? i.damageReasonOther ?? null;
     } else p.units += i.goodQty;
     products.set(i.catalogItemId, p);
@@ -330,6 +333,8 @@ export function ScannedProductsDamage({ batchId, items, onChanged }: { batchId: 
   const list = [...products.values()].sort((a, b) => a.name.localeCompare(b.name));
   const totalUnits = list.reduce((s, p) => s + p.units, 0);
   const totalDamaged = list.reduce((s, p) => s + p.damaged, 0);
+  const totalMissing = list.reduce((s, p) => s + p.missing, 0);
+  const marked = totalDamaged + totalMissing;
   // Pedido del usuario 2026-10-02: la lista se puede volver a ocultar con
   // "Ocultar" (como la de guías escaneadas), aunque ya haya dañadas marcadas.
   const showList = open;
@@ -337,7 +342,7 @@ export function ScannedProductsDamage({ batchId, items, onChanged }: { batchId: 
   return (
     <div className="bg-surface border border-rule rounded-md p-3 mb-3">
       <div className="flex items-center justify-between gap-2 mb-0.5">
-        <div className="font-display font-bold text-[14px]">Paso 2 · ¿Vino algo dañado?</div>
+        <div className="font-display font-bold text-[14px]">Paso 2 · ¿Vino algo dañado o faltó algo?</div>
         {showList && (
           <button
             type="button"
@@ -352,20 +357,28 @@ export function ScannedProductsDamage({ batchId, items, onChanged }: { batchId: 
         )}
       </div>
       <div className="text-[11px] text-steel mb-2.5">
-        {list.length} producto(s) · <span className="text-green font-bold">{totalUnits - totalDamaged} buenas</span>
+        {list.length} producto(s) · <span className="text-green font-bold">{totalUnits - marked} buenas</span>
         {totalDamaged > 0 && <span className="text-red font-bold"> · {totalDamaged} dañadas</span>}
-        {!showList && totalDamaged === 0 && " · Si no vino nada dañado, envía el lote directo."}
+        {totalMissing > 0 && <span className="font-bold" style={{ color: "var(--color-gold)" }}> · {totalMissing} no llegaron</span>}
+        {!showList && marked === 0 && " · Si todo llegó bien y completo, envía el lote directo."}
       </div>
       {!showList && (
         <button type="button" className="w-full rounded border border-red/50 px-3 py-2 text-[12.5px] font-semibold text-red cursor-pointer" onClick={() => setOpen(true)}>
-          {totalDamaged > 0 ? "Ver o cambiar productos dañados" : "Sí, marcar productos dañados"}
+          {marked > 0 ? "Ver o cambiar dañados y faltantes" : "Sí, marcar dañados o faltantes"}
         </button>
       )}
-      {showList && <div className="text-[11px] text-steel mb-2">Toca cada producto que apartaste como dañado y pon cuántos. Lo demás queda como bueno.</div>}
+      {showList && <div className="text-[11px] text-steel mb-2">Toca cada producto que vino dañado o que no llegó completo y pon cuántos. Lo demás queda como bueno.</div>}
       <div className={`flex flex-col gap-1.5 ${showList ? "" : "hidden"}`}>
         {list.map((p) => (
-          <div key={p.id} className={`rounded-md border p-2 ${p.damaged > 0 ? "border-red/40 bg-red/5" : "border-rule"}`}>
-            <button type="button" className="w-full flex items-center gap-2.5 text-left cursor-pointer" onClick={() => setEditing(editing === p.id ? null : p.id)}>
+          <div key={p.id} className={`rounded-md border p-2 ${p.damaged > 0 ? "border-red/40 bg-red/5" : p.missing > 0 ? "border-gold/50 bg-gold/10" : "border-rule"}`}>
+            <button
+              type="button"
+              className="w-full flex items-center gap-2.5 text-left cursor-pointer"
+              onClick={() => {
+                setMode("damaged");
+                setEditing(editing === p.id ? null : p.id);
+              }}
+            >
               {p.photo ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={p.photo} alt={p.name} className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
@@ -385,21 +398,55 @@ export function ScannedProductsDamage({ batchId, items, onChanged }: { batchId: 
                       <span className="text-[14px] font-bold tabular-nums">{p.damaged}</span> dañada(s){p.reason ? ` (${p.reason})` : ""}
                     </span>
                   )}
+                  {p.missing > 0 && (
+                    <span className="font-semibold" style={{ color: "var(--color-gold)" }}>
+                      {" · "}
+                      <span className="text-[14px] font-bold tabular-nums">{p.missing}</span> no llegó/llegaron
+                    </span>
+                  )}
                 </div>
               </div>
             </button>
             {editing === p.id && (
-              <DamageEditor
-                batchId={batchId}
-                catalogItemId={p.id}
-                max={p.units}
-                current={p.damaged}
-                onSaved={() => {
-                  setEditing(null);
-                  onChanged();
-                }}
-                onCancel={() => setEditing(null)}
-              />
+              <>
+                <div className="flex gap-1.5 mt-2">
+                  {(["damaged", "missing"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMode(m)}
+                      className={`flex-1 text-[11.5px] font-semibold rounded px-2 py-1.5 border cursor-pointer ${mode === m ? "border-teal text-teal bg-teal/15" : "border-rule text-steel"}`}
+                    >
+                      {m === "damaged" ? "Vino dañado" : "No llegó"}
+                    </button>
+                  ))}
+                </div>
+                {mode === "damaged" ? (
+                  <DamageEditor
+                    batchId={batchId}
+                    catalogItemId={p.id}
+                    max={p.units - p.missing}
+                    current={p.damaged}
+                    onSaved={() => {
+                      setEditing(null);
+                      onChanged();
+                    }}
+                    onCancel={() => setEditing(null)}
+                  />
+                ) : (
+                  <MissingEditor
+                    batchId={batchId}
+                    catalogItemId={p.id}
+                    max={p.units - p.damaged}
+                    current={p.missing}
+                    onSaved={() => {
+                      setEditing(null);
+                      onChanged();
+                    }}
+                    onCancel={() => setEditing(null)}
+                  />
+                )}
+              </>
             )}
           </div>
         ))}
@@ -467,7 +514,7 @@ function DamageEditor({ batchId, catalogItemId, max, current, onSaved, onCancel 
             ))}
           </div>
           {reason === "Otro" && (
-            <input type="text" placeholder="Describe el motivo (ej. no vino)" className="w-full mt-1.5 rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]" value={other} onChange={(e) => setOther(e.target.value)} />
+            <input type="text" placeholder="Describe el motivo" className="w-full mt-1.5 rounded border border-rule bg-cloud px-2.5 py-1.5 text-[12px]" value={other} onChange={(e) => setOther(e.target.value)} />
           )}
         </div>
       )}
@@ -479,6 +526,53 @@ function DamageEditor({ batchId, catalogItemId, max, current, onSaved, onCancel 
         </button>
         <button type="button" disabled={!valid || saving} className="flex-1 rounded border border-red bg-red px-3 py-1.5 text-[12px] font-bold text-white cursor-pointer disabled:opacity-40" onClick={save}>
           {saving ? "Guardando…" : n === 0 ? "Quitar dañadas" : "Guardar dañadas"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Pedido del usuario 2026-10-03: devolución incompleta. Lo que no llegó no
+// entra al stock y Daniel recibe el aviso para reclamarlo.
+function MissingEditor({ batchId, catalogItemId, max, current, onSaved, onCancel }: { batchId: string; catalogItemId: string; max: number; current: number; onSaved: () => void; onCancel: () => void }) {
+  const [qty, setQty] = useState(current > 0 ? String(current) : "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const n = Number(qty) || 0;
+  const valid = n >= 0 && n <= max;
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    try {
+      const r = await fetch(`/api/merchandise-reentry/batches/${batchId}/missing`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ catalogItemId, missingQty: n }),
+      });
+      const data = await r.json().catch(() => null);
+      if (!r.ok) throw new Error(data?.error ?? "No se pudo guardar.");
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo guardar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-2 border-t border-rule pt-2">
+      <div className="text-[11px] text-steel mb-1">¿Cuántas NO llegaron en la devolución? (salieron {max})</div>
+      <input type="number" min={0} max={max} className="w-24 rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] font-bold" value={qty} onChange={(e) => setQty(e.target.value)} />
+      <div className="text-[10.5px] text-steel mt-1">No entran al stock y se le avisa a Daniel para reclamarlas.</div>
+      {n > max && <div className="text-red text-[11px] mt-1">Solo salieron {max}.</div>}
+      {error && <div className="text-red text-[11px] mt-1">{error}</div>}
+      <div className="flex gap-2 mt-2">
+        <button type="button" className="flex-1 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer" onClick={onCancel}>
+          Cancelar
+        </button>
+        <button type="button" disabled={!valid || saving} className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={save}>
+          {saving ? "Guardando…" : n === 0 ? "Quitar faltantes" : "Guardar faltantes"}
         </button>
       </div>
     </div>

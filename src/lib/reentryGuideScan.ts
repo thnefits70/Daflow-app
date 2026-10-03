@@ -157,16 +157,33 @@ export async function scanGuideIntoBatch(params: { batchId: string; raw: string;
 // última escaneada) y la fila de dañadas toma el costo de esas guías. Corre
 // dentro de la transacción del envío.
 export async function applyScanDamage(tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0], batchId: string): Promise<string | null> {
-  const damageRows = await tx.merchandiseReentryItem.findMany({ where: { batchId, scanDamage: true }, select: { id: true, catalogItemId: true, damagedQty: true } });
+  const damageRows = await tx.merchandiseReentryItem.findMany({ where: { batchId, scanDamage: true }, select: { id: true, catalogItemId: true, damagedQty: true, missingQty: true } });
   for (const d of damageRows) {
-    if (!d.catalogItemId || d.damagedQty <= 0) continue;
+    if (!d.catalogItemId) continue;
     const guideItems = await tx.merchandiseReentryItem.findMany({
       where: { batchId, guideId: { not: null }, catalogItemId: d.catalogItemId },
       select: { id: true, goodQty: true, unitCost: true },
       orderBy: { createdAt: "desc" },
     });
     const available = guideItems.reduce((s, i) => s + i.goodQty, 0);
-    if (available < d.damagedQty) return "Marcaste más dañadas que las unidades escaneadas de un producto. Revisa las dañadas antes de enviar.";
+    if (available < d.damagedQty + d.missingQty) return "Marcaste más dañadas o faltantes que las unidades escaneadas de un producto. Revísalas antes de enviar.";
+    // Faltantes (2026-10-03): se quitan de las buenas y quedan anotadas en la
+    // fila de la guía de la que faltaron. Nunca entran al stock.
+    let missingLeft = d.missingQty;
+    for (const g of guideItems) {
+      if (missingLeft <= 0) break;
+      const take = Math.min(missingLeft, g.goodQty);
+      if (take > 0) {
+        await tx.merchandiseReentryItem.update({ where: { id: g.id }, data: { goodQty: { decrement: take }, missingQty: { increment: take } } });
+        g.goodQty -= take;
+      }
+      missingLeft -= take;
+    }
+    if (d.damagedQty <= 0) {
+      await tx.merchandiseReentryItem.delete({ where: { id: d.id } });
+      continue;
+    }
+    await tx.merchandiseReentryItem.update({ where: { id: d.id }, data: { missingQty: 0 } });
     const withCost = guideItems.filter((i) => i.unitCost != null);
     const cost = withCost.length ? withCost.reduce((s, i) => s + i.goodQty * i.unitCost!, 0) / withCost.reduce((s, i) => s + i.goodQty, 0) : null;
     let left = d.damagedQty;
