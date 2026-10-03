@@ -262,12 +262,25 @@ const SUMMARY_NAME_CUT = 38;
 // …salvo que lo que sigue sea solo un color/talla (real 2026-10-02, Gintracom
 // D002084758: resumen "PARCHE DE CUERO AUTOADHESIVO IMPERMEABLE", justo 40
 // letras, y la etiqueta "… IMPERMEABLE NEGRO" — el NEGRO se perdía).
+// Real 2026-10-03, Gintracom D002088227: "Funda Impermeable De Silicona De
+// Zapatos Mujer M" — hombre/mujer no estaban y se perdían 13 unidades.
 const COLOR_OR_SIZE_WORDS = new Set(
-  "negro negra blanco blanca rojo roja azul verde amarillo amarilla rosado rosada rosa gris cafe marron beige morado morada lila naranja dorado dorada plateado plateada celeste fucsia transparente crema vino turquesa xs s m l xl xxl xxxl".split(" ")
+  "negro negra blanco blanca rojo roja azul verde amarillo amarilla rosado rosada rosa gris cafe marron beige morado morada lila naranja dorado dorada plateado plateada celeste fucsia transparente crema vino turquesa hombre mujer dama caballero nino nina unisex xs s m l xl xxl xxxl".split(" ")
 );
-const isColorOrSize = (norm: string) => {
+// Además de la lista fija, se aceptan las palabras que el mismo PDF usa como
+// variante en las etiquetas que sí las rotulan ("COLOR: Hombre TALLA: L" de
+// Servientrega/Laar/Veloces) — así un producto nuevo con variantes nuevas se
+// lee solo, sin agregar cada palabra a mano.
+const isColorOrSize = (norm: string, learned: Set<string> = new Set()) => {
   const w = norm.split(" ").filter(Boolean);
-  return w.length >= 1 && w.length <= 2 && w.every((x) => COLOR_OR_SIZE_WORDS.has(x));
+  return w.length >= 1 && w.length <= 3 && w.every((x) => COLOR_OR_SIZE_WORDS.has(x) || learned.has(x));
+};
+// "Mujer M" (Gintracom) → "Mujer / M", igual que "COLOR: Mujer TALLA: M" de
+// las otras transportadoras, para que cuente como la misma variante.
+const slashSize = (variant: string) => {
+  const w = variant.trim().split(/\s+/);
+  const isSize = (x: string) => /^(xs|s|m|l|x+l|\d{1,3})$/i.test(x);
+  return w.length >= 2 && isSize(w[w.length - 1]) && !isSize(w[w.length - 2]) ? `${w.slice(0, -1).join(" ")} / ${w[w.length - 1]}` : variant;
 };
 
 function variantWithCarriers(label: string, byCarrier: Map<string, number>): { label: string; quantity: number; byCarrier: Record<string, number> } {
@@ -587,6 +600,15 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
     }
   }
 
+  // Palabras que este PDF usa como variante en etiquetas rotuladas (ver isColorOrSize).
+  const learnedVariantWords = new Set<string>();
+  for (const lines of pages)
+    for (const l of lines) {
+      const m = l.text.match(ID_LABEL_RE);
+      const v = m ? splitVariant(m[2]).variant : null;
+      if (v) for (const w of normalizeName(v).split(" ")) if (w && !/^\d+$/.test(w) && !NAME_STOPWORDS.has(w) && w !== "de") learnedVariantWords.add(w);
+    }
+
   const summaryNames = [...summary.entries()].map(([code, v]) => ({ code, norm: normalizeName(v.name), cut: v.name.trim().length >= SUMMARY_NAME_CUT }));
   // Etiqueta sin ID → el producto del resumen cuyo nombre es el prefijo más
   // largo. Lo que sobra (si empieza en palabra nueva) es la variante.
@@ -609,7 +631,8 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false): ParsedGui
     const pack = rest ? repeatedNamePack(rest, best.norm, false) : null;
     if (pack) return { code: best.code, variant: pack };
     const repeatsName = rest && best.norm.split(" ").slice(0, 2).every((w) => rest.includes(w));
-    return { code: best.code, variant: rest && (!best.cut || isColorOrSize(rest)) && !truncated && !repeatsName ? rest : null };
+    const ok = rest && (!best.cut || isColorOrSize(rest, learnedVariantWords)) && !truncated && !repeatsName;
+    return { code: best.code, variant: ok ? slashSize(rest) : null };
   };
 
   const hits: LabelHit[] = [];
