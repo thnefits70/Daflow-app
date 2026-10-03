@@ -12,6 +12,7 @@ import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOper
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { isScreenPhotoNote } from "@/lib/receiptPhotoScreen";
+import { WAREHOUSE_AREAS, areaLabel, type WarehouseArea } from "@/lib/warehouseAreas";
 
 type ReceiptDraftData = { receivedQty: string; receivedPhotoUrls: string[]; receivedVideoUrls: string[]; comment: string; minorDifferenceConfirmed: boolean };
 function isReceiptDraftEmpty(d: ReceiptDraftData) {
@@ -42,7 +43,7 @@ type Row = {
   totalCost: number;
   requestedAt: string;
   paidAt: string | null;
-  catalogItem: { name: string; photos: string[]; justCode: string | null; hasExpiration: boolean; awaitingDropiId: boolean };
+  catalogItem: { name: string; photos: string[]; justCode: string | null; hasExpiration: boolean; awaitingDropiId: boolean; warehouseArea: string | null };
   supplier: { name: string; paymentMode?: "PREPAGO" | "CREDITO" };
   requestedBy: { name: string } | null;
   paidBy: { name: string } | null;
@@ -329,6 +330,8 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // caducidad — si dice que sí, o si ya estaba marcado, pide fecha de
   // elaboración (opcional) + vencimiento (obligatoria) + cantidad.
   const [expirationAnswer, setExpirationAnswer] = useState<Record<string, "yes" | "no">>({});
+  // Área de bodega elegida al aprobar, solo para productos que todavía no tienen.
+  const [areaChoice, setAreaChoice] = useState<Record<string, WarehouseArea>>({});
   // Reporte urgente ya enviado sin caducidad al que se le está declarando.
   const [declaringLotId, setDeclaringLotId] = useState<string | null>(null);
   // quantity queda sin definir hasta que la editan a mano — mientras tanto
@@ -662,15 +665,16 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     const res = await fetch(`/api/purchase-requests/${id}/approve-receipt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: lot
-        ? JSON.stringify({
-            expirationLot: {
-              manufactureDate: lot.manufactureDate || null,
-              expirationDate: lot.expirationDate,
-              quantity: Number(lot.quantity ?? receivedQuantity),
-            },
-          })
-        : undefined,
+      body: JSON.stringify({
+        ...(lot && {
+          expirationLot: {
+            manufactureDate: lot.manufactureDate || null,
+            expirationDate: lot.expirationDate,
+            quantity: Number(lot.quantity ?? receivedQuantity),
+          },
+        }),
+        ...(areaChoice[id] && { warehouseArea: areaChoice[id] }),
+      }),
     });
     setBusy(false);
     const data = await res.json().catch(() => null);
@@ -680,6 +684,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     }
     setExpirationAnswer((m) => { const next = { ...m }; delete next[id]; return next; });
     setExpirationForm((m) => { const next = { ...m }; delete next[id]; return next; });
+    setAreaChoice((m) => { const next = { ...m }; delete next[id]; return next; });
     load();
     router.refresh();
   }
@@ -2299,17 +2304,45 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         }
                         return renderExpirationBlock(r.id, r.catalogItem.hasExpiration || rc.expirationDeclared === true, String(rc.receivedQuantity));
                       })()}
+                      {/* Confirmado 2026-10-03, pedido explícito del usuario: si el
+                          producto (nuevo o recompra) no tiene área de bodega, Daniel
+                          la elige acá — obligatorio para aprobar. Se guarda en el
+                          producto, así la próxima recompra ya no la pide. */}
+                      {r.catalogItem.warehouseArea ? (
+                        <div className="text-[12px] text-ink mb-2">
+                          Va en <b>{areaLabel(r.catalogItem.warehouseArea)}</b> de la bodega.
+                        </div>
+                      ) : canApprove || isAdmin ? (
+                        <div className="bg-cloud rounded-md p-2.5 mb-2">
+                          <div className="text-[11px] font-semibold text-gold mb-1.5">Este producto no tiene área. ¿En qué área de la bodega va?</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {WAREHOUSE_AREAS.map((a) => (
+                              <button
+                                key={a}
+                                type="button"
+                                onClick={() => setAreaChoice((m) => ({ ...m, [r.id]: a }))}
+                                className={`w-9 h-9 rounded border text-[13px] font-bold cursor-pointer ${areaChoice[r.id] === a ? "border-teal bg-teal text-navy" : "border-rule text-ink"}`}
+                              >
+                                {a}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-[11.5px] text-steel mb-2">Daniel elige el área de la bodega al aprobar.</div>
+                      )}
                       <button
                         type="button"
                         disabled={
                           !canApprove ||
                           busy ||
+                          (!r.catalogItem.warehouseArea && !areaChoice[r.id]) ||
                           (approvalNeedsLot(r) &&
                             (expirationForm[r.id] !== undefined
                               ? !(expirationForm[r.id]?.expirationDate && Number(expirationForm[r.id]?.quantity ?? r.receipt.receivedQuantity) > 0)
                               : !(r.receipt.expirationDeclared && r.receipt.lotExpirationDate)))
                         }
-                        title={!canApprove ? "Exclusivo del líder de Inventario" : undefined}
+                        title={!canApprove ? "Exclusivo del líder de Inventario" : !r.catalogItem.warehouseArea && !areaChoice[r.id] ? "Elige primero el área de la bodega" : undefined}
                         className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                         onClick={() => approveReceipt(r.id, approvalNeedsLot(r) && expirationForm[r.id] !== undefined, r.receipt!.receivedQuantity)}
                       >

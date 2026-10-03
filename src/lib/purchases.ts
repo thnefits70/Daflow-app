@@ -722,7 +722,7 @@ const bankAccountSelect = { id: true, supplierId: true, bankName: true, bankAcco
 // aprobar, recibir, facturar, auditar, corregir) — un solo lugar para no
 // tener 6 copias ligeramente distintas del mismo shape.
 export const purchaseRequestInclude = {
-  catalogItem: { select: { id: true, name: true, photos: true, justCode: true, hasExpiration: true, awaitingDropiId: true } },
+  catalogItem: { select: { id: true, name: true, photos: true, justCode: true, hasExpiration: true, awaitingDropiId: true, warehouseArea: true } },
   supplier: { select: { id: true, name: true, paymentMode: true, givesInvoice: true, givesInvoiceSetBy: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
   carrier: { select: { id: true, name: true, bankAccounts: { orderBy: { createdAt: "asc" as const } } } },
   bankAccount: { select: bankAccountSelect },

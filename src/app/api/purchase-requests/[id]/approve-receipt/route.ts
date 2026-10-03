@@ -6,6 +6,7 @@ import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { recordKardexEntry } from "@/lib/stockKardex";
 import { effectiveUnitCost } from "@/lib/purchases";
+import { isWarehouseArea } from "@/lib/warehouseAreas";
 
 // Confirmado 2026-08-18: pedido explícito del usuario — la aprobación FINAL
 // de Daniel (líder de Inventario) sobre una recepción que ya hizo su equipo
@@ -40,11 +41,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const existing = await prisma.purchaseRequest.findUnique({
     where: { id },
-    include: { catalogItem: { select: { name: true, hasExpiration: true, awaitingDropiId: true } }, receipt: true },
+    include: { catalogItem: { select: { name: true, hasExpiration: true, awaitingDropiId: true, warehouseArea: true } }, receipt: true },
   });
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (existing.status !== "RECEIVED_PENDING_REVIEW" || !existing.receipt) {
     return NextResponse.json({ error: "No hay una recepción del equipo pendiente de aprobar." }, { status: 409 });
+  }
+  // Confirmado 2026-10-03, pedido explícito del usuario: el área de bodega
+  // (A…G) es obligatoria para aprobar si el producto todavía no tiene una
+  // (nuevo o recompra sin área). Se guarda en el producto; si ya tenía área
+  // no se toca (para cambiarla está "Stock Actual").
+  const newArea = !existing.catalogItem.warehouseArea && isWarehouseArea(body?.warehouseArea) ? body.warehouseArea : null;
+  if (!existing.catalogItem.warehouseArea && !newArea) {
+    return NextResponse.json({ error: "Elige en qué área de la bodega va este producto antes de aprobar." }, { status: 409 });
   }
   // Confirmado 2026-09-25, pedido explícito del usuario: el lote ya lo
   // declaró el equipo de Inventario al confirmar que llegó (receipt/route.ts).
@@ -79,6 +88,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: { approvedById: isAdmin ? null : session.user.id, approvedAt: new Date() },
     }),
     prisma.purchaseRequest.update({ where: { id }, data: { status: "RECEIVED" } }),
+    ...(newArea
+      ? [prisma.purchaseCatalogItem.updateMany({ where: { id: existing.catalogItemId, warehouseArea: null }, data: { warehouseArea: newArea } })]
+      : []),
   ]);
 
   if (existing.catalogItem.awaitingDropiId) {
