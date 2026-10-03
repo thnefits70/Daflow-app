@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/guards";
-import { previewPersonalPurchaseKardexBackfill, applyPersonalPurchaseKardexBackfill } from "@/lib/stockKardex";
+import { previewPersonalPurchaseKardexBackfill } from "@/lib/stockKardex";
 
 // Confirmado 2026-09-17, pedido explícito del usuario (admin): botón exclusivo
 // suyo, una sola vez, para corregir el stock de las Compras Personales que
@@ -17,6 +17,8 @@ export async function GET() {
 
 export async function POST() {
   if (!(await requireAdminSession())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-  const result = await applyPersonalPurchaseKardexBackfill();
-  return NextResponse.json(result);
+  // Desactivado 2026-10-03 (pedido del usuario): herramienta de un solo uso
+  // que ya se corrió; su recálculo trata las líneas del corte con Just como
+  // salidas y dañaría el saldo de los productos que pasaron por el corte.
+  return NextResponse.json({ error: "Esta herramienta está desactivada: ya se usó y hoy dañaría el stock." }, { status: 410 });
 }

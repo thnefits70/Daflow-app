@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdminSession } from "@/lib/guards";
-import { previewKardexFreightRecompute, applyKardexFreightRecompute } from "@/lib/stockKardex";
+import { previewKardexFreightRecompute } from "@/lib/stockKardex";
 
 // Confirmado 2026-09-16, pedido explícito del usuario (admin): corrección
 // única del historial de Kardex de antes de que approve-receipt/route.ts
@@ -16,6 +16,8 @@ export async function GET() {
 
 export async function POST() {
   if (!(await requireAdminSession())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-  const result = await applyKardexFreightRecompute();
-  return NextResponse.json(result);
+  // Desactivado 2026-10-03 (pedido del usuario): herramienta de un solo uso
+  // que ya se corrió; su recálculo trata las líneas del corte con Just como
+  // salidas y dañaría el saldo de los productos que pasaron por el corte.
+  return NextResponse.json({ error: "Esta herramienta está desactivada: ya se usó y hoy dañaría el stock." }, { status: 410 });
 }
