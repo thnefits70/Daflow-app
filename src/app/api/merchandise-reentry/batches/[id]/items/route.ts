@@ -26,7 +26,9 @@ const schema = z
     // escanear la guía falló, y queda guardada la razón que dio DAFLOW.
     manualReason: z.string().trim().min(1, "El registro a mano solo se usa cuando escanear la guía falló. Actualiza la página y escanea la guía primero.").max(500),
   })
-  .refine((d) => !!d.catalogItemId || !!d.declaredName, { message: "Falta el nombre del producto." })
+  // Pedido del usuario 2026-10-03: solo productos que existen en el catálogo,
+  // nunca un nombre escrito a mano.
+  .refine((d) => !!d.catalogItemId, { message: "Elige el producto del catálogo." })
   .refine((d) => d.goodQty + d.damagedQty > 0, { message: "Las cantidades no pueden ser todas cero." })
   .refine((d) => d.damagedQty === 0 || !!d.damageReasonName || !!d.damageReasonOther, {
     message: "Falta el motivo del daño.",

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Pencil, Send, Trash2, X } from "lucide-react";
-import { ProductMatchPicker, type MatchCatalogItem, type ProductMatchResult } from "./ProductMatchPicker";
+import { ProductMatchPicker, type MatchCatalogItem, type MatchCombo, type ProductMatchResult } from "./ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { ExpandableName } from "@/components/ui/ExpandableName";
@@ -357,6 +357,9 @@ export function CaptureFlow() {
 // producto y pone la cantidad (lo percha de inmediato) — ya no se toma foto.
 function AddItemForm({ batchId, existingItems, manualReason, onAdded, onCancel }: { batchId: string; existingItems: ItemDTO[]; manualReason: string; onAdded: () => void; onCancel: () => void }) {
   const [selected, setSelected] = useState<MatchCatalogItem | null>(null);
+  // Pedido del usuario 2026-10-03: ID de Dropi que es combo/paquete — Joel
+  // pone cuántos PEDIDOS llegaron y entra cada producto real del combo.
+  const [combo, setCombo] = useState<MatchCombo | null>(null);
   // Confirmado 2026-09-29, pedido de Daniel + usuario: en lotes abiertos todo
   // el día Joel a veces registraba el mismo producto dos veces (44 casos, con
   // horas de diferencia). Si el producto ya está en este lote, se le pregunta
@@ -391,27 +394,53 @@ function AddItemForm({ batchId, existingItems, manualReason, onAdded, onCancel }
   );
 
   function onMatchConfirmed(result: ProductMatchResult) {
+    setCombo(null);
     setSelected(result);
   }
 
   const dQty = Number(damagedQty) || 0;
   const gQty = Number(goodQty) || 0;
   const hasDamageReason = dQty === 0 || !!damageReason;
-  const alreadyInBatch = selected ? existingItems.filter((i) => i.catalogItemId === selected.id) : [];
-  const needsRepeatAnswer = alreadyInBatch.length > 0 && repeatConfirmedFor !== selected?.id;
-  const canSave = !!selected && !needsRepeatAnswer && gQty + dQty > 0 && hasDamageReason && !saving;
-  const finalName = selected?.name ?? "";
+  const alreadyInBatch = selected
+    ? existingItems.filter((i) => i.catalogItemId === selected.id)
+    : combo
+      ? existingItems.filter((i) => combo.components.some((c) => c.catalogItem.id === i.catalogItemId))
+      : [];
+  const pickedKey = selected?.id ?? combo?.code ?? null;
+  const needsRepeatAnswer = alreadyInBatch.length > 0 && repeatConfirmedFor !== pickedKey;
+  const canSave = !!pickedKey && !needsRepeatAnswer && gQty + dQty > 0 && hasDamageReason && !saving;
+  const comboUnits = combo ? combo.components.map((c) => `${(gQty + dQty) * c.quantity} × ${c.catalogItem.name}`).join(" + ") : "";
+  const finalName = selected?.name ?? (combo ? `${combo.label ?? "Combo"} → ${comboUnits}` : "");
   const finalDamageReason = dQty > 0 ? (damageReason === "Otro" ? damageReasonOther.trim() || "Otro (sin describir)" : damageReason) : null;
 
   async function save() {
     // Guard con ref (no solo state) porque un doble-tap táctil dispara dos
     // onClick antes de que React re-renderice el botón con disabled=true,
     // creando dos POST y un producto duplicado en el lote.
-    if (!selected || savingRef.current) return;
+    if ((!selected && !combo) || savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
     setError("");
     try {
+      if (combo) {
+        // Cada producto real del combo entra por separado: pedidos × cantidad del combo.
+        for (const c of combo.components) {
+          await postJson(`/api/merchandise-reentry/batches/${batchId}/items`, {
+            photoUrls: [],
+            catalogItemId: c.catalogItem.id,
+            aiRecognized: true,
+            goodQty: gQty * c.quantity,
+            damagedQty: dQty * c.quantity,
+            damageReasonName: dQty > 0 ? damageReason : undefined,
+            damageReasonOther: dQty > 0 && damageReason === "Otro" ? damageReasonOther.trim() : undefined,
+            manualReason: `${manualReason} · combo ${combo.code} × ${gQty + dQty} pedido(s)`,
+          });
+        }
+        clearAddItemDraft();
+        onAdded();
+        return;
+      }
+      if (!selected) return;
       await postJson(`/api/merchandise-reentry/batches/${batchId}/items`, {
         photoUrls: [],
         catalogItemId: selected.id,
@@ -440,11 +469,9 @@ function AddItemForm({ batchId, existingItems, manualReason, onAdded, onCancel }
           <div className="flex flex-col gap-2 text-[12.5px]">
             <div className="flex items-start justify-between gap-3">
               <span className="text-steel shrink-0">Producto</span>
-              <span className="font-semibold text-right flex items-center gap-1.5">{selected && <CatalogCode code={selected.justCode} />} {finalName}</span>
+              <span className="font-semibold text-right flex items-center gap-1.5">{selected && <CatalogCode code={selected.justCode} />}{combo && <CatalogCode code={combo.code} />} {finalName}</span>
             </div>
-            {!selected && (
-              <div className="text-[11px] text-steel -mt-1">Nombre puesto a mano — no se encontró en el catálogo o se prefirió escribir directo.</div>
-            )}
+            {combo && <div className="text-[11px] text-steel -mt-1">Combo/paquete: las cantidades de abajo son PEDIDOS.</div>}
             <div className="flex items-start justify-between gap-3">
               <span className="text-steel shrink-0">Unidades buenas</span>
               <span className="font-semibold text-green">{gQty}</span>
@@ -491,12 +518,31 @@ function AddItemForm({ batchId, existingItems, manualReason, onAdded, onCancel }
                 </button>
               </div>
             </div>
+          ) : combo ? (
+            <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
+              <div className="flex-1 min-w-0 text-[12.5px]">
+                <div className="font-semibold flex items-center gap-1.5">
+                  <CatalogCode code={combo.code} /> {combo.label ?? "Combo / paquete"}
+                </div>
+                <div className="text-[11px] text-steel">1 pedido trae: {combo.components.map((c) => `${c.quantity} × ${c.catalogItem.name}`).join(" + ")}</div>
+              </div>
+              <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setCombo(null)}>
+                Cambiar
+              </button>
+            </div>
           ) : (
-            <ProductMatchPicker referencePhotoUrl={null} onConfirm={onMatchConfirmed} />
+            <ProductMatchPicker
+              referencePhotoUrl={null}
+              onConfirm={onMatchConfirmed}
+              onConfirmCombo={(c) => {
+                setSelected(null);
+                setCombo(c);
+              }}
+            />
           )}
         </div>
 
-      {selected && needsRepeatAnswer && (
+      {pickedKey && needsRepeatAnswer && (
         <div className="rounded-md border border-gold/50 bg-gold/10 p-3">
           <div className="text-[12.5px] font-bold mb-1">⚠️ Ya registraste este producto en este lote</div>
           <div className="text-[12px] text-steel mb-2.5">
@@ -515,7 +561,7 @@ function AddItemForm({ batchId, existingItems, manualReason, onAdded, onCancel }
             <button
               type="button"
               className="rounded border border-teal bg-teal px-3 py-2 text-[12px] font-bold text-navy cursor-pointer"
-              onClick={() => setRepeatConfirmedFor(selected.id)}
+              onClick={() => setRepeatConfirmedFor(pickedKey)}
             >
               Es otra devolución, agregar
             </button>
@@ -523,20 +569,21 @@ function AddItemForm({ batchId, existingItems, manualReason, onAdded, onCancel }
         </div>
       )}
 
-      {selected && !needsRepeatAnswer && (
+      {pickedKey && !needsRepeatAnswer && (
         <div>
           <label className="block mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel">2 · Cantidades</label>
           <div className="flex gap-2.5">
             <div className="flex-1">
-              <div className="text-[11px] text-steel mb-1">Unidades buenas</div>
+              <div className="text-[11px] text-steel mb-1">{combo ? "Pedidos buenos" : "Unidades buenas"}</div>
               <input type="number" min={0} className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] font-bold text-green" value={goodQty} onChange={(e) => setGoodQty(e.target.value)} />
             </div>
             <div className="flex-1">
-              <div className="text-[11px] text-steel mb-1">Unidades dañadas</div>
+              <div className="text-[11px] text-steel mb-1">{combo ? "Pedidos dañados" : "Unidades dañadas"}</div>
               <input type="number" min={0} className="w-full rounded border border-rule bg-cloud px-2.5 py-1.5 text-[13px] font-bold text-red" value={damagedQty} onChange={(e) => setDamagedQty(e.target.value)} />
             </div>
           </div>
 
+          {combo && gQty + dQty > 0 && <div className="text-[11px] text-steel mt-1.5">Entran: {comboUnits}</div>}
           {dQty > 0 && (
             <div className="mt-2.5">
               <div className="text-[11px] text-steel mb-1.5">Motivo del daño</div>

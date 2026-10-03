@@ -12,6 +12,9 @@ export type MatchCatalogItem = { id: string; name: string; photos: string[]; jus
 // vez de inventar un nombre; el formulario que la contiene se queda sin
 // producto elegido hasta que alguien agregue el producto real.
 export type ProductMatchResult = MatchCatalogItem;
+// Combo/paquete de Dropi que ya existe con productos reales del catálogo
+// (solo el Reingreso a mano lo ofrece — ver combo-lookup/route.ts).
+export type MatchCombo = { code: string; label: string | null; components: { quantity: number; catalogItem: MatchCatalogItem }[] };
 
 // Confirmado 2026-09-29, pedido del usuario: los "- ALF" son IDs
 // provisionales que nunca se crean en el catálogo (ver fulfillmentGuides.ts
@@ -30,6 +33,7 @@ export function ProductMatchPicker({
   initialQuery = "",
   searchUrl = "/api/merchandise-reentry/catalog-search",
   onConfirm,
+  onConfirmCombo,
   onCancel,
 }: {
   referencePhotoUrl: string | null;
@@ -40,6 +44,9 @@ export function ProductMatchPicker({
   // usar ese flujo, aunque todos lean del mismo PurchaseCatalogItem.
   searchUrl?: string;
   onConfirm: (result: ProductMatchResult) => void;
+  // Si se pasa, al escribir un ID de Dropi que es combo/paquete también se
+  // ofrece ese combo (con sus productos reales).
+  onConfirmCombo?: (combo: MatchCombo) => void;
   onCancel?: () => void;
 }) {
   const [catalog, setCatalog] = useState<MatchCatalogItem[] | null>(null);
@@ -76,6 +83,25 @@ export function ProductMatchPicker({
       .catch(() => setCatalog([]));
   }, [searchUrl]);
 
+  const comboCode = onConfirmCombo && /^\d{3,}$/.test(query.trim()) ? query.trim() : "";
+  const [combo, setCombo] = useState<MatchCombo | null>(null);
+  const [confirmingCombo, setConfirmingCombo] = useState<MatchCombo | null>(null);
+  useEffect(() => {
+    if (!comboCode) return;
+    let alive = true;
+    const t = setTimeout(() => {
+      fetch(`/api/merchandise-reentry/combo-lookup?code=${encodeURIComponent(comboCode)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((c) => alive && setCombo(c))
+        .catch(() => alive && setCombo(null));
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [comboCode]);
+  const shownCombo = comboCode && combo?.code === comboCode ? combo : null;
+
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const suggestions =
     words.length === 0
@@ -83,6 +109,27 @@ export function ProductMatchPicker({
       : (catalog ?? [])
           .filter((c) => words.every((w) => c.name.toLowerCase().includes(w) || (!!c.justCode && c.justCode.toLowerCase().includes(w))))
           .slice(0, 6);
+
+  if (confirmingCombo && onConfirmCombo) {
+    return (
+      <div className="bg-cloud rounded-md p-3">
+        <div className="text-[12px] font-semibold mb-2">¿Es este combo o paquete?</div>
+        <div className="text-[12.5px] font-semibold mb-1.5 flex items-center gap-1.5 flex-wrap">
+          <CatalogCode code={confirmingCombo.code} />
+          <span>{confirmingCombo.label ?? "Combo de Dropi"}</span>
+        </div>
+        <div className="text-[11.5px] text-steel mb-2.5">1 pedido trae: {confirmingCombo.components.map((c) => `${c.quantity} × ${c.catalogItem.name}`).join(" + ")}</div>
+        <div className="flex gap-2">
+          <button type="button" className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer" onClick={() => onConfirmCombo(confirmingCombo)}>
+            Sí, es este
+          </button>
+          <button type="button" className="flex-1 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer" onClick={() => setConfirmingCombo(null)}>
+            No, buscar otro
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (confirming) {
     return (
@@ -202,6 +249,18 @@ export function ProductMatchPicker({
         onChange={(e) => setQuery(e.target.value)}
       />
       {catalog === null && <div className="text-[11.5px] text-steel mt-1">Cargando catálogo…</div>}
+      {shownCombo && (
+        <button type="button" className="w-full mt-1.5 flex items-center gap-2.5 p-2 border border-rule rounded-md hover:bg-surface cursor-pointer text-left" onClick={() => setConfirmingCombo(shownCombo)}>
+          <span className="text-[12.5px] font-medium flex-1 min-w-0">
+            <span className="flex items-center gap-1.5 flex-wrap">
+              <CatalogCode code={shownCombo.code} />
+              <span className="font-semibold">Combo / paquete</span>
+            </span>
+            <span className="block text-[11px] text-steel">{shownCombo.components.map((c) => `${c.quantity} × ${c.catalogItem.name}`).join(" + ")}</span>
+          </span>
+          <CheckCircle2 size={13} className="text-teal shrink-0" />
+        </button>
+      )}
       {suggestions.length > 0 && (
         <div className="flex flex-col gap-1 mt-1.5 border border-rule rounded-md overflow-hidden">
           {suggestions.map((c) => (
@@ -228,11 +287,11 @@ export function ProductMatchPicker({
           ))}
         </div>
       )}
-      {words.length > 0 && suggestions.length === 0 && catalog !== null && (
+      {words.length > 0 && suggestions.length === 0 && !shownCombo && catalog !== null && (
         <div className="text-[11.5px] text-steel mt-1">No se encontró nada con esas palabras.</div>
       )}
       <div className="flex gap-1.5 flex-wrap mt-1.5">
-        {words.length > 0 && suggestions.length === 0 && catalog !== null && (
+        {words.length > 0 && suggestions.length === 0 && !shownCombo && catalog !== null && (
           <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => setReporting(true)}>
             No lo encuentro — avisar que falta
           </button>
