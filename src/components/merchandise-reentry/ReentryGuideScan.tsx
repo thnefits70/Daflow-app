@@ -41,7 +41,6 @@ const CARRIER_LABEL: Record<string, string> = { SERVIENTREGA: "Servientrega", GI
 
 export function GuideScanner({ batchId, onChanged, onManual }: { batchId: string; onChanged: () => void; onManual: (reason: string) => void }) {
   const [cameraOn, setCameraOn] = useState(false);
-  const [cameraKey, setCameraKey] = useState(0);
   // Cola de guías por leer: la cámara sigue escaneando mientras DAFLOW lee
   // la anterior (cada lectura abre el PDF del corte y tarda unos segundos).
   const queueRef = useRef<string[]>([]);
@@ -103,15 +102,8 @@ export function GuideScanner({ batchId, onChanged, onManual }: { batchId: string
 
       {cameraOn ? (
         <div className="mb-2.5">
-          <LiveBarcodeScanner
-            key={cameraKey}
-            onScanned={(code) => {
-              enqueue(code);
-              // Se vuelve a abrir solo para la siguiente guía.
-              setTimeout(() => setCameraKey((k) => k + 1), 600);
-            }}
-            onCancel={() => setCameraOn(false)}
-          />
+          {/* 2026-10-03: la cámara queda abierta entre guía y guía. */}
+          <LiveBarcodeScanner continuous onScanned={enqueue} onCancel={() => setCameraOn(false)} />
           <button type="button" className="mt-2 text-[12px] font-semibold text-steel cursor-pointer" onClick={() => setCameraOn(false)}>
             Cerrar cámara
           </button>

@@ -10,7 +10,15 @@ import { useBackButtonGuard } from "@/lib/useBackButtonGuard";
 type Props = {
   onScanned: (code: string) => void;
   onCancel?: () => void;
+  // La cámara queda abierta y sigue leyendo un código tras otro (ej. guías
+  // de reingreso). El mismo código no se vuelve a entregar seguido.
+  continuous?: boolean;
 };
+
+// Modo continuo: tiempo mínimo antes de volver a entregar el MISMO código, y
+// pausa corta después de cada lectura para no leer la etiqueta dos veces.
+const CONTINUOUS_SAME_CODE_MS = 4000;
+const CONTINUOUS_PAUSE_MS = 900;
 
 // Lector nativo del celular (Chrome en Android lo trae). No está en los
 // tipos de TypeScript todavía, así que se declara lo mínimo que se usa.
@@ -42,17 +50,31 @@ const HINT_AFTER_MS = 4000;
 // con ~8 intentos por segundo y modo "esforzarse más", y se pide enfoque
 // continuo + un zoom leve para que se pueda escanear a una distancia
 // donde la cámara sí enfoca.
-export function LiveBarcodeScanner({ onScanned, onCancel }: Props) {
+//
+// Reporte de Joel (2026-10-03, reingreso por guía): después de cada guía la
+// cámara se cerraba y había que tocar el botón otra vez. Se intentaba
+// "reabrirla" desmontando el escáner, pero al desmontarse el seguro del
+// botón atrás hacía history.back() y el escáner nuevo lo tomaba como un
+// "atrás" → se cerraba. Ahora con `continuous` la cámara nunca se cierra.
+export function LiveBarcodeScanner({ onScanned, onCancel, continuous = false }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const stopRef = useRef<() => void>(() => {});
+  const onScannedRef = useRef(onScanned);
+  useEffect(() => {
+    onScannedRef.current = onScanned;
+  });
   const [error, setError] = useState("");
   const [showHint, setShowHint] = useState(false);
+  const [readCount, setReadCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     let stream: MediaStream | null = null;
     let zxingControls: IScannerControls | null = null;
     let loopTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastText = "";
+    let lastAt = 0;
+    let pausedUntil = 0;
     const hintTimer = setTimeout(() => { if (!cancelled) setShowHint(true); }, HINT_AFTER_MS);
 
     const stopAll = () => {
@@ -64,10 +86,27 @@ export function LiveBarcodeScanner({ onScanned, onCancel }: Props) {
     };
     stopRef.current = stopAll;
 
+    // Devuelve true si la lectura se entregó.
     const deliver = (text: string) => {
-      if (cancelled) return;
-      stopAll();
-      onScanned(text);
+      if (cancelled) return false;
+      if (!continuous) {
+        stopAll();
+        onScannedRef.current(text);
+        return true;
+      }
+      const now = Date.now();
+      if (now < pausedUntil) return false;
+      if (text === lastText && now - lastAt < CONTINUOUS_SAME_CODE_MS) {
+        lastAt = now; // sigue apuntando a la misma etiqueta
+        return false;
+      }
+      lastText = text;
+      lastAt = now;
+      pausedUntil = now + CONTINUOUS_PAUSE_MS;
+      setReadCount((c) => c + 1);
+      setShowHint(false);
+      onScannedRef.current(text);
+      return true;
     };
 
     // Enfoque continuo + zoom leve, solo si la cámara lo soporta. Si falla,
@@ -101,7 +140,7 @@ export function LiveBarcodeScanner({ onScanned, onCancel }: Props) {
           try {
             const found = await detector.detect(video);
             const text = found.find((f) => f.rawValue)?.rawValue;
-            if (text) return deliver(text);
+            if (text && deliver(text) && !continuous) return;
           } catch {
             // Fotograma que no se pudo leer — se intenta con el siguiente.
           }
@@ -172,8 +211,11 @@ export function LiveBarcodeScanner({ onScanned, onCancel }: Props) {
             </div>
           </div>
           <div className="flex items-center gap-2 mt-2.5 text-[12px] text-steel">
-            <ScanLine size={13} /> Apunta al código del estante
+            <ScanLine size={13} /> {continuous ? "Apunta a cada guía, una tras otra — la cámara queda abierta" : "Apunta al código del estante"}
           </div>
+          {continuous && readCount > 0 && (
+            <div className="text-[11.5px] text-teal font-semibold mt-1">✓ {readCount} leída(s) — sigue con la siguiente</div>
+          )}
           {showHint && (
             <div className="text-[11.5px] text-yellow mt-1.5">
               ¿No lo lee? Aleja el celular a un palmo (unos 20 cm) y mantenlo quieto un segundo para que enfoque.
