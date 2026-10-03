@@ -527,6 +527,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   plan_mejora_etapa_vencida: "Plan de Mejora — etapa vencida, falta decidir cómo siguió",
   plan_mejora_cierre_aprobacion: "Plan de Mejora — cierre de un líder por aprobar",
   analisis_mercado_aprobacion: "Análisis de Mercado — propuestas por aprobar",
+  analisis_mercado_sin_compra: "Análisis de Mercado — aprobados con compra rechazada",
   analisis_mercado_listo_comprar: "Análisis de Mercado — productos listos para comprar",
   analisis_mercado_brandear: "Nuevos IDs por brandear",
   analisis_mercado_sin_id: "Productos de Compras sin ID de Dropi",
@@ -1288,6 +1289,40 @@ async function getMarketProductReviewPendingItem(href: string): Promise<PendingI
     label: "Propuestas de productos por aprobar",
     meta: `${rows.length} propuesta${rows.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
     overdue,
+    href,
+  };
+}
+
+// Pedido del usuario 2026-10-03 (AM-0018 "Casco de Gateo para Bebe"): una
+// propuesta aprobada cuya compra Bryan rechazó quedaba "aprobada" para
+// siempre sin que nadie la cerrara. Le sale a Bryan hasta que decida:
+// cancelarla (botón en Trazabilidad) o volver a comprarla (Jariel reenvía la
+// compra → ya hay compra viva y deja de salir). Solo sin publicar en Dropi.
+export async function getMarketProposalsWithRejectedPurchaseIds(): Promise<{ id: string; code: string; productName: string }[]> {
+  const rows = await prisma.marketProductProposal.findMany({
+    where: { status: "APPROVED", publishedAt: null, catalogItemId: { not: null } },
+    select: { id: true, code: true, productName: true, catalogItemId: true },
+  });
+  if (rows.length === 0) return [];
+  const purchases = await prisma.purchaseRequest.findMany({
+    where: { catalogItemId: { in: rows.map((r) => r.catalogItemId!) } },
+    select: { catalogItemId: true, status: true },
+  });
+  return rows.filter((r) => {
+    const mine = purchases.filter((p) => p.catalogItemId === r.catalogItemId);
+    return mine.length > 0 && mine.every((p) => p.status === "REJECTED");
+  });
+}
+
+async function getMarketProposalRejectedPurchasePendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await getMarketProposalsWithRejectedPurchaseIds();
+  if (rows.length === 0) return null;
+  return {
+    type: "analisis_mercado_sin_compra",
+    icon: "🗂️",
+    label: "Productos aprobados con su compra rechazada — ¿se cancelan o se vuelven a comprar?",
+    meta: rows.length === 1 ? `${rows[0].code} ${rows[0].productName}` : `${rows.length} propuestas`,
+    overdue: false,
     href,
   };
 }
@@ -3979,6 +4014,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (me.leadsDept.code === "MKT") {
     const marketProductReviewItem = await getMarketProductReviewPendingItem("/area/workspace?tab=analisis-mercado");
     if (marketProductReviewItem) items.push(marketProductReviewItem);
+    const rejectedPurchaseProposalItem = await getMarketProposalRejectedPurchasePendingItem("/area/workspace?tab=analisis-mercado&ptab=trazabilidad");
+    if (rejectedPurchaseProposalItem) items.push(rejectedPurchaseProposalItem);
     const kardexReleaseItem = await getMarketProductKardexReleasePendingItem("/area/workspace?tab=analisis-mercado&ptab=trazabilidad");
     if (kardexReleaseItem) items.unshift(kardexReleaseItem);
     const externalSaleReviewItem = await getExternalSaleReviewPendingItem("/area/workspace?tab=ventas-externas&etab=revision");
@@ -4146,7 +4183,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.canManagePurchases) types.push("deterioro_compras_gestion", "compras_excedente_gestion");
     if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion", "compras_excedente_confirmar");
-    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion", "ventas_externas_revisar");
+    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion", "analisis_mercado_sin_compra", "ventas_externas_revisar");
   }
 
   return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));

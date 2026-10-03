@@ -12,7 +12,10 @@ import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 // "CAMARA GO PRO DEPORTIVA 4K"). Nombres muy cortos (<12 letras) no cuentan.
 
 export type DuplicateSide = { id: string; name: string; justCode: string | null; photo: string | null; balance: number };
-export type DuplicateCandidate = { pairKey: string; a: DuplicateSide; b: DuplicateSide };
+// newProductNote: pedido del usuario 2026-10-03 (AM-0018) — si uno entró como
+// producto NUEVO por Análisis de Mercado, se avisa: Bryan ya lo aprobó como
+// distinto, así que probablemente no es el mismo aunque el nombre se parezca.
+export type DuplicateCandidate = { pairKey: string; a: DuplicateSide; b: DuplicateSide; newProductNote: string | null };
 
 export function duplicatePairKey(aId: string, bId: string): string {
   return [aId, bId].sort().join(":");
@@ -44,9 +47,16 @@ export async function findDuplicateCandidates(): Promise<DuplicateCandidate[]> {
     }
   }
   if (pairs.length === 0) return [];
-  const stock = await getCurrentStockByItemIds([...new Set(pairs.flatMap((p) => [p.a.id, p.b.id]))]);
+  const pairIds = [...new Set(pairs.flatMap((p) => [p.a.id, p.b.id]))];
+  const [stock, proposals] = await Promise.all([
+    getCurrentStockByItemIds(pairIds),
+    prisma.marketProductProposal.findMany({ where: { catalogItemId: { in: pairIds } }, select: { catalogItemId: true, code: true } }),
+  ]);
+  const proposalCode = new Map(proposals.map((p) => [p.catalogItemId, p.code]));
+  const note = (x: (typeof norm)[number]) =>
+    proposalCode.has(x.id) ? `"${x.name}" entró como producto NUEVO por Análisis de Mercado (${proposalCode.get(x.id)}) y se aprobó como distinto. Mira las fotos antes de juntar: probablemente no es el mismo.` : null;
   const side = (x: (typeof norm)[number]): DuplicateSide => ({ id: x.id, name: x.name, justCode: x.justCode, photo: x.photos[0] ?? null, balance: stock.get(x.id)?.balance ?? 0 });
-  return pairs.map((p) => ({ pairKey: duplicatePairKey(p.a.id, p.b.id), a: side(p.a), b: side(p.b) }));
+  return pairs.map((p) => ({ pairKey: duplicatePairKey(p.a.id, p.b.id), a: side(p.a), b: side(p.b), newProductNote: note(p.a) ?? note(p.b) }));
 }
 
 export async function dismissDuplicate(aId: string, bId: string, userId: string | null): Promise<void> {

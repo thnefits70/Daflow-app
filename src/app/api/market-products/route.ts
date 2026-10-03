@@ -26,8 +26,8 @@ import {
 } from "@/lib/marketProduct";
 import { getAllCurrentStock } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
-import { getOpenPurchaseCodesByCatalogItem } from "@/lib/purchases";
-import { getMarketProductKardexReleasePendingRows } from "@/lib/pendingTasks";
+import { getOpenPurchaseCodesByCatalogItem, formatPurchaseRequestCode } from "@/lib/purchases";
+import { getMarketProductKardexReleasePendingRows, getMarketProposalsWithRejectedPurchaseIds } from "@/lib/pendingTasks";
 
 const supplierPriceSchema = z.object({
   supplierId: z.string(),
@@ -261,12 +261,27 @@ export async function GET(req: NextRequest) {
       : [];
     const firstBoughtAt = new Map<string, Date>();
     for (const b of bought) if (!firstBoughtAt.has(b.catalogItemId)) firstBoughtAt.set(b.catalogItemId, b.createdAt);
-    const withUnits = rows.map((r) => ({
-      ...r,
-      kardexPendingUnits: pending.get(r.id) ?? 0,
-      boughtAt: r.catalogItemId ? firstBoughtAt.get(r.catalogItemId) ?? null : null,
-    }));
-    withUnits.sort((a, b) => (b.kardexPendingUnits > 0 ? 1 : 0) - (a.kardexPendingUnits > 0 ? 1 : 0));
+    // Pedido del usuario 2026-10-03 (AM-0018): las que tienen su compra
+    // rechazada (y ninguna viva) van primero con aviso — Bryan decide si se
+    // cancelan o se vuelven a comprar (pendiente en su Inicio).
+    const rejectedOnly = new Set((await getMarketProposalsWithRejectedPurchaseIds()).map((p) => p.id));
+    const lastRejection = catalogItemIds.length
+      ? await prisma.purchaseRequest.findMany({
+          where: { catalogItemId: { in: catalogItemIds }, status: "REJECTED" },
+          select: { catalogItemId: true, requestNumber: true, rejectReason: true, reviewedAt: true },
+          orderBy: { reviewedAt: "desc" },
+        })
+      : [];
+    const withUnits = rows.map((r) => {
+      const rej = rejectedOnly.has(r.id) ? lastRejection.find((x) => x.catalogItemId === r.catalogItemId) : undefined;
+      return {
+        ...r,
+        kardexPendingUnits: pending.get(r.id) ?? 0,
+        boughtAt: r.catalogItemId ? firstBoughtAt.get(r.catalogItemId) ?? null : null,
+        rejectedPurchase: rej ? { code: rej.requestNumber ? formatPurchaseRequestCode(rej.requestNumber) : null, reason: rej.rejectReason, at: rej.reviewedAt } : null,
+      };
+    });
+    withUnits.sort((a, b) => (b.kardexPendingUnits > 0 ? 1 : 0) - (a.kardexPendingUnits > 0 ? 1 : 0) || (b.rejectedPurchase ? 1 : 0) - (a.rejectedPurchase ? 1 : 0));
     return NextResponse.json(withUnits);
   }
 

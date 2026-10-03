@@ -82,6 +82,7 @@ export function CatalogDuplicatesReview() {
                 ))}
               </div>
               <div className="text-[11.5px] text-steel mt-1">Marcado = el ID que se queda si los juntas.</div>
+              {p.newProductNote && <div className="text-[11.5px] text-gold font-semibold mt-1">⚠ {p.newProductNote}</div>}
               {!active && (
                 <div className="flex flex-wrap gap-2 mt-2">
                   <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-2.5 py-1 font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => startMerge(p)}>

@@ -55,6 +55,7 @@ type Proposal = {
   kardexReleasedAt: string | null;
   kardexReleasedBy: { name: string } | null;
   kardexPendingUnits?: number;
+  rejectedPurchase?: { code: string | null; reason: string | null; at: string | null } | null;
   boughtAt?: string | null;
   catalogItem: { id: string; name: string; photos: string[]; awaitingDropiId?: boolean } | null;
   supplierPrices: SupplierPrice[];
@@ -1428,6 +1429,13 @@ function TraceabilityView({ canDecidePurchase, canCancel }: { canDecidePurchase:
             </div>
           )}
           {p.readyToBuyAt && <div className="text-[12px] text-teal font-semibold">Listo para comprar con {p.chosenSupplier?.name} — {formatDateTime(p.readyToBuyAt)}</div>}
+          {/* Pedido del usuario 2026-10-03 (AM-0018): pendiente de Bryan en Inicio. */}
+          {p.rejectedPurchase && (
+            <div className="bg-red/10 border border-red/30 rounded-md p-2.5 mt-2 text-[12px] text-ink">
+              <b>Su compra fue rechazada</b>{p.rejectedPurchase.code ? ` (${p.rejectedPurchase.code})` : ""}{p.rejectedPurchase.reason ? `: "${p.rejectedPurchase.reason}"` : ""}. La propuesta sigue aprobada.
+              <span className="block text-steel mt-1">Si el producto ya no va, cancélala aquí. Si sí se va a comprar, pide que se reenvíe la compra corregida en Control de Compras.</span>
+            </div>
+          )}
           {canCancel && !p.publishedAt && !p.boughtAt && (
             <button type="button" disabled={busy === p.id} className="mt-2 rounded border border-red px-3 py-1.5 text-[12px] font-semibold text-red cursor-pointer disabled:opacity-60" onClick={() => cancelProposal(p.id, `${p.code} ${p.productName}`)}>
               Cancelar propuesta
