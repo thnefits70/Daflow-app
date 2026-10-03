@@ -493,6 +493,7 @@ export function LotView({
 
       {lot.backfill && lot.status !== "DRAFT" && <BackfillConfirmBox lot={lot} onChanged={onChanged} />}
       {lot.status !== "DRAFT" && !lot.backfill && <GuideHoldsBox lot={lot} />}
+      {lot.viewer?.canConfirm && lot.status !== "CLOSED" && !lot.backfill && <RereadVariantsButton lotId={lot.id} onChanged={onChanged} />}
       {lot.status !== "DRAFT" && !lot.backfill && <PickingPanel lot={lot} onChanged={onChanged} />}
 
       {editable && !confirming && (
@@ -750,6 +751,51 @@ function BackfillConfirmBox({ lot, onChanged }: { lot: CompiledLot; onChanged: (
           <button type="button" disabled={busy} className="text-steel text-[12.5px] cursor-pointer" onClick={() => setAsking(false)}>
             Cancelar
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Pedido del usuario 2026-10-03: cuando se mejora el lector de guías, Daniel
+// relee los PDF guardados del corte para recuperar variantes que antes salían
+// "Sin variante". Solo cambia esas notas, nunca cantidades.
+function RereadVariantsButton({ lotId, onChanged }: { lotId: string; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string; lines?: string[] } | null>(null);
+
+  async function run() {
+    setBusy(true);
+    setMsg(null);
+    const res = await fetch(`/api/fulfillment-lots/${lotId}/reread-variants`, { method: "POST" });
+    const json = await res.json().catch(() => null);
+    setBusy(false);
+    if (!res.ok) {
+      setMsg({ ok: false, text: json?.error ?? "No se pudo volver a leer." });
+      return;
+    }
+    const updated: { name: string; carrier: string | null; labels: string[] }[] = json.updated ?? [];
+    if (updated.length === 0) {
+      setMsg({ ok: true, text: "Listo: no había variantes nuevas por recuperar." });
+      return;
+    }
+    setMsg({ ok: true, text: `Listo: se recuperaron variantes en ${updated.length} producto(s).`, lines: updated.map((u) => `${u.name}${u.carrier ? ` (${u.carrier})` : ""}: ${u.labels.join(" · ")}`) });
+    onChanged();
+  }
+
+  return (
+    <div className="text-[12px] mb-3">
+      <button type="button" disabled={busy} onClick={run} className="rounded border border-teal/60 px-3 py-1.5 text-[12px] font-semibold text-teal cursor-pointer disabled:opacity-60">
+        {busy ? "Leyendo los PDF del corte…" : "Volver a leer variantes de las guías"}
+      </button>
+      {msg && (
+        <div className={`mt-1.5 ${msg.ok ? "text-teal" : "text-red"}`}>
+          {msg.text}
+          {msg.lines?.map((l) => (
+            <div key={l} className="text-steel pl-2">
+              {l}
+            </div>
+          ))}
         </div>
       )}
     </div>

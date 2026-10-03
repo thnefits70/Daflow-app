@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { isRocketCode, normalizeName, ROCKET_PREFIX, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
+import { addGuidesLine, isRocketCode, normalizeName, parseGuidesPdf, ROCKET_PREFIX, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
 import { findSimilarUnlinkedItem, significantWords } from "@/lib/justCatalog";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
@@ -1347,4 +1347,107 @@ export async function correctComboRecipeFromLot(params: {
     ok: true,
     warning: skippedWarranty > 0 ? `${skippedWarranty} garantía(s) de este combo marcadas como "solo parte" o "pieza" no se cambiaron — revísalas.` : undefined,
   };
+}
+
+// ---- Volver a leer variantes de un corte ------------------------------------
+
+// Pedido del usuario 2026-10-03 (corte con la Funda 193889: 13 unidades de
+// Gintracom quedaron "Sin variante" porque el lector no entendía "Mujer M").
+// Cuando se mejora el lector, Daniel puede releer los PDF guardados del corte
+// para recuperar las variantes que antes no se leyeron. Muy conservador:
+// - solo cambia transportadoras de un producto que hoy dicen SOLO "Sin
+//   variante"/"Sin leer en guías" (nunca toca variantes ya leídas o
+//   corregidas), y solo si la nueva lectura trae variantes de verdad;
+// - la nueva lectura tiene que cuadrar EXACTO con las cantidades del corte
+//   (si no, ese producto se deja como está);
+// - nunca cambia cantidades, solo las notas de variante.
+const FILLER_LABELS = new Set(["Sin variante", "Sin leer en guías"]);
+
+export type RereadVariantsResult = { ok: true; updated: { name: string; carrier: string | null; labels: string[] }[] } | { ok: false; error: string };
+
+export async function rereadLotVariants(lotId: string, userId: string | null): Promise<RereadVariantsResult> {
+  const lot = await prisma.fulfillmentLot.findUnique({
+    where: { id: lotId },
+    select: {
+      batches: {
+        select: {
+          id: true,
+          source: true,
+          fileUrls: true,
+          items: { select: { catalogItemId: true, quantity: true, sourceCode: true, fromComboCode: true, carrier: true, warrantyGuide: true, catalogItem: { select: { name: true } } } },
+          variantNotes: { select: { id: true, catalogItemId: true, carrier: true, label: true } },
+        },
+      },
+    },
+  });
+  if (!lot) return { ok: false, error: "Corte no encontrado." };
+
+  const updated: { name: string; carrier: string | null; labels: string[] }[] = [];
+  for (const batch of lot.batches) {
+    if (batch.source !== "DROPI" || batch.fileUrls.length === 0) continue;
+    const warrantyGuides = new Set(batch.items.map((i) => i.warrantyGuide).filter((g): g is string => !!g));
+    const lines = new Map<string, ParsedGuidesLine>();
+    for (const url of batch.fileUrls) {
+      const res = await fetch(url).catch(() => null);
+      if (!res?.ok) return { ok: false, error: "No se pudo abrir uno de los PDF guardados del corte." };
+      const parsed = await parseGuidesPdf(new Uint8Array(await res.arrayBuffer())).catch(() => null);
+      if (!parsed || parsed.source !== "DROPI") continue;
+      // PDF de garantías (se subió marcado aparte): sus productos no son
+      // pedidos normales, no sirve para las variantes.
+      if (parsed.guides.length > 0 && parsed.guides.every((g) => warrantyGuides.has(g.number))) continue;
+      for (const l of parsed.lines) {
+        const prev = lines.get(l.code);
+        if (prev) addGuidesLine(prev, l);
+        else lines.set(l.code, { ...l, byCarrier: { ...l.byCarrier }, labelUnitsByCarrier: l.labelUnitsByCarrier ? { ...l.labelUnitsByCarrier } : undefined, variants: l.variants.map((v) => ({ ...v, byCarrier: v.byCarrier ? { ...v.byCarrier } : undefined })) });
+      }
+    }
+
+    // Nuevas notas por producto → transportadora → variante.
+    const normal = batch.items.filter((i) => !i.warrantyGuide);
+    const fresh = new Map<string, Map<string, Map<string, number>>>();
+    const broken = new Set<string>();
+    for (const it of normal) {
+      const line = lines.get(it.sourceCode);
+      const carrier = it.carrier ?? NO_CARRIER;
+      const rowQty = line?.byCarrier[carrier] ?? 0;
+      const breakdown = line ? rowBreakdownByCarrier({ ...line, decision: { kind: "ignore" } } as GuidesApplyRow)?.get(carrier) : undefined;
+      if (!line || !rowQty || it.quantity % rowQty !== 0 || !breakdown || breakdown.length === 0) {
+        broken.add(it.catalogItemId);
+        continue;
+      }
+      const perUnit = it.quantity / rowQty;
+      let byCarrier = fresh.get(it.catalogItemId);
+      if (!byCarrier) fresh.set(it.catalogItemId, (byCarrier = new Map()));
+      let m = byCarrier.get(carrier);
+      if (!m) byCarrier.set(carrier, (m = new Map()));
+      for (const b of breakdown) {
+        const label = it.fromComboCode ? `Combo ${it.fromComboCode}: ${b.label}` : b.label;
+        m.set(label, (m.get(label) ?? 0) + b.quantity * perUnit);
+      }
+    }
+
+    const toDelete: string[] = [];
+    const toCreate: { batchId: string; catalogItemId: string; carrier: string | null; label: string; quantity: number; createdById: string | null }[] = [];
+    for (const [catalogItemId, byCarrier] of fresh) {
+      if (broken.has(catalogItemId)) continue;
+      for (const [carrier, m] of byCarrier) {
+        const dbCarrier = carrier === NO_CARRIER ? null : carrier;
+        const total = normal.filter((i) => i.catalogItemId === catalogItemId && (i.carrier ?? NO_CARRIER) === carrier).reduce((a, i) => a + i.quantity, 0);
+        const sum = [...m.values()].reduce((a, b) => a + b, 0);
+        const hasReal = [...m.keys()].some((l) => !FILLER_LABELS.has(l.replace(/^Combo \S+: /, "")));
+        const existing = batch.variantNotes.filter((n) => n.catalogItemId === catalogItemId && n.carrier === dbCarrier);
+        const onlyFiller = existing.every((n) => FILLER_LABELS.has(n.label.replace(/^Combo \S+: /, "")));
+        if (sum !== total || !hasReal || !onlyFiller) continue;
+        toDelete.push(...existing.map((n) => n.id));
+        for (const [label, quantity] of m) toCreate.push({ batchId: batch.id, catalogItemId, carrier: dbCarrier, label, quantity, createdById: userId });
+        updated.push({ name: normal.find((i) => i.catalogItemId === catalogItemId)!.catalogItem.name, carrier: dbCarrier, labels: [...m].map(([l, q]) => `${l} ${q}`) });
+      }
+    }
+    if (toCreate.length === 0) continue;
+    await prisma.$transaction([
+      prisma.fulfillmentRequestVariantNote.deleteMany({ where: { id: { in: toDelete } } }),
+      prisma.fulfillmentRequestVariantNote.createMany({ data: toCreate }),
+    ]);
+  }
+  return { ok: true, updated };
 }
