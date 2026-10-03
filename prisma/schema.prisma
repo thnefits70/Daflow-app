@@ -1960,6 +1960,15 @@ model PurchaseCatalogItem {
   fulfillmentSizeSetAt   DateTime?
   fulfillmentSizeSetById String?
 
+  // Pedido del usuario 2026-10-02: último Precio Dropi que quien publica
+  // (asesora B2B) confirmó en Dropi — desde acá se mide si el precio subió
+  // (aviso desde +2%) o bajó (aviso desde −3%). null = todavía no se tomó
+  // (se toma solo con el precio de ese momento, sin aviso). By null = lo
+  // tomó el sistema.
+  dropiPriceRef     Float?
+  dropiPriceRefAt   DateTime?
+  dropiPriceRefById String?
+
   createdById String?
   createdBy   User?    @relation("PurchaseCatalogItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())

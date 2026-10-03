@@ -14,6 +14,7 @@ import { SupplierStockoutPanel } from "@/components/marketanalysis/SupplierStock
 import { SuddenDemandPanel } from "@/components/marketanalysis/SuddenDemandPanel";
 import { MaxPurchasePrice } from "@/components/marketanalysis/MaxPurchasePrice";
 import { CopyDropiPrice } from "@/components/shared/CopyDropiPrice";
+import { DropiPriceChangesQueue } from "./DropiPriceChangesQueue";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -211,6 +212,7 @@ export function MarketProductPanel({
       {tab === "aprobacion" && <ReviewQueue canAct={canActOnReview} />}
       {tab === "publicar" && (
         <>
+          <DropiPriceChangesQueue />
           <CatalogMissingIdQueue />
           <PublishQueue />
         </>
@@ -781,7 +783,7 @@ function CatalogMissingIdQueue() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button type="button" disabled={busy === p.id} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => save(p.id)}>
-                    {p.dropiPrice != null ? `Sí, este ID es de este producto y puse ${p.dropiPrice.toFixed(2)} o más en Dropi` : "Sí, este ID es de este producto"}
+                    {p.dropiPrice != null ? `Sí, este ID es de este producto y puse $${p.dropiPrice.toFixed(2)} o más en Dropi` : "Sí, este ID es de este producto"}
                   </button>
                   <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setConfirmingId(null)}>
                     Cancelar

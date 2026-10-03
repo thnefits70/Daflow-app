@@ -28,6 +28,7 @@ import { DISCONTINUED_URL, getDiscontinuedOrderPendingCount, getDiscontinuedPend
 import { formerLeaderIdsFor, isSummaryComplete } from "@/lib/formerLeaders";
 import { getUnlinkedShanghaiCount } from "@/lib/storeTracking";
 import { adminLotHref, getCountedUnconfirmedLots, overdueCountedLots } from "@/lib/fulfillmentPicking";
+import { getDropiPriceChanges } from "@/lib/dropiPriceChanges";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -531,6 +532,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_sin_id: "Productos de Compras sin ID de Dropi",
   seguimiento_tiendas_sin_tienda: "Seguimiento de tiendas — productos de Shanghai sin tienda",
   analisis_mercado_compra_en_camino: "Ya se está comprando — publícalo en Dropi",
+  precio_dropi_cambio: "Cambió el Precio Dropi de un producto publicado",
   fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
   fulfillment_bloque_asignado: "Bloque del corte asignado — sacar de bodega",
   compras_calientes: "Compras calientes (30 unidades o menos)",
@@ -1699,6 +1701,25 @@ async function getPurchaseInTransitUnpublishedPendingItem(href: string): Promise
     label: "Ya se está comprando — publícalo en Dropi primero",
     meta: hits.length === 1 ? hits[0].productName : `${hits.length} productos`,
     overdue: true,
+    href,
+  };
+}
+
+// Pedido del usuario 2026-10-02 — ver dropiPriceChanges.ts: productos
+// publicados cuyo Precio Dropi subió (2%+) o bajó (3%+) desde lo confirmado.
+async function getDropiPriceChangesPendingItem(href: string): Promise<PendingItem | null> {
+  const changes = await getDropiPriceChanges();
+  if (changes.length === 0) return null;
+  const up = changes.filter((c) => c.direction === "UP").length;
+  const down = changes.length - up;
+  const parts = [up ? `${up} sube${up === 1 ? "" : "n"}` : null, down ? `${down} puede${down === 1 ? "" : "n"} bajar` : null].filter(Boolean);
+  return {
+    type: "precio_dropi_cambio",
+    icon: "💲",
+    label: "Cambia el precio en Dropi",
+    meta: changes.length === 1 ? `${changes[0].name} → $${changes[0].newPrice.toFixed(2)}` : parts.join(" · "),
+    // Una subida es urgente: con el precio viejo se gana menos del 20%.
+    overdue: up > 0,
     href,
   };
 }
@@ -3756,6 +3777,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (missingIdItem) teamItems.push(missingIdItem);
       const inTransitItem = await getPurchaseInTransitUnpublishedPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
       if (inTransitItem) teamItems.unshift(inTransitItem);
+      const priceChangeItem = await getDropiPriceChangesPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
+      if (priceChangeItem) teamItems.unshift(priceChangeItem);
     }
     if (me.canLinkStoreProducts) {
       const storeTrackingItem = await getStoreTrackingUnlinkedPendingItem();
@@ -4069,7 +4092,7 @@ export async function getPossiblePendingTypesForActor(
       // pero no su líder — mismo criterio que el resto de este bloque.
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar");
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
-      if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino");
+      if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio");
       if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
       if (me.department?.code === "INV") types.push("fulfillment_bloque_asignado");
       if (me.canManagePurchases && me.department?.code === "MKT") types.push("compras_calientes");
@@ -4078,7 +4101,7 @@ export async function getPossiblePendingTypesForActor(
 
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
-    if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino");
+    if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio");
     if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
     if (me.leadsDept.code === "FIN") types.push("compras_frias");
     if (me.leadsDept.code === "INV") types.push("compras_urgentes_sin_atender");
