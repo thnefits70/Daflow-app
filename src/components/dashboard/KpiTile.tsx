@@ -456,19 +456,15 @@ function usd(n: number) {
 // guarda el seguro del 6% — SOLO admin y Nairoby (la página no lo manda a
 // nadie más).
 // 2026-10-03 (pedido del usuario): se muestra como PÉRDIDA (en rojo) para que
-// quien lo vea se alerte; el 6% queda solo como referencia de presupuesto.
+// quien lo vea se alerte. El 6% / presupuesto NO se muestra en Inicio — es
+// tema financiero que al equipo no le ayuda.
 export function WarrantyCostTile({ current, previous }: { current: WarrantyCostMonth; previous: WarrantyCostMonth | null }) {
-  const usedPct = current.reserve > 0 ? Math.round((current.total / current.reserve) * 100) : null;
-  const over = current.total > current.reserve;
   return (
     <div className="bg-surface border border-rule rounded-lg p-4">
       <div className="flex items-center gap-1.5 flex-wrap mb-2">
         <span className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-steel">Pérdidas por garantías</span>
         <KpiInfoTip>
-          <b className="text-ink">Cuánto dinero se perdió este mes por garantías:</b> el producto nuevo que salió de bodega para reemplazar el dañado + los fletes de enviar y recoger. Cada garantía es plata que no regresa.
-          <br />
-          <br />
-          <b className="text-ink">Presupuesto:</b> cada precio de Dropi lleva un 6% extra pensado para cubrir garantías. El presupuesto es ese 6% sobre lo que se vendió en el mes. Si las pérdidas pasan el presupuesto, las garantías están costando más de lo que se cobra por ellas.
+          <b className="text-ink">Cuánto dinero se perdió este mes por garantías:</b> el producto nuevo que salió de bodega para reemplazar el dañado + los fletes de enviar y recoger. Cada garantía es plata que no regresa. Se actualiza solo cada vez que se registra una garantía nueva.
         </KpiInfoTip>
       </div>
       <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
@@ -484,13 +480,9 @@ export function WarrantyCostTile({ current, previous }: { current: WarrantyCostM
           <span>{usd(current.total)}</span>
         </div>
       </div>
-      <div className={`text-[10.5px] mt-2 ${over ? "text-red font-semibold" : "text-steel"}`}>
-        Presupuesto del 6%: {usd(current.reserve)}
-        {usedPct != null && (over ? ` · se pasó por ${usd(current.total - current.reserve)}` : ` · usado ${usedPct}%`)}
-      </div>
       {previous && (
         <div className="text-[10.5px] text-steel mt-2 pt-2 border-t border-dashed border-rule">
-          {formatMonthShort(previous.month)}: {usd(previous.total)} en pérdidas (presupuesto {usd(previous.reserve)})
+          Mes anterior ({formatMonthShort(previous.month)}): {usd(previous.total)} en pérdidas
         </div>
       )}
     </div>

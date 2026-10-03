@@ -38,6 +38,12 @@ const MAX_OPEN_PER_WINNER = 3;
 // Tope de productos de baja salida por consulta (los más lentos primero).
 const MAX_LOW_IN_PROMPT = 200;
 const WINNER_CHUNK_SIZE = 20;
+// 2026-10-03: con 4096 tokens la IA se quedaba sin espacio (el modelo piensa
+// antes de responder y eso cuenta en el tope) — todas las respuestas desde el
+// 1 de octubre llegaron cortadas, el JSON no se podía leer y se guardaban 0
+// combos. Tope amplio + máximo de combos por respuesta.
+const COMBO_MATCH_MAX_TOKENS = 16000;
+const MAX_COMBOS_PER_CALL = 10;
 
 const OPEN_STATUSES = ["SUGERIDO", "SELECCIONADO", "PENDIENTE_APROBACION"] as const;
 
@@ -164,7 +170,7 @@ Arma combos que tengan sentido real para venderse juntos. Reglas OBLIGATORIAS:
 5. A cada combo ponle un nombre en español, llamativo, con efecto "wow", de máximo ${COMBO_NAME_MAX_WORDS} palabras, sin marcas ni la palabra "combo".
 6. Dale un puntaje de 0 a 100 de qué tan probable es que se venda bien.
 
-Sé exigente: pocos combos buenos valen más que muchos dudosos. Un producto puede estar en más de un combo.
+Sé exigente: pocos combos buenos valen más que muchos dudosos (máximo ${MAX_COMBOS_PER_CALL} por respuesta). Un producto puede estar en más de un combo.
 
 Responde ÚNICAMENTE con JSON (sin markdown):
 { "combos": [{ "winners": [0], "low": 2, "score": 85, "name": "Batido Express Total" }] }
@@ -207,7 +213,7 @@ async function askAi(winners: Candidate[], lows: Candidate[], actorId: string): 
     const l = lows.map((c, i) => `${i}. ${c.name} (${c.nicho ?? "sin nicho"}) [${c.units7}]`).join("\n");
     const response = await client.messages.create({
       model: COMBO_MATCH_AI_MODEL,
-      max_tokens: 4096,
+      max_tokens: COMBO_MATCH_MAX_TOKENS,
       system: COMBO_MATCH_SYSTEM_PROMPT,
       messages: [{ role: "user", content: `Ganadores:\n${w}\n\nDe baja salida:\n${l}` }],
     });
@@ -218,6 +224,7 @@ async function askAi(winners: Candidate[], lows: Candidate[], actorId: string): 
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
     });
+    if (response.stop_reason === "max_tokens") console.error("Combos IA: respuesta cortada por el tope de tokens.");
     const textBlock = response.content.find((b) => b.type === "text");
     return textBlock && textBlock.type === "text" ? parseAiCombos(textBlock.text) : [];
   } catch (err) {
