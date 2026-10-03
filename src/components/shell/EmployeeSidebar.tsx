@@ -8,6 +8,7 @@ import { LayoutDashboard, ClipboardList, Scale, LogOut, Rocket, Wallet, FolderLo
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
+import { SoundToggle } from "@/components/shared/SoundToggle";
 import { NotificationBell } from "@/components/shared/NotificationBell";
 
 export function EmployeeSidebar({
@@ -168,6 +169,7 @@ export function EmployeeSidebar({
       <div className="px-4.5 py-3.5 border-t border-white/10 flex flex-col gap-2.5">
         <PushSettingsToggle />
         <ThemeToggle />
+        <SoundToggle />
         <button
           type="button"
           className="flex items-center gap-2 text-[#C9CFC5] hover:text-white text-[12.5px] cursor-pointer"

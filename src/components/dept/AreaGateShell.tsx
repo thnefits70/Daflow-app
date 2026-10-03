@@ -21,6 +21,7 @@ import { signOut } from "next-auth/react";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import { isFutureDate } from "@/lib/time";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
+import { SoundToggle } from "@/components/shared/SoundToggle";
 
 type PendingUpdate = { id: string; processId: string; processTitle: string; note: string; createdAt: string };
 type LeaderAlert = { id: string; processTitle: string; pendingCount: number; teamSize: number };
@@ -192,6 +193,7 @@ export function AreaGateShell({
           </div>
           <div className="px-4.5 py-3.5 border-t border-white/10 mt-auto flex flex-col gap-2.5">
             <ThemeToggle />
+            <SoundToggle />
             <button
               type="button"
               className="flex items-center gap-2 text-[#C9CFC5] hover:text-white text-[12.5px] cursor-pointer"

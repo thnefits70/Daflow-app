@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Bell } from "lucide-react";
+import { playSound } from "@/lib/sound";
 
 type Notification = { id: string; title: string; body: string; url: string | null; createdAt: string; readAt: string | null };
 
@@ -34,8 +35,17 @@ export function NotificationBell() {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Ids sin leer ya vistos: suena solo cuando llega uno nuevo (no al abrir la página).
+  const seenUnread = useRef<Set<string> | null>(null);
   function load() {
-    fetch("/api/notifications").then((r) => (r.ok ? r.json() : [])).then(setItems);
+    fetch("/api/notifications")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: Notification[]) => {
+        const unread = list.filter((n) => !n.readAt).map((n) => n.id);
+        if (seenUnread.current && unread.some((id) => !seenUnread.current!.has(id))) playSound("notify");
+        seenUnread.current = new Set([...(seenUnread.current ?? []), ...unread]);
+        setItems(list);
+      });
   }
   useEffect(() => {
     load();

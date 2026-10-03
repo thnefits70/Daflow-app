@@ -5,6 +5,7 @@ import { AlertTriangle, Camera, Check, Keyboard, Loader2, X } from "lucide-react
 import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
+import { playSound } from "@/lib/sound";
 
 // Pedido del usuario 2026-10-02: el reingreso se hace escaneando la guía de
 // cada devolución, una tras otra, sin revisar nada por guía. DAFLOW agrega
@@ -46,8 +47,14 @@ export function GuideScanner({ batchId, onChanged, onManual }: { batchId: string
   const queueRef = useRef<string[]>([]);
   const runningRef = useRef(false);
   const [pending, setPending] = useState(0);
-  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [feedback, setFeedbackState] = useState<Feedback | null>(null);
   const [typing, setTyping] = useState(false);
+  // 2026-10-03: si la guía no sirve (ya escaneada, no encontrada…) suena el
+  // sonido de error, distinto al bip de "leído", para notarlo sin mirar.
+  const setFeedback = (fb: Feedback | null) => {
+    if (fb?.kind === "fail") playSound("error");
+    setFeedbackState(fb);
+  };
   const recent = useRef<Map<string, number>>(new Map());
 
   // Pistola lectora (escribe como un teclado y termina con Enter).
@@ -141,6 +148,7 @@ export function GuideScanner({ batchId, onChanged, onManual }: { batchId: string
             setFeedback({ kind: "fail", text: "Eso parece escrito a mano. Escanea la guía; si la etiqueta no se puede leer, usa \"La etiqueta no se puede leer\"." });
             return;
           }
+          playSound("scan");
           enqueue(value);
         }}
       />

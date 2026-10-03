@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
+import { SoundToggle } from "@/components/shared/SoundToggle";
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -248,6 +249,7 @@ export function AdminSidebar({
         {saving && <div className="text-[10.5px] text-[#B9C2CC] mb-2">Guardando orden…</div>}
         <PushSettingsToggle />
         <ThemeToggle />
+        <SoundToggle />
         <button
           type="button"
           className="flex items-center gap-2 text-[#C9CFC5] hover:text-white text-[12.5px] cursor-pointer"

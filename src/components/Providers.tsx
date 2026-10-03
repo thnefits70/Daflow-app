@@ -4,6 +4,7 @@ import { SessionProvider } from "next-auth/react";
 import { GlobalImageZoom } from "@/components/shared/GlobalImageZoom";
 import { GlobalNumberInputGuard } from "@/components/shared/GlobalNumberInputGuard";
 import { ThemeAutoSwitch } from "@/components/shared/ThemeToggle";
+import { SoundUnlock } from "@/components/shared/SoundToggle";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -12,6 +13,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <GlobalImageZoom />
       <GlobalNumberInputGuard />
       <ThemeAutoSwitch />
+      <SoundUnlock />
     </SessionProvider>
   );
 }
