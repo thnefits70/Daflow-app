@@ -41,9 +41,9 @@ export function DropiPriceChangesQueue() {
 
   return (
     <div className="mb-6">
-      <div className="text-[13.5px] font-bold mb-1">Cambia el precio en Dropi</div>
+      <div className="text-[13.5px] font-bold mb-1">Cambió el precio mínimo en Dropi</div>
       <div className="text-[12px] text-steel mb-3">
-        El costo de estos productos cambió con las últimas compras. Si sube, cámbialo cuanto antes para no ganar menos del 20%; si baja, puedes bajarlo para competir.
+        DAFLOW calcula el precio MÍNIMO (20% de ganancia) y cambió con las últimas compras. En Dropi pueden poner más según la competencia y el mercado, nunca menos que el mínimo.
       </div>
       <div className="flex flex-col gap-3">
         {rows.map((c) => {
@@ -61,11 +61,16 @@ export function DropiPriceChangesQueue() {
                   <div className="text-[12px] text-steel font-mono">ID {c.code}</div>
                   <div className={`text-[12.5px] font-semibold mt-1 flex items-center gap-1 ${up ? "text-red" : "text-teal"}`}>
                     {up ? <ArrowUp size={13} /> : <ArrowDown size={13} />}
-                    {up ? "SUBE" : "Puede BAJAR"}: de ${c.refPrice.toFixed(2)} a ${c.newPrice.toFixed(2)} ({up ? "+" : "−"}{pct.toFixed(1)}%)
+                    El mínimo {up ? "SUBE" : "BAJA"}: de ${c.refPrice.toFixed(2)} a ${c.newPrice.toFixed(2)} ({up ? "+" : "−"}{pct.toFixed(1)}%)
+                  </div>
+                  <div className="text-[12px] text-steel mt-0.5">
+                    {up
+                      ? `Si en Dropi tienes menos de $${c.newPrice.toFixed(2)}, súbelo. Si ya tienes más, déjalo.`
+                      : `Puedes bajar hasta $${c.newPrice.toFixed(2)} solo si la competencia lo pide. Si vendes bien con tu precio, déjalo.`}
                   </div>
                 </div>
               </div>
-              <CopyDropiPrice price={c.newPrice} label="Precio Dropi nuevo" />
+              <CopyDropiPrice price={c.newPrice} label="Precio mínimo nuevo" />
               {err?.id === c.catalogItemId && <div className="text-red text-[12.5px] mb-2">{err.msg}</div>}
               <button
                 type="button"
@@ -73,7 +78,7 @@ export function DropiPriceChangesQueue() {
                 className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
                 onClick={() => confirm(c)}
               >
-                Ya lo cambié en Dropi a ${c.newPrice.toFixed(2)}
+                {up ? `Listo: en Dropi tengo $${c.newPrice.toFixed(2)} o más` : "Revisado"}
               </button>
             </div>
           );

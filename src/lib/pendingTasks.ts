@@ -532,7 +532,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_sin_id: "Productos de Compras sin ID de Dropi",
   seguimiento_tiendas_sin_tienda: "Seguimiento de tiendas — productos de Shanghai sin tienda",
   analisis_mercado_compra_en_camino: "Ya se está comprando — publícalo en Dropi",
-  precio_dropi_cambio: "Cambió el Precio Dropi de un producto publicado",
+  precio_dropi_cambio: "Cambió el precio mínimo de un producto publicado en Dropi",
   fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
   fulfillment_bloque_asignado: "Bloque del corte asignado — sacar de bodega",
   compras_calientes: "Compras calientes (30 unidades o menos)",
@@ -1712,11 +1712,11 @@ async function getDropiPriceChangesPendingItem(href: string): Promise<PendingIte
   if (changes.length === 0) return null;
   const up = changes.filter((c) => c.direction === "UP").length;
   const down = changes.length - up;
-  const parts = [up ? `${up} sube${up === 1 ? "" : "n"}` : null, down ? `${down} puede${down === 1 ? "" : "n"} bajar` : null].filter(Boolean);
+  const parts = [up ? `${up} mínimo${up === 1 ? "" : "s"} sube${up === 1 ? "" : "n"}` : null, down ? `${down} mínimo${down === 1 ? "" : "s"} baja${down === 1 ? "" : "n"}` : null].filter(Boolean);
   return {
     type: "precio_dropi_cambio",
     icon: "💲",
-    label: "Cambia el precio en Dropi",
+    label: "Cambió el precio mínimo en Dropi",
     meta: changes.length === 1 ? `${changes[0].name} → $${changes[0].newPrice.toFixed(2)}` : parts.join(" · "),
     // Una subida es urgente: con el precio viejo se gana menos del 20%.
     overdue: up > 0,
