@@ -218,7 +218,7 @@ export function MarketProductPanel({
         </>
       )}
       {tab === "mispublicados" && <PublishedHistoryView />}
-      {tab === "trazabilidad" && <TraceabilityView canDecidePurchase={canDecidePurchase} />}
+      {tab === "trazabilidad" && <TraceabilityView canDecidePurchase={canDecidePurchase} canCancel={canReview} />}
     </div>
   );
 }
@@ -1313,7 +1313,7 @@ function ReadyToBuyQueue() {
   );
 }
 
-function TraceabilityView({ canDecidePurchase }: { canDecidePurchase: boolean }) {
+function TraceabilityView({ canDecidePurchase, canCancel }: { canDecidePurchase: boolean; canCancel: boolean }) {
   const [rows, setRows] = useState<Proposal[] | null>(null);
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -1348,6 +1348,21 @@ function TraceabilityView({ canDecidePurchase }: { canDecidePurchase: boolean })
     const res = await fetch(`/api/market-products/${id}/release-kardex`, { method: "POST" });
     setReleasingId(null);
     if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo liberar."); return; }
+    load();
+  }
+
+  // Pedido del usuario 2026-10-03 (AM-0018): cerrar una propuesta aprobada
+  // que al final no se va a vender — ver api/market-products/[id]/cancel.
+  async function cancelProposal(id: string, label: string) {
+    const reason = prompt(`¿Por qué se cancela ${label}? Deja de estar aprobada y sale de publicar y de listo para comprar.`);
+    if (!reason?.trim()) return;
+    setErr(""); setBusy(id);
+    const res = await fetch(`/api/market-products/${id}/cancel`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    });
+    setBusy(null);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo cancelar."); return; }
     load();
   }
 
@@ -1413,6 +1428,11 @@ function TraceabilityView({ canDecidePurchase }: { canDecidePurchase: boolean })
             </div>
           )}
           {p.readyToBuyAt && <div className="text-[12px] text-teal font-semibold">Listo para comprar con {p.chosenSupplier?.name} — {formatDateTime(p.readyToBuyAt)}</div>}
+          {canCancel && !p.publishedAt && !p.boughtAt && (
+            <button type="button" disabled={busy === p.id} className="mt-2 rounded border border-red px-3 py-1.5 text-[12px] font-semibold text-red cursor-pointer disabled:opacity-60" onClick={() => cancelProposal(p.id, `${p.code} ${p.productName}`)}>
+              Cancelar propuesta
+            </button>
+          )}
         </div>
       ))}
     </div>
