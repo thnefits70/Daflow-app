@@ -86,6 +86,30 @@ export async function resolveCostBasisForCatalogItems(catalogItemIds: string[]):
   return byCatalogItemId;
 }
 
+export type DropiPriceParams = { insuranceRatePercent: number; fulfillmentCost: number; marginPercent: number };
+
+// Pedido del usuario 2026-10-03: los mismos seguro / fulfillment / margen que
+// usa resolveCostBasisForCatalogItems, sin tocar el costo — para explicar un
+// Precio Dropi ya guardado (Compras Personales).
+export async function resolveDropiParamsForCatalogItems(catalogItemIds: string[]): Promise<Map<string, DropiPriceParams>> {
+  const ids = [...new Set(catalogItemIds)];
+  if (ids.length === 0) return new Map();
+  const [proposals, sizes] = await Promise.all([
+    prisma.marketProductProposal.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true, insuranceRatePercent: true, fulfillmentCost: true, marginPercent: true } }),
+    prisma.purchaseCatalogItem.findMany({ where: { id: { in: ids } }, select: { id: true, fulfillmentSize: true } }),
+  ]);
+  const proposalById = new Map(proposals.filter((p) => p.catalogItemId).map((p) => [p.catalogItemId!, p]));
+  const sizeById = new Map(sizes.map((x) => [x.id, x.fulfillmentSize]));
+  return new Map(ids.map((id) => {
+    const p = proposalById.get(id);
+    return [id, {
+      insuranceRatePercent: p?.insuranceRatePercent ?? DROPI_INSURANCE_DEFAULT,
+      fulfillmentCost: p?.fulfillmentCost ?? (sizeById.get(id) === "SMALL" ? DROPI_FULFILLMENT_SMALL : DROPI_FULFILLMENT_DEFAULT),
+      marginPercent: p?.marginPercent ?? DROPI_MARGIN_DEFAULT,
+    }];
+  }));
+}
+
 // Fase 2 (Análisis de Mercado) — confirmado 2026-09-09 con la especificación
 // completa de Bryan (líder de MKT). Nunca se confía en el precio calculado
 // que manda el navegador: siempre se recalcula acá, server-side.

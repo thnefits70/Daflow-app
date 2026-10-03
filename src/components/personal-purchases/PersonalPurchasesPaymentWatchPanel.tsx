@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
+import { PersonalPurchasePriceExplanation } from "@/components/personal-purchases/PersonalPurchasePriceExplanation";
+import type { ItemPriceExplanation } from "@/lib/personalPurchases";
 
 type Item = {
   id: string;
@@ -13,6 +15,10 @@ type Item = {
   livePhotoUrl: string;
   optionalPhotoUrl: string | null;
   confirmedCatalogItem: { justCode: string | null } | null;
+  costUnitPrice: number | null;
+  dropiUnitPrice: number | null;
+  itemTotal: number | null;
+  priceExplanation: ItemPriceExplanation | null;
 };
 type Order = {
   id: string;
@@ -97,7 +103,8 @@ export function PersonalPurchasesPaymentWatchPanel({ canReopenPrice = false }: {
                 </div>
                 <div className="flex flex-col gap-2 mt-2.5 pt-2.5 border-t border-rule">
                   {o.items.map((it) => (
-                    <div key={it.id} className="flex gap-2.5 items-center">
+                    <div key={it.id}>
+                    <div className="flex gap-2.5 items-center">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={it.livePhotoUrl}
@@ -120,6 +127,8 @@ export function PersonalPurchasesPaymentWatchPanel({ canReopenPrice = false }: {
                         <CatalogCode code={it.confirmedCatalogItem?.justCode} />
                         <ExpandableName text={`${it.confirmedProductName ?? it.employeeProductName} × ${it.quantity}`} />
                       </div>
+                    </div>
+                    <PersonalPurchasePriceExplanation explanation={it.priceExplanation} costUnitPrice={it.costUnitPrice} dropiUnitPrice={it.dropiUnitPrice} itemTotal={it.itemTotal} />
                     </div>
                   ))}
                 </div>

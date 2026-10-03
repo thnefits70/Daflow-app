@@ -31,6 +31,7 @@ type ItemDTO = {
   declaredName: string | null;
   goodQty: number;
   damagedQty: number;
+  missingQty: number;
   damageReason: { name: string } | null;
   damageReasonOther: string | null;
   guideId: string | null;

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { bodegaUnitCost, computeMarketProductSalePrice, resolveCostBasisForCatalogItems, DROPI_MARGIN_DEFAULT } from "@/lib/marketProduct";
+import { bodegaUnitCost, computeMarketProductSalePrice, resolveCostBasisForCatalogItems, resolveDropiParamsForCatalogItems, DROPI_MARGIN_DEFAULT } from "@/lib/marketProduct";
 import { addBusinessDays } from "@/lib/businessHours";
 
 // Confirmado 2026-08-18: rediseño completo — el precio al costo por unidad
@@ -207,7 +207,106 @@ export async function attemptAutoPriceOrder(orderId: string): Promise<AutoPriceA
   return { priced: true, totalAmount, employeeId: order.employeeId };
 }
 
-export type StalePersonalPurchasePush = { ownerId: string; title: string; body: string; url: string };
+export type UnitPriceExplanation = { mode: PriceMode; who: string; reason: string };
+export type DropiPriceSteps = { bodega: number; insuranceRatePercent: number; withInsurance: number; fulfillmentCost: number; withFulfillment: number; marginPercent: number; dropi: number };
+export type ItemPriceExplanation = { units: UnitPriceExplanation[]; dropiSteps: DropiPriceSteps | null };
+
+type ExplainItemInput = {
+  id: string;
+  employeeId: string;
+  createdAt: Date;
+  quantity: number;
+  confirmedProductName: string | null;
+  confirmedCatalogItemId: string | null;
+  confirmedJustCode: string | null;
+  unitDeclarations: unknown;
+  unitPriceModes: unknown;
+  costUnitPrice: number | null;
+  dropiUnitPrice: number | null;
+};
+
+const RELATION_LABEL: Record<BuyerRelation, string> = { SELF: "Para él/ella", MINOR_CHILD: "Hijo/a menor", OTHER_FAMILY: "Otra persona" };
+
+function shortDate(d: Date): string {
+  return d.toLocaleDateString("es-EC", { timeZone: "America/Guayaquil", day: "2-digit", month: "short", year: "numeric" });
+}
+
+// Pedido del usuario 2026-10-03 (caso Joel, cinturón $5.39): admin/Nairoby
+// no veían POR QUÉ una compra salió a ese precio. Explica, con lo que YA
+// quedó guardado (unitPriceModes, costo y Dropi por unidad), por qué cada
+// unidad fue costo o Dropi, y cómo se armó el Precio Dropi. No recalcula ni
+// cambia nada. El desglose del Dropi solo se muestra si los parámetros
+// actuales del producto reproducen el precio guardado (pedidos viejos con
+// precio escrito a mano no cuadran → solo se muestran los montos).
+export async function explainPersonalPurchaseItems(items: ExplainItemInput[]): Promise<Map<string, ItemPriceExplanation>> {
+  const result = new Map<string, ItemPriceExplanation>();
+  const catalogIds = items.map((it) => it.confirmedCatalogItemId).filter((x): x is string => !!x);
+  const justCodes = items.map((it) => it.confirmedJustCode).filter((x): x is string => !!x);
+  const [paramsById, combos] = await Promise.all([
+    resolveDropiParamsForCatalogItems(catalogIds),
+    justCodes.length ? prisma.dropiCombo.findMany({ where: { code: { in: justCodes } }, select: { code: true } }) : Promise.resolve([]),
+  ]);
+  const comboCodes = new Set(combos.map((c) => c.code));
+
+  for (const it of items) {
+    const modes = (Array.isArray(it.unitPriceModes) ? it.unitPriceModes : []) as PriceMode[];
+    const decls = (Array.isArray(it.unitDeclarations) ? it.unitDeclarations : []) as UnitDeclaration[];
+    const isCombo = !!it.confirmedJustCode && comboCodes.has(it.confirmedJustCode);
+    const units: UnitPriceExplanation[] = [];
+    let selfCostSeen = false;
+    for (let i = 0; i < modes.length; i++) {
+      const mode = modes[i];
+      const d = decls[i];
+      const who = d ? `${RELATION_LABEL[d.relation]}${d.note ? ` (${d.note})` : ""}` : "Sin declarar";
+      let reason: string;
+      if (isCombo && mode === "DROPI") reason = "Es un combo: siempre va a precio Dropi.";
+      else if (!d || i >= MAX_COST_UNITS_PER_ITEM) reason = `Pasa del tope de ${MAX_COST_UNITS_PER_ITEM} unidades que pueden ir al costo.`;
+      else if (d.relation === "MINOR_CHILD") reason = mode === "COST" ? "Hijo/a menor de 18: siempre al costo." : "Precio Dropi.";
+      else if (d.relation === "OTHER_FAMILY") reason = "Para otra persona: siempre precio Dropi. El costo es solo para uno mismo o un hijo/a menor.";
+      else if (mode === "COST") {
+        reason = "Para uno mismo: 1 unidad al costo por producto cada 6 meses.";
+        selfCostSeen = true;
+      } else if (selfCostSeen) reason = "Solo 1 unidad propia por producto va al costo; esta es una adicional.";
+      else {
+        const prev = await prisma.personalPurchaseItem.findFirst({
+          where: {
+            id: { not: it.id },
+            createdAt: { lt: it.createdAt },
+            OR: [
+              ...(it.confirmedCatalogItemId ? [{ confirmedCatalogItemId: it.confirmedCatalogItemId }] : []),
+              ...(it.confirmedProductName ? [{ confirmedProductName: it.confirmedProductName }] : []),
+            ],
+            order: { employeeId: it.employeeId, status: { not: "REJECTED" } },
+            unitPriceModes: { array_contains: "COST" },
+          },
+          orderBy: { createdAt: "desc" },
+          select: { createdAt: true },
+        });
+        if (prev) {
+          const again = new Date(prev.createdAt);
+          again.setUTCMonth(again.getUTCMonth() + COOLDOWN_MONTHS);
+          reason = `Ya compró este producto al costo el ${shortDate(prev.createdAt)}; vuelve a poder al costo desde el ${shortDate(again)}.`;
+        } else reason = "Para uno mismo, pero no calificó al costo cuando se confirmó.";
+      }
+      units.push({ mode, who, reason });
+    }
+
+    let dropiSteps: DropiPriceSteps | null = null;
+    const params = it.confirmedCatalogItemId ? paramsById.get(it.confirmedCatalogItemId) : undefined;
+    if (params && it.costUnitPrice && it.dropiUnitPrice && modes.includes("DROPI")) {
+      const withInsurance = it.costUnitPrice * (1 + params.insuranceRatePercent / 100);
+      const withFulfillment = withInsurance + params.fulfillmentCost;
+      const dropi = withFulfillment / (1 - params.marginPercent / 100);
+      if (Math.abs(dropi - it.dropiUnitPrice) < 0.01) {
+        dropiSteps = { bodega: it.costUnitPrice, insuranceRatePercent: params.insuranceRatePercent, withInsurance, fulfillmentCost: params.fulfillmentCost, withFulfillment, marginPercent: params.marginPercent, dropi };
+      }
+    }
+    result.set(it.id, { units, dropiSteps });
+  }
+  return result;
+}
+
+export type StalePersonalPurchasePush ={ ownerId: string; title: string; body: string; url: string };
 
 // Confirmado 2026-08-20: recordatorio diario del cron de pendientes
 // (push-pendientes). Días 1-3 hábiles desde que Nairoby cerró el precio
