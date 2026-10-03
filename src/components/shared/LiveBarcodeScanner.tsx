@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import type { IScannerControls } from "@zxing/browser";
-import { DecodeHintType } from "@zxing/library";
+import { BarcodeFormat, DecodeHintType } from "@zxing/library";
 import { ScanLine, X } from "lucide-react";
 import { useBackButtonGuard } from "@/lib/useBackButtonGuard";
 import { playSound } from "@/lib/sound";
@@ -20,7 +20,7 @@ type Props = {
 // Modo continuo: tiempo mínimo antes de volver a entregar el MISMO código, y
 // pausa corta después de cada lectura para no leer la etiqueta dos veces.
 const CONTINUOUS_SAME_CODE_MS = 4000;
-const CONTINUOUS_PAUSE_MS = 900;
+const CONTINUOUS_PAUSE_MS = 400;
 
 // Lector nativo del celular (Chrome en Android lo trae). No está en los
 // tipos de TypeScript todavía, así que se declara lo mínimo que se usa.
@@ -37,6 +37,27 @@ const SCAN_INTERVAL_MS = 120;
 const HINT_AFTER_MS = 4000;
 // Si deja de ver el código, los cuadros se borran después de este tiempo.
 const BOX_HOLD_MS = 450;
+// Los cuadros se recalculan como mucho cada tanto — medir la imagen cuesta y
+// no debe frenar la lectura.
+const BOX_EVERY_MS = 200;
+
+// Reporte 2026-10-03 (después de agregar los cuadros): tardaba en leer. Se
+// buscaba TODO tipo de código (PDF417, Aztec, MaxiCode…) y los cuadros se
+// calculaban antes de entregar la lectura. Ahora solo los tipos que de verdad
+// usamos — guías (barras / QR) y etiquetas de DAFLOW (QR) — y la lectura se
+// entrega primero; los cuadros se dibujan después.
+const NATIVE_FORMATS = ["qr_code", "code_128", "code_39", "code_93", "codabar", "itf", "ean_13", "ean_8", "upc_a"];
+const ZXING_FORMATS = [
+  BarcodeFormat.QR_CODE,
+  BarcodeFormat.CODE_128,
+  BarcodeFormat.CODE_39,
+  BarcodeFormat.CODE_93,
+  BarcodeFormat.CODABAR,
+  BarcodeFormat.ITF,
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.UPC_A,
+];
 
 // Rectángulo en píxeles del video original; al guardarlo para dibujar se
 // pasa a % del recuadro de la cámara en pantalla.
@@ -236,9 +257,25 @@ export function LiveBarcodeScanner({ onScanned, onCancel, continuous = false }: 
     let lastAt = 0;
     let pausedUntil = 0;
     let clearBoxTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastBoxAt = 0;
 
-    const showBox = (seed: Rect | null, text: string, lineOnly = false) => {
-      if (cancelled || !seed) return;
+    // Se llama DESPUÉS de entregar la lectura y fuera del ciclo de lectura
+    // (setTimeout 0), así nunca la retrasa.
+    const queueBox = (seed: Rect | null, text: string, lineOnly = false) => {
+      if (!seed) return;
+      const now = Date.now();
+      if (now - lastBoxAt < BOX_EVERY_MS) {
+        // Sigue viendo el código: solo se alarga el tiempo en pantalla.
+        if (clearBoxTimer) clearTimeout(clearBoxTimer);
+        clearBoxTimer = setTimeout(() => { if (!cancelled) setDetection(null); }, BOX_HOLD_MS);
+        return;
+      }
+      lastBoxAt = now;
+      setTimeout(() => showBox(seed, text, lineOnly), 0);
+    };
+
+    const showBox = (seed: Rect, text: string, lineOnly: boolean) => {
+      if (cancelled) return;
       const video = videoRef.current;
       const frame = frameRef.current;
       if (!video || !frame) return;
@@ -320,7 +357,8 @@ export function LiveBarcodeScanner({ onScanned, onCancel, continuous = false }: 
     const startNative = async (Ctor: NativeDetectorCtor, video: HTMLVideoElement) => {
       const supported = (await Ctor.getSupportedFormats?.()) ?? [];
       if (!supported.includes("qr_code")) return false;
-      const detector = new Ctor({ formats: supported });
+      const formats = NATIVE_FORMATS.filter((f) => supported.includes(f));
+      const detector = new Ctor({ formats });
       video.srcObject = stream;
       await video.play().catch(() => {});
       const tick = async () => {
@@ -330,11 +368,12 @@ export function LiveBarcodeScanner({ onScanned, onCancel, continuous = false }: 
             const found = await detector.detect(video);
             const hit = found.find((f) => f.rawValue);
             const text = hit?.rawValue;
+            const delivered = !!text && deliver(text);
             if (hit?.boundingBox) {
               const b = hit.boundingBox;
-              showBox({ x: b.x, y: b.y, w: b.width, h: b.height }, hit.rawValue);
+              queueBox({ x: b.x, y: b.y, w: b.width, h: b.height }, hit.rawValue);
             }
-            if (text && deliver(text) && !continuous) return;
+            if (delivered && !continuous) return;
           } catch {
             // Fotograma que no se pudo leer — se intenta con el siguiente.
           }
@@ -346,7 +385,10 @@ export function LiveBarcodeScanner({ onScanned, onCancel, continuous = false }: 
     };
 
     const startZxing = async (video: HTMLVideoElement) => {
-      const hints = new Map<DecodeHintType, unknown>([[DecodeHintType.TRY_HARDER, true]]);
+      const hints = new Map<DecodeHintType, unknown>([
+        [DecodeHintType.TRY_HARDER, true],
+        [DecodeHintType.POSSIBLE_FORMATS, ZXING_FORMATS],
+      ]);
       const reader = new BrowserMultiFormatReader(hints, {
         delayBetweenScanAttempts: SCAN_INTERVAL_MS,
         delayBetweenScanSuccess: SCAN_INTERVAL_MS,
@@ -355,10 +397,10 @@ export function LiveBarcodeScanner({ onScanned, onCancel, continuous = false }: 
         // Sin resultado ZXing avisa con "error" en cada fotograma — no es un
         // error real, es su forma de decir "todavía no hay código".
         if (!result) return;
+        deliver(result.getText());
         const pts = (result.getResultPoints() ?? []).filter(Boolean).map((p) => ({ x: p.getX(), y: p.getY() }));
         const r = rectFromPoints(pts);
-        if (r) showBox(r.rect, result.getText(), r.lineOnly);
-        deliver(result.getText());
+        if (r) queueBox(r.rect, result.getText(), r.lineOnly);
       });
       if (cancelled) zxingControls.stop();
     };
@@ -415,7 +457,7 @@ export function LiveBarcodeScanner({ onScanned, onCancel, continuous = false }: 
             {detection && (
               <>
                 <div
-                  className="pointer-events-none absolute transition-all duration-100 ease-out"
+                  className="pointer-events-none absolute transition-all duration-200 ease-out"
                   style={{ left: `${detection.bar.x}%`, top: `${detection.bar.y}%`, width: `${detection.bar.w}%`, height: `${detection.bar.h}%` }}
                 >
                   <div className="absolute inset-0 bg-teal/15 shadow-[0_0_12px_rgba(45,212,191,.55)] rounded-sm" />
@@ -423,7 +465,7 @@ export function LiveBarcodeScanner({ onScanned, onCancel, continuous = false }: 
                   <span className="absolute -top-4 left-0 rounded-sm bg-teal px-1 text-[8.5px] font-bold uppercase tracking-wider text-navy">Código</span>
                 </div>
                 <div
-                  className="pointer-events-none absolute transition-all duration-100 ease-out"
+                  className="pointer-events-none absolute transition-all duration-200 ease-out"
                   style={{ left: `${detection.num.x}%`, top: `${detection.num.y}%`, width: `${detection.num.w}%`, height: `${detection.num.h}%` }}
                 >
                   <div className="absolute inset-0 border border-dashed border-gold/70 bg-gold/15 shadow-[0_0_10px_rgba(234,179,8,.45)] rounded-sm" />
