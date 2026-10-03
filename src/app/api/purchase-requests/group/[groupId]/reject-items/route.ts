@@ -50,10 +50,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
       where: { id: { in: rejected.map((r) => r.id) } },
       data: { groupId: newGroupId, status: "REJECTED", rejectReason: parsed.data.rejectReason, reviewedById: actorId, reviewedAt: new Date() },
     }),
-    // El total leído de la cotización era de TODOS los productos — ya no
-    // cuadra con lo que queda, y la revisión IA al aprobar lo marcaría como
-    // diferencia. null = "no comparar" (mismo caso que cotización solo código).
-    prisma.purchaseRequest.updateMany({ where: { groupId }, data: { quoteReadTotal: null } }),
+    // El total leído de la cotización era de TODOS los productos. Pedido del
+    // usuario 2026-10-03: se sigue comparando, pero contra la cotización
+    // MENOS lo rechazado (ej. $100 − casco $25 = $75), así la revisión IA al
+    // aprobar sigue detectando una diferencia real en lo que queda.
+    prisma.purchaseRequest.updateMany({
+      where: { groupId },
+      data: {
+        quoteReadTotal:
+          rows[0].quoteReadTotal == null ? null : Math.round((rows[0].quoteReadTotal - rejected.reduce((s, r) => s + r.totalCost, 0)) * 100) / 100,
+      },
+    }),
   ]);
 
   // Si el crédito reservado ya supera lo que queda por pagar, se libera
