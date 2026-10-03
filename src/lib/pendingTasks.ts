@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
-import { isAutoWarrantyMonth } from "@/lib/warrantyKpiConstants";
-import { isAutoReturnRateMonth } from "@/lib/returnRateConstants";
+import { isAutoWarrantyMonth, WARRANTY_LAST_MANUAL_MONTH } from "@/lib/warrantyKpiConstants";
+import { isAutoReturnRateMonth, RETURN_RATE_LAST_MANUAL_MONTH } from "@/lib/returnRateConstants";
 import { prisma } from "@/lib/prisma";
 import { evaluationDeadline, adminConfirmDeadline, summaryFieldsFromScores } from "@/lib/recognition";
 import { addBusinessHours } from "@/lib/businessHours";
@@ -821,14 +821,18 @@ async function getExternalPaymentPendingItem(href: string): Promise<PendingItem 
 async function getReturnRatePendingItem(href: string): Promise<PendingItem | null> {
   const today = currentMonthStr();
   const prev = prevMonthStr(today);
-  // Desde octubre 2026 la tasa se calcula sola — no se recuerda.
-  if (isAutoReturnRateMonth(prev)) return null;
-  if (fixedDayDeadlinePassed(today, 4) && !(await prisma.returnRateRecord.findUnique({ where: { month: prev } }))) {
+  // Desde octubre 2026 la tasa se calcula sola. Pedido del usuario
+  // 2026-10-03: el último mes a mano (septiembre) se recuerda SIEMPRE hasta
+  // que se cargue — antes se miraba solo "el mes anterior" y en noviembre el
+  // aviso habría desaparecido aunque septiembre nunca se cargara.
+  const month = isAutoReturnRateMonth(prev) ? RETURN_RATE_LAST_MANUAL_MONTH : prev;
+  const due = month !== prev || fixedDayDeadlinePassed(today, 4);
+  if (due && !(await prisma.returnRateRecord.findUnique({ where: { month } }))) {
     return {
       type: "tasa_devolucion",
       icon: "📉",
       label: "Tasa de Devolución General",
-      meta: `${formatMonthLabel(prev)} · atrasado`,
+      meta: `${formatMonthLabel(month)} · copiar el % de ATOM · atrasado`,
       overdue: true,
       href,
     };
@@ -843,19 +847,25 @@ async function getReturnRatePendingItem(href: string): Promise<PendingItem | nul
 async function getWarrantyPendingItem(href: string): Promise<PendingItem | null> {
   const today = currentMonthStr();
   const prev = prevMonthStr(today);
-  // Desde octubre 2026 el mes se llena solo con los cortes — no se recuerda.
-  if (isAutoWarrantyMonth(prev)) return null;
-  if (fixedDayDeadlinePassed(today, 1) && !(await prisma.warrantyMonthTotal.findUnique({ where: { month: prev } }))) {
-    return {
-      type: "kpi_garantias",
-      icon: "🛡️",
-      label: "KPI de Garantías",
-      meta: `${formatMonthLabel(prev)} · atrasado`,
-      overdue: true,
-      href,
-    };
-  }
-  return null;
+  // Desde octubre 2026 el mes se llena solo con los cortes. 2026-10-03: igual
+  // que la Tasa, septiembre (último mes a mano) se recuerda siempre hasta
+  // tener el total Y los motivos — el aviso dice cuál falta.
+  const month = isAutoWarrantyMonth(prev) ? WARRANTY_LAST_MANUAL_MONTH : prev;
+  if (month === prev && !fixedDayDeadlinePassed(today, 1)) return null;
+  const [total, motives] = await Promise.all([
+    prisma.warrantyMonthTotal.findUnique({ where: { month } }),
+    prisma.warrantyCategoryMonthCount.count({ where: { month } }),
+  ]);
+  if (total && motives > 0) return null;
+  const missing = !total && motives === 0 ? "total y motivos" : !total ? "falta el total" : "faltan los motivos";
+  return {
+    type: "kpi_garantias",
+    icon: "🛡️",
+    label: "KPI de Garantías",
+    meta: `${formatMonthLabel(month)} · ${missing} · atrasado`,
+    overdue: true,
+    href,
+  };
 }
 
 // Each active payment reminder has its own reminderStartDay (día del mes

@@ -8,7 +8,7 @@ import { WarrantyPanel } from "@/components/finance/WarrantyPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { canManageReturnRate, canManageWarranties, canViewReturnRateDetail } from "@/lib/guards";
 import { AutoReturnRatePanel } from "@/components/finance/AutoReturnRatePanel";
-import { WARRANTY_LAST_MANUAL_MONTH } from "@/lib/warrantyKpiConstants";
+import { isLastManualWarrantyMonthDone } from "@/lib/warrantyKpi";
 import { RETURN_RATE_LAST_MANUAL_MONTH } from "@/lib/returnRateConstants";
 
 export default async function AreaKpisGeneralesPage() {
@@ -20,7 +20,7 @@ export default async function AreaKpisGeneralesPage() {
     canManageReturnRate(),
     canManageWarranties(),
     prisma.returnRateRecord.findUnique({ where: { month: RETURN_RATE_LAST_MANUAL_MONTH }, select: { id: true } }),
-    prisma.warrantyMonthTotal.findUnique({ where: { month: WARRANTY_LAST_MANUAL_MONTH }, select: { id: true } }),
+    isLastManualWarrantyMonthDone(),
   ]);
   // Pedido del usuario 2026-09-30: igual que Garantías, la Tasa de Devolución
   // se calcula sola desde octubre 2026 — solo aparece hasta que se copia de

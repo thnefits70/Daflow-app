@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { isAutoWarrantyMonth } from "@/lib/warrantyKpiConstants";
+import { isAutoWarrantyMonth, WARRANTY_LAST_MANUAL_MONTH } from "@/lib/warrantyKpiConstants";
 
 // Guayaquil es UTC-5 todo el año (sin horario de verano).
 const GYE_OFFSET_MS = 5 * 60 * 60 * 1000;
@@ -44,4 +44,15 @@ export async function syncWarrantyMonth(month: string): Promise<void> {
       })
     ),
   ]);
+}
+
+// Pedido del usuario 2026-10-03: septiembre (el último mes a mano) cuenta
+// como cargado solo con el total Y al menos un motivo — antes bastaba el
+// total, y al guardarlo la sección desaparecía sin dejar poner los motivos.
+export async function isLastManualWarrantyMonthDone(): Promise<boolean> {
+  const [total, counts] = await Promise.all([
+    prisma.warrantyMonthTotal.findUnique({ where: { month: WARRANTY_LAST_MANUAL_MONTH }, select: { id: true } }),
+    prisma.warrantyCategoryMonthCount.count({ where: { month: WARRANTY_LAST_MANUAL_MONTH } }),
+  ]);
+  return !!total && counts > 0;
 }

@@ -4,7 +4,7 @@ import { ReturnRatePanel } from "@/components/finance/ReturnRatePanel";
 import { AutoReturnRatePanel } from "@/components/finance/AutoReturnRatePanel";
 import { WarrantyPanel } from "@/components/finance/WarrantyPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
-import { WARRANTY_LAST_MANUAL_MONTH } from "@/lib/warrantyKpiConstants";
+import { isLastManualWarrantyMonthDone } from "@/lib/warrantyKpi";
 import { RETURN_RATE_LAST_MANUAL_MONTH } from "@/lib/returnRateConstants";
 
 // Pedido del usuario 2026-09-30: acá ya no se carga nada a mano desde
@@ -17,7 +17,7 @@ export default async function AdminKpisGeneralesPage() {
   const [returnRateRecords, lastManualReturnMonth, lastManualWarrantyMonth] = await Promise.all([
     prisma.returnRateRecord.findMany({ orderBy: { month: "desc" } }),
     prisma.returnRateRecord.findUnique({ where: { month: RETURN_RATE_LAST_MANUAL_MONTH }, select: { id: true } }),
-    prisma.warrantyMonthTotal.findUnique({ where: { month: WARRANTY_LAST_MANUAL_MONTH }, select: { id: true } }),
+    isLastManualWarrantyMonthDone(),
   ]);
   const showWarranties = !lastManualWarrantyMonth;
   const [warrantyCategories, warrantyMonthTotals, warrantyCounts] = showWarranties
