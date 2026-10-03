@@ -16,8 +16,10 @@ import { effectiveUnitCost } from "@/lib/purchases";
 // - Si la compra nueva salió más barata y quedan unidades caras → se usa el
 //   promedio de lo que queda (baja un poco ya, para ganarle a la competencia).
 //   Cuando se acaban las caras, el promedio baja solo al costo nuevo.
-// - Freno: el precio nunca puede dejar en pérdida a la unidad más cara que
-//   queda (con seguro y fulfillment, ganancia 0).
+// - Freno: el precio nunca puede dejar a la unidad más cara que queda con
+//   menos de BRAKE_MIN_MARGIN_PERCENT de ganancia (con seguro y fulfillment).
+//   Cambiado 2026-10-02, pedido del usuario: antes era ganancia 0, ahora 10%
+//   hasta que se acaben esas unidades caras.
 // Las llegadas que bodega ya registró pero Daniel todavía no aprobó (aún no
 // están en el Kardex) también cuentan: la mercadería ya está en bodega.
 
@@ -40,11 +42,16 @@ export type RemainingStockCost = {
   freightPerUnit: number;
 };
 
-// Costo mínimo que, con la fórmula del Precio Dropi, cubre el costo completo
-// (con seguro y fulfillment) de la unidad más cara — el freno.
+const BRAKE_MIN_MARGIN_PERCENT = 10;
+
+// Costo mínimo que, con la fórmula del Precio Dropi, deja a la unidad más
+// cara con al menos BRAKE_MIN_MARGIN_PERCENT de ganancia (con seguro y
+// fulfillment) — el freno. Si el margen del producto es menor que 10%, el
+// freno usa ese margen (nunca pide más ganancia que el propio producto).
 function breakEvenBasis(maxCost: number, insuranceRatePercent: number, fulfillmentCost: number, marginPercent: number) {
   const fullCost = maxCost * (1 + insuranceRatePercent / 100) + fulfillmentCost;
-  return (fullCost * (1 - marginPercent / 100) - fulfillmentCost) / (1 + insuranceRatePercent / 100);
+  const minPrice = fullCost / (1 - Math.min(BRAKE_MIN_MARGIN_PERCENT, marginPercent) / 100);
+  return (minPrice * (1 - marginPercent / 100) - fulfillmentCost) / (1 + insuranceRatePercent / 100);
 }
 
 export function pickSellingCost(
