@@ -881,8 +881,12 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
         <span className="flex items-center justify-end gap-1 border-l border-rule pl-3 text-teal">
           B2B <FormulaInfoButton open={openFormula === "b2b"} onToggle={() => setOpenFormula((k) => (k === "b2b" ? null : "b2b"))} />
         </span>
-        <span className="flex items-center justify-end gap-1">
-          Dropi <FormulaInfoButton open={openFormula === "dropi"} onToggle={() => setOpenFormula((k) => (k === "dropi" ? null : "dropi"))} />
+        {/* 2026-10-02, pedido del usuario: Dropi resaltado en naranja (título y
+            precio) para ubicarlo de un vistazo entre las demás columnas. */}
+        <span className="flex items-center justify-end">
+          <span className="flex items-center gap-1 rounded bg-orange/15 px-1.5 py-0.5 text-orange">
+            Dropi <FormulaInfoButton open={openFormula === "dropi"} onToggle={() => setOpenFormula((k) => (k === "dropi" ? null : "dropi"))} />
+          </span>
         </span>
         <span className="flex items-center justify-end gap-1 text-blue">
           B2C 1 un. <FormulaInfoButton open={openFormula === "b2c1"} onToggle={() => setOpenFormula((k) => (k === "b2c1" ? null : "b2c1"))} />
@@ -1307,7 +1311,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                 />
                 <CopyableAmount
                   value={r.dropiPrice}
-                  className={"text-right font-mono text-[13px] font-bold text-ink"}
+                  className={"justify-self-end rounded bg-orange/15 px-1.5 text-right font-mono text-[13px] font-bold text-orange"}
                 />
                 <CopyableAmount
                   value={r.b2cPrice1Unit}
@@ -1449,7 +1453,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                       />
                       <CopyableAmount
                         value={combo.dropiPrice}
-                        className={"text-right font-mono text-[13px] font-bold text-ink"}
+                        className={"justify-self-end rounded bg-orange/15 px-1.5 text-right font-mono text-[13px] font-bold text-orange"}
                       />
                       <CopyableAmount
                         value={combo.b2cPrice1Unit}
