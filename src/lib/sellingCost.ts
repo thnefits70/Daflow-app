@@ -122,7 +122,11 @@ export async function costOfKardexOutEntries(catalogItemId: string, entryIds: st
 
 async function replayStockLayers(
   catalogItemIds: string[],
-  opts: { includePending?: boolean; onOut?: (entryId: string, consumed: { qty: number; total: number }) => void } = {}
+  opts: {
+    includePending?: boolean;
+    onOut?: (entryId: string, consumed: { qty: number; total: number }) => void;
+    onItemDone?: (catalogItemId: string, info: { balance: number; kardexAvg: number; cleanAvg: number }) => void;
+  } = {}
 ): Promise<Map<string, Layer[]>> {
   const ids = [...new Set(catalogItemIds)];
   const result = new Map<string, Layer[]>();
@@ -168,8 +172,12 @@ async function replayStockLayers(
   // que entraron al promedio del Kardex y los cortes con Just usan este.
   let cleanAvg = 0;
   let prevKardexAvg = 0;
+  // CUTOVER_CORRECTION devuelve el saldo/costo de justo antes del corte con
+  // Just: se guarda el promedio limpio de ese momento para devolver ese.
+  let beforeCutover: { kardexAvg: number; cleanAvg: number } | null = null;
   const flush = () => {
     if (current === null) return;
+    opts.onItemDone?.(current, { balance, kardexAvg: lastAvg, cleanAvg });
     const sum = layers.reduce((s, l) => s + l.qty, 0);
     const list = sum === Math.max(balance, 0) ? layers.map(({ qty, cost, returned, freight, unknownCost }) => ({ qty, cost, returned, freight, unknownCost })) : balance > 0 ? [{ qty: balance, cost: cleanAvg || lastAvg }] : [];
     result.set(current, list.length > 0 ? list : [{ qty: 0, cost: lastInCost || lastAvg, freight: lastInCost ? lastInFreight : 0 }]);
@@ -186,6 +194,7 @@ async function replayStockLayers(
       lastInRequestId = undefined;
       cleanAvg = 0;
       prevKardexAvg = 0;
+      beforeCutover = null;
     }
     const delta = e.balanceAfter - balance;
     if (e.type === "SEED" && balance === 0) {
@@ -195,16 +204,20 @@ async function replayStockLayers(
     } else if (e.type === "JUST_CUTOVER_SYNC" || e.type === "CUTOVER_CORRECTION") {
       // Punto de partida nuevo: el saldo y costo que quedaron. Si el corte
       // no cambió el promedio, se usa el promedio sin unidades a $0.
-      const cost = cleanAvg > 0 && Math.abs(e.avgCostAfter - prevKardexAvg) < 1e-9 ? cleanAvg : e.avgCostAfter;
+      if (e.type === "JUST_CUTOVER_SYNC" && !beforeCutover) beforeCutover = { kardexAvg: prevKardexAvg, cleanAvg };
+      const restoresBefore = e.type === "CUTOVER_CORRECTION" && beforeCutover && beforeCutover.cleanAvg > 0 && Math.abs(e.avgCostAfter - beforeCutover.kardexAvg) < 1e-9;
+      const cost = restoresBefore ? beforeCutover!.cleanAvg : cleanAvg > 0 && Math.abs(e.avgCostAfter - prevKardexAvg) < 1e-9 ? cleanAvg : e.avgCostAfter;
       layers = e.balanceAfter > 0 ? [{ qty: e.balanceAfter, cost, unknownCost: cost <= 0 }] : [];
       cleanAvg = cost;
     } else if (e.type === "COST_DECLARATION") {
+      // avgCostAfter (lo que el Kardex usó de verdad): en un caso (Corrector de
+      // postura) la línea dice $1.25 pero el Kardex siguió con $2.78.
       for (const l of layers) {
-        l.cost = e.unitCost ?? e.avgCostAfter;
+        l.cost = e.avgCostAfter;
         l.freight = 0;
         l.unknownCost = l.cost <= 0;
       }
-      cleanAvg = e.unitCost ?? e.avgCostAfter;
+      cleanAvg = e.avgCostAfter;
     } else if (e.type === "PRICE_CORRECTION") {
       // Corrige solo las unidades de esa compra que siguen en bodega.
       const diff = e.unitCost ?? 0;
@@ -283,4 +296,29 @@ export async function getInventoryValuationComparison(): Promise<{ byAverage: nu
   let byLots = 0;
   for (const layers of layersById.values()) for (const l of layers) if (l.qty > 0) byLots += l.qty * l.cost;
   return { byAverage, byLots };
+}
+
+// Pedido del usuario (CEO) 2026-10-02: corregir también el KARDEX de los
+// productos donde unidades que entraron a $0 bajaron el promedio (antes solo
+// se corregía para los precios). Devuelve los productos con stock cuyo
+// promedio del Kardex difiere del promedio sin esas unidades a $0.
+export type ZeroCostCorrectionRow = { catalogItemId: string; name: string; code: string | null; balance: number; kardexAvg: number; correctAvg: number };
+
+export async function getZeroCostCorrections(): Promise<ZeroCostCorrectionRow[]> {
+  const ids = (await prisma.stockKardexEntry.findMany({ distinct: ["catalogItemId"], select: { catalogItemId: true } })).map((e) => e.catalogItemId);
+  const found: { id: string; balance: number; kardexAvg: number; cleanAvg: number }[] = [];
+  await replayStockLayers(ids, {
+    includePending: false,
+    onItemDone: (id, info) => {
+      // Solo hacia arriba: las unidades a $0 siempre bajan el promedio; una
+      // diferencia hacia abajo es otra cosa (datos raros) y no se toca.
+      if (info.balance > 0 && info.cleanAvg - info.kardexAvg >= 0.005) found.push({ id, ...info });
+    },
+  });
+  if (found.length === 0) return [];
+  const items = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: found.map((f) => f.id) } }, select: { id: true, name: true, justCode: true } });
+  const byId = new Map(items.map((i) => [i.id, i]));
+  return found
+    .map((f) => ({ catalogItemId: f.id, name: byId.get(f.id)?.name ?? "—", code: byId.get(f.id)?.justCode ?? null, balance: f.balance, kardexAvg: f.kardexAvg, correctAvg: f.cleanAvg }))
+    .sort((a, b) => b.balance * (b.correctAvg - b.kardexAvg) - a.balance * (a.correctAvg - a.kardexAvg));
 }

@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "StockMovementType" ADD VALUE 'ZERO_COST_CORRECTION';

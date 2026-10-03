@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getInventoryLeadId } from "@/lib/guards";
 import { effectiveUnitCost } from "@/lib/purchases";
+import { getZeroCostCorrections } from "@/lib/sellingCost";
 import type { MarketProductBodega, StockMovementType } from "@/generated/prisma/client";
 
 // Fase 3 (INVESTOCK) — confirmado 2026-09-09: el número de stock propio de
@@ -51,8 +52,11 @@ export async function recordKardexEntry(params: {
     // Promedio ponderado: (saldo viejo × costo viejo + entrada × costo entrada) / saldo nuevo.
     // Si el saldo viejo era 0 o negativo (ej. venía de un error), el costo
     // nuevo pasa a ser directo el de esta entrada.
+    // Pedido del usuario (CEO) 2026-10-02: lo mismo si lo que había no tenía
+    // costo ($0 — devoluciones antes de la primera compra): esas unidades
+    // toman el costo de esta compra en vez de bajarle el promedio.
     avgCostAfter =
-      newBalance > 0 && current.balance > 0
+      newBalance > 0 && current.balance > 0 && current.avgCost > 0
         ? (current.balance * current.avgCost + params.quantity * incomingCost) / newBalance
         : incomingCost;
     balanceAfter = newBalance;
@@ -622,6 +626,40 @@ export async function declareManualCost(params: {
   return { balanceAfter: entry.balanceAfter, avgCostAfter: entry.avgCostAfter };
 }
 
+// Pedido del usuario (CEO) 2026-10-02: corrige el promedio del Kardex de los
+// productos donde unidades que entraron a $0 lo bajaron (ver
+// getZeroCostCorrections en sellingCost.ts). Una línea ZERO_COST_CORRECTION
+// por producto (quantity 0, no mueve el saldo); no borra ni cambia ninguna
+// línea vieja. Se vuelve a calcular justo antes de escribir y solo escribe
+// si el producto sigue igual (mismo saldo y costo que se vio).
+export async function applyZeroCostCorrections(seen: { catalogItemId: string; balance: number; kardexAvg: number }[], declaredById: string | null): Promise<{ corrected: number; skipped: number }> {
+  const fresh = new Map((await getZeroCostCorrections()).map((r) => [r.catalogItemId, r]));
+  let corrected = 0;
+  let skipped = 0;
+  for (const s of seen) {
+    const r = fresh.get(s.catalogItemId);
+    const latest = r ? await getLatestKardexEntry(s.catalogItemId) : null;
+    if (!r || !latest || latest.balanceAfter !== s.balance || Math.abs(latest.avgCostAfter - s.kardexAvg) > 1e-6 || Math.abs(latest.avgCostAfter - r.kardexAvg) > 1e-6) {
+      skipped++;
+      continue;
+    }
+    await prisma.stockKardexEntry.create({
+      data: {
+        catalogItemId: s.catalogItemId,
+        type: "ZERO_COST_CORRECTION",
+        quantity: 0,
+        unitCost: r.correctAvg,
+        balanceAfter: latest.balanceAfter,
+        avgCostAfter: r.correctAvg,
+        declaredCostById: declaredById,
+        occurredAt: new Date(),
+      },
+    });
+    corrected++;
+  }
+  return { corrected, skipped };
+}
+
 // Confirmado 2026-09-21, pedido explícito del usuario (admin): productos
 // "esqueleto" que la importación de Just crea automáticamente para un
 // código que todavía no existe en DAFLOW (`pendingRegistration: true`,
@@ -796,7 +834,7 @@ async function replayCatalogItemKardex(catalogItemId: string): Promise<{ updates
       // SEED — en uno normal es la primera línea, así que da lo mismo.
       const seedCost = e.unitCost ?? 0;
       const seedBalance = balance + e.quantity;
-      avgCost = seedBalance > 0 && balance > 0 ? (balance * avgCost + e.quantity * seedCost) / seedBalance : seedCost;
+      avgCost = seedBalance > 0 && balance > 0 && avgCost > 0 ? (balance * avgCost + e.quantity * seedCost) / seedBalance : seedCost;
       balance = seedBalance;
       updates.push({ id: e.id, unitCost: e.unitCost, avgCostAfter: avgCost, balanceAfter: balance });
     } else if (e.type === "IN") {
@@ -813,11 +851,11 @@ async function replayCatalogItemKardex(catalogItemId: string): Promise<{ updates
         ? effectiveUnitCost({ unitCost: originalUnitCost, quantity: request.quantity, shippingIncluded: request.shippingIncluded, shippingCostTotal: request.shippingCostTotal })
         : avgCost;
       const newBalance = balance + e.quantity;
-      const newAvgCost = newBalance > 0 && balance > 0 ? (balance * avgCost + e.quantity * incomingCost) / newBalance : incomingCost;
+      const newAvgCost = newBalance > 0 && balance > 0 && avgCost > 0 ? (balance * avgCost + e.quantity * incomingCost) / newBalance : incomingCost;
       updates.push({ id: e.id, unitCost: incomingCost, avgCostAfter: newAvgCost, balanceAfter: newBalance });
       balance = newBalance;
       avgCost = newAvgCost;
-    } else if (e.type === "COST_DECLARATION") {
+    } else if (e.type === "COST_DECLARATION" || e.type === "ZERO_COST_CORRECTION") {
       // Declaración manual de costo (ver declareManualCost) — quantity
       // siempre 0, no hay flete que corregir, solo se re-arrastra el costo
       // declarado para que el recómputo no lo borre.
@@ -956,16 +994,16 @@ async function replayCatalogItemWithBackfill(catalogItemId: string, missing: Per
       // Se suma, no reemplaza — ver la misma nota en replayCatalogItemKardex.
       const seedCost = line.unitCost ?? 0;
       const seedBalance = balance + line.quantity;
-      avgCost = seedBalance > 0 && balance > 0 ? (balance * avgCost + line.quantity * seedCost) / seedBalance : seedCost;
+      avgCost = seedBalance > 0 && balance > 0 && avgCost > 0 ? (balance * avgCost + line.quantity * seedCost) / seedBalance : seedCost;
       balance = seedBalance;
       updates.push({ id: line.id, unitCost: line.unitCost, avgCostAfter: avgCost, balanceAfter: balance });
     } else if (line.type === "IN") {
       const incomingCost = line.unitCost ?? avgCost;
       const newBalance = balance + line.quantity;
-      avgCost = newBalance > 0 && balance > 0 ? (balance * avgCost + line.quantity * incomingCost) / newBalance : incomingCost;
+      avgCost = newBalance > 0 && balance > 0 && avgCost > 0 ? (balance * avgCost + line.quantity * incomingCost) / newBalance : incomingCost;
       updates.push({ id: line.id, unitCost: line.unitCost, avgCostAfter: avgCost, balanceAfter: newBalance });
       balance = newBalance;
-    } else if (line.type === "COST_DECLARATION") {
+    } else if (line.type === "COST_DECLARATION" || line.type === "ZERO_COST_CORRECTION") {
       // Declaración manual de costo (ver declareManualCost) — quantity
       // siempre 0, nunca mueve el saldo, solo fija el costo promedio desde
       // ese punto en adelante.

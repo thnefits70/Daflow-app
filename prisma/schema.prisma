@@ -1102,6 +1102,13 @@ enum StockMovementType {
   // conservan el costo con el que se valoraron ese día. El detalle (antes,
   // ahora, unidades corregidas, quién pidió) vive en PurchasePriceCorrection.
   PRICE_CORRECTION
+  // Pedido del usuario (CEO) 2026-10-02: unidades que entraron sin costo
+  // (devoluciones antes de la primera compra) se contaban a $0 y bajaban el
+  // promedio (ej. TV Stick $10 en vez de $12). Esta línea pone el promedio
+  // real (como si esas unidades hubieran costado lo de la compra real).
+  // quantity 0, unitCost = avgCostAfter = el costo corregido. La contadora
+  // pasa a FIFO el próximo año; mientras tanto el promedio no debe perder plata.
+  ZERO_COST_CORRECTION
 }
 
 model StockKardexEntry {
