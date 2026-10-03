@@ -1771,3 +1771,13 @@ export async function canActOnImprovementPlan(plan: { deptId: string; leaderId: 
   }
   return false;
 }
+
+// Pedido del usuario 2026-10-03: el costo en plata de las garantías (contra
+// el seguro del 6%) solo lo ven el admin y Nairoby (líder de Finanzas).
+export async function canViewWarrantyCost() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await getGuardUser(session.user.id);
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}

@@ -9,7 +9,8 @@ import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
 import { WeeklyTrendChart } from "./WeeklyTrendChart";
 import { CommissionProgressCard } from "./CommissionProgressCard";
-import { FillRateTile, ReturnProductsTile, ReturnRateTile, WarrantyMonthTile } from "./KpiTile";
+import { FillRateTile, ReturnProductsTile, ReturnRateTile, WarrantyCostTile, WarrantyMonthTile, WarrantyProductsTile } from "./KpiTile";
+import type { WarrantyCostMonth, WarrantyProductRow } from "@/lib/warrantyInsights";
 import type { TopReturnProducts } from "@/lib/returnRate";
 import { FillRateBreakdownCard } from "./FillRateBreakdownCard";
 import { AiSpendWidget } from "./AiSpendWidget";
@@ -46,6 +47,8 @@ export function Dashboard({
   warrantyMonthlyChart,
   warrantyReasonChart,
   warrantyReasonTrend = [],
+  warrantyProducts,
+  warrantyCost,
   storeFeedback,
   storeFeedbackTrend = [],
   storeFeedbackDetails,
@@ -67,6 +70,10 @@ export function Dashboard({
   warrantyMonthlyChart?: WarrantyMonthlyChart | null;
   warrantyReasonChart?: PieSlice[];
   warrantyReasonTrend?: WarrantyReasonTrendSeries[];
+  // Pedido del usuario 2026-10-03 — ver lib/warrantyInsights.ts. warrantyCost
+  // solo llega para admin y Nairoby.
+  warrantyProducts?: WarrantyProductRow[];
+  warrantyCost?: { current: WarrantyCostMonth; previous: WarrantyCostMonth | null } | null;
   storeFeedback?: StoreFeedbackAggregate | null;
   storeFeedbackTrend?: StoreFeedbackTrendPoint[];
   storeFeedbackDetails?: StoreFeedbackStoreDetail[];
@@ -156,6 +163,9 @@ export function Dashboard({
           {warrantyReasonChart && warrantyReasonChart.length > 0 && (
             <WarrantyReasonCard slices={warrantyReasonChart} trend={warrantyReasonTrend} />
           )}
+
+          {warrantyProducts && <WarrantyProductsTile rows={warrantyProducts} />}
+          {warrantyCost && <WarrantyCostTile current={warrantyCost.current} previous={warrantyCost.previous} />}
 
           {fillRateTrend && <FillRateTile trend={fillRateTrend} />}
           {returnRateTrend && <ReturnRateTile trend={returnRateTrend} />}

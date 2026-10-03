@@ -103,6 +103,51 @@ export function PieChart({
 
   const ranked = [...slices].map((s, i) => ({ ...s, i })).sort((a, b) => b.value - a.value);
 
+  // Pedido del usuario 2026-10-03: motivos de garantía separados en "Falla
+  // del producto" y "Error de bodega", cada grupo con su subtotal.
+  if (compact && slices.some((s) => s.group)) {
+    const groups: { key: string; label: string }[] = [
+      { key: "PRODUCTO", label: "Falla del producto" },
+      { key: "BODEGA", label: "Error de bodega" },
+      { key: "OTRO", label: "Otros" },
+    ];
+    const indexed = slices.map((s, i) => ({ ...s, i }));
+    return (
+      <div className="flex items-center gap-3">
+        {pieSvg}
+        <div className="flex-1 min-w-0 text-[10.5px] text-steel leading-relaxed">
+          {groups.map((g) => {
+            const items = indexed.filter((s) => (s.group ?? "OTRO") === g.key);
+            if (items.length === 0) return null;
+            const sub = items.reduce((a, s) => a + s.value, 0);
+            return (
+              <div key={g.key} className="mb-1 last:mb-0">
+                <div className="flex items-center justify-between gap-2 font-semibold text-ink">
+                  <span className="truncate">{g.label}</span>
+                  <span className="font-mono shrink-0">
+                    {sub} · {Math.round((sub / total) * 100)}%
+                  </span>
+                </div>
+                {items.map((s) => (
+                  <div key={s.label} className="flex items-center justify-between gap-2 pl-2">
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: PALETTE[s.i % PALETTE.length] }} />
+                      <span className="truncate">{s.label}</span>
+                    </span>
+                    <span className="font-mono text-ink shrink-0 inline-flex items-center gap-1">
+                      {s.value} · {Math.round((s.value / total) * 100)}%
+                      <TrendIcon trend={s.trend} />
+                    </span>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   if (compact) {
     const shown = ranked.slice(0, 4);
     const restCount = ranked.length - shown.length;

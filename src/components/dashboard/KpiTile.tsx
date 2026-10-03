@@ -12,6 +12,7 @@ import {
 import { PieChart } from "./PieChart";
 import type { WeeklyTrend, WarrantyMonthlyChart } from "@/lib/dashboard";
 import type { TopReturnProducts } from "@/lib/returnRate";
+import type { WarrantyCostMonth, WarrantyProductRow } from "@/lib/warrantyInsights";
 
 // Confirmado 2026-08-31: pedido explícito del usuario — quien vea la
 // tarjetita chiquita (no solo la tarjeta grande de desglose) debe poder
@@ -396,10 +397,87 @@ export function ReturnProductsTile({ data, href }: { data: TopReturnProducts; hr
 }
 
 export function WarrantyMonthTile({ chart, emptyMessage }: { chart: WarrantyMonthlyChart; emptyMessage: string }) {
+  // Pedido del usuario 2026-10-03: cantidad + % de los pedidos sin decimales,
+  // y si mejoró o empeoró contra el mes anterior (menos es mejor).
+  const rate = chart.rate;
+  const prev = chart.prevRatePct;
   return (
     <KpiTile kicker="Garantías del mes" value={String(chart.total)} period={`${formatMonthShort(chart.month)} · ingresadas`}>
+      {rate && (
+        <div className="text-[11px] text-steel mb-2 -mt-1.5">
+          <b className="text-ink">{rate.ratePct === 0 && chart.total > 0 ? "menos de 1%" : `${rate.ratePct}%`}</b> de los pedidos ({rate.orders.toLocaleString("es-EC")} pedidos)
+          {prev != null && prev !== rate.ratePct && (
+            <span className={`ml-1 font-semibold ${rate.ratePct < prev ? "text-teal" : "text-red"}`}>
+              {rate.ratePct < prev ? "↓ mejoró" : "↑ empeoró"} (antes {prev}%)
+            </span>
+          )}
+          {prev != null && prev === rate.ratePct && <span className="ml-1">· igual que el mes anterior</span>}
+        </div>
+      )}
       <PieChart compact title="Garantías del mes" slices={chart.slices} emptyMessage={emptyMessage} />
     </KpiTile>
+  );
+}
+
+// Pedido del usuario 2026-10-03: productos con más garantías (últimos 30
+// días, cortes + locales), ordenados por fallas del producto — para saber
+// cuál reclamar al proveedor o dejar de comprar.
+export function WarrantyProductsTile({ rows }: { rows: WarrantyProductRow[] }) {
+  return (
+    <div className="bg-surface border border-rule rounded-lg p-4">
+      <div className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-steel mb-2">Productos con más garantías</div>
+      <div className="text-[10.5px] text-steel mb-2.5">Últimos 30 días · ordenados por fallas del producto</div>
+      {rows.length === 0 ? (
+        <div className="text-[11.5px] text-steel">No hubo garantías en los últimos 30 días.</div>
+      ) : (
+        <div className="flex flex-col divide-y divide-rule">
+          {rows.map((r) => (
+            <div key={r.catalogItemId} className="flex items-center justify-between gap-2 py-1.5 text-[12px]">
+              <span className="min-w-0 truncate">{r.name}</span>
+              <span className="shrink-0 text-steel text-[11px]">
+                <b className={r.product > 0 ? "text-red" : "text-ink"}>{r.product}</b> falla{r.product === 1 ? "" : "s"}
+                {r.pct != null && r.product > 0 && <> ({r.pct === 0 ? "menos de 1%" : `${r.pct}%`} de {r.out} vendidas)</>}
+                {r.bodega > 0 && <> · {r.bodega} de bodega</>}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function usd(n: number) {
+  return `${n.toLocaleString("es-EC", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Pedido del usuario 2026-10-03: cuánto cuestan las garantías contra lo que
+// guarda el seguro del 6% — SOLO admin y Nairoby (la página no lo manda a
+// nadie más).
+export function WarrantyCostTile({ current, previous }: { current: WarrantyCostMonth; previous: WarrantyCostMonth | null }) {
+  const left = current.reserve - current.total;
+  return (
+    <div className="bg-surface border border-rule rounded-lg p-4">
+      <div className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-steel mb-2">Costo de garantías vs seguro 6%</div>
+      <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
+        <span className="font-display text-[22px] font-bold leading-none">{usd(current.total)}</span>
+        <span className="text-[11px] text-steel">de {usd(current.reserve)} guardados</span>
+      </div>
+      <div className="text-[10.5px] text-steel mb-2.5">{formatMonthShort(current.month)} · {current.warranties} garantía{current.warranties === 1 ? "" : "s"} · solo admin y Finanzas lo ven</div>
+      <div className="text-[11.5px] flex flex-col gap-0.5">
+        <div className="flex justify-between"><span className="text-steel">Producto</span><span>{usd(current.productCost)}</span></div>
+        <div className="flex justify-between"><span className="text-steel">Fletes (promedio $6)</span><span>{usd(current.freight)}</span></div>
+        <div className={`flex justify-between font-semibold ${left >= 0 ? "text-teal" : "text-red"}`}>
+          <span>{left >= 0 ? "Sobra del seguro" : "Falta (el 6% no alcanzó)"}</span>
+          <span>{usd(Math.abs(left))}</span>
+        </div>
+      </div>
+      {previous && (
+        <div className="text-[10.5px] text-steel mt-2 pt-2 border-t border-dashed border-rule">
+          {formatMonthShort(previous.month)}: {usd(previous.total)} de {usd(previous.reserve)} guardados
+        </div>
+      )}
+    </div>
   );
 }
 

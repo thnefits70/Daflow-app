@@ -18,7 +18,8 @@ import { getStoreFeedbackAggregate, getStoreFeedbackTrend, getStoreFeedbackStore
 import { getDuePeriodicReminders } from "@/lib/periodicReminders";
 import { getMyLearningPaths, summarizeMyLearningPaths } from "@/lib/learningPaths";
 import { EmployeeHome } from "@/components/dashboard/EmployeeHome";
-import { canViewInventoryKpisHome, canJustifyFillRate, canManageStoreFeedback, canUseWeeklyCheckin, canViewReturnRateDetail } from "@/lib/guards";
+import { canViewInventoryKpisHome, canJustifyFillRate, canManageStoreFeedback, canUseWeeklyCheckin, canViewReturnRateDetail, canViewWarrantyCost } from "@/lib/guards";
+import { getTopWarrantyProducts, getWarrantyCostOverview } from "@/lib/warrantyInsights";
 import { getInventoryKpisData } from "@/lib/inventoryKpis";
 import { getActiveImprovementPlanForCollaborator } from "@/lib/improvementPlan";
 
@@ -44,6 +45,7 @@ export default async function AreaHomePage() {
     warrantyMonthlyChart,
     warrantyReasonChart,
     warrantyReasonTrend,
+    warrantyProducts,
     storeFeedback,
     storeFeedbackTrend,
     duePeriodicReminders,
@@ -71,6 +73,7 @@ export default async function AreaHomePage() {
     getWarrantyMonthlyChart(),
     getWarrantyReasonChart(),
     getWarrantyReasonMonthlyTrend(),
+    getTopWarrantyProducts(),
     getStoreFeedbackAggregate(),
     getStoreFeedbackTrend(),
     getDuePeriodicReminders({ deptId, userId: session.user.id }),
@@ -81,10 +84,13 @@ export default async function AreaHomePage() {
   ]);
   if (!dept) redirect("/api/auth/force-logout");
 
-  const [canJustifyFillRateFlag, canViewReturnDetail] = await Promise.all([
+  const [canJustifyFillRateFlag, canViewReturnDetail, canSeeWarrantyCost] = await Promise.all([
     fillRateBreakdown ? canJustifyFillRate() : Promise.resolve(false),
     canViewReturnRateDetail(),
+    canViewWarrantyCost(),
   ]);
+  // Pedido del usuario 2026-10-03: solo admin y Nairoby ven el costo.
+  const warrantyCost = canSeeWarrantyCost ? await getWarrantyCostOverview() : null;
   // Confirmado 2026-08-31: pedido explícito del usuario — acceso directo
   // en Inicio, un clic, al chat con Mary (ver WeeklyCheckinPanel, montada
   // globalmente en area/layout.tsx solo para líderes de un área con
@@ -119,6 +125,8 @@ export default async function AreaHomePage() {
       warrantyMonthlyChart={warrantyMonthlyChart}
       warrantyReasonChart={warrantyReasonChart}
       warrantyReasonTrend={warrantyReasonTrend}
+      warrantyProducts={warrantyProducts}
+      warrantyCost={warrantyCost}
       storeFeedback={storeFeedback}
       storeFeedbackTrend={storeFeedbackTrend}
       storeFeedbackDetails={storeFeedbackDetails}

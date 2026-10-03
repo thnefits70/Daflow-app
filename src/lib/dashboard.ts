@@ -8,6 +8,7 @@ import { isAutoFillRateWeek, isoWeekOf } from "@/lib/autoFillRate";
 import { brandLabel, sortBrands } from "@/lib/brandLabels";
 import { isRocketCode } from "@/lib/dropiGuidesPdf";
 import { NO_BRAND } from "@/lib/fulfillmentGuides";
+import { getLocalWarrantyReasonCounts, getWarrantyRate, previousMonth, warrantyReasonGroup, type WarrantyReasonGroup } from "@/lib/warrantyInsights";
 
 function pct(a: number, b: number) {
   return b === 0 ? 0 : Math.round((a / b) * 100);
@@ -476,8 +477,30 @@ export async function getStockoutWeeks(): Promise<StockoutWeekPoint[]> {
 // the most recently loaded month against the month before it — a rising
 // share means that reason is becoming relatively more common, not just that
 // overall volume grew. Left undefined until at least two months of data exist.
-export type PieSlice = { label: string; value: number; trend?: "up" | "down" };
-export type WarrantyMonthlyChart = { month: string; total: number; slices: PieSlice[] };
+export type PieSlice = { label: string; value: number; trend?: "up" | "down"; group?: WarrantyReasonGroup };
+// rate/prevRatePct: garantías ÷ pedidos del mes en % sin decimales (pedido
+// del usuario 2026-10-03) — solo meses automáticos (desde octubre 2026).
+export type WarrantyMonthlyChart = { month: string; total: number; slices: PieSlice[]; rate?: { orders: number; ratePct: number } | null; prevRatePct?: number | null };
+
+// Pedido del usuario 2026-10-03: las garantías locales (GL) no suman al total
+// pero sus motivos sí se suman a los gráficos de motivos. Devuelve las mismas
+// filas de conteo con las de las locales agregadas.
+async function withLocalWarrantyCounts<T extends { month: string; count: number; category: { name: string } }>(counts: T[], months: string[]): Promise<{ month: string; count: number; category: { name: string } }[]> {
+  const local = await getLocalWarrantyReasonCounts(months);
+  const out: { month: string; count: number; category: { name: string } }[] = counts.map((c) => ({ month: c.month, count: c.count, category: { name: c.category.name } }));
+  for (const [month, byName] of local) for (const [name, count] of byName) out.push({ month, count, category: { name } });
+  return out;
+}
+
+// Falla del producto primero, luego error de bodega, luego otros; dentro de
+// cada grupo de mayor a menor — el mismo orden da los mismos colores en la
+// torta y en la tendencia.
+function groupedOrder(slices: PieSlice[]): PieSlice[] {
+  const rank: Record<WarrantyReasonGroup, number> = { PRODUCTO: 0, BODEGA: 1, OTRO: 2 };
+  return slices
+    .map((sl) => ({ ...sl, group: warrantyReasonGroup(sl.label) }))
+    .sort((a, b) => rank[a.group] - rank[b.group] || b.value - a.value);
+}
 
 // Gráfico 1 de KPI de Garantías — la torta del mes más reciente cargado por
 // Nairoby: cuántas garantías de cada categoría, sobre el total ingresado ese mes.
@@ -485,15 +508,29 @@ export async function getWarrantyMonthlyChart(): Promise<WarrantyMonthlyChart | 
   const latest = await prisma.warrantyMonthTotal.findFirst({ orderBy: { month: "desc" } });
   if (!latest) return null;
 
-  const counts = await prisma.warrantyCategoryMonthCount.findMany({
-    where: { month: latest.month },
-    include: { category: { select: { name: true } } },
-  });
+  const counts = await withLocalWarrantyCounts(
+    await prisma.warrantyCategoryMonthCount.findMany({
+      where: { month: latest.month },
+      include: { category: { select: { name: true } } },
+    }),
+    [latest.month]
+  );
+  const byName = new Map<string, number>();
+  for (const c of counts) byName.set(c.category.name, (byName.get(c.category.name) ?? 0) + c.count);
+
+  const prevMonth = previousMonth(latest.month);
+  const [rate, prevTotal] = await Promise.all([
+    getWarrantyRate(latest.month, latest.total),
+    prisma.warrantyMonthTotal.findUnique({ where: { month: prevMonth }, select: { total: true } }),
+  ]);
+  const prevRate = prevTotal ? await getWarrantyRate(prevMonth, prevTotal.total) : null;
 
   return {
     month: latest.month,
     total: latest.total,
-    slices: counts.map((c) => ({ label: c.category.name, value: c.count })),
+    slices: groupedOrder([...byName.entries()].map(([label, value]) => ({ label, value }))),
+    rate,
+    prevRatePct: prevRate?.ratePct ?? null,
   };
 }
 
@@ -513,10 +550,13 @@ function last12Months(): string[] {
 export async function getWarrantyReasonChart(): Promise<PieSlice[]> {
   const months = last12Months();
 
-  const counts = await prisma.warrantyCategoryMonthCount.findMany({
-    where: { month: { in: months } },
-    include: { category: { select: { name: true } } },
-  });
+  const counts = await withLocalWarrantyCounts(
+    await prisma.warrantyCategoryMonthCount.findMany({
+      where: { month: { in: months } },
+      include: { category: { select: { name: true } } },
+    }),
+    months
+  );
   if (counts.length === 0) return [];
 
   const byCategory = new Map<string, number>();
@@ -549,7 +589,7 @@ export async function getWarrantyReasonChart(): Promise<PieSlice[]> {
     }
   }
 
-  return [...byCategory.entries()]
+  return groupedOrder([...byCategory.entries()]
     .map(([label, value]) => {
       let trend: "up" | "down" | undefined;
       if (latestTotal > 0 && prevTotal > 0) {
@@ -559,8 +599,7 @@ export async function getWarrantyReasonChart(): Promise<PieSlice[]> {
         else if (latestShare < prevShare) trend = "down";
       }
       return { label, value, trend };
-    })
-    .sort((a, b) => b.value - a.value);
+    }));
 }
 
 export type WarrantyReasonTrendSeries = {
@@ -580,10 +619,13 @@ export type WarrantyReasonTrendSeries = {
 export async function getWarrantyReasonMonthlyTrend(): Promise<WarrantyReasonTrendSeries[]> {
   const months = last12Months();
 
-  const counts = await prisma.warrantyCategoryMonthCount.findMany({
-    where: { month: { in: months } },
-    include: { category: { select: { name: true } } },
-  });
+  const counts = await withLocalWarrantyCounts(
+    await prisma.warrantyCategoryMonthCount.findMany({
+      where: { month: { in: months } },
+      include: { category: { select: { name: true } } },
+    }),
+    months
+  );
   if (counts.length === 0) return [];
 
   const distinctMonths = [...new Set(counts.map((c) => c.month))].sort();

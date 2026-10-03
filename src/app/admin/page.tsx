@@ -12,6 +12,7 @@ import {
 } from "@/lib/dashboard";
 import { getStoreFeedbackAggregate, getStoreFeedbackTrend, getStoreFeedbackStoreDetails } from "@/lib/storeFeedback";
 import { getTopReturnProducts } from "@/lib/returnRate";
+import { getTopWarrantyProducts, getWarrantyCostOverview } from "@/lib/warrantyInsights";
 import { getTeamLearningPathResults } from "@/lib/learningPaths";
 import { getAiSpendOverview } from "@/lib/aiUsage";
 import { getPurchaseMerchandisePaymentsShortcut } from "@/lib/pendingTasks";
@@ -24,7 +25,7 @@ import { Dashboard } from "@/components/dashboard/Dashboard";
 // líder ya ve los suyos en su propio Inicio (`getDuePeriodicReminders({deptId})`
 // en area/page.tsx) — el admin ya no ve ninguno aquí.
 export default async function AdminHomePage() {
-  const [data, weeklyTrend, fillRateTrend, fillRateBreakdown, returnRateTrend, returnProducts, stockoutWeeks, warrantyMonthlyChart, warrantyReasonChart, warrantyReasonTrend, storeFeedback, storeFeedbackTrend, learningPathResults, aiSpend, commissionProgress, merchandisePayments] =
+  const [data, weeklyTrend, fillRateTrend, fillRateBreakdown, returnRateTrend, returnProducts, stockoutWeeks, warrantyMonthlyChart, warrantyReasonChart, warrantyReasonTrend, warrantyProducts, warrantyCost, storeFeedback, storeFeedbackTrend, learningPathResults, aiSpend, commissionProgress, merchandisePayments] =
     await Promise.all([
       getDashboardData(),
       getWeeklyTrend(),
@@ -36,6 +37,8 @@ export default async function AdminHomePage() {
       getWarrantyMonthlyChart(),
       getWarrantyReasonChart(),
       getWarrantyReasonMonthlyTrend(),
+      getTopWarrantyProducts(),
+      getWarrantyCostOverview(),
       getStoreFeedbackAggregate(),
       getStoreFeedbackTrend(),
       getTeamLearningPathResults(),
@@ -57,6 +60,8 @@ export default async function AdminHomePage() {
       warrantyMonthlyChart={warrantyMonthlyChart}
       warrantyReasonChart={warrantyReasonChart}
       warrantyReasonTrend={warrantyReasonTrend}
+      warrantyProducts={warrantyProducts}
+      warrantyCost={warrantyCost}
       storeFeedback={storeFeedback}
       storeFeedbackTrend={storeFeedbackTrend}
       storeFeedbackDetails={storeFeedbackDetails}
