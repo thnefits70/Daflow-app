@@ -10,6 +10,7 @@ import {
   returnRateStatus,
 } from "./WeeklyTrendChart";
 import { PieChart } from "./PieChart";
+import { KpiInfoTip } from "@/components/shared/KpiInfoTip";
 import type { WeeklyTrend, WarrantyMonthlyChart } from "@/lib/dashboard";
 import type { TopReturnProducts } from "@/lib/returnRate";
 import type { WarrantyCostMonth, WarrantyProductRow } from "@/lib/warrantyInsights";
@@ -454,27 +455,42 @@ function usd(n: number) {
 // Pedido del usuario 2026-10-03: cuánto cuestan las garantías contra lo que
 // guarda el seguro del 6% — SOLO admin y Nairoby (la página no lo manda a
 // nadie más).
+// 2026-10-03 (pedido del usuario): se muestra como PÉRDIDA (en rojo) para que
+// quien lo vea se alerte; el 6% queda solo como referencia de presupuesto.
 export function WarrantyCostTile({ current, previous }: { current: WarrantyCostMonth; previous: WarrantyCostMonth | null }) {
-  const left = current.reserve - current.total;
+  const usedPct = current.reserve > 0 ? Math.round((current.total / current.reserve) * 100) : null;
+  const over = current.total > current.reserve;
   return (
     <div className="bg-surface border border-rule rounded-lg p-4">
-      <div className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-steel mb-2">Costo de garantías vs seguro 6%</div>
+      <div className="flex items-center gap-1.5 flex-wrap mb-2">
+        <span className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-steel">Pérdidas por garantías</span>
+        <KpiInfoTip>
+          <b className="text-ink">Cuánto dinero se perdió este mes por garantías:</b> el producto nuevo que salió de bodega para reemplazar el dañado + los fletes de enviar y recoger. Cada garantía es plata que no regresa.
+          <br />
+          <br />
+          <b className="text-ink">Presupuesto:</b> cada precio de Dropi lleva un 6% extra pensado para cubrir garantías. El presupuesto es ese 6% sobre lo que se vendió en el mes. Si las pérdidas pasan el presupuesto, las garantías están costando más de lo que se cobra por ellas.
+        </KpiInfoTip>
+      </div>
       <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
-        <span className="font-display text-[22px] font-bold leading-none">{usd(current.total)}</span>
-        <span className="text-[11px] text-steel">de {usd(current.reserve)} guardados</span>
+        <span className={`font-display text-[22px] font-bold leading-none ${current.total > 0 ? "text-red" : ""}`}>{usd(current.total)}</span>
+        <span className="text-[11px] text-steel">perdidos este mes</span>
       </div>
       <div className="text-[10.5px] text-steel mb-2.5">{formatMonthShort(current.month)} · {current.warranties} garantía{current.warranties === 1 ? "" : "s"} · solo admin y Finanzas lo ven</div>
       <div className="text-[11.5px] flex flex-col gap-0.5">
-        <div className="flex justify-between"><span className="text-steel">Producto</span><span>{usd(current.productCost)}</span></div>
+        <div className="flex justify-between"><span className="text-steel">Producto reemplazado</span><span>{usd(current.productCost)}</span></div>
         <div className="flex justify-between"><span className="text-steel">Fletes (promedio $6)</span><span>{usd(current.freight)}</span></div>
-        <div className={`flex justify-between font-semibold ${left >= 0 ? "text-teal" : "text-red"}`}>
-          <span>{left >= 0 ? "Sobra del seguro" : "Falta (el 6% no alcanzó)"}</span>
-          <span>{usd(Math.abs(left))}</span>
+        <div className={`flex justify-between font-semibold ${current.total > 0 ? "text-red" : "text-ink"}`}>
+          <span>Total en pérdidas</span>
+          <span>{usd(current.total)}</span>
         </div>
+      </div>
+      <div className={`text-[10.5px] mt-2 ${over ? "text-red font-semibold" : "text-steel"}`}>
+        Presupuesto del 6%: {usd(current.reserve)}
+        {usedPct != null && (over ? ` · se pasó por ${usd(current.total - current.reserve)}` : ` · usado ${usedPct}%`)}
       </div>
       {previous && (
         <div className="text-[10.5px] text-steel mt-2 pt-2 border-t border-dashed border-rule">
-          {formatMonthShort(previous.month)}: {usd(previous.total)} de {usd(previous.reserve)} guardados
+          {formatMonthShort(previous.month)}: {usd(previous.total)} en pérdidas (presupuesto {usd(previous.reserve)})
         </div>
       )}
     </div>
