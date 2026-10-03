@@ -48,6 +48,9 @@ export type WarrantySource = {
   // Códigos de la guía que no están vinculados a ningún producto de
   // INVESTOCK (2026-10-02, los usa el Reingreso por escaneo de guía).
   unresolved?: { code: string; name: string; quantity: number }[];
+  // Códigos de la etiqueta que no son nada físico de bodega (ni producto ni
+  // provisional en el corte): se ignoran en silencio.
+  notShipped?: number;
 };
 
 export type LookupResult = { ok: true; source: WarrantySource } | { ok: false; error: string };
@@ -425,6 +428,7 @@ export async function lookupGuide(guide: string, opts: { productsOnly?: boolean 
     else byItem.set(item.id, { catalogItemId: item.id, name: item.name, code: item.justCode, photo: item.photos[0] ?? null, quantity: qty, alreadyUsed: 0 });
   };
   const unresolved: { code: string; name: string; quantity: number }[] = [];
+  let notShipped = 0;
   // Lo que salió de verdad manda sobre el vínculo de hoy (caso 2026-10-03,
   // guía 189872130: el 29/09 el código 137853 salió como 1 aire acondicionado
   // y después se volvió combo con soporte + mini ventilador). Si en el corte
@@ -450,7 +454,7 @@ export async function lookupGuide(guide: string, opts: { productsOnly?: boolean 
       // Ni producto ni provisional en el corte = no salió nada físico (ej.
       // 50269 "Envío prioritario"; 168766 Mesa Auxiliar, que nunca se compró
       // — confirmado por el usuario 2026-10-03). No se agrega a la devolución.
-      warnings.push(`"${r.name}" (código ${r.code}) no salió en el corte: no se agrega.`);
+      notShipped++;
     } else {
       warnings.push(`El código ${r.code} (${r.name}) no está vinculado a un producto de INVESTOCK.`);
       unresolved.push({ code: r.code, name: r.name, quantity: r.quantity });
@@ -482,6 +486,7 @@ export async function lookupGuide(guide: string, opts: { productsOnly?: boolean 
       lines: [...byItem.values()],
       warnings,
       unresolved,
+      notShipped,
     },
   };
 }
