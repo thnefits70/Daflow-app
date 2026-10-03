@@ -433,6 +433,9 @@ export async function lookupGuide(guide: string, opts: { productsOnly?: boolean 
     where: { batchId: row.batchId, warrantyGuide: null, OR: [{ sourceCode: { in: resolved.map((r) => r.code) } }, { fromComboCode: { in: resolved.map((r) => r.code) } }] },
     select: { sourceCode: true, fromComboCode: true, catalogItem: { select: { id: true, name: true, photos: true, justCode: true } } },
   });
+  const provisionalCodes = new Set(
+    (await prisma.fulfillmentProvisionalLine.findMany({ where: { batchId: row.batchId, code: { in: resolved.map((r) => r.code) } }, select: { code: true } })).map((p) => p.code)
+  );
   for (const r of resolved) {
     const asCombo = corteItems.some((i) => i.fromComboCode === r.code);
     const plain = corteItems.filter((i) => i.sourceCode === r.code && !i.fromComboCode);
@@ -443,7 +446,12 @@ export async function lookupGuide(guide: string, opts: { productsOnly?: boolean 
     }
     if (r.resolution.kind === "product") add(r.resolution.catalogItem, r.quantity);
     else if (r.resolution.kind === "combo") for (const comp of r.resolution.components) add(comp.catalogItem, comp.quantity * r.quantity);
-    else {
+    else if (!provisionalCodes.has(r.code)) {
+      // Ni producto ni provisional en el corte = no salió nada físico (ej.
+      // 50269 "Envío prioritario"; 168766 Mesa Auxiliar, que nunca se compró
+      // — confirmado por el usuario 2026-10-03). No se agrega a la devolución.
+      warnings.push(`"${r.name}" (código ${r.code}) no salió en el corte: no se agrega.`);
+    } else {
       warnings.push(`El código ${r.code} (${r.name}) no está vinculado a un producto de INVESTOCK.`);
       unresolved.push({ code: r.code, name: r.name, quantity: r.quantity });
     }

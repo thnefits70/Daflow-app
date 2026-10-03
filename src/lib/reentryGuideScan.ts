@@ -84,6 +84,9 @@ export async function scanGuideIntoBatch(params: { batchId: string; raw: string;
   if (!looked.ok) return { ok: false, reason: `${looked.error} Regístrala a mano.`, allowManual: true };
   const src = looked.source;
   const unresolved = src.unresolved ?? [];
+  if (src.lines.length === 0 && unresolved.length === 0 && src.warnings.some((w) => w.includes("no salió en el corte"))) {
+    return { ok: false, reason: `La guía ${row.guideNumber} no llevó ningún producto que haya salido de bodega (${src.warnings.join(" ")}). Si llegó algo físico, regístralo a mano.`, allowManual: true };
+  }
   if (src.lines.length === 0 && unresolved.length === 0) {
     return { ok: false, reason: `No se pudo leer qué productos traía la guía ${row.guideNumber} en el PDF guardado del corte. Regístrala a mano.`, allowManual: true };
   }
