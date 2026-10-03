@@ -327,6 +327,19 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
                             El motorizado recoge el producto dañado y lo trae a bodega
                           </label>
                         )}
+                        {/* Pedido del usuario 2026-10-02: recoger cuesta un flete aparte —
+                            DAFLOW recomienda según el costo real del producto. */}
+                        {(st.reason === "MAL_FUNCIONAMIENTO" || st.reason === "PRODUCTO_ROTO") && l.pickupMinQty != null && (
+                          Number(st.qty) >= l.pickupMinQty ? (
+                            <div className="text-[12px] text-teal flex gap-1">
+                              <CheckCircle2 size={13} className="shrink-0 mt-0.5" /> Conviene recogerlo: el producto vale más que el flete de recogida.
+                            </div>
+                          ) : (
+                            <div className="text-[12px] text-gold flex gap-1">
+                              <AlertTriangle size={13} className="shrink-0 mt-0.5" /> No conviene recogerlo: el flete de recogida cuesta más que el producto. Recógelo solo si crees que el producto puede estar bien o para cambiarlo con el proveedor.
+                            </div>
+                          )
+                        )}
                       </div>
                     )}
                   </div>

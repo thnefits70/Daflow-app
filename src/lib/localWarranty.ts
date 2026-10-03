@@ -22,7 +22,10 @@ import {
 // cantidad — el asesor no los escribe, para no equivocarse, y nunca puede
 // mandar más de lo que decía el original.
 
-export type WarrantySourceLine = { catalogItemId: string; name: string; code: string | null; photo: string | null; quantity: number; alreadyUsed: number };
+// pickupMinQty: desde cuántas unidades conviene recoger el producto dañado
+// (ver WARRANTY_PICKUP_FREIGHT_AVG); null = no se conoce el costo. Lo pone
+// la ruta de búsqueda — el asesor ve solo la recomendación, no el costo.
+export type WarrantySourceLine = { catalogItemId: string; name: string; code: string | null; photo: string | null; quantity: number; alreadyUsed: number; pickupMinQty?: number | null };
 
 export type WarrantySource = {
   kind: "GUIDE" | "SALE";
