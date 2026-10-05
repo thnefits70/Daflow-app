@@ -434,7 +434,7 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
       ownerId: r.requestedById,
       title: `📦 Pedido sin llegar hace ${r.days} días — pregunta al proveedor`,
       body: `${r.name} (${r.quantity} un.) · ${r.supplierName} — todavía no llega a bodega.`,
-      url: LEFT_BEHIND_HREF,
+      url: OVERDUE_ORDERS_HREF,
     });
   }
 
@@ -500,7 +500,7 @@ export async function getPurchaseLinesOverdue(requestedById?: string): Promise<(
         { status: "APPROVED", supplier: { paymentMode: "CREDITO" }, reviewedAt: { lt: cutoff } },
       ],
     },
-    select: { id: true, groupId: true, quantity: true, requestedById: true, paidAt: true, reviewedAt: true, catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
+    select: { id: true, groupId: true, quantity: true, requestedById: true, requestedBy: { select: { name: true } }, paidAt: true, reviewedAt: true, catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
   });
   if (rows.length === 0) return [];
   const groupsWithReceipt = new Set(
@@ -520,19 +520,23 @@ export async function getPurchaseLinesOverdue(requestedById?: string): Promise<(
         quantity: r.quantity,
         supplierName: r.supplier?.name ?? "proveedor",
         requestedById: r.requestedById,
+        requestedByName: r.requestedBy?.name ?? null,
         since,
         days: Math.floor((Date.now() - since.getTime()) / (24 * 60 * 60 * 1000)),
       };
     });
 }
 
-export const LEFT_BEHIND_HREF = "/area/workspace?tab=compras&ptab=mias";
+export const OVERDUE_ORDERS_HREF = "/area/workspace?tab=compras&ptab=mias";
+// Pedido de Jariel 2026-10-05: lo que no llegó con el resto se coordina desde
+// Reportes urgentes (crédito a favor, devolución del dinero o que lo envíen).
+export const LEFT_BEHIND_HREF = "/area/workspace?tab=compras&ptab=urgentes";
 // Pedido del usuario 2026-10-05: Inventario tiene hasta 24 h para registrar
 // lo que falta (llega en otro bulto, se cuenta después); si no, recién ahí
 // pasa a Jariel para que lo gestione con el proveedor.
 const LEFT_BEHIND_GRACE_MS = 24 * 60 * 60 * 1000;
 
-export type PurchaseLineLeftBehind = { id: string; groupId: string; name: string; quantity: number; supplierName: string; requestedById: string | null; since: Date };
+export type PurchaseLineLeftBehind = { id: string; groupId: string; name: string; quantity: number; supplierName: string; requestedById: string | null; requestedByName: string | null; since: Date };
 
 // Pedido del usuario 2026-10-05 (caso candado de Zheng wu, 2 oct): Inventario
 // recibió parte del pedido y el producto que no vino quedó "Pagada" sin
@@ -548,7 +552,7 @@ export async function getPurchaseLinesLeftBehind(requestedById?: string): Promis
       urgentReports: { none: {} },
       OR: [{ status: "PAID" }, { status: "APPROVED", supplier: { paymentMode: "CREDITO" } }],
     },
-    select: { id: true, groupId: true, quantity: true, requestedById: true, catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
+    select: { id: true, groupId: true, quantity: true, requestedById: true, requestedBy: { select: { name: true } }, catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
   });
   if (waiting.length === 0) return [];
 
@@ -572,6 +576,7 @@ export async function getPurchaseLinesLeftBehind(requestedById?: string): Promis
       quantity: w.quantity,
       supplierName: w.supplier?.name ?? "proveedor",
       requestedById: w.requestedById,
+      requestedByName: w.requestedBy?.name ?? null,
       since: firstReceived.get(w.groupId)!,
     }));
 }

@@ -19,6 +19,7 @@ type ResolutionStatus = "PENDING" | "COMPLETED" | "CANCELLED";
 // resolutionLabel más abajo).
 type UiResolutionType = ResolutionType | "MISSING_DELIVERY";
 type ShortReceipt = { id: string; name: string; supplierName: string; quantity: number; receivedQuantity: number; missing: number; receivedAt: string | null; requestedByName: string | null };
+type LeftBehind = { id: string; name: string; supplierName: string; quantity: number; since: string; requestedByName: string | null };
 
 type ResolutionDraftData = { resType: UiResolutionType; resQty: string; resDueDate: string; resNote: string; resProofUrl: string; resProofName: string };
 function isResolutionDraftEmpty(d: ResolutionDraftData) {
@@ -282,16 +283,21 @@ export function PurchaseUrgentReportsPanel({
   // reclamaron (ver getShortReceiptsUnclaimed).
   const [shortReceipts, setShortReceipts] = useState<ShortReceipt[]>([]);
   const [confirmClaimId, setConfirmClaimId] = useState<string | null>(null);
+  // Pedido de Jariel 2026-10-05: lo que no llegó con el resto del pedido (ver
+  // getPurchaseLinesLeftBehind) — se abre el reclamo y abajo se elige crédito
+  // a favor, devolución del dinero o que el proveedor lo envíe.
+  const [leftBehind, setLeftBehind] = useState<LeftBehind[]>([]);
 
   function load() {
     fetch("/api/purchase-requests/urgent-reports").then((r) => (r.ok ? r.json() : [])).then(setReports).catch(() => setReports([]));
     fetch("/api/purchase-requests/short-receipts").then((r) => (r.ok ? r.json() : [])).then(setShortReceipts).catch(() => setShortReceipts([]));
+    fetch("/api/purchase-requests/left-behind").then((r) => (r.ok ? r.json() : [])).then(setLeftBehind).catch(() => setLeftBehind([]));
   }
 
-  async function openShortReceiptClaim(requestId: string) {
+  async function openShortReceiptClaim(requestId: string, kind: "short-receipt-claim" | "left-behind-claim" = "short-receipt-claim") {
     setBusy(true);
     setErr("");
-    const res = await fetch(`/api/purchase-requests/${requestId}/short-receipt-claim`, { method: "POST" });
+    const res = await fetch(`/api/purchase-requests/${requestId}/${kind}`, { method: "POST" });
     setBusy(false);
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo abrir el reclamo."); return; }
@@ -502,6 +508,42 @@ export function PurchaseUrgentReportsPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      {leftBehind.length > 0 && (
+        <div className="bg-surface border border-red/40 rounded-md p-4">
+          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2 text-red">
+            <AlertTriangle size={14} /> Mercadería que no llegó con el resto del pedido ({leftBehind.length})
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {leftBehind.map((l) => (
+              <div key={l.id} className="bg-cloud rounded-md p-3 text-[12px]">
+                <div className="font-semibold">{l.name}</div>
+                <div className="text-steel text-[11.5px] mb-1.5">
+                  {l.supplierName} — no llegaron las <b>{l.quantity} un.</b> · lo demás se recibió {formatDateTime(l.since)} · compra de {actorName(l.requestedByName)}
+                </div>
+                {canAct ? (
+                  confirmClaimId === l.id ? (
+                    <div className="bg-surface border border-red/40 rounded-md p-2.5">
+                      <div className="text-[11.5px] font-semibold mb-1.5">¿Abrir el reclamo por las {l.quantity} un.? Queda abajo, en los reclamos abiertos, para registrar qué acordaste con el proveedor: crédito a favor, devolución del dinero o que lo envíe.</div>
+                      {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+                      <div className="flex items-center gap-2">
+                        <button type="button" disabled={busy} className="rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => openShortReceiptClaim(l.id, "left-behind-claim")}>Sí, abrir reclamo</button>
+                        <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setConfirmClaimId(null); setErr(""); }}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="rounded border border-red/50 text-red px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer" onClick={() => { setConfirmClaimId(l.id); setErr(""); }}>
+                      Coordinar solución con el proveedor
+                    </button>
+                  )
+                ) : (
+                  <div className="text-steel-dim italic text-[11.5px]">Esperando que Compras coordine la solución con el proveedor.</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {shortReceipts.length > 0 && (
         <div className="bg-surface border border-red/40 rounded-md p-4">
           <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2 text-red">

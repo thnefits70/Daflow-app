@@ -20,7 +20,7 @@ import { fullCountCompleted, getActiveCount, getCountView, getDifferences, getSu
 import { getNegativeStockProducts } from "@/lib/stockKardex";
 import { carrierLabel } from "@/lib/carriers";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
-import { getOpenPurchaseCodesByCatalogItem, getPurchaseLinesLeftBehind, getPurchaseLinesOverdue, getShortReceiptsUnclaimed, LEFT_BEHIND_HREF } from "@/lib/purchases";
+import { getOpenPurchaseCodesByCatalogItem, getPurchaseLinesLeftBehind, getPurchaseLinesOverdue, getShortReceiptsUnclaimed, LEFT_BEHIND_HREF, OVERDUE_ORDERS_HREF } from "@/lib/purchases";
 import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
@@ -1593,7 +1593,7 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
     items.push({
       type: "compras_falta_mercaderia",
       icon: "🚨",
-      label: "Mercadería que no llegó con el resto del pedido — coordina con el proveedor",
+      label: "Mercadería que no llegó con el resto del pedido — coordina crédito, devolución o envío con el proveedor",
       meta:
         leftBehind.length === 1
           ? `${leftBehind[0].name} (${leftBehind[0].quantity} un.) · ${leftBehind[0].supplierName}`
@@ -1613,7 +1613,7 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
           ? `${overdueOrders[0].name} (${overdueOrders[0].quantity} un.) · ${overdueOrders[0].supplierName} · ${overdueOrders[0].days} días`
           : `${overdueOrders.length} productos: ${overdueOrders.map((l) => l.name).join(", ")}`,
       overdue: true,
-      href: LEFT_BEHIND_HREF,
+      href: OVERDUE_ORDERS_HREF,
     });
   }
 
