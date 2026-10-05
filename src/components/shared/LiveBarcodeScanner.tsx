@@ -87,7 +87,6 @@ export function LiveBarcodeScanner({ onScanned, onCancel, continuous = false }: 
   });
   const [error, setError] = useState("");
   const [showHint, setShowHint] = useState(false);
-  const [readCount, setReadCount] = useState(0);
   // Destello verde cuando una lectura se entrega (no en cada fotograma).
   const [flashAt, setFlashAt] = useState(0);
 
@@ -130,7 +129,6 @@ export function LiveBarcodeScanner({ onScanned, onCancel, continuous = false }: 
       lastText = text;
       lastAt = now;
       pausedUntil = now + CONTINUOUS_PAUSE_MS;
-      setReadCount((c) => c + 1);
       setShowHint(false);
       playSound("scan");
       setFlashAt(now);
@@ -250,9 +248,6 @@ export function LiveBarcodeScanner({ onScanned, onCancel, continuous = false }: 
           <div className="flex items-center gap-2 mt-2.5 text-[12px] text-steel">
             <ScanLine size={13} /> {continuous ? "Apunta a cada guía, una tras otra — la cámara queda abierta" : "Apunta al código del estante"}
           </div>
-          {continuous && readCount > 0 && (
-            <div className="text-[11.5px] text-teal font-semibold mt-1">✓ {readCount} leída(s) — sigue con la siguiente</div>
-          )}
           {showHint && (
             <div className="text-[11.5px] text-yellow mt-1.5">
               ¿No lo lee? Aleja el celular a un palmo (unos 20 cm) y mantenlo quieto un segundo para que enfoque.
