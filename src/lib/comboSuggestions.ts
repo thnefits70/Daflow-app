@@ -17,8 +17,8 @@ const COMBO_MATCH_AI_MODEL = "claude-sonnet-5";
 //   del hogar") y con lógica real de uso juntos — eso lo confirma la IA.
 // - Si un ganador ya es un combo registrado, entra con su receta real tal
 //   cual (nunca se adivina una receta). Si no, 1 unidad por producto.
-// - Nombre llamativo de máximo 4 palabras, sugerido en la MISMA consulta a
-//   la IA (sin costo extra).
+// - Nombre sugerido en la MISMA consulta a la IA (sin costo extra). Desde
+//   2026-10-05: nombres reales unidos con " Y ", máximo 40 caracteres.
 // - Un combo vive en una sola marca: la misma "huella" (productos×cantidad)
 //   nunca se repite, ni contra otra sugerencia ni contra un combo ya
 //   registrado en Stock Actual.
@@ -40,7 +40,11 @@ export const WINNER_7D_THRESHOLD = 50;
 export const WINNER_30D_THRESHOLD = 200;
 // En combos de 3 el de baja salida debe ser de los que casi no se movieron.
 export const VERY_LOW_THRESHOLD = 3;
-export const COMBO_NAME_MAX_WORDS = 4;
+// Pedido del usuario 2026-10-05 (reemplaza el nombre "wow" de 4 palabras):
+// el nombre une los nombres reales de los productos con " Y " (ej. "Pulidor
+// De Uñas Y Secador Láser") y nunca pasa de 40 caracteres — el máximo que
+// deja escribir Dropi al crear el producto.
+export const COMBO_NAME_MAX_CHARS = 40;
 // Tope de productos de baja salida por consulta (los más lentos primero).
 const MAX_LOW_IN_PROMPT = 200;
 const WINNER_CHUNK_SIZE = 20;
@@ -83,11 +87,41 @@ function normalizeFingerprint(fp: string): string {
   return fp.split("|").sort().join("|");
 }
 
+// Palabras que no pueden quedar sueltas al final si se corta el nombre.
+const DANGLING_WORDS = new Set(["y", "de", "del", "para", "con", "en", "la", "el", "los", "las", "-", "+", "/"]);
+
+function trimDangling(words: string[]): string[] {
+  const out = [...words];
+  while (out.length > 0 && DANGLING_WORDS.has(out[out.length - 1].toLowerCase())) out.pop();
+  return out;
+}
+
+function fitWords(words: string[]): string | null {
+  const out: string[] = [];
+  for (const w of words) {
+    if ([...out, w].join(" ").length > COMBO_NAME_MAX_CHARS) break;
+    out.push(w);
+  }
+  const trimmed = trimDangling(out);
+  return trimmed.length > 0 ? trimmed.join(" ") : null;
+}
+
 export function clampComboName(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const words = raw.replace(/["“”]/g, "").trim().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return null;
-  return words.slice(0, COMBO_NAME_MAX_WORDS).join(" ");
+  return fitWords(words);
+}
+
+// Respaldo si la IA no manda nombre: los nombres reales unidos con " Y ",
+// recortando cada uno a sus primeras palabras hasta que entre en 40.
+export function comboNameFromProducts(names: string[]): string | null {
+  const split = names.map((n) => n.replace(/\s+-\s+/g, " ").trim().split(/\s+/).filter(Boolean));
+  const longest = Math.max(0, ...split.map((w) => w.length));
+  for (let k = longest; k >= 1; k--) {
+    const name = split.map((w) => trimDangling(w.slice(0, k)).join(" ")).filter(Boolean).join(" Y ");
+    if (name.length <= COMBO_NAME_MAX_CHARS) return name;
+  }
+  return fitWords(split.map((w) => w[0]).filter(Boolean).join(" Y ").split(" "));
 }
 
 function mergeParts(parts: ComboPart[]): ComboPart[] {
@@ -176,7 +210,7 @@ Arma combos que tengan sentido real para venderse juntos. Reglas OBLIGATORIAS:
 2. Combo de 3: exactamente 2 ganadores + 1 de baja salida que haya salido 0 a ${VERY_LOW_THRESHOLD} unidades. Prefiere siempre los que salieron menos (0 primero).
 3. Todos los productos del combo deben ser del MISMO nicho o de nichos equivalentes escritos distinto (ej. "Hogar y limpieza" y "Limpieza del hogar" son el mismo). Nunca mezcles nichos distintos.
 4. Deben complementarse en uso real (ej. licuadora + vasos térmicos). Compartir nicho por sí solo no basta.
-5. A cada combo ponle un nombre en español, llamativo, con efecto "wow", de máximo ${COMBO_NAME_MAX_WORDS} palabras, sin marcas ni la palabra "combo".
+5. A cada combo ponle un nombre que una los nombres REALES de sus productos con " Y " (ej. "Producto A Y Producto B" o "Producto A Y Producto B Y Producto C"), en el mismo orden: primero los ganadores y al final el de baja salida. Para que entre, acorta cada nombre a sus palabras clave (quita "Kit", "Premium", marcas, guiones y adjetivos de relleno), pero que se reconozca cada producto. MÁXIMO ${COMBO_NAME_MAX_CHARS} caracteres contando espacios (es el límite de Dropi). Sin la palabra "combo". Cada palabra con mayúscula inicial y con tildes y ñ correctas.
 6. Dale un puntaje de 0 a 100 de qué tan probable es que se venda bien.
 7. Explica en "reason", en español sencillo y en máximo 2 oraciones cortas: por qué el ganador se está vendiendo, por qué el de baja salida lo complementa y por qué juntos podrían ser un combo ganador.
 
@@ -185,7 +219,7 @@ Si te paso "Historial de decisiones", aprende de él: arma más combos del estil
 Sé exigente: pocos combos buenos valen más que muchos dudosos (máximo ${MAX_COMBOS_PER_CALL} por respuesta). Un producto puede estar en más de un combo.
 
 Responde ÚNICAMENTE con JSON (sin markdown):
-{ "combos": [{ "winners": [0], "low": 2, "score": 85, "name": "Batido Express Total", "reason": "La licuadora se vende mucho esta semana. Los vasos térmicos casi no salen, pero son el complemento natural para llevar el batido." }] }
+{ "combos": [{ "winners": [0], "low": 2, "score": 85, "name": "Licuadora Portátil Y Vaso Térmico", "reason": "La licuadora se vende mucho esta semana. Los vasos térmicos casi no salen, pero son el complemento natural para llevar el batido." }] }
 Los números son la posición (desde 0) en cada lista. Si nada tiene sentido: { "combos": [] }.`;
 
 type AiCombo = { winners: number[]; low: number; score: number; name: string | null; reason: string | null };
@@ -393,7 +427,7 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
             winnerCatalogItemId: winnerParts[0].catalogItemId,
             lowRotationCatalogItemId: lowId,
             matchScore: ai.score,
-            suggestedName: ai.name,
+            suggestedName: ai.name ?? comboNameFromProducts([...winnerParts, low.parts[0]].map((p) => catalogById.get(p.catalogItemId)?.name ?? "")),
             aiReason: ai.reason,
             fingerprint: fp,
             items: {
