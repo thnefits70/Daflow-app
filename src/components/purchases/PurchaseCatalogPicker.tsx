@@ -105,6 +105,23 @@ export function PurchaseCatalogPicker({
   const [newCode, setNewCode] = useState(defaultCreateDraft?.newCode ?? "");
   const [newBodega, setNewBodega] = useState<CatalogMarca | "">(defaultCreateDraft?.newBodega ?? "");
   const [newJustCode, setNewJustCode] = useState(defaultCreateDraft?.newJustCode ?? "");
+  // Suministro sin código de afuera: DAFLOW le pone uno (ver lib/supplyCode.ts).
+  // Solo si ya trae código de Just se escribe a mano.
+  const [supplyOwnCode, setSupplyOwnCode] = useState(false);
+  const [supplyPreview, setSupplyPreview] = useState<{ name: string; code: string } | null>(null);
+  const autoSupplyCode = newBodega === "MKT_SUMINISTROS" && !supplyOwnCode;
+  useEffect(() => {
+    if (!autoSupplyCode || !newName.trim()) return;
+    const name = newName.trim();
+    const t = setTimeout(() => {
+      fetch(`/api/purchase-catalog/next-supply-code?name=${encodeURIComponent(name)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d?.code) setSupplyPreview({ name, code: d.code }); })
+        .catch(() => {});
+    }, 300);
+    return () => clearTimeout(t);
+  }, [autoSupplyCode, newName]);
+  const supplyCodeShown = supplyPreview && supplyPreview.name === newName.trim() ? supplyPreview.code : "";
   const [photos, setPhotos] = useState<string[]>(defaultCreateDraft?.photos ?? []);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -130,6 +147,7 @@ export function PurchaseCatalogPicker({
     setNewCode("");
     setNewBodega("");
     setNewJustCode("");
+    setSupplyOwnCode(false);
     setPhotos([]);
     setSimilarity(null);
     setConfirmStep(false);
@@ -164,6 +182,7 @@ export function PurchaseCatalogPicker({
     setNewCode("");
     setNewBodega("");
     setNewJustCode("");
+    setSupplyOwnCode(false);
     setPhotos([]);
     setSimilarity(null);
     setConfirmStep(false);
@@ -204,9 +223,9 @@ export function PurchaseCatalogPicker({
       setErr("Elige la marca.");
       return;
     }
-    if (!newJustCode.trim()) {
+    if (!autoSupplyCode && !newJustCode.trim()) {
       setErr(newBodega === "MKT_SUMINISTROS"
-        ? "Escribe el código del suministro."
+        ? "Escribe el código de Just del suministro."
         : "Escribe el ID de Dropi. Si todavía no tiene ID, propónlo en Análisis de Mercado.");
       return;
     }
@@ -257,7 +276,7 @@ export function PurchaseCatalogPicker({
       res = await fetch("/api/purchase-catalog", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim(), photos, description: newDescription.trim() || undefined, code: newCode.trim() || undefined, bodega: newBodega, justCode: newJustCode.trim() }),
+        body: JSON.stringify({ name: newName.trim(), photos, description: newDescription.trim() || undefined, code: newCode.trim() || undefined, bodega: newBodega, ...(autoSupplyCode ? { autoSupplyCode: true } : { justCode: newJustCode.trim() }) }),
       });
     } catch {
       setBusy(false);
@@ -472,12 +491,24 @@ export function PurchaseCatalogPicker({
               </div>
               <div>
                 <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">{newBodega === "MKT_SUMINISTROS" ? "Código del suministro" : "ID de Dropi"}</label>
-                <input
-                  className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
-                  value={newJustCode}
-                  onChange={(e) => setNewJustCode(e.target.value)}
-                  placeholder={newBodega === "MKT_SUMINISTROS" ? "Código del suministro, ej. 00025" : "Ej. 187749"}
-                />
+                {autoSupplyCode ? (
+                  <div className="w-full rounded border border-rule bg-surface px-2.5 py-2 text-[13px] font-mono">
+                    {supplyCodeShown || <span className="text-steel font-sans">Escribe el nombre y sale solo</span>}
+                  </div>
+                ) : (
+                  <input
+                    className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
+                    value={newJustCode}
+                    onChange={(e) => setNewJustCode(e.target.value)}
+                    placeholder={newBodega === "MKT_SUMINISTROS" ? "Código que trae de Just" : "Ej. 187749"}
+                  />
+                )}
+                {newBodega === "MKT_SUMINISTROS" && (
+                  <label className="flex items-center gap-1.5 mt-1.5 text-[11.5px] text-steel cursor-pointer">
+                    <input type="checkbox" checked={supplyOwnCode} onChange={(e) => setSupplyOwnCode(e.target.checked)} />
+                    Ya trae código de Just (escribirlo a mano)
+                  </label>
+                )}
               </div>
             </div>
             {/* Suministros no se publican en Dropi (2026-10-05): sin este aviso. */}
@@ -535,7 +566,7 @@ export function PurchaseCatalogPicker({
             <div className="bg-cloud border border-rule rounded-md p-3 mb-3">
               <div className="text-[13px] font-semibold mb-1">{newName}</div>
               <div className="text-[12px] text-steel mb-1">
-                ID {newJustCode.trim()} · {newBodega ? CATALOG_MARCA_LABELS[newBodega] : "—"}
+                ID {autoSupplyCode ? `${supplyCodeShown || "automático"} (se confirma al guardar)` : newJustCode.trim()} ·{newBodega ? CATALOG_MARCA_LABELS[newBodega] : "—"}
               </div>
               {newDescription.trim() && <div className="text-[12px] text-steel mb-2">{newDescription.trim()}</div>}
               <div className="flex gap-1.5">

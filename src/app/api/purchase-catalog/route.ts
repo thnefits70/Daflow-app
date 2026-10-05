@@ -8,7 +8,7 @@ import { getCatalogItemPriceStats } from "@/lib/purchases";
 import { actorName } from "@/lib/actorName";
 import { suggestNichoIfMissing } from "@/lib/nichoAi";
 import { productIdUsedByCombo } from "@/lib/comboBrand";
-
+import { formatSupplyCode, nextSupplyNumber } from "@/lib/supplyCode";
 // Confirmado 2026-08-06: quien creó un producto puede eliminarlo él mismo
 // dentro de las primeras 2 horas desde que lo creó (ver DELETE en
 // [id]/route.ts, que vuelve a validar esto server-side) — se calcula acá
@@ -111,8 +111,20 @@ const createSchema = z.object({
   // completarlo a mano después (caso "Juego De Herramientas 94 Piezas").
   // Suministros (papel, cinta…) usan su código interno como ID.
   bodega: z.enum(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "MKT_SUMINISTROS"], { message: "Elige la marca." }),
-  justCode: z.string().trim().min(1, "Falta el ID de Dropi (o el código del suministro).").max(50),
+  justCode: z.string().trim().max(50).optional(),
+  // Suministro sin código de afuera: el código lo pone DAFLOW (ver supplyCode.ts).
+  autoSupplyCode: z.boolean().optional(),
+}).refine((d) => (d.bodega === "MKT_SUMINISTROS" && d.autoSupplyCode) || !!d.justCode, {
+  message: "Falta el ID de Dropi (o el código del suministro).",
 });
+
+async function nextFreeSupplyCode(name: string): Promise<string> {
+  const rows = await prisma.purchaseCatalogItem.findMany({
+    where: { bodega: "MKT_SUMINISTROS", justCode: { contains: "-SUM-" } },
+    select: { justCode: true },
+  });
+  return formatSupplyCode(name, nextSupplyNumber(rows.map((r) => r.justCode)));
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -138,29 +150,45 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const idTaken = await prisma.purchaseCatalogItem.findUnique({ where: { justCode: parsed.data.justCode }, select: { id: true, name: true } });
-  if (idTaken) {
-    return NextResponse.json(
-      { error: `El ID ${parsed.data.justCode} ya es de "${idTaken.name}" — selecciónalo en vez de crear uno nuevo.`, existingId: idTaken.id },
-      { status: 409 }
-    );
+  const autoCode = parsed.data.bodega === "MKT_SUMINISTROS" && !!parsed.data.autoSupplyCode;
+  if (!autoCode) {
+    const justCode = parsed.data.justCode!;
+    const idTaken = await prisma.purchaseCatalogItem.findUnique({ where: { justCode }, select: { id: true, name: true } });
+    if (idTaken) {
+      return NextResponse.json(
+        { error: `El ID ${justCode} ya es de "${idTaken.name}" — selecciónalo en vez de crear uno nuevo.`, existingId: idTaken.id },
+        { status: 409 }
+      );
+    }
+
+    const comboClash = await productIdUsedByCombo(justCode);
+    if (comboClash) return NextResponse.json({ error: comboClash }, { status: 409 });
   }
 
-  const comboClash = await productIdUsedByCombo(parsed.data.justCode);
-  if (comboClash) return NextResponse.json({ error: comboClash }, { status: 409 });
-
   const isAdmin = session.user.role === "admin";
-  const item = await prisma.purchaseCatalogItem.create({
-    data: {
-      name: parsed.data.name,
-      photos: parsed.data.photos,
-      description: parsed.data.description || null,
-      code: parsed.data.code || null,
-      bodega: parsed.data.bodega,
-      justCode: parsed.data.justCode,
-      createdById: isAdmin ? null : session.user.id,
-    },
-  });
+  const data = {
+    name: parsed.data.name,
+    photos: parsed.data.photos,
+    description: parsed.data.description || null,
+    code: parsed.data.code || null,
+    bodega: parsed.data.bodega,
+    createdById: isAdmin ? null : session.user.id,
+  };
+  let item;
+  if (!autoCode) {
+    item = await prisma.purchaseCatalogItem.create({ data: { ...data, justCode: parsed.data.justCode! } });
+  } else {
+    // El número se calcula recién al guardar: si dos personas crean un
+    // suministro a la vez y chocan, se reintenta con el siguiente.
+    for (let attempt = 0; attempt < 5 && !item; attempt++) {
+      try {
+        item = await prisma.purchaseCatalogItem.create({ data: { ...data, justCode: await nextFreeSupplyCode(parsed.data.name) } });
+      } catch (e) {
+        if ((e as { code?: string }).code !== "P2002") throw e;
+      }
+    }
+    if (!item) return NextResponse.json({ error: "No se pudo asignar el código del suministro — intenta de nuevo." }, { status: 409 });
+  }
 
   // Confirmado 2026-09-01: pedido explícito del usuario — sugerencia de
   // nicho automática al crear cualquier producto nuevo, sin depender de
