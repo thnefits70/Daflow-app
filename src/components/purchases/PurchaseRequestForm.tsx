@@ -826,7 +826,16 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // exige en su lugar es que cada una de esas líneas ya esté reconocida
   // (recién confirmada, o ya sabida de antes). Si no hay ninguna línea así,
   // se vuelve a exigir que el total coincida, como siempre.
-  const quoteVerified = isCreditoSupplier || (!!verifyResult && (codeOnlyIdxs.length > 0 ? allCodeOnlyResolved : verifyResult.matches));
+  // Pedido de Nairoby 2026-10-05: si el flete lo cobra el mismo proveedor,
+  // su cotización suele traer el total CON flete — también cuenta como que
+  // coincide (mismo criterio que checkPurchaseSubmission en el servidor). Se
+  // calcula acá con el total leído en vez de usar verifyResult.matches, así
+  // cambiar el flete o la casilla se refleja al instante sin volver a leer.
+  const supplierShipping = !shippingIncluded && !shippingCarrierPending && shippingBySupplier ? Number(shippingCostTotal) || 0 : 0;
+  const readTotal = verifyResult?.readTotal ?? null;
+  const quoteMatchesWithShipping = readTotal !== null && supplierShipping > 0 && Math.abs(readTotal - (total + supplierShipping)) < 0.01;
+  const quoteTotalMatches = readTotal !== null && (Math.abs(readTotal - total) < 0.01 || quoteMatchesWithShipping);
+  const quoteVerified = isCreditoSupplier || (!!verifyResult && (codeOnlyIdxs.length > 0 ? allCodeOnlyResolved : quoteTotalMatches));
   const validLines = lines.filter((l) => l.catalogItem && Number(l.quantity) > 0 && Number(l.unitCost) > 0);
 
   async function submit() {
@@ -1407,13 +1416,16 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                       })}
                     </div>
                   </div>
-                ) : verifyResult.matches ? (
+                ) : quoteTotalMatches ? (
                   <div className="flex items-center gap-2 text-[12.5px] text-teal">
                     <CheckCircle2 size={14} /> Coinciden — total leído ${verifyResult.readTotal?.toFixed(2)}
+                    {quoteMatchesWithShipping && ` (productos $${total.toFixed(2)} + flete $${supplierShipping.toFixed(2)})`}
                   </div>
                 ) : (
                   <div className="flex items-center gap-2 text-[12.5px] text-red">
-                    <Lock size={14} /> No coincide — la cotización dice ${verifyResult.readTotal?.toFixed(2) ?? "?"}, pero se escribió ${total.toFixed(2)}. Corrige el número o sube la imagen correcta.
+                    <Lock size={14} /> No coincide — la cotización dice ${verifyResult.readTotal?.toFixed(2) ?? "?"}, pero se escribió ${total.toFixed(2)}
+                    {supplierShipping > 0 ? ` (o $${(total + supplierShipping).toFixed(2)} con el flete)` : ""}. Corrige el número o sube la imagen correcta.
+                    {supplierShipping === 0 && !shippingIncluded && " Si la cotización ya trae el flete sumado, marca abajo que el flete lo cobra el mismo proveedor y escribe su costo."}
                   </div>
                 )}
               </>

@@ -741,7 +741,16 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
     return { ok: false, status: 400, error: "Falta la cotización." };
   }
 
-  const matches = d.quoteReadTotal !== null && Math.abs(d.quoteReadTotal - groupTotal) < 0.01;
+  // Pedido de Nairoby 2026-10-05 (cotización de Compel): cuando el flete lo
+  // cobra el mismo proveedor, su cotización/factura suele traer el flete
+  // sumado al total ($332.93 + $8.36 = $341.29) — eso también cuenta como que
+  // coincide. Solo en ese caso: si el flete lo cobra otro transportista, la
+  // cotización del proveedor nunca lo incluye.
+  const supplierShipping =
+    !d.shippingIncluded && !d.shippingCarrierPending && !!d.carrierId && d.carrierId === d.supplierId ? d.shippingCostTotal ?? 0 : 0;
+  const matches =
+    d.quoteReadTotal !== null &&
+    (Math.abs(d.quoteReadTotal - groupTotal) < 0.01 || (supplierShipping > 0 && Math.abs(d.quoteReadTotal - (groupTotal + supplierShipping)) < 0.01));
   const anyLineManuallyConfirmed = d.items.some((it) => !!it.quoteReferenceCode);
   if (!isCreditoSupplier && !matches && !anyLineManuallyConfirmed) {
     return { ok: false, status: 400, error: "La cotización no coincide con lo escrito — verifícala de nuevo antes de enviar." };
