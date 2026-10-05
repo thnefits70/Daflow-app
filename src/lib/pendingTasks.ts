@@ -16,7 +16,8 @@ import { CLAIM_GAP_DAYS, findPossibleDoubleRegistrations, getSupplierClaimGaps }
 import { ecuadorDay, getCompiledLot, isBackfillLot } from "@/lib/fulfillmentGuides";
 import { holidayName, isWorkingDay, previousWorkingDay } from "@/lib/ecuadorHolidays";
 import { findDuplicateCandidates } from "@/lib/catalogDuplicates";
-import { fullCountCompleted, getActiveCount, getCountView, getDifferences, getSubmittedCounts } from "@/lib/stockCount";
+import { fullCountCompleted, getActiveCount, getDifferences, getSubmittedCounts } from "@/lib/stockCount";
+import { getAssignmentBoard, notifyLateAssignments, type AssignmentView } from "@/lib/stockCountAssignments";
 import { getNegativeStockProducts } from "@/lib/stockKardex";
 import { carrierLabel } from "@/lib/carriers";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
@@ -2875,39 +2876,67 @@ async function getManifestCatchUpPendingItem(href: string): Promise<PendingItem 
   };
 }
 
-// Conteo físico (pedido del usuario 2026-10-02): el conteo abierto (general
-// o el área de la semana) le sale al equipo de Inventario y a Daniel con su
-// avance; a Daniel además le dice cuándo ya puede enviarlo.
-async function getStockCountPendingItem(forLead: boolean): Promise<PendingItem | null> {
-  const count = await getActiveCount(null).catch(() => null);
-  // Antes del conteo general, a Daniel le sale el acceso para iniciarlo.
-  if (!count && forLead && !(await fullCountCompleted())) {
-    return {
-      type: "conteo_inventario",
-      icon: "📋",
-      label: "Conteo general de inventario — inícialo cuando la bodega esté lista",
-      meta: "Antes, confirma todos los cortes pendientes. Tu equipo cuenta a ciegas desde el celular.",
-      overdue: false,
-      href: "/area/conteo-inventario",
-    };
-  }
-  if (!count || count.status !== "COUNTING") return null;
-  const view = await getCountView(count.id);
-  if (!view) return null;
-  const done = view.products.filter((p) => p.countedQty !== null).length;
-  const total = view.products.length;
-  const title = view.kind === "FULL" ? "Conteo general de inventario" : `Conteo semanal · Área ${view.area}`;
-  const all = total > 0 && done === total;
-  // El semanal se atrasa desde el jueves de esa semana.
-  const overdue = view.kind === "WEEKLY_AREA" && !!view.weekStart && ecuadorDay(new Date()) >= new Date(new Date(`${view.weekStart}T12:00:00Z`).getTime() + 3 * 86_400_000).toISOString().slice(0, 10);
+// Conteo físico (pedido del usuario 2026-10-02; por áreas asignadas desde
+// 2026-10-05). A quien Daniel asignó un área le sale SU área; a Daniel, qué
+// área asignar después, quién va atrasado y cuándo ya puede enviarlo.
+function hourEc(iso: string): string {
+  return new Date(iso).toLocaleTimeString("es-EC", { hour: "numeric", minute: "2-digit", timeZone: "America/Guayaquil" });
+}
+
+function myCountItem(mine: AssignmentView): PendingItem {
+  const what = mine.area === "RECOUNT" ? `Recontar ${mine.total} producto(s)` : `Contar ${mine.label}`;
   return {
     type: "conteo_inventario",
     icon: "📋",
-    label: forLead && all ? `${title}: ya está todo contado — revísalo y envíalo` : `${title}: cuenta lo que hay en la percha`,
-    meta: `Contados ${done} de ${total} · a ciegas${overdue ? " · atrasado" : ""}`,
-    overdue,
+    label: mine.startedAt ? `${what}: sigue contando` : `Te toca: ${what} — pulsa «Empezar» cuando termines el corte`,
+    meta: `Contados ${mine.done} de ${mine.total} · meta antes de las ${hourEc(mine.deadline)}${mine.late ? " · atrasado" : ""}`,
+    overdue: mine.late,
     href: "/area/conteo-inventario",
   };
+}
+
+async function getStockCountPendingItems(forLead: boolean, userId: string | null): Promise<PendingItem[]> {
+  const count = await getActiveCount(null).catch(() => null);
+  // Antes del conteo general, a Daniel le sale el acceso para iniciarlo.
+  if (!count && forLead && !(await fullCountCompleted())) {
+    return [{
+      type: "conteo_inventario",
+      icon: "📋",
+      label: "Conteo general de inventario — inícialo cuando la bodega esté lista",
+      meta: "Antes, confirma todos los cortes pendientes. Luego asignas cada área a una persona.",
+      overdue: false,
+      href: "/area/conteo-inventario",
+    }];
+  }
+  if (!count || count.status === "APPROVED") return [];
+  if (forLead) await notifyLateAssignments().catch(() => null);
+  const board = await getAssignmentBoard(count, userId, forLead);
+  const items: PendingItem[] = board.mine ? [myCountItem(board.mine)] : [];
+  if (!forLead) return items;
+
+  const title = count.kind === "FULL" ? "Conteo general" : `Conteo semanal · Área ${count.area}`;
+  const late = [...board.areas.map((a) => a.assignment), ...board.recounts].filter((a): a is AssignmentView => !!a && a.late);
+  if (board.unassignedRecount > 0) {
+    items.push({ type: "conteo_inventario", icon: "🔁", label: `${board.unassignedRecount} producto(s) para recontar — asígnalos a otra persona`, meta: "El administrador los desmarcó. No puede recontarlos quien los contó.", overdue: true, href: "/area/conteo-inventario" });
+  }
+  if (count.status !== "COUNTING") return items;
+  const finished = board.areas.filter((a) => a.assignment?.finishedAt).length;
+  const inProgress = board.areas.filter((a) => a.assignment && !a.assignment.finishedAt);
+  const free = board.areas.filter((a) => !a.assignment && a.total > 0);
+  const all = board.areas.every((a) => a.total === 0 || a.assignment?.finishedAt);
+  // El semanal se atrasa desde el jueves de esa semana.
+  const weekLate = count.kind === "WEEKLY_AREA" && !!count.weekStart && ecuadorDay(new Date()) >= new Date(new Date(`${count.weekStart}T12:00:00Z`).getTime() + 3 * 86_400_000).toISOString().slice(0, 10);
+  const label = all
+    ? `${title}: todas las áreas contadas — revísalo y envíalo`
+    : free.length > 0
+      ? `${title}: asigna ${free.length === 1 ? free[0].label : `la siguiente área (faltan ${free.map((a) => a.area === "NONE" ? "Sin área" : a.area).join(", ")})`}`
+      : `${title}: tu equipo está contando`;
+  const meta = [
+    `${finished} de ${board.areas.length} área(s) terminadas`,
+    ...inProgress.map((a) => `${a.label}: ${a.assignment!.assigneeName} ${a.assignment!.done}/${a.assignment!.total}${a.assignment!.late ? " ⏰" : ""}`),
+  ].join(" · ");
+  items.push({ type: "conteo_inventario", icon: "📋", label, meta: meta + (late.length || weekLate ? " · atrasado" : ""), overdue: late.length > 0 || weekLate || (free.length > 0 && inProgress.length === 0), href: "/area/conteo-inventario" });
+  return items;
 }
 
 // Al admin: conteos que Daniel envió con diferencias por aprobar.
@@ -2915,6 +2944,8 @@ async function getStockCountApprovalPendingItem(href: string): Promise<PendingIt
   const counts = await getSubmittedCounts();
   if (counts.length === 0) return null;
   const diffs = (await Promise.all(counts.map((c) => getDifferences(c.id)))).reduce((sum, d) => sum + d.length, 0);
+  // Mientras solo quede lo que se está recontando, no hay nada que aprobar.
+  if (diffs === 0) return null;
   return {
     type: "conteo_inventario_aprobar",
     icon: "📋",
@@ -3940,8 +3971,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     teamItems.unshift(...(await getMyFulfillmentBlockPendingItems(actor.userId, "/area/workspace?tab=egresos&otab=solicitud")));
     teamItems.unshift(...(await getMyLocalWarrantyPendingItems(actor.userId, "/area/workspace?tab=ventas-externas&etab=garantias")));
     if (me.department?.code === "INV") {
-      const teamCountItem = await getStockCountPendingItem(false).catch(() => null);
-      if (teamCountItem) teamItems.unshift(teamCountItem);
+      teamItems.unshift(...(await getStockCountPendingItems(false, actor.userId).catch(() => [])));
       const pickupItem = await getLocalWarrantyPickupPendingItem("/area/workspace?tab=ventas-externas&etab=devoluciones");
       if (pickupItem) teamItems.unshift(pickupItem);
       const [receivingItem, replacementItem, urgentUnresolvedItem] = await Promise.all([
@@ -4153,8 +4183,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (externalSalePackItem) items.push(externalSalePackItem);
     const warrantyPickupItem = await getLocalWarrantyPickupPendingItem("/area/workspace?tab=ventas-externas&etab=devoluciones");
     if (warrantyPickupItem) items.push(warrantyPickupItem);
-    const stockCountItem = await getStockCountPendingItem(true).catch(() => null);
-    if (stockCountItem) items.unshift(stockCountItem);
+    items.unshift(...(await getStockCountPendingItems(true, actor.userId).catch(() => [])));
     const negativeStockItem = await getNegativeStockPendingItem("/area/workspace?tab=stock-actual").catch(() => null);
     if (negativeStockItem) items.unshift(negativeStockItem);
     const manifestCatchUpItem = await getManifestCatchUpPendingItem("/area/workspace?tab=egresos&otab=solicitud");

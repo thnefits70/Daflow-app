@@ -8,11 +8,13 @@ import { areaLabel } from "@/lib/warehouseAreas";
 type Pending = { id: string; kind: "FULL" | "WEEKLY_AREA"; area: string | null; weekStart: string | null; submittedAt: string; differences: DifferenceRow[] };
 
 // Pedido del usuario 2026-10-02: el admin aprueba todas las diferencias del
-// conteo físico en una sola lista (desmarca las que vea raras: esas no se
-// ajustan). Aquí sí se ve lo que decía el sistema.
+// conteo físico en una sola lista. Aquí sí se ve lo que decía el sistema.
+// Desde 2026-10-05 lo desmarcado lo vuelve a contar OTRA persona (Daniel lo
+// asigna), salvo que el admin elija "dejar como está".
 export function StockCountReview({ onApproved }: { onApproved?: () => void }) {
   const [rows, setRows] = useState<Pending[] | null>(null);
   const [unchecked, setUnchecked] = useState<Set<string>>(new Set());
+  const [keep, setKeep] = useState<Set<string>>(new Set());
   const [confirming, setConfirming] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -30,29 +32,32 @@ export function StockCountReview({ onApproved }: { onApproved?: () => void }) {
     setBusy(true);
     setErr("");
     const approveLineIds = c.differences.filter((d) => !unchecked.has(d.lineId)).map((d) => d.lineId);
-    const res = await fetch(`/api/stock-count/${c.id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approveLineIds }) });
+    const keepLineIds = c.differences.filter((d) => unchecked.has(d.lineId) && keep.has(d.lineId)).map((d) => d.lineId);
+    const res = await fetch(`/api/stock-count/${c.id}/approve`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ approveLineIds, keepLineIds }) });
     const json = await res.json().catch(() => null);
     setBusy(false);
     setConfirming(null);
     if (!res.ok) return setErr(json?.error ?? "No se pudo aprobar.");
-    setMsg(`Listo: ${json.applied} producto(s) ajustado(s)${json.rejected ? `, ${json.rejected} rechazado(s)` : ""}.`);
+    setMsg(`Listo: ${json.applied} producto(s) ajustado(s)${json.recount ? `, ${json.recount} van a recuento con otra persona` : ""}${json.rejected ? `, ${json.rejected} se dejaron como estaban` : ""}.`);
     load();
     onApproved?.();
   }
 
-  if (!rows || (rows.length === 0 && !msg)) return null;
+  if (!rows || (!rows.some((c) => c.differences.length > 0) && !msg)) return null;
   return (
     <section className="border border-gold rounded-md p-3 mb-3">
       {msg && <div className="text-teal text-[12.5px] mb-2">{msg}</div>}
       {err && <div className="text-red text-[12.5px] mb-2">{err}</div>}
-      {rows.map((c) => {
+      {rows.filter((c) => c.differences.length > 0).map((c) => {
         const selected = c.differences.filter((d) => !unchecked.has(d.lineId));
+        const toKeep = c.differences.filter((d) => unchecked.has(d.lineId) && keep.has(d.lineId)).length;
+        const toRecount = c.differences.length - selected.length - toKeep;
         return (
           <div key={c.id} className="mb-3 last:mb-0">
             <div className="font-semibold text-[13px] flex items-center gap-2 mb-1 text-gold">
               <ClipboardCheck size={14} /> {c.kind === "FULL" ? "Conteo general" : `Conteo semanal · ${areaLabel(c.area)}`} por aprobar — {c.differences.length} diferencia(s)
             </div>
-            <div className="text-[12px] text-steel mb-2">Desmarca lo que veas raro: eso no se ajusta. Lo marcado se corrige en el stock.</div>
+            <div className="text-[12px] text-steel mb-2">Lo marcado se corrige en el stock. Desmarca lo que veas raro: lo vuelve a contar otra persona y te regresa a esta lista.</div>
             <div className="overflow-x-auto">
               <table className="text-[12.5px] min-w-[560px] w-full">
                 <thead>
@@ -90,7 +95,25 @@ export function StockCountReview({ onApproved }: { onApproved?: () => void }) {
                       <td className="py-1 pr-2 text-right font-mono">{d.expectedQty}</td>
                       <td className="py-1 pr-2 text-right font-mono">{d.countedQty}</td>
                       <td className={`py-1 pr-2 text-right font-mono font-bold ${d.diff < 0 ? "text-red" : "text-teal"}`}>{d.diff > 0 ? `+${d.diff}` : d.diff}</td>
-                      <td className="py-1 text-steel">{d.countedByName ?? "—"}</td>
+                      <td className="py-1 text-steel">
+                        {d.countedByName ?? "—"}
+                        {unchecked.has(d.lineId) && (
+                          <button
+                            type="button"
+                            className="block text-[11px] underline cursor-pointer text-gold"
+                            onClick={() =>
+                              setKeep((s) => {
+                                const n = new Set(s);
+                                if (n.has(d.lineId)) n.delete(d.lineId);
+                                else n.add(d.lineId);
+                                return n;
+                              })
+                            }
+                          >
+                            {keep.has(d.lineId) ? "Se deja como está (cambiar a recontar)" : "Va a recuento (o dejar como está)"}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -98,7 +121,7 @@ export function StockCountReview({ onApproved }: { onApproved?: () => void }) {
             </div>
             {confirming === c.id ? (
               <div className="mt-2 bg-cloud border border-gold/50 rounded p-2 text-[12.5px]">
-                ¿Aprobar {selected.length} ajuste(s){c.differences.length - selected.length > 0 ? ` y rechazar ${c.differences.length - selected.length}` : ""}? El stock queda como se contó y no se puede deshacer.
+                ¿Aprobar {selected.length} ajuste(s){toRecount > 0 ? `, mandar ${toRecount} a recuento` : ""}{toKeep > 0 ? ` y dejar ${toKeep} como están` : ""}? Lo aprobado queda como se contó y no se puede deshacer.
                 <div className="flex gap-2 mt-1.5">
                   <button type="button" disabled={busy} className="rounded border border-gold bg-gold px-3 py-1 font-bold text-navy cursor-pointer" onClick={() => approve(c)}>{busy ? "Aprobando…" : "Sí, aprobar"}</button>
                   <button type="button" className="text-steel cursor-pointer" onClick={() => setConfirming(null)}>Cancelar</button>

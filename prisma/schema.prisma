@@ -321,7 +321,7 @@ model User {
   // Fulfillment — quien tenga el flag sube los PDF de guías de Dropi y envía
   // el corte, igual que el Líder de Inventarios. Confirmar el corte (lo que
   // descuenta el Kardex) sigue siendo solo del líder.
-  canUploadFulfillmentGuides Boolean @default(false)
+  canUploadFulfillmentGuides   Boolean @default(false)
   // Solo informativo (mismo espíritu que Store.brand) — qué marca asesora
   // esta persona, para mostrarla junto a su nombre cuando confirma. Nunca se
   // usa para filtrar ni bloquear quién ve o puede confirmar qué llegada.
@@ -2366,15 +2366,15 @@ model MarketProductProposal {
   proposedBy   User?    @relation("MarketProductProposalProposedBy", fields: [proposedById], references: [id], onDelete: SetNull)
   proposedAt   DateTime @default(now())
 
-  reviewedById String?
-  reviewedBy   User?                @relation("MarketProductProposalReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt   DateTime?
+  reviewedById    String?
+  reviewedBy      User?                @relation("MarketProductProposalReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt      DateTime?
   // Pedido del usuario 2026-10-03: quien propuso marca "Enterado" de un
   // rechazo — hasta entonces le sale en Inicio.
   rejectionSeenAt DateTime?
   // Decisión de Bryan al aprobar — ambos null hasta entonces.
-  bodega       MarketProductBodega?
-  isPublic     Boolean?
+  bodega          MarketProductBodega?
+  isPublic        Boolean?
 
   dropiProductId String?
   publishedById  String?
@@ -3336,9 +3336,9 @@ model PurchaseRequest {
   requestedByDeptId String?
   requestedAt       DateTime @default(now())
 
-  reviewedById String?
-  reviewedBy   User?     @relation("PurchaseRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt   DateTime?
+  reviewedById        String?
+  reviewedBy          User?     @relation("PurchaseRequestReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt          DateTime?
   // Pedido del usuario 2026-10-03: quien pidió la compra puede cerrar un
   // rechazo que NO se va a reenviar (ej. "por duplicado", "el otro está más
   // barato") — deja de salirle en Inicio como "corregir y reenviar".
@@ -7614,7 +7614,8 @@ model StockCount {
   approvedAt    DateTime?
   approvedById  String?
 
-  lines StockCountLine[]
+  lines       StockCountLine[]
+  assignments StockCountAssignment[]
 
   @@unique([kind, weekStart, area])
   @@index([status])
@@ -7633,10 +7634,41 @@ model StockCountLine {
   // sin confirmar + lo recibido sin aprobar. La diferencia se aplica sobre el
   // saldo de ese momento, así no se pisa lo que se movió después.
   expectedQty   Int
-  // Decisión del admin sobre la diferencia (solo si countedQty != expectedQty).
+  // Decisión del admin sobre la diferencia (solo si countedQty != expectedQty):
+  // APPROVED, REJECTED o RECOUNT (lo vuelve a contar otra persona; al
+  // recontarse vuelve a null y regresa a la lista del admin).
   decision      String?
   decidedAt     DateTime?
+  // Segundos que tomó contar este producto (desde el producto anterior de la
+  // misma persona; null si hubo una pausa larga). Base del tiempo estimado
+  // de los próximos conteos.
+  durationSec   Int?
 
   @@unique([countId, catalogItemId])
   @@index([countId])
+}
+
+// Pedido del usuario 2026-10-05: Daniel asigna cada área a UNA persona del
+// equipo de Inventario, con un bloque de horario entre cortes. La persona ve
+// la tarea en su Inicio, la empieza (corre su tiempo) y avisa cuando termina.
+model StockCountAssignment {
+  id             String     @id @default(cuid())
+  countId        String
+  count          StockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+  // Área A–G, "NONE" (productos sin área) o "RECOUNT" (lo que el admin
+  // mandó a recontar; esos productos van en catalogItemIds).
+  area           String
+  catalogItemIds String[]   @default([])
+  assigneeId     String
+  assignedById   String?
+  assignedAt     DateTime   @default(now())
+  // Fin del bloque de horario que eligió Daniel (meta para terminar).
+  dueAt          DateTime
+  startedAt      DateTime?
+  lastActivityAt DateTime?
+  finishedAt     DateTime?
+  lateNotifiedAt DateTime?
+
+  @@index([countId])
+  @@index([assigneeId])
 }

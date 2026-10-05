@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStock } from "@/lib/stockKardex";
 import { WAREHOUSE_AREAS } from "@/lib/warehouseAreas";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
+import { MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, openAssignmentFor, recentMovement } from "@/lib/stockCountAssignments";
 
 // Conteo físico de inventario — pedido del usuario 2026-10-02.
 // - FULL: conteo general de toda la bodega (una vez). Cuando el admin lo
@@ -55,7 +56,13 @@ async function products(area: string | null): Promise<CountableProduct[]> {
     select: { id: true, name: true, justCode: true, photos: true, warehouseArea: true },
     orderBy: [{ warehouseArea: "asc" }, { name: "asc" }],
   });
-  return items.map((i) => ({ id: i.id, name: i.name, justCode: i.justCode, photo: i.photos[0] ?? null, area: i.warehouseArea }));
+  // Del que más se vende al que menos (pedido del usuario 2026-10-05): los
+  // que más se mueven son los que más se descuadran.
+  const moved = await recentMovement(items.map((i) => i.id));
+  return items
+    .map((i) => ({ p: { id: i.id, name: i.name, justCode: i.justCode, photo: i.photos[0] ?? null, area: i.warehouseArea }, moved: moved.get(i.id) ?? 0 }))
+    .sort((a, b) => b.moved - a.moved || a.p.name.localeCompare(b.p.name))
+    .map((x) => x.p);
 }
 
 // El conteo abierto: el general si existe uno sin aprobar; si no, el de la
@@ -84,7 +91,7 @@ export type CountView = {
   status: "COUNTING" | "SUBMITTED" | "APPROVED";
   area: string | null;
   weekStart: string | null;
-  products: (CountableProduct & { countedQty: number | null; countedByName: string | null; countedAt: string | null })[];
+  products: (CountableProduct & { countedQty: number | null; countedByName: string | null; countedAt: string | null; recount: boolean })[];
 };
 
 // Vista para quien cuenta / Daniel: NUNCA incluye lo que dice el sistema.
@@ -104,25 +111,48 @@ export async function getCountView(countId: string): Promise<CountView | null> {
     weekStart: count.weekStart,
     products: list.map((p) => {
       const l = byItem.get(p.id);
-      return { ...p, countedQty: l?.countedQty ?? null, countedByName: l?.countedById ? (nameOf.get(l.countedById) ?? null) : null, countedAt: l?.countedAt.toISOString() ?? null };
+      return { ...p, countedQty: l?.countedQty ?? null, countedByName: l?.countedById ? (nameOf.get(l.countedById) ?? null) : null, countedAt: l?.countedAt.toISOString() ?? null, recount: l?.decision === RECOUNT };
     }),
   };
 }
 
-export async function recordCount(params: { countId: string; catalogItemId: string; quantity: number; userId: string | null }): Promise<{ ok: true } | { ok: false; error: string }> {
+// Quien no es Daniel solo cuenta lo de su área asignada, después de pulsar
+// "Empezar" (pedido del usuario 2026-10-05). Daniel puede corregir cualquiera.
+export async function recordCount(params: { countId: string; catalogItemId: string; quantity: number; userId: string | null; isLead: boolean }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!Number.isInteger(params.quantity) || params.quantity < 0) return { ok: false, error: "Escribe una cantidad entera, 0 o mayor." };
   const count = await prisma.stockCount.findUnique({ where: { id: params.countId }, select: { status: true, kind: true, area: true } });
   if (!count) return { ok: false, error: "Conteo no encontrado." };
-  if (count.status !== "COUNTING") return { ok: false, error: "Este conteo ya se envió: no se puede cambiar." };
-  if (count.kind === "WEEKLY_AREA") {
+  const existing = await prisma.stockCountLine.findUnique({ where: { countId_catalogItemId: { countId: params.countId, catalogItemId: params.catalogItemId } } });
+  const isRecount = existing?.decision === RECOUNT;
+  if (count.status !== "COUNTING" && !(isRecount && count.status === "SUBMITTED")) return { ok: false, error: "Este conteo ya se envió: no se puede cambiar." };
+  if (count.kind === "WEEKLY_AREA" && !isRecount) {
     const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: params.catalogItemId }, select: { warehouseArea: true } });
     if (item?.warehouseArea !== count.area) return { ok: false, error: `Este producto no es del área ${count.area}.` };
   }
+  const assignment = params.userId ? await openAssignmentFor(params.countId, params.userId) : null;
+  const mine = assignment ? (await assignmentProductIds(assignment)).includes(params.catalogItemId) : false;
+  if (isRecount && (!assignment || assignment.area !== RECOUNT || !mine)) return { ok: false, error: "Este producto lo vuelve a contar la persona que Daniel asignó para el recuento." };
+  if (!params.isLead && !isRecount) {
+    if (!assignment) return { ok: false, error: "Todavía no tienes un área asignada. Daniel te la asigna." };
+    if (!mine) return { ok: false, error: "Este producto no es de tu área asignada." };
+  }
+  if (assignment && mine && !assignment.startedAt) return { ok: false, error: "Primero pulsa «Empezar conteo»." };
+
+  const now = new Date();
+  // Tiempo de este producto: desde el anterior que contó esta persona.
+  let durationSec: number | null = null;
+  if (assignment && mine && assignment.lastActivityAt) {
+    const gap = Math.round((now.getTime() - assignment.lastActivityAt.getTime()) / 1000);
+    durationSec = gap <= MAX_PRODUCT_GAP_SEC ? gap : null;
+    await prisma.stockCountAssignment.update({ where: { id: assignment.id }, data: { lastActivityAt: now } });
+  }
+  // Una corrección no cambia el tiempo que ya se midió.
+  const firstTime = !existing || isRecount;
   const expectedQty = await expectedNow(params.catalogItemId);
   await prisma.stockCountLine.upsert({
     where: { countId_catalogItemId: { countId: params.countId, catalogItemId: params.catalogItemId } },
-    update: { countedQty: params.quantity, countedById: params.userId, countedAt: new Date(), expectedQty },
-    create: { countId: params.countId, catalogItemId: params.catalogItemId, countedQty: params.quantity, countedById: params.userId, expectedQty },
+    update: { countedQty: params.quantity, countedById: params.userId, countedAt: now, expectedQty, ...(isRecount ? { decision: null, decidedAt: null } : {}), ...(firstTime ? { durationSec } : {}) },
+    create: { countId: params.countId, catalogItemId: params.catalogItemId, countedQty: params.quantity, countedById: params.userId, expectedQty, durationSec },
   });
   return { ok: true };
 }
@@ -135,6 +165,8 @@ export async function submitCount(countId: string, userId: string | null): Promi
   if (count.lines.length === 0) return { ok: false, error: "Todavía no se contó nada." };
   const differences = count.lines.filter((l) => l.countedQty !== l.expectedQty).length;
   await prisma.stockCount.update({ where: { id: countId }, data: { status: "SUBMITTED", submittedAt: new Date(), submittedById: userId } });
+  // Lo que quedó sin terminar ya no le sale a nadie en su Inicio.
+  await prisma.stockCountAssignment.updateMany({ where: { countId, finishedAt: null }, data: { finishedAt: new Date() } });
   // Sin diferencias no hay nada que aprobar: queda aprobado solo.
   if (differences === 0) await finishCount(countId, null);
   return { ok: true, differences };
@@ -176,14 +208,18 @@ async function finishCount(countId: string, adminId: string | null) {
 // saldo ACTUAL como ajuste por conteo físico (la diferencia que había en el
 // momento de contar, no el número contado, para no pisar lo que se movió
 // después). Las rechazadas no tocan el stock.
-export async function approveDifferences(params: { countId: string; approveLineIds: string[]; adminId: string | null }): Promise<{ ok: true; applied: number; rejected: number } | { ok: false; error: string }> {
+// Lo desmarcado lo vuelve a contar OTRA persona (decisión del usuario
+// 2026-10-05), salvo lo que el admin decida "dejar como está".
+export async function approveDifferences(params: { countId: string; approveLineIds: string[]; keepLineIds?: string[]; adminId: string | null }): Promise<{ ok: true; applied: number; rejected: number; recount: number } | { ok: false; error: string }> {
   const count = await prisma.stockCount.findUnique({ where: { id: params.countId }, select: { status: true } });
   if (!count) return { ok: false, error: "Conteo no encontrado." };
   if (count.status !== "SUBMITTED") return { ok: false, error: "Este conteo no está esperando aprobación." };
   const pending = (await prisma.stockCountLine.findMany({ where: { countId: params.countId, decision: null } })).filter((l) => l.countedQty !== l.expectedQty);
   const approve = new Set(params.approveLineIds);
+  const keep = new Set(params.keepLineIds ?? []);
   let applied = 0;
   let rejected = 0;
+  let recount = 0;
   for (const l of pending) {
     if (approve.has(l.id)) {
       const claimed = await prisma.stockCountLine.updateMany({ where: { id: l.id, decision: null }, data: { decision: "APPROVED", decidedAt: new Date() } });
@@ -202,13 +238,29 @@ export async function approveDifferences(params: { countId: string; approveLineI
         },
       });
       applied++;
-    } else {
+    } else if (keep.has(l.id)) {
       await prisma.stockCountLine.updateMany({ where: { id: l.id, decision: null }, data: { decision: "REJECTED", decidedAt: new Date() } });
       rejected++;
+    } else {
+      await prisma.stockCountLine.updateMany({ where: { id: l.id, decision: null }, data: { decision: RECOUNT, decidedAt: new Date() } });
+      recount++;
     }
   }
-  await finishCount(params.countId, params.adminId);
-  return { ok: true, applied, rejected };
+  await closeIfSettled(params.countId, params.adminId);
+  return { ok: true, applied, rejected, recount };
+}
+
+// El conteo se cierra cuando ya no queda nada por recontar ni por aprobar.
+export async function closeIfSettled(countId: string, adminId: string | null = null): Promise<void> {
+  const count = await prisma.stockCount.findUnique({ where: { id: countId }, select: { status: true } });
+  if (count?.status !== "SUBMITTED") return;
+  const lines = await prisma.stockCountLine.findMany({ where: { countId, OR: [{ decision: null }, { decision: RECOUNT }] }, select: { decision: true, countedQty: true, expectedQty: true } });
+  if (lines.some((l) => l.decision === RECOUNT || l.countedQty !== l.expectedQty)) return;
+  await finishCount(countId, adminId);
+}
+
+export async function recountPendingCount(countId: string): Promise<number> {
+  return prisma.stockCountLine.count({ where: { countId, decision: RECOUNT } });
 }
 
 export async function getSubmittedCounts() {
