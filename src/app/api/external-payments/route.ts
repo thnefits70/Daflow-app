@@ -35,12 +35,27 @@ export async function GET(req: NextRequest) {
   const users = await prisma.user.findMany({
     where: { isActive: true, payrollProfile: { externalPaymentMode: true } },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, position: true, payrollProfile: { select: { requiresInvoice: true } } },
+    select: { id: true, name: true, position: true, startDate: true, payrollProfile: { select: { requiresInvoice: true, externalPaymentModeSince: true } } },
   });
   const payments = await prisma.externalPayment.findMany({ where: { month, userId: { in: users.map((u) => u.id) } } });
   const paymentByUser = new Map(payments.map((p) => [p.userId, p]));
 
-  const roster = users.map((u) => ({
+  // Fix confirmado 2026-10-05 (reportado por Nairoby, caso Michelle Ramírez,
+  // ingresó 2026-10-04): el roster mostraba "Registrar pago" de septiembre a
+  // alguien que todavía no trabajaba acá. Mismo criterio que
+  // countMissingExternalPayments en pendingTasks.ts — startDate hasta el fin
+  // del mes y externalPaymentModeSince hasta ese mes. Quien ya tenga un pago
+  // registrado ese mes se sigue mostrando igual, para no esconderlo.
+  const [y, m] = month.split("-").map(Number);
+  const monthEnd = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+  const eligible = users.filter((u) => {
+    if (paymentByUser.has(u.id)) return true;
+    if (u.startDate && u.startDate > monthEnd) return false;
+    const since = u.payrollProfile?.externalPaymentModeSince;
+    return !since || month >= since;
+  });
+
+  const roster = eligible.map((u) => ({
     user: { id: u.id, name: u.name, position: u.position },
     requiresInvoice: u.payrollProfile?.requiresInvoice ?? false,
     payment: paymentByUser.get(u.id) ?? null,
