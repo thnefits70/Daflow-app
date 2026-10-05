@@ -67,7 +67,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // Pedido del usuario 2026-09-30: si ya está marcado, quien compra lo ve y
   // lo puede corregir él mismo (ver fulfillment-size/route.ts).
   const setBy = item.fulfillmentSizeSetById ? await prisma.user.findUnique({ where: { id: item.fulfillmentSizeSetById }, select: { name: true } }) : null;
-  const fulfillmentSize = item.fulfillmentSize
+  // Suministros no llevan fulfillment (2026-10-05): no se muestra ni se corrige.
+  const fulfillmentSize = item.fulfillmentSize && item.bodega !== "MKT_SUMINISTROS"
     ? { value: item.fulfillmentSize as "SMALL" | "NORMAL", setAt: item.fulfillmentSizeSetAt, setByName: setBy?.name ?? null }
     : null;
   return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats, blockedBy, needsFulfillmentSize, fulfillmentSize });

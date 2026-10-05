@@ -758,11 +758,13 @@ export const purchaseRequestInclude = {
 // fulfillment) o normales ($0.75). La primera vez que se vuelven a comprar,
 // quien compra lo elige UNA vez (doble confirmación en el formulario) y queda
 // guardado en el producto. Después ya no se pregunta; solo el admin lo cambia.
+// Pedido del usuario 2026-10-05: los Suministros (cinta, papel…) no se
+// despachan, así que no llevan fulfillment — nunca se pregunta por ellos.
 export async function getCatalogItemsNeedingFulfillmentSize(catalogItemIds: string[]): Promise<Set<string>> {
   const ids = [...new Set(catalogItemIds)];
   if (ids.length === 0) return new Set();
   const items = await prisma.purchaseCatalogItem.findMany({
-    where: { id: { in: ids }, fulfillmentSize: null },
+    where: { id: { in: ids }, fulfillmentSize: null, OR: [{ bodega: null }, { bodega: { not: "MKT_SUMINISTROS" } }] },
     select: { id: true, marketProductProposal: { select: { id: true } } },
   });
   return new Set(items.filter((i) => !i.marketProductProposal).map((i) => i.id));
