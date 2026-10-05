@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { recordKardexEntry } from "@/lib/stockKardex";
-import { effectiveUnitCost, LEFT_BEHIND_HREF } from "@/lib/purchases";
+import { effectiveUnitCost } from "@/lib/purchases";
 import { isWarehouseArea } from "@/lib/warehouseAreas";
 
 // Confirmado 2026-08-18: pedido explícito del usuario — la aprobación FINAL
@@ -189,26 +189,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }).catch(() => null);
   }
 
-  // Pedido del usuario 2026-10-05 (caso candado de Zheng wu): al aprobar la
-  // última recepción del pedido, si otro producto de ese mismo pedido no
-  // llegó (sin recepción ni reporte urgente), se avisa en el acto a quien
-  // compró. El recordatorio diario y el pendiente de Inicio salen de
-  // getPurchaseLinesLeftBehind.
-  if (existing.requestedById) {
-    const siblings = await prisma.purchaseRequest.findMany({
-      where: { groupId: existing.groupId, id: { not: id } },
-      select: { status: true, quantity: true, receipt: { select: { id: true } }, urgentReports: { select: { id: true } }, catalogItem: { select: { name: true } } },
-    });
-    const stillReviewing = siblings.some((s) => s.status === "RECEIVED_PENDING_REVIEW");
-    const missing = siblings.filter((s) => !s.receipt && s.urgentReports.length === 0 && (s.status === "PAID" || s.status === "APPROVED"));
-    if (!stillReviewing && missing.length > 0) {
-      await notifyOwner(existing.requestedById, {
-        title: "📦 Falta mercadería de un pedido — coordina con el proveedor",
-        body: `Llegó el resto del pedido, pero no: ${missing.map((m) => `${m.catalogItem.name} (${m.quantity} un.)`).join(", ")}.`,
-        url: LEFT_BEHIND_HREF,
-      }).catch(() => null);
-    }
-  }
+  // Lo que no llegó con el resto del pedido ya no se avisa acá: Inventario
+  // tiene 24 h para registrarlo (pedido del usuario 2026-10-05) — ver
+  // getPurchaseLinesLeftBehind (Inicio + aviso diario).
 
   return NextResponse.json(updated);
 }

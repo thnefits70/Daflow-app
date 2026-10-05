@@ -527,9 +527,10 @@ export async function getPurchaseLinesOverdue(requestedById?: string): Promise<(
 }
 
 export const LEFT_BEHIND_HREF = "/area/workspace?tab=compras&ptab=mias";
-// Margen para que el equipo termine de contar todo el pedido (cada producto
-// se recibe por separado, minutos de diferencia) antes de dar por faltante.
-const LEFT_BEHIND_GRACE_MS = 2 * 60 * 60 * 1000;
+// Pedido del usuario 2026-10-05: Inventario tiene hasta 24 h para registrar
+// lo que falta (llega en otro bulto, se cuenta después); si no, recién ahí
+// pasa a Jariel para que lo gestione con el proveedor.
+const LEFT_BEHIND_GRACE_MS = 24 * 60 * 60 * 1000;
 
 export type PurchaseLineLeftBehind = { id: string; groupId: string; name: string; quantity: number; supplierName: string; requestedById: string | null; since: Date };
 
@@ -538,7 +539,7 @@ export type PurchaseLineLeftBehind = { id: string; groupId: string; name: string
 // recepción ni reporte urgente — nadie le avisó a Jariel. Esto lo detecta
 // solo: líneas sin recepción (pagadas, o aprobadas si el proveedor es de
 // crédito) cuyo mismo pedido (groupId) ya tiene otra línea recibida hace más
-// de 2 h. Sale de la lista apenas Inventario la recibe o la reporta.
+// de 24 h. Sale de la lista apenas Inventario la recibe o la reporta.
 export async function getPurchaseLinesLeftBehind(requestedById?: string): Promise<PurchaseLineLeftBehind[]> {
   const waiting = await prisma.purchaseRequest.findMany({
     where: {
