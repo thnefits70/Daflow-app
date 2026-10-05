@@ -1485,12 +1485,15 @@ export async function canMarkComboCreatedInDropi() {
 // Mismo patrón exacto que Sugerencias de Combos: proponer = miembro de MKT;
 // ver la bandeja de aprobación = líder de MKT o admin (solo lectura);
 // aprobar/rechazar de verdad = EXCLUSIVO del líder de MKT, admin excluido.
+// Confirmado 2026-10-05, pedido del usuario: el líder de Finanzas (hoy
+// Nairoby) hace las compras frías y también propone productos a Bryan.
 export async function canProposeMarketProduct() {
   const session = await auth();
   if (!session) return false;
   if (session.user.role === "admin") return true;
   const user = await getGuardUser(session.user.id);
-  return user?.department?.code === "MKT";
+  if (user?.department?.code === "MKT") return true;
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 
 export async function canReviewMarketProduct() {
