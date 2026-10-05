@@ -82,9 +82,9 @@ export type OtherOpenPurchase ={ catalogItemId: string; itemName: string; code: 
 // Mientras haya una compra abierta de un producto, solo quien la pidió puede
 // pedir más de ese producto; cualquier otra persona queda frenada y ve quién
 // lo está comprando. El admin no se frena.
-export async function findOpenPurchasesByOthers(catalogItemIds: string[], requesterId: string | null): Promise<OtherOpenPurchase[]> {
+export async function findOpenPurchasesByOthers(catalogItemIds: string[], requesterId: string | null, db: Prisma.TransactionClient = prisma): Promise<OtherOpenPurchase[]> {
   if (catalogItemIds.length === 0) return [];
-  const rows = await prisma.purchaseRequest.findMany({
+  const rows = await db.purchaseRequest.findMany({
     where: {
       catalogItemId: { in: catalogItemIds },
       AND: [openPurchaseWhere(), ...(requesterId ? [{ OR: [{ requestedById: null }, { requestedById: { not: requesterId } }] }] : [])],
@@ -109,6 +109,22 @@ export async function findOpenPurchasesByOthers(catalogItemIds: string[], reques
     statusText: OPEN_STATUS_TEXT[r.status] ?? "abierta",
     createdAt: r.createdAt.toISOString(),
   }));
+}
+
+// Pedido del usuario 2026-10-05: cerrar del todo el caso de dos personas
+// enviando la compra del mismo producto en el mismo segundo (las dos pasaban
+// el chequeo de arriba antes de que la otra quedara guardada). Se llama
+// DENTRO de la transacción que crea las solicitudes: pone un candado de la
+// base por producto (se suelta solo al terminar la transacción) y vuelve a
+// revisar — la segunda espera a que la primera termine y ya la ve.
+// requesterId null = admin: se bloquea igual, pero no se frena.
+export async function lockAndFindOpenPurchaseByOthers(tx: Prisma.TransactionClient, catalogItemIds: string[], requesterId: string | null): Promise<OtherOpenPurchase | null> {
+  for (const id of [...new Set(catalogItemIds)].sort()) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"purchase-item:" + id}))`;
+  }
+  if (!requesterId) return null;
+  const others = await findOpenPurchasesByOthers(catalogItemIds, requesterId, tx);
+  return others[0] ?? null;
 }
 
 export function otherOpenPurchaseMessage(p: OtherOpenPurchase): string {

@@ -6,9 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { linkReadyToBuyProposalsToGroup } from "@/lib/marketProduct";
 import { canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
-import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes, formatPurchaseRequestCode } from "@/lib/purchases";
+import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, lockAndFindOpenPurchaseByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes, formatPurchaseRequestCode } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
-import { reserveCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
+import { reserveCreditsForGroup, releaseCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 import { reviewApprovedPurchaseGroup, shippingFromSupplierTotal } from "@/lib/purchaseAi";
 
 // Pedido del usuario 2026-10-01: a Jariel no le salían en "Mis solicitudes"
@@ -475,9 +475,13 @@ export async function POST(req: NextRequest) {
   }
 
   const requestNumber = await nextPurchaseRequestNumber();
-  await prisma.$transaction(
-    d.items.map((it, idx) =>
-      prisma.purchaseRequest.create({
+  // Pedido del usuario 2026-10-05: segundo chequeo con candado, por si dos
+  // personas envían el mismo producto en el mismo segundo.
+  const conflict = await prisma.$transaction(async (tx) => {
+    const other = await lockAndFindOpenPurchaseByOthers(tx, d.items.map((it) => it.catalogItemId), isAdmin ? null : session.user.id);
+    if (other) return other;
+    await Promise.all(d.items.map((it, idx) =>
+      tx.purchaseRequest.create({
         data: {
           groupId,
           requestNumber,
@@ -509,8 +513,13 @@ export async function POST(req: NextRequest) {
           marketProductProposalId: d.marketProductProposalId || null,
         },
       })
-    )
-  );
+    ));
+    return null;
+  }, { timeout: 20000, maxWait: 10000 });
+  if (conflict) {
+    await releaseCreditsForGroup(groupId);
+    return NextResponse.json({ error: otherOpenPurchaseMessage(conflict) }, { status: 409 });
+  }
 
   await linkReadyToBuyProposalsToGroup(groupId);
 

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
-import { checkPurchaseSubmission, purchaseSubmissionSchema, purchaseRequestInclude, findOpenPurchasesByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes } from "@/lib/purchases";
+import { checkPurchaseSubmission, purchaseSubmissionSchema, purchaseRequestInclude, findOpenPurchasesByOthers, lockAndFindOpenPurchaseByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
-import { reserveCreditsForGroup } from "@/lib/supplierCredits";
+import { reserveCreditsForGroup, releaseCreditsForGroup } from "@/lib/supplierCredits";
 
 // Confirmado 2026-08-08: cambio de política pedido explícitamente por el
 // usuario — "Corregir y reenviar" una solicitud rechazada antes creaba una
@@ -66,10 +66,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
 
   const attemptNumber = Math.max(...existingRows.map((r) => r.attemptNumber)) + 1;
 
-  await prisma.$transaction([
-    prisma.purchaseRequest.deleteMany({ where: { groupId } }),
-    ...d.items.map((it, idx) =>
-      prisma.purchaseRequest.create({
+  // Pedido del usuario 2026-10-05: segundo chequeo con candado, por si otra
+  // persona envía el mismo producto en el mismo segundo.
+  const conflict = await prisma.$transaction(async (tx) => {
+    const other = await lockAndFindOpenPurchaseByOthers(tx, d.items.map((it) => it.catalogItemId), isAdmin ? null : session.user.id);
+    if (other) return other;
+    await tx.purchaseRequest.deleteMany({ where: { groupId } });
+    await Promise.all(d.items.map((it, idx) =>
+      tx.purchaseRequest.create({
         data: {
           groupId,
           requestNumber: r0.requestNumber,
@@ -106,8 +110,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
           emergencyReason: r0.emergencyReason,
         },
       })
-    ),
-  ]);
+    ));
+    return null;
+  }, { timeout: 20000, maxWait: 10000 });
+  if (conflict) {
+    await releaseCreditsForGroup(groupId);
+    return NextResponse.json({ error: otherOpenPurchaseMessage(conflict) }, { status: 409 });
+  }
 
   const summary = d.items.length === 1 ? check.nameById.get(d.items[0].catalogItemId) : `${d.items.length} productos`;
   await notifyOwner("admin", {
