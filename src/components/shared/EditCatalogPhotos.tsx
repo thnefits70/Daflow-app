@@ -83,6 +83,9 @@ export function EditCatalogPhotos({
         <div className="text-[12.5px] text-steel mb-3">
           <b className="text-ink">{item.name}</b> — quita las fotos incorrectas y agrega las que hagan falta (mínimo 3).
         </div>
+        <div className="text-[11.5px] text-steel-dim mb-3">
+          Revisa bien: apenas se registre la primera compra de este producto, las fotos quedan fijas y solo el admin podrá cambiarlas.
+        </div>
 
         <div className="flex gap-2 mb-3">
           {photos.map((p, i) => (

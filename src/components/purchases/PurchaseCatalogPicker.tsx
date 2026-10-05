@@ -399,9 +399,29 @@ export function PurchaseCatalogPicker({
           </div>
           {value.description && <div className="text-[11px] text-steel truncate">{value.description}</div>}
         </div>
+        {/* Pedido del usuario 2026-10-05 (caso Nairoby, ROL-SUM-013): el lápiz
+            de la lista quedaba escondido — mientras el producto no tenga
+            compras registradas se corrigen las fotos desde aquí mismo; con
+            la primera compra quedan fijas (el servidor lo bloquea igual). */}
+        {!value.pendingRegistration && value.canEditPhotos !== false && (
+          <button type="button" className="flex items-center gap-1 text-[11.5px] text-steel hover:text-blue font-semibold cursor-pointer" onClick={() => setEditingItem(value)}>
+            <Pencil size={12} /> Cambiar fotos
+          </button>
+        )}
         <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => onChange(null)}>
           Cambiar
         </button>
+        {editingItem && (
+          <EditCatalogPhotos
+            item={editingItem}
+            onCancel={() => setEditingItem(null)}
+            onDone={(updated) => {
+              setEditingItem(null);
+              setResults((rs) => rs.map((r) => (r.id === updated.id ? { ...r, photos: updated.photos } : r)));
+              onChange({ ...value, photos: updated.photos });
+            }}
+          />
+        )}
       </div>
     );
   }
