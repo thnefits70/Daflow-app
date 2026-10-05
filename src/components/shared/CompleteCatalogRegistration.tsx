@@ -5,6 +5,7 @@ import { Camera, X } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
+import { ConfirmPhotosBelongTo } from "@/components/shared/ConfirmPhotosBelongTo";
 
 export type CompletedCatalogItem = { id: string; name: string; photos: string[]; description?: string | null; code?: string | null };
 
@@ -21,7 +22,7 @@ export function CompleteCatalogRegistration({
   onDone,
   onCancel,
 }: {
-  item: { id: string; name: string };
+  item: { id: string; name: string; justCode?: string | null };
   onDone: (item: CompletedCatalogItem) => void;
   onCancel: () => void;
 }) {
@@ -32,6 +33,7 @@ export function CompleteCatalogRegistration({
   const [dragOver, setDragOver] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  const [confirming, setConfirming] = useState(false);
   const { onPaste: onPastePhoto, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => addPhotos([file]));
 
   // Confirmado 2026-09-03: Jariel pidió poder arrastrar/seleccionar varias
@@ -165,19 +167,23 @@ export function CompleteCatalogRegistration({
         />
 
         {err && <div className="text-red text-[12px] mb-2.5">{err}</div>}
-        <div className="flex items-center gap-2.5">
-          <button
-            type="button"
-            disabled={saving || uploadingPhoto || photos.length < 3}
-            className="rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
-            onClick={save}
-          >
-            {saving ? "Guardando…" : "Matricular"}
-          </button>
-          <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={onCancel}>
-            Cancelar
-          </button>
-        </div>
+        {confirming ? (
+          <ConfirmPhotosBelongTo item={item} photos={photos} saving={saving} onConfirm={save} onBack={() => setConfirming(false)} onWrongProduct={onCancel} />
+        ) : (
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              disabled={uploadingPhoto || photos.length < 3}
+              className="rounded border border-teal bg-teal px-3.5 py-2 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-60"
+              onClick={() => { setErr(""); setConfirming(true); }}
+            >
+              Matricular
+            </button>
+            <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={onCancel}>
+              Cancelar
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
