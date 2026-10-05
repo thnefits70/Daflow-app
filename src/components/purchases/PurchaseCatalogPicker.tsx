@@ -205,7 +205,9 @@ export function PurchaseCatalogPicker({
       return;
     }
     if (!newJustCode.trim()) {
-      setErr("Escribe el ID de Dropi (o el código del suministro). Si todavía no tiene ID, propónlo en Análisis de Mercado.");
+      setErr(newBodega === "MKT_SUMINISTROS"
+        ? "Escribe el código del suministro."
+        : "Escribe el ID de Dropi. Si todavía no tiene ID, propónlo en Análisis de Mercado.");
       return;
     }
     if (uploadingPhoto) {
