@@ -131,11 +131,24 @@ export type PettyCashPayoutAccountDTO = {
   phone: string | null;
 };
 
+export type PettyCashReservationDTO = {
+  id: string;
+  amount: number;
+  description: string;
+  createdByName: string | null;
+  createdAt: string;
+};
+
 export type PettyCashBoxDTO = {
   type: PettyCashBoxTypeStr;
   minThreshold: number;
   payoutAccount: PettyCashPayoutAccountDTO | null;
   balance: number;
+  // Dinero apartado (2026-10-05): reserved = suma de lo apartado sin
+  // liberar; available = balance − reserved, y es lo que decide isLow.
+  reserved: number;
+  available: number;
+  reservations: PettyCashReservationDTO[];
   isLow: boolean;
   blocked: boolean;
   entries: PettyCashEntryDTO[];
@@ -145,19 +158,26 @@ export type PettyCashBoxDTO = {
 
 export async function getPettyCashBoxData(type: PettyCashBoxTypeStr): Promise<PettyCashBoxDTO> {
   const box = await getOrCreateBox(type);
-  const [rows, payoutAccount] = await Promise.all([
+  const [rows, payoutAccount, reservationRows] = await Promise.all([
     prisma.pettyCashEntry.findMany({
       where: { boxId: box.id },
       include: { createdBy: { select: { name: true } }, confirmedBy: { select: { name: true } } },
       orderBy: { requestNumber: "desc" },
     }),
     prisma.pettyCashPayoutAccount.findUnique({ where: { boxId: box.id } }),
+    prisma.pettyCashReservation.findMany({
+      where: { boxId: box.id, releasedAt: null },
+      include: { createdBy: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
 
   const active = rows.filter((r) => !r.archived);
   const archived = rows.filter((r) => r.archived);
   const pending = active.filter((r) => r.kind === "RECARGA" && r.confirmedAt === null);
   const balance = await computeBalance(box.id);
+  const reserved = reservationRows.reduce((s, r) => s + r.amount, 0);
+  const available = balance - reserved;
 
   return {
     type,
@@ -173,7 +193,16 @@ export async function getPettyCashBoxData(type: PettyCashBoxTypeStr): Promise<Pe
       phone: payoutAccount.phone,
     },
     balance,
-    isLow: balance <= box.minThreshold,
+    reserved,
+    available,
+    reservations: reservationRows.map((r) => ({
+      id: r.id,
+      amount: r.amount,
+      description: r.description,
+      createdByName: r.createdBy ? actorName(r.createdBy.name) : actorName(null),
+      createdAt: r.createdAt.toISOString(),
+    })),
+    isLow: available <= box.minThreshold,
     blocked: pending.length > 0,
     entries: await Promise.all(active.map((e) => toEntryDTO(e, type))),
     archivedEntries: await Promise.all(archived.map((e) => toEntryDTO(e, type))),

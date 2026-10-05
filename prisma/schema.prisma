@@ -508,6 +508,8 @@ model User {
   pettyCashExceptionsRequested                     PettyCashFreightException[]           @relation("PettyCashExceptionRequestedBy")
   pettyCashPayoutAccountsUpdated                   PettyCashPayoutAccount[]
   pettyCashExceptionsReviewed                      PettyCashFreightException[]           @relation("PettyCashExceptionReviewedBy")
+  pettyCashReservationsCreated                     PettyCashReservation[]                @relation("PettyCashReservationCreatedBy")
+  pettyCashReservationsReleased                    PettyCashReservation[]                @relation("PettyCashReservationReleasedBy")
   purchaseRequestsMade                             PurchaseRequest[]                     @relation("PurchaseRequestRequestedBy")
   purchaseRequestsReviewed                         PurchaseRequest[]                     @relation("PurchaseRequestReviewedBy")
   purchaseRequestReceiptsConfirmed                 PurchaseRequestReceipt[]              @relation("PurchaseRequestReceiptConfirmedBy")
@@ -1276,6 +1278,34 @@ model PettyCashBox {
   entries       PettyCashEntry[]
   exceptions    PettyCashFreightException[]
   payoutAccount PettyCashPayoutAccount?
+  reservations  PettyCashReservation[]
+}
+
+// Dinero apartado (pedido del usuario 2026-10-05, caso Nairoby: $555 de la
+// caja ya comprometidos para una compra de Marcos que todavía no se hacía,
+// así que el saldo parecía alto y nunca saltaba el aviso de saldo bajo).
+// Quien administra la caja aparta un monto con su motivo; el saldo LIBRE
+// (saldo − apartado) es el que decide el aviso de saldo bajo. Nunca se
+// borra: se libera al registrar el desembolso que lo usa ("used") o con
+// "Ya no se necesita" ("cancelled").
+model PettyCashReservation {
+  id          String       @id @default(cuid())
+  boxId       String
+  box         PettyCashBox @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  amount      Float
+  description String
+
+  createdById String?
+  createdBy   User?    @relation("PettyCashReservationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  releasedAt        DateTime?
+  releasedById      String?
+  releasedBy        User?     @relation("PettyCashReservationReleasedBy", fields: [releasedById], references: [id], onDelete: SetNull)
+  releaseReason     String? // "used" | "cancelled"
+  releasedByEntryId String?
+
+  @@index([boxId])
 }
 
 // Cuenta donde quien administra la caja (nunca admin) quiere recibir el

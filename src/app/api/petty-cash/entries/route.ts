@@ -18,6 +18,8 @@ const schema = z.object({
   linkedGroupId: z.string().nullable().optional(),
   linkedExternalSaleId: z.string().nullable().optional(),
   manualReason: z.string().trim().nullable().optional(),
+  // Dinero apartado (2026-10-05) que este desembolso usa — se libera solo.
+  reservationId: z.string().nullable().optional(),
 });
 
 // Confirmado 2026-08-05: registrar un desembolso (solicitud de pago) — se
@@ -40,6 +42,12 @@ export async function POST(req: NextRequest) {
 
   if (await hasPendingConfirmation(box.id)) {
     return NextResponse.json({ error: "Tienes una recarga pendiente de confirmar — confírmala antes de registrar un desembolso." }, { status: 409 });
+  }
+
+  if (d.reservationId) {
+    const r = await prisma.pettyCashReservation.findUnique({ where: { id: d.reservationId } });
+    if (!r || r.boxId !== box.id) return NextResponse.json({ error: "Lo apartado no es de esta caja." }, { status: 400 });
+    if (r.releasedAt) return NextResponse.json({ error: "Lo apartado ya se había liberado — recarga la página." }, { status: 409 });
   }
 
   if (d.linkedGroupId) {
@@ -141,6 +149,13 @@ export async function POST(req: NextRequest) {
       updatedById: isAdmin ? null : session.user.id,
     },
   });
+
+  if (d.reservationId) {
+    await prisma.pettyCashReservation.updateMany({
+      where: { id: d.reservationId, releasedAt: null },
+      data: { releasedAt: new Date(), releasedById: isAdmin ? null : session.user.id, releaseReason: "used", releasedByEntryId: entry.id },
+    });
+  }
 
   if (d.linkedGroupId) {
     await markGroupFreightPaid(d.linkedGroupId, isAdmin ? null : session.user.id, d.proofUrl || null, d.amount);

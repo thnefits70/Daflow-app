@@ -345,6 +345,12 @@ function BoxCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fundAmount, fundProofUrl]);
 
+  // Dinero apartado (pedido del usuario 2026-10-05).
+  const [reservationId, setReservationId] = useState("");
+  const [reserveOpen, setReserveOpen] = useState(false);
+  const [reserveDesc, setReserveDesc] = useState("");
+  const [reserveAmount, setReserveAmount] = useState("");
+
   const [excReason, setExcReason] = useState("");
   const [zoomedUrl, setZoomedUrl] = useState<string | null>(null);
 
@@ -577,19 +583,60 @@ function BoxCard({
         linkedGroupId: showOrderLink && linkMode === "orden" ? groupId : null,
         linkedExternalSaleId: linkMode === "moto" ? saleId : null,
         manualReason: showOrderLink && linkMode === "motivo" ? reason : (!showOrderLink ? null : null),
+        reservationId: reservationId || null,
       }),
     });
     setBusy(false);
     const json = await res.json().catch(() => null);
     if (!res.ok) { setErr(json?.error ?? "No se pudo guardar."); return; }
-    setAmount(""); setDescription(""); setProofUrl(null); setReason(""); setProofVerifyResult(null);
+    setAmount(""); setDescription(""); setProofUrl(null); setReason(""); setProofVerifyResult(null); setReservationId("");
     clearDesembolsoDraft();
     router.refresh();
   }
 
   function clearDesembolso() {
-    setAmount(""); setDescription(""); setProofUrl(null); setReason(""); setProofVerifyResult(null); setErr("");
+    setAmount(""); setDescription(""); setProofUrl(null); setReason(""); setProofVerifyResult(null); setErr(""); setReservationId("");
     clearDesembolsoDraft();
+  }
+
+  // Al elegir de qué apartado sale el desembolso, se llenan monto y
+  // descripción si están vacíos (siguen editables).
+  function selectReservation(id: string) {
+    setReservationId(id);
+    const r = box.reservations.find((x) => x.id === id);
+    if (!r) return;
+    if (!amount.trim()) { setAmount(String(r.amount)); setProofVerifyResult(null); }
+    if (!description.trim()) setDescription(r.description);
+  }
+
+  async function submitReservation() {
+    const n = Number(reserveAmount);
+    if (!reserveDesc.trim()) { setErr("Escribe para qué es el dinero apartado."); return; }
+    if (Number.isNaN(n) || n <= 0) { setErr("Ingresa un monto válido."); return; }
+    setBusy(true);
+    setErr("");
+    const res = await fetch("/api/petty-cash/reservations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ boxType: box.type, amount: n, description: reserveDesc }),
+    });
+    setBusy(false);
+    const json = await res.json().catch(() => null);
+    if (!res.ok) { setErr(json?.error ?? "No se pudo apartar."); return; }
+    setReserveDesc(""); setReserveAmount(""); setReserveOpen(false);
+    router.refresh();
+  }
+
+  async function cancelReservation(id: string, label: string) {
+    if (!window.confirm(`¿Ya no se necesita "${label}"? El dinero vuelve a quedar libre.`)) return;
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/petty-cash/reservations/${id}`, { method: "PATCH" });
+    setBusy(false);
+    const json = await res.json().catch(() => null);
+    if (!res.ok) { setErr(json?.error ?? "No se pudo liberar."); return; }
+    if (reservationId === id) setReservationId("");
+    router.refresh();
   }
 
   async function submitFund() {
@@ -660,9 +707,14 @@ function BoxCard({
         </div>
       </div>
       <div className={`font-display text-[28px] font-bold mt-1 ${box.isLow ? "text-red" : ""}`}>{money(box.balance)}</div>
+      {box.reserved > 0 && (
+        <div className="mt-0.5 text-[12px] text-steel">
+          📌 Apartado {money(box.reserved)} · <span className={`font-semibold ${box.isLow ? "text-red" : "text-ink"}`}>Libre {money(box.available)}</span>
+        </div>
+      )}
       {box.isLow && (
         <div className="mt-1.5 flex items-center gap-2 text-[11.5px] text-red bg-red/10 border border-red/30 rounded-md px-2.5 py-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-red shrink-0" /> Saldo bajo el mínimo de {money(box.minThreshold)}.
+          <span className="w-1.5 h-1.5 rounded-full bg-red shrink-0" /> {box.reserved > 0 ? "Saldo libre" : "Saldo"} bajo el mínimo de {money(box.minThreshold)}.
         </div>
       )}
       {/* Pendiente de confirmar se sigue viendo aunque la caja esté oculta. */}
@@ -786,9 +838,58 @@ function BoxCard({
         </div>
       )}
 
+      {(box.reservations.length > 0 || canOperate) && (
+        <div className="mt-4 pt-3.5 border-t border-dashed border-rule">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[12px] font-semibold">📌 Dinero apartado</div>
+            {canOperate && (
+              <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => setReserveOpen((v) => !v)}>
+                {reserveOpen ? "Cancelar" : "+ Apartar dinero"}
+              </button>
+            )}
+          </div>
+          {box.reservations.length === 0 && !reserveOpen && (
+            <div className="text-[11.5px] text-steel">Si un gasto ya está comprometido pero todavía no se paga, apártalo aquí. Así el aviso de saldo bajo le llega al dueño a tiempo.</div>
+          )}
+          {box.reservations.length > 0 && (
+            <div className="flex flex-col gap-1.5">
+              {box.reservations.map((r) => (
+                <div key={r.id} className="flex items-center gap-2.5 rounded-md border border-rule bg-cloud px-2.5 py-1.5">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[12px] font-semibold truncate">{r.description}</div>
+                    <div className="text-[10.5px] text-steel">{r.createdByName} · {formatDateTime(r.createdAt)}</div>
+                  </div>
+                  <div className="font-mono text-[12.5px] font-semibold">{money(r.amount)}</div>
+                  {canOperate && (
+                    <button type="button" disabled={busy} className="text-[11px] text-steel underline cursor-pointer disabled:opacity-60" onClick={() => cancelReservation(r.id, r.description)}>
+                      Ya no se necesita
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {canOperate && reserveOpen && (
+            <div className="mt-2 rounded-md border border-rule p-3">
+              <input type="text" placeholder="¿Para qué es? (ej. Compra de Marcos)" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2" value={reserveDesc} onChange={(e) => setReserveDesc(e.target.value)} />
+              <input type="number" step="any" placeholder="$0.00" className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] font-mono mb-2" value={reserveAmount} onChange={(e) => setReserveAmount(e.target.value)} />
+              <button type="button" disabled={busy} className="rounded bg-blue text-white px-3.5 py-1.5 text-[12px] font-semibold cursor-pointer disabled:opacity-60" onClick={submitReservation}>
+                Apartar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {canOperate && !blocked && (
         <div className="mt-4 pt-3.5 border-t border-dashed border-rule">
           <div className="text-[12px] font-semibold mb-2">Registrar solicitud de pago</div>
+          {box.reservations.length > 0 && (
+            <select className="w-full rounded border border-rule bg-cloud px-2.5 py-2 text-[12px] mb-2.5" value={reservationId} onChange={(e) => selectReservation(e.target.value)}>
+              <option value="">No sale de lo apartado</option>
+              {box.reservations.map((r) => <option key={r.id} value={r.id}>📌 Sale de lo apartado: {r.description} — {money(r.amount)}</option>)}
+            </select>
+          )}
           {(showOrderLink || motorizadoFreights.length > 0) && (
             <div className="flex gap-1.5 mb-2.5 flex-wrap">
               {showOrderLink && (

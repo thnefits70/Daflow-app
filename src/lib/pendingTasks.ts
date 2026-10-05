@@ -1085,7 +1085,9 @@ async function getPettyCashLowBalanceItems(hrefBase: string): Promise<PendingIte
         type: "caja_chica_saldo",
         icon: "💰",
         label: `Caja Chica ${b.label} con saldo bajo`,
-        meta: `$${box.balance.toFixed(2)} · mínimo $${box.minThreshold.toFixed(2)} · atrasado`,
+        meta: box.reserved > 0
+          ? `Libre $${box.available.toFixed(2)} ($${box.reserved.toFixed(2)} apartado) · mínimo $${box.minThreshold.toFixed(2)} · atrasado`
+          : `$${box.balance.toFixed(2)} · mínimo $${box.minThreshold.toFixed(2)} · atrasado`,
         overdue: true,
         href: `${hrefBase}?tab=cajachica&box=${b.type.toLowerCase()}`,
       });
