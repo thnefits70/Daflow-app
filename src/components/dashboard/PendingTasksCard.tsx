@@ -19,6 +19,16 @@ export function PendingTasksCard() {
       .catch(() => setData(null));
   }, []);
 
+  // Pedido del usuario 2026-10-05: mientras se revisan los pendientes se ve
+  // que vienen en camino, en vez de que la tarjeta aparezca de golpe al final.
+  if (data === undefined) {
+    return (
+      <div className="bg-surface border rounded-lg px-4 py-3 mb-6 flex items-center gap-2 text-[12px] text-steel" style={{ borderColor: "rgba(217,164,65,.25)" }}>
+        <span className="w-1.5 h-1.5 rounded-full shrink-0 animate-pulse" style={{ background: "#D9A441" }} />
+        Revisando pendientes…
+      </div>
+    );
+  }
   if (!data) return null;
 
   return (

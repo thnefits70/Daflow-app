@@ -395,18 +395,37 @@ export const COUNTED_LOT_GRACE_HOURS = 24;
 
 export type CountedLot = { id: string; day: string; corte: number; matching: number; off: number; readySince: Date };
 
+// Pedido del usuario 2026-10-05 (Inicio tardaba en aparecer): antes armaba
+// cada corte completo con getCompiledLot (~6 consultas por corte). Ahora una
+// sola consulta trae lo justo y calcula lo pedido igual que getCompiledLot:
+// productos normales + garantías que no son pieza, contra lo que se sacó.
 export async function getCountedUnconfirmedLots(): Promise<CountedLot[]> {
   const rows = await prisma.fulfillmentLot.findMany({
     where: { status: "SENT" },
-    select: { id: true, day: true, corte: true, sentAt: true, createdAt: true },
+    select: {
+      id: true, day: true, corte: true, sentAt: true, createdAt: true,
+      batches: { select: { items: { select: { catalogItemId: true, quantity: true, warrantyGuide: true, warrantyMode: true } } } },
+      picks: { select: { catalogItemId: true, pickedQty: true, pickedAt: true, confirmedAt: true } },
+    },
     orderBy: [{ day: "asc" }, { corte: "asc" }],
   });
   const out: CountedLot[] = [];
   for (const r of rows) {
     if (isBackfillLot(r)) continue;
-    const lot = await getCompiledLot(r.id);
-    if (!lot) continue;
-    const open = lot.picking.filter((p) => !p.confirmedAt);
+    const neededByItem = new Map<string, number>();
+    for (const b of r.batches) {
+      for (const it of b.items) {
+        if (it.warrantyGuide && (it.warrantyMode ?? "COMPLETE") === "PIECE") continue;
+        neededByItem.set(it.catalogItemId, (neededByItem.get(it.catalogItemId) ?? 0) + it.quantity);
+      }
+    }
+    const pickByItem = new Map(r.picks.map((p) => [p.catalogItemId, p]));
+    const open = [...neededByItem.entries()]
+      .map(([catalogItemId, needed]) => {
+        const p = pickByItem.get(catalogItemId);
+        return { needed, picked: p?.pickedQty ?? null, pickedAt: p?.pickedAt ?? null, confirmedAt: p?.confirmedAt ?? null };
+      })
+      .filter((p) => !p.confirmedAt);
     if (open.length === 0 || open.some((p) => p.picked === null)) continue;
     const times = open.map((p) => (p.pickedAt ? new Date(p.pickedAt).getTime() : 0)).filter((t) => t > 0);
     out.push({

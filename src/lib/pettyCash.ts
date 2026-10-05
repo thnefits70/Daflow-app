@@ -210,7 +210,37 @@ export async function getPettyCashBoxData(type: PettyCashBoxTypeStr): Promise<Pe
   };
 }
 
-export type EligiblePaymentOrderDTO = { groupId: string; label: string; shippingCostTotal: number; requestedAt: string };
+// Pedido del usuario 2026-10-05 ("se demora mucho en aparecer en Inicio"):
+// el aviso de saldo bajo solo necesita saldo, apartado y mínimo — no las
+// etiquetas de cada movimiento que arma getPettyCashBoxData (una consulta por
+// movimiento). Mismo cálculo que computeBalance + isLow, ambas cajas de una vez.
+export async function getPettyCashBoxStatuses(): Promise<
+  { type: PettyCashBoxTypeStr; minThreshold: number; balance: number; reserved: number; available: number; isLow: boolean }[]
+> {
+  const types: PettyCashBoxTypeStr[] = ["PRINCIPAL", "SECUNDARIA"];
+  const boxes = await Promise.all(types.map((t) => getOrCreateBox(t)));
+  const ids = boxes.map((b) => b.id);
+  const [entries, reservations] = await Promise.all([
+    prisma.pettyCashEntry.findMany({
+      where: { boxId: { in: ids }, archived: false },
+      select: { boxId: true, kind: true, amount: true, confirmedAt: true },
+    }),
+    prisma.pettyCashReservation.findMany({ where: { boxId: { in: ids }, releasedAt: null }, select: { boxId: true, amount: true } }),
+  ]);
+  return boxes.map((box, i) => {
+    let balance = 0;
+    for (const e of entries) {
+      if (e.boxId !== box.id) continue;
+      if (e.kind === "DESEMBOLSO") balance -= e.amount;
+      else if (e.kind === "RECARGA" && e.confirmedAt !== null) balance += e.amount;
+    }
+    const reserved = reservations.filter((r) => r.boxId === box.id).reduce((s, r) => s + r.amount, 0);
+    const available = balance - reserved;
+    return { type: types[i], minThreshold: box.minThreshold, balance, reserved, available, isLow: available <= box.minThreshold };
+  });
+}
+
+export type EligiblePaymentOrderDTO ={ groupId: string; label: string; shippingCostTotal: number; requestedAt: string };
 
 // Órdenes de pago con flete pendiente — confirmado 2026-08-05: el freno de
 // doble pago vive aquí, contra el MISMO campo que ya usa Control de Compras

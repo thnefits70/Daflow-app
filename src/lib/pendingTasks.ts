@@ -4,7 +4,7 @@ import { isAutoReturnRateMonth, RETURN_RATE_LAST_MANUAL_MONTH } from "@/lib/retu
 import { prisma } from "@/lib/prisma";
 import { evaluationDeadline, adminConfirmDeadline, summaryFieldsFromScores } from "@/lib/recognition";
 import { addBusinessHours } from "@/lib/businessHours";
-import { getPettyCashBoxData, getPendingMotorizadoFreights, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
+import { getPettyCashBoxStatuses, getPendingMotorizadoFreights, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
 import { getUpcomingBirthdays } from "@/lib/birthdays";
 import { getFinanzasDeptId } from "@/lib/inventoryKpis";
 import { isEndOfMonthQuincena, monthOfPeriod } from "@/lib/payrollCalc";
@@ -29,7 +29,7 @@ import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
 import { DISCONTINUED_URL, getDiscontinuedOrderPendingCount, getDiscontinuedPendingCount } from "@/lib/dropiDiscontinued";
 import { formerLeaderIdsFor, isSummaryComplete } from "@/lib/formerLeaders";
 import { getUnlinkedShanghaiCount } from "@/lib/storeTracking";
-import { adminLotHref, getCountedUnconfirmedLots, overdueCountedLots } from "@/lib/fulfillmentPicking";
+import { getCountedUnconfirmedLots, overdueCountedLots } from "@/lib/fulfillmentPicking";
 import { getDropiPriceChanges } from "@/lib/dropiPriceChanges";
 
 // ---------------- Date helpers ----------------
@@ -1073,23 +1073,18 @@ async function getRecognitionAdminPendingItem(href: string): Promise<PendingItem
 // de destino, sin query) se recibe ya resuelta por el llamador y acá solo se
 // le agregan los parámetros que DeptWorkspaceTabs/PettyCashPanel leen.
 async function getPettyCashLowBalanceItems(hrefBase: string): Promise<PendingItem[]> {
-  const boxes: { label: string; type: PettyCashBoxTypeStr }[] = [
-    { label: "Principal", type: "PRINCIPAL" },
-    { label: "Secundaria", type: "SECUNDARIA" },
-  ];
   const items: PendingItem[] = [];
-  for (const b of boxes) {
-    const box = await getPettyCashBoxData(b.type);
+  for (const box of await getPettyCashBoxStatuses()) {
     if (box.isLow) {
       items.push({
         type: "caja_chica_saldo",
         icon: "💰",
-        label: `Caja Chica ${b.label} con saldo bajo`,
+        label: `Caja Chica ${box.type === "PRINCIPAL" ? "Principal" : "Secundaria"} con saldo bajo`,
         meta: box.reserved > 0
           ? `Libre $${box.available.toFixed(2)} ($${box.reserved.toFixed(2)} apartado) · mínimo $${box.minThreshold.toFixed(2)} · atrasado`
           : `$${box.balance.toFixed(2)} · mínimo $${box.minThreshold.toFixed(2)} · atrasado`,
         overdue: true,
-        href: `${hrefBase}?tab=cajachica&box=${b.type.toLowerCase()}`,
+        href: `${hrefBase}?tab=cajachica&box=${box.type.toLowerCase()}`,
       });
     }
   }
@@ -3761,19 +3756,20 @@ async function getImprovementPlanPendingClosureApprovalItems(href: string): Prom
 // cortes contados (Daniel), compras recibidas sin aprobar (Daniel) y
 // productos nuevos sin "Liberar al Kardex" (Bryan). La decisión sigue siendo
 // de cada uno; esto solo avisa.
-async function getKardexDelayAdminItems(): Promise<PendingItem[]> {
+async function getKardexDelayAdminItems(deptIds: Map<string, string>): Promise<PendingItem[]> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const daysSince = (d: Date) => Math.max(1, Math.floor((Date.now() - d.getTime()) / (24 * 60 * 60 * 1000)));
-  const [counted, receipts, releases, comDept, mktDept, lotsHref] = await Promise.all([
+  const comDept = deptIds.has("COM") ? { id: deptIds.get("COM")! } : null;
+  const mktDept = deptIds.has("MKT") ? { id: deptIds.get("MKT")! } : null;
+  // Mismo destino que adminLotHref() en fulfillmentPicking.ts.
+  const lotsHref = deptIds.has("INV") ? `/admin/dept/${deptIds.get("INV")}?tab=egresos&otab=solicitud` : "/admin";
+  const [counted, receipts, releases] = await Promise.all([
     getCountedUnconfirmedLots().then((l) => overdueCountedLots(l)),
     prisma.purchaseRequest.findMany({
       where: { status: "RECEIVED_PENDING_REVIEW", receipt: { confirmedAt: { lt: cutoff } } },
       select: { groupId: true, receipt: { select: { confirmedAt: true } } },
     }),
     getMarketProductKardexReleasePendingRows().then((rows) => rows.filter((r) => r.since < cutoff)),
-    prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } }),
-    prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } }),
-    adminLotHref(),
   ]);
   const items: PendingItem[] = [];
   if (counted.length > 0) {
@@ -3831,20 +3827,26 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // Confirmado 2026-08-06: la Caja Chica solo se ve dentro de la pestaña
     // "Caja Chica" del área de Finanzas — el link de admin debe apuntar a
     // esa página específica (/admin/dept/[id]), no a "/admin" a secas.
-    const finDept = await prisma.department.findUnique({ where: { code: "FIN" }, select: { id: true } });
+    // Pedido del usuario 2026-10-05 (Inicio tardaba): los ids de las cuatro
+    // áreas en una sola consulta, no una por área.
+    const deptIds = new Map(
+      (await prisma.department.findMany({ where: { code: { in: ["FIN", "COM", "INV", "MKT"] } }, select: { id: true, code: true } })).map((d) => [d.code, d.id]),
+    );
+    const deptOf = (code: string) => (deptIds.has(code) ? { id: deptIds.get(code)! } : null);
+    const finDept = deptOf("FIN");
     const financeHref = finDept ? `/admin/dept/${finDept.id}` : "/admin";
     // Confirmado 2026-08-13: Control de Compras vive en la página del
     // departamento COM (Compras) — mismo criterio que financeHref arriba —
     // y ambos pendientes de pago (mercadería y flete) se pagan desde su
     // pestaña interna "Finanzas" (?ptab=finanzas, leído por
     // PurchaseControlPanel).
-    const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
+    const comDept = deptOf("COM");
     const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
     const comCreditsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin";
     // Confirmado 2026-08-27: "Registro de Egresos" (donde vive la vista de
     // solo lectura de Cambio con proveedor) solo se ve desde la página del
     // departamento INV (ver canViewMerchandiseOutflow en admin/dept/[id]/page.tsx).
-    const invDept = await prisma.department.findUnique({ where: { code: "INV" }, select: { id: true } });
+    const invDept = deptOf("INV");
     const invEgresosHref = invDept ? `/admin/dept/${invDept.id}?tab=egresos&otab=proveedor` : "/admin";
     const invStockHref = invDept ? `/admin/dept/${invDept.id}?tab=stock-actual` : "/admin";
     const comSolicitarHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=solicitar` : "/admin";
@@ -3854,7 +3856,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // Confirmado 2026-08-31: "Ventas Externas" vive en la página del
     // departamento MKT (ver canViewExternalSales en admin/dept/[id]/page.tsx),
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
-    const mktDept = await prisma.department.findUnique({ where: { code: "MKT" }, select: { id: true } });
+    const mktDept = deptOf("MKT");
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
     const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseAwaitingCostItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, improvementPlanClosureItems, purchaseExceptionItem, stockAdjustmentItem, catalogDeleteItem, supplierAccountItem, freightExceptionItem, nairobySalaryItem, adminPlanItems, priceCorrectionItem, writeOffApprovalItem] = await Promise.all([
       getFeedbackPendingItems(),
@@ -3931,7 +3933,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     ];
     // Pedido del usuario 2026-10-01: lo que no entra al Kardex porque alguien
     // no confirmó en 24 horas va arriba de todo (y sale en el aviso de las 8:00).
-    items.unshift(...(await getKardexDelayAdminItems()));
+    items.unshift(...(await getKardexDelayAdminItems(deptIds)));
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
   }
