@@ -82,6 +82,27 @@ export async function POST(req: NextRequest) {
   // llenos — a propósito vacíos, no un olvido.
   const skipCompetitor = d.platform === "ROCKET" || !!d.noCompetitorData;
 
+  // Pedido del usuario 2026-10-05: Jariel y Nairoby proponen por separado y
+  // no hablan entre ellos — si el mismo producto (mismo ID de la competencia
+  // o mismo nombre) ya está propuesto o aprobado, no se deja proponer otra vez.
+  const competitorId = skipCompetitor ? null : d.competitorId?.trim() || null;
+  const sameProduct = await prisma.marketProductProposal.findFirst({
+    where: {
+      status: { in: ["PENDING_APPROVAL", "APPROVED"] },
+      OR: [
+        { productName: { equals: d.productName.trim(), mode: "insensitive" } },
+        ...(competitorId ? [{ competitorId }] : []),
+      ],
+    },
+    orderBy: { createdAt: "desc" },
+    select: { code: true, productName: true, status: true, proposedById: true, proposedBy: { select: { name: true } } },
+  });
+  if (sameProduct) {
+    const who = sameProduct.proposedById === session.user.id ? "Tú ya" : `${sameProduct.proposedBy?.name ?? "El admin"} ya`;
+    const state = sameProduct.status === "APPROVED" ? "y Bryan ya la aprobó" : "y está esperando aprobación de Bryan";
+    return NextResponse.json({ error: `${who} propuso este producto: ${sameProduct.code} "${sameProduct.productName}", ${state}. No se puede proponer dos veces.` }, { status: 409 });
+  }
+
   const insuranceRatePercent = d.insuranceRatePercent ?? 6;
   const fulfillmentCost = d.fulfillmentCost ?? 0.75;
   const marginPercent = d.marginPercent ?? 20;
