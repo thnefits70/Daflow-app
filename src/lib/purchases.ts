@@ -441,6 +441,46 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
   return pushes;
 }
 
+export type ShortReceiptUnclaimed = { id: string; name: string; supplierName: string; quantity: number; receivedQuantity: number; missing: number; receivedAt: Date | null; requestedById: string | null; requestedByName: string | null };
+
+// Pedido del usuario 2026-10-05 (caso Bolsa De Lavar Zapatos, 12 ago: 270 de
+// 300): compras recibidas con menos de lo pedido y sin ningún reporte urgente
+// — el faltante nunca se reclamó. Hoy la recepción ya no deja confirmar una
+// cantidad distinta sin "Informar urgente", así que esto queda para los
+// casos viejos. Desaparece apenas se abre el reclamo (short-receipt-claim).
+export async function getShortReceiptsUnclaimed(requestedById?: string): Promise<ShortReceiptUnclaimed[]> {
+  const rows = await prisma.purchaseRequest.findMany({
+    where: {
+      ...(requestedById ? { requestedById } : {}),
+      status: { in: ["RECEIVED", "RECEIVED_PENDING_REVIEW"] },
+      receipt: { isNot: null },
+      urgentReports: { none: {} },
+    },
+    select: {
+      id: true,
+      quantity: true,
+      requestedById: true,
+      requestedBy: { select: { name: true } },
+      catalogItem: { select: { name: true } },
+      supplier: { select: { name: true } },
+      receipt: { select: { receivedQuantity: true, confirmedAt: true } },
+    },
+  });
+  return rows
+    .filter((r) => r.receipt && r.receipt.receivedQuantity < r.quantity)
+    .map((r) => ({
+      id: r.id,
+      name: r.catalogItem.name,
+      supplierName: r.supplier?.name ?? "proveedor",
+      quantity: r.quantity,
+      receivedQuantity: r.receipt!.receivedQuantity,
+      missing: r.quantity - r.receipt!.receivedQuantity,
+      receivedAt: r.receipt!.confirmedAt,
+      requestedById: r.requestedById,
+      requestedByName: r.requestedBy?.name ?? null,
+    }));
+}
+
 const OVERDUE_DAYS = 5;
 
 // Pedido del usuario 2026-10-05: pedido completo (ninguna línea recibida) que

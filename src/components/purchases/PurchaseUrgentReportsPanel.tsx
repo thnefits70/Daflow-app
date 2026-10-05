@@ -18,6 +18,7 @@ type ResolutionStatus = "PENDING" | "COMPLETED" | "CANCELLED";
 // verificación de punta a punta, solo cambia el rótulo (ver
 // resolutionLabel más abajo).
 type UiResolutionType = ResolutionType | "MISSING_DELIVERY";
+type ShortReceipt = { id: string; name: string; supplierName: string; quantity: number; receivedQuantity: number; missing: number; receivedAt: string | null; requestedByName: string | null };
 
 type ResolutionDraftData = { resType: UiResolutionType; resQty: string; resDueDate: string; resNote: string; resProofUrl: string; resProofName: string };
 function isResolutionDraftEmpty(d: ResolutionDraftData) {
@@ -277,8 +278,26 @@ export function PurchaseUrgentReportsPanel({
     "/area/workspace?tab=compras"
   );
 
+  // Pedido del usuario 2026-10-05: faltantes que llegaron cortos y nunca se
+  // reclamaron (ver getShortReceiptsUnclaimed).
+  const [shortReceipts, setShortReceipts] = useState<ShortReceipt[]>([]);
+  const [confirmClaimId, setConfirmClaimId] = useState<string | null>(null);
+
   function load() {
     fetch("/api/purchase-requests/urgent-reports").then((r) => (r.ok ? r.json() : [])).then(setReports).catch(() => setReports([]));
+    fetch("/api/purchase-requests/short-receipts").then((r) => (r.ok ? r.json() : [])).then(setShortReceipts).catch(() => setShortReceipts([]));
+  }
+
+  async function openShortReceiptClaim(requestId: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/${requestId}/short-receipt-claim`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo abrir el reclamo."); return; }
+    setConfirmClaimId(null);
+    load();
+    router.refresh();
   }
   useEffect(load, []);
 
@@ -483,6 +502,43 @@ export function PurchaseUrgentReportsPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      {shortReceipts.length > 0 && (
+        <div className="bg-surface border border-red/40 rounded-md p-4">
+          <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2 text-red">
+            <AlertTriangle size={14} /> Faltantes que nunca se reclamaron ({shortReceipts.length})
+          </div>
+          <div className="flex flex-col gap-2.5">
+            {shortReceipts.map((s) => (
+              <div key={s.id} className="bg-cloud rounded-md p-3 text-[12px]">
+                <div className="font-semibold">{s.name}</div>
+                <div className="text-steel text-[11.5px] mb-1.5">
+                  {s.supplierName} — se pidieron {s.quantity} un., llegaron {s.receivedQuantity}. Faltan <b>{s.missing} un.</b>
+                  {s.receivedAt && <> · recibido {formatDateTime(s.receivedAt)}</>} · compra de {actorName(s.requestedByName)}
+                </div>
+                {canAct ? (
+                  confirmClaimId === s.id ? (
+                    <div className="bg-surface border border-red/40 rounded-md p-2.5">
+                      <div className="text-[11.5px] font-semibold mb-1.5">¿Abrir el reclamo por {s.missing} un. faltantes? Queda abajo, en los reclamos abiertos, para registrar qué responde el proveedor.</div>
+                      {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+                      <div className="flex items-center gap-2">
+                        <button type="button" disabled={busy} className="rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => openShortReceiptClaim(s.id)}>Sí, abrir reclamo</button>
+                        <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setConfirmClaimId(null); setErr(""); }}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="rounded border border-red/50 text-red px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer" onClick={() => { setConfirmClaimId(s.id); setErr(""); }}>
+                      Abrir reclamo al proveedor
+                    </button>
+                  )
+                ) : (
+                  <div className="text-steel-dim italic text-[11.5px]">Esperando que Compras abra el reclamo con el proveedor.</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {pendingExcess.length > 0 && (
         <div className="bg-surface border border-teal/40 rounded-md p-4">
           <div className="flex items-center gap-1.5 text-[12px] font-bold mb-2 text-teal">

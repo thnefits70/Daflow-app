@@ -20,7 +20,7 @@ import { fullCountCompleted, getActiveCount, getCountView, getDifferences, getSu
 import { getNegativeStockProducts } from "@/lib/stockKardex";
 import { carrierLabel } from "@/lib/carriers";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
-import { getOpenPurchaseCodesByCatalogItem, getPurchaseLinesLeftBehind, getPurchaseLinesOverdue, LEFT_BEHIND_HREF } from "@/lib/purchases";
+import { getOpenPurchaseCodesByCatalogItem, getPurchaseLinesLeftBehind, getPurchaseLinesOverdue, getShortReceiptsUnclaimed, LEFT_BEHIND_HREF } from "@/lib/purchases";
 import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
@@ -2252,11 +2252,40 @@ async function getPurchaseReplacementVerificationPendingItem(href: string): Prom
 // urgent-reports/route.ts (ya revisado por Daniel; nunca rechazado), y misma cuenta de "lo faltante"
 // que openReports en PurchaseUrgentReportsPanel.tsx (lo reclamado en
 // resoluciones no CANCELLED todavía no cubre lo reportado).
-async function getPurchaseUrgentReportsUnresolvedPendingItem(href: string): Promise<PendingItem | null> {
+// Pedido del usuario 2026-10-05 (caso bolsas de Megadescuentos): faltantes
+// que llegaron cortos y nunca se reclamaron. Quien coordina con el proveedor
+// (canManagePurchases) los ve todos y abre el reclamo; quien compró
+// (requestedById) los ve en seguimiento.
+async function getShortReceiptsUnclaimedPendingItem(href: string, requestedById?: string): Promise<PendingItem | null> {
+  const rows = await getShortReceiptsUnclaimed(requestedById);
+  if (rows.length === 0) return null;
+  return {
+    type: "compras_faltante_sin_reclamar",
+    icon: "🚨",
+    label: requestedById
+      ? "Faltante de tu compra que nunca se reclamó al proveedor (seguimiento)"
+      : "Faltante que nunca se reclamó al proveedor — abre el reclamo",
+    meta:
+      rows.length === 1
+        ? `${rows[0].name} · faltan ${rows[0].missing} de ${rows[0].quantity} un. · ${rows[0].supplierName}`
+        : `${rows.length} productos: ${rows.map((r) => r.name).join(", ")}`,
+    overdue: true,
+    href,
+  };
+}
+
+// Pedido del usuario 2026-10-05: `opts.label` para quien coordina con el
+// proveedor (Jariel) y `opts.requestedById` para que quien aprueba compras
+// (Bryan) vea, en seguimiento, los reclamos de las compras que él hizo.
+async function getPurchaseUrgentReportsUnresolvedPendingItem(
+  href: string,
+  opts: { label?: string; requestedById?: string } = {}
+): Promise<PendingItem | null> {
   const rows = await prisma.purchaseRequestUrgentReport.findMany({
     where: {
       rejectedAt: null,
       reviewedByLeadAt: { not: null },
+      ...(opts.requestedById ? { request: { requestedById: opts.requestedById } } : {}),
     },
     select: {
       damagedQty: true,
@@ -2278,7 +2307,7 @@ async function getPurchaseUrgentReportsUnresolvedPendingItem(href: string): Prom
   return {
     type: "compras_urgentes_sin_resolver",
     icon: "📦",
-    label: "Reclamos de tu equipo sin resolver con el proveedor",
+    label: opts.label ?? "Reclamos de tu equipo sin resolver con el proveedor",
     meta: `${open.length} reclamo${open.length === 1 ? "" : "s"}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
@@ -3963,10 +3992,14 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       // líder/equipo de Inventario más arriba. Mismo generador que ya usa
       // Daniel (getPurchaseUrgentReportsUnresolvedPendingItem), mismo href
       // que aprove/route.ts ahora manda en la notificación.
-      const purchaseUrgentUnresolvedItem = await getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes");
+      const purchaseUrgentUnresolvedItem = await getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes", {
+        label: "Mercadería faltante o dañada — coordina la solución con el proveedor",
+      });
       if (purchaseUrgentUnresolvedItem) teamItems.push(purchaseUrgentUnresolvedItem);
       const purchaseGestionItem = await getPurchaseGestionPendingItem("/area/workspace?tab=compras&ptab=urgentes");
       if (purchaseGestionItem) teamItems.push(purchaseGestionItem);
+      const shortReceiptsItem = await getShortReceiptsUnclaimedPendingItem("/area/workspace?tab=compras&ptab=urgentes");
+      if (shortReceiptsItem) teamItems.unshift(shortReceiptsItem);
       const excessGestionItem = await getPurchaseExcessPendingItem("gestion", "/area/workspace?tab=compras&ptab=urgentes");
       if (excessGestionItem) teamItems.push(excessGestionItem);
     }
@@ -3978,6 +4011,15 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (purchaseApprovalItem) teamItems.push(purchaseApprovalItem);
       const excessConfirmItem = await getPurchaseExcessPendingItem("confirmar", "/area/workspace?tab=compras&ptab=urgentes");
       if (excessConfirmItem) teamItems.push(excessConfirmItem);
+      if (!me.canManagePurchases) {
+        const myClaimsItem = await getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes", {
+          label: "Reclamos de tus compras sin resolver con el proveedor (seguimiento)",
+          requestedById: actor.userId,
+        });
+        if (myClaimsItem) teamItems.push({ ...myClaimsItem, overdue: false });
+        const myShortItem = await getShortReceiptsUnclaimedPendingItem("/area/workspace?tab=compras&ptab=urgentes", actor.userId);
+        if (myShortItem) teamItems.unshift(myShortItem);
+      }
     }
     // Confirmado 2026-09-29 (idea de Daniel): "Qué comprar" — Jariel ve sus
     // compras calientes aunque no lidere ningún departamento.
@@ -4173,6 +4215,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   if (me.canManagePurchases) {
     const purchaseGestionItem = await getPurchaseGestionPendingItem("/area/workspace?tab=compras&ptab=urgentes");
     if (purchaseGestionItem) items.push(purchaseGestionItem);
+    const shortReceiptsItem = await getShortReceiptsUnclaimedPendingItem("/area/workspace?tab=compras&ptab=urgentes");
+    if (shortReceiptsItem) items.unshift(shortReceiptsItem);
     const excessGestionItem = await getPurchaseExcessPendingItem("gestion", "/area/workspace?tab=compras&ptab=urgentes");
     if (excessGestionItem) items.push(excessGestionItem);
   }
@@ -4187,6 +4231,15 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (purchaseApprovalItem) items.push(purchaseApprovalItem);
     const excessConfirmItem = await getPurchaseExcessPendingItem("confirmar", "/area/workspace?tab=compras&ptab=urgentes");
     if (excessConfirmItem) items.push(excessConfirmItem);
+    if (!me.canManagePurchases) {
+      const myClaimsItem = await getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes", {
+        label: "Reclamos de tus compras sin resolver con el proveedor (seguimiento)",
+        requestedById: actor.userId,
+      });
+      if (myClaimsItem) items.push({ ...myClaimsItem, overdue: false });
+      const myShortItem = await getShortReceiptsUnclaimedPendingItem("/area/workspace?tab=compras&ptab=urgentes", actor.userId);
+      if (myShortItem) items.unshift(myShortItem);
+    }
   }
 
   // Confirmado 2026-09-29 (idea de Daniel): compras frías a Nairoby, y a
