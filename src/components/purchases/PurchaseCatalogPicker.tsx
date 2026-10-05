@@ -469,7 +469,7 @@ export function PurchaseCatalogPicker({
                 </select>
               </div>
               <div>
-                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">ID de Dropi</label>
+                <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">{newBodega === "MKT_SUMINISTROS" ? "Código del suministro" : "ID de Dropi"}</label>
                 <input
                   className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
                   value={newJustCode}
@@ -478,13 +478,16 @@ export function PurchaseCatalogPicker({
                 />
               </div>
             </div>
-            <div className="flex items-start gap-2 bg-blue/10 border border-blue/30 rounded-md p-2.5 mb-3 text-[11.5px] text-ink">
-              <AlertTriangle size={13} className="mt-0.5 shrink-0 text-blue" />
-              <span>
-                ¿Todavía no tiene ID de Dropi? No lo crees aquí:{" "}
-                <a href="/area/workspace?tab=analisis-mercado" className="font-semibold text-blue underline">propónlo en Análisis de Mercado</a>. Bryan lo aprueba con su marca y ya lo puedes comprar; <B2BAdvisorName /> le pone el ID después.
-              </span>
-            </div>
+            {/* Suministros no se publican en Dropi (2026-10-05): sin este aviso. */}
+            {newBodega !== "MKT_SUMINISTROS" && (
+              <div className="flex items-start gap-2 bg-blue/10 border border-blue/30 rounded-md p-2.5 mb-3 text-[11.5px] text-ink">
+                <AlertTriangle size={13} className="mt-0.5 shrink-0 text-blue" />
+                <span>
+                  ¿Todavía no tiene ID de Dropi? No lo crees aquí:{" "}
+                  <a href="/area/workspace?tab=analisis-mercado" className="font-semibold text-blue underline">propónlo en Análisis de Mercado</a>. Bryan lo aprueba con su marca y ya lo puedes comprar; <B2BAdvisorName /> le pone el ID después.
+                </span>
+              </div>
+            )}
             <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
               Descripción <span className="text-steel-dim normal-case font-normal">(opcional)</span>
             </label>
