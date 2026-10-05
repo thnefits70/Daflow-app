@@ -741,6 +741,12 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   if (quoteImageUrl) draftSummaryParts.push("Cotización ya subida");
 
   async function handleQuoteFile(file: File) {
+    // Pedido de Nairoby 2026-10-05: la cotización también puede venir en PDF
+    // (antes solo foto) — la IA la lee igual (ver readPurchaseQuote).
+    if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
+      setErr("La cotización debe ser una foto o un PDF.");
+      return;
+    }
     setQuoteFile(file);
     setVerifyResult(null);
     setConfirmingLineIdx(null);
@@ -1296,17 +1302,24 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
           >
             <span className="flex items-center gap-2">
               {uploadingQuote ? <span className="w-4 h-4 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={16} />}
-              Pega o arrastra la cotización aquí (Ctrl+V)
+              Pega o arrastra la cotización aquí (Ctrl+V) — foto o PDF
             </span>
             <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => quoteFileInputRef.current?.click()}>
               o selecciona un archivo
             </button>
-            <input ref={quoteFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && handleQuoteFile(e.target.files[0])} />
+            <input ref={quoteFileInputRef} type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && handleQuoteFile(e.target.files[0])} />
           </div>
         ) : (
           <div className="bg-cloud border border-rule rounded-md p-3">
             <div className="flex items-center gap-3 mb-2.5">
-              <img src={quoteImageUrl} alt="" className="w-14 h-14 rounded object-cover border border-rule" />
+              {/\.pdf($|\?)/i.test(quoteImageUrl) ? (
+                <a href={quoteImageUrl} target="_blank" rel="noopener noreferrer" className="w-14 h-14 rounded border border-rule flex flex-col items-center justify-center gap-0.5 text-blue text-[10px] font-semibold shrink-0">
+                  <FileText size={20} />
+                  PDF
+                </a>
+              ) : (
+                <img src={quoteImageUrl} alt="" className="w-14 h-14 rounded object-cover border border-rule" />
+              )}
               <div className="flex-1 text-[12.5px] text-steel">
                 Escrito ({lines.length} {lines.length === 1 ? "producto" : "productos"}): <b className="text-ink">${total.toFixed(2)}</b>
               </div>

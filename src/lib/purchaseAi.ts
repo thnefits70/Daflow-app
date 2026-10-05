@@ -5,17 +5,8 @@ import { SCREEN_PHOTO_NOTE_PREFIX } from "@/lib/receiptPhotoScreen";
 
 const PURCHASE_AI_MODEL = "claude-sonnet-5";
 
-async function fetchImageBase64(url: string): Promise<{ data: string; mediaType: "image/jpeg" | "image/png" | "image/webp" }> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`No se pudo leer la imagen de la cotización (${res.status}).`);
-  const contentType = res.headers.get("content-type") ?? "";
-  const mediaType = contentType.includes("png") ? "image/png" : contentType.includes("webp") ? "image/webp" : "image/jpeg";
-  const buf = await res.arrayBuffer();
-  return { data: Buffer.from(buf).toString("base64"), mediaType };
-}
-
 // Confirmado 2026-08-04: el comprobante de pago puede venir como foto O como
-// PDF (a diferencia de la cotización, que siempre es foto) — se arma el
+// PDF (y desde 2026-10-05 la cotización también) — se arma el
 // bloque de contenido correcto según el tipo real del archivo en vez de
 // mandar bytes de PDF disfrazados de imagen, que Claude no puede leer así.
 export async function fetchFileContentBlock(url: string): Promise<{ type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/webp"; data: string } } | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }> {
@@ -81,7 +72,9 @@ export async function readPurchaseQuote(params: {
   expectedProductNames?: string[];
 }): Promise<QuoteReadResult> {
   const client = getAnthropicClient();
-  const { data, mediaType } = await fetchImageBase64(params.quoteImageUrl);
+  // Pedido de Nairoby 2026-10-05: la cotización ya no es siempre foto —
+  // también puede ser PDF, así que se arma el bloque según el tipo real.
+  const fileBlock = await fetchFileContentBlock(params.quoteImageUrl);
   const expectedNames = (params.expectedProductNames ?? []).map((n) => n.trim()).filter(Boolean);
 
   const response = await client.messages.create({
@@ -119,7 +112,7 @@ export async function readPurchaseQuote(params: {
       {
         role: "user",
         content: [
-          { type: "image", source: { type: "base64", media_type: mediaType, data } },
+          fileBlock,
           { type: "text", text: "Lee esta cotización y devuelve el JSON pedido." },
         ],
       },
