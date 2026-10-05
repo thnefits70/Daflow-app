@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useB2BAdvisorLabel } from "@/lib/useB2BAdvisorLabel";
 import { useRouter } from "next/navigation";
-import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown, Award, CreditCard, PackageSearch, PackageCheck } from "lucide-react";
+import { FileText, Upload, CheckCircle2, AlertTriangle, Lock, Landmark, LineChart, ChevronDown, Award, CreditCard, PackageSearch, PackageCheck, Search } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
@@ -248,13 +248,20 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   const [historyHasMore, setHistoryHasMore] = useState(false);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  // Pedido del usuario 2026-10-05 (Bryan): buscador por producto, ID o
+  // proveedor — se busca en el servidor, así encuentra compras viejas aunque
+  // no estén en la primera página.
+  const [historyQuery, setHistoryQuery] = useState("");
+  const historyQueryRef = useRef("");
 
-  function loadHistory(append = false) {
+  function loadHistory(append = false, q = historyQueryRef.current) {
     const offset = append && historyRows ? groupRows(historyRows).length : 0;
     if (append) setHistoryLoadingMore(true);
-    fetch(`/api/purchase-requests?view=approval-history&offset=${offset}`)
+    fetch(`/api/purchase-requests?view=approval-history&offset=${offset}${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`)
       .then((r) => (r.ok ? r.json() : null))
       .then(async (d: { rows: HistoryRow[]; total: number; hasMore: boolean } | null) => {
+        // Si mientras llegaba la respuesta ya se escribió otra búsqueda, se descarta.
+        if (q !== historyQueryRef.current) return;
         const data = d?.rows ?? [];
         setHistoryRows((cur) => {
           if (!append || !cur) return data;
@@ -292,6 +299,17 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   function openSubTab(next: "pending" | "history") {
     setSubTab(next);
     if (next === "history") loadHistory(false);
+  }
+
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function onHistoryQueryChange(value: string) {
+    setHistoryQuery(value);
+    historyQueryRef.current = value;
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      setHistoryRows(null);
+      loadHistory(false, value);
+    }, 350);
   }
 
   // Confirmado 2026-08-13: fix — esta pantalla no tenía en cuenta el
@@ -677,10 +695,22 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
     return (
       <div>
         {subTabs}
+        <div className="relative mb-3">
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-steel-dim pointer-events-none" />
+          <input
+            type="search"
+            value={historyQuery}
+            onChange={(e) => onHistoryQueryChange(e.target.value)}
+            placeholder="Buscar por producto, ID o proveedor…"
+            className="w-full rounded-md border border-rule bg-surface pl-8 pr-3 py-2 text-[13px] outline-none focus:border-teal"
+          />
+        </div>
         {!historyGroups ? (
           <div className="text-steel text-[13px]">Cargando…</div>
         ) : historyGroups.length === 0 ? (
-          <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">Todavía no aprobaste ni rechazaste ninguna solicitud.</div>
+          <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">
+            {historyQuery.trim() ? `No hay compras que coincidan con "${historyQuery.trim()}".` : "Todavía no aprobaste ni rechazaste ninguna solicitud."}
+          </div>
         ) : (
           <div className="flex flex-col gap-2">
             {historyGroups.map((g) => {

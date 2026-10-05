@@ -95,9 +95,32 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     }
     const { offset, limit } = pageParams(req);
-    return NextResponse.json(
-      await pagePurchaseGroups({ status: { in: ["APPROVED", "REJECTED", "PAID", "RECEIVED_PENDING_REVIEW", "RECEIVED"] } }, "reviewedAt", offset, limit)
-    );
+    const historyWhere: Prisma.PurchaseRequestWhereInput = { status: { in: ["APPROVED", "REJECTED", "PAID", "RECEIVED_PENDING_REVIEW", "RECEIVED"] } };
+    // Pedido del usuario 2026-10-05 (Bryan): buscar una compra que aprobó por
+    // producto (nombre o ID) o proveedor. Se filtra por COMPRA: si un producto
+    // coincide, se muestra la compra completa con todos sus productos.
+    const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
+    if (q) {
+      const matches = await prisma.purchaseRequest.findMany({
+        where: {
+          AND: [
+            historyWhere,
+            {
+              OR: [
+                { catalogItem: { name: { contains: q, mode: "insensitive" } } },
+                { catalogItem: { justCode: { contains: q, mode: "insensitive" } } },
+                { catalogItem: { code: { contains: q, mode: "insensitive" } } },
+                { supplier: { name: { contains: q, mode: "insensitive" } } },
+              ],
+            },
+          ],
+        },
+        select: { groupId: true },
+        distinct: ["groupId"],
+      });
+      historyWhere.groupId = { in: matches.map((m) => m.groupId) };
+    }
+    return NextResponse.json(await pagePurchaseGroups(historyWhere, "reviewedAt", offset, limit));
   }
 
   if (view === "receiving") {
