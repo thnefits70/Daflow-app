@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { computeCostUsd } from "@/lib/aiPricing";
 
-export type AiUsageFeature = "nancy" | "fernick" | "weekly_checkin" | "rutas_conocimiento" | "control_compras_cotizacion" | "control_compras_catalogo" | "control_compras_comprobante_pago" | "control_compras_orden_compra" | "control_compras_recepcion_fotos" | "control_compras_revision_pago" | "control_compras_revision_factura" | "caja_chica_comprobante" | "control_inventario_comprobante" | "pagos_admin_declaracion" | "reingreso_mercaderia_reconocimiento" | "anticipos_comprobante" | "nomina_transferencia_comprobante" | "nomina_pago_individual_comprobante" | "nomina_iess_comprobante" | "nomina_sueldo_nairoby_comprobante" | "registro_egresos_manifiesto" | "registro_egresos_catalogo_match" | "combo_sugerencias_nicho" | "combo_sugerencias_match" | "proveedor_credito_pago" | "plan_mejora_redaccion" | "plan_mejora_evaluacion_semanal" | "ventas_externas_comprobante" | "deterioro_credito_comprobante" | "proveedor_hoja_nota_aviso" | "compras_captura_no_envio" | "compras_captura_precio" | "mary_help";
+export type AiUsageFeature = "nancy" | "fernick" | "weekly_checkin" | "rutas_conocimiento" | "control_compras_cotizacion" | "control_compras_catalogo" | "control_compras_comprobante_pago" | "control_compras_orden_compra" | "control_compras_recepcion_fotos" | "control_compras_revision_pago" | "control_compras_revision_factura" | "caja_chica_comprobante" | "control_inventario_comprobante" | "pagos_admin_declaracion" | "reingreso_mercaderia_reconocimiento" | "anticipos_comprobante" | "nomina_transferencia_comprobante" | "nomina_pago_individual_comprobante" | "nomina_iess_comprobante" | "nomina_sueldo_nairoby_comprobante" | "registro_egresos_manifiesto" | "registro_egresos_catalogo_match" | "combo_sugerencias_nicho" | "combo_sugerencias_match" | "proveedor_credito_pago" | "plan_mejora_redaccion" | "plan_mejora_evaluacion_semanal" | "ventas_externas_comprobante" | "deterioro_credito_comprobante" | "proveedor_hoja_nota_aviso" | "compras_captura_no_envio" | "compras_captura_precio" | "mary_help" | "analisis_mercado_ortografia";
 
 const FEATURE_LABELS: Record<AiUsageFeature, string> = {
   nancy: "Nancy · chat financiero",
@@ -11,6 +11,7 @@ const FEATURE_LABELS: Record<AiUsageFeature, string> = {
   rutas_conocimiento: "Rutas de conocimiento · generar preguntas",
   control_compras_cotizacion: "Control de Compras · verificar cotización",
   control_compras_catalogo: "Control de Compras · chequeo de catálogo",
+  analisis_mercado_ortografia: "Análisis de Mercado · ortografía del nombre",
   control_compras_comprobante_pago: "Control de Compras · verificar comprobante de pago",
   control_compras_orden_compra: "Control de Compras · verificar orden de compra",
   control_compras_recepcion_fotos: "Control de Compras · comparar fotos de recepción",

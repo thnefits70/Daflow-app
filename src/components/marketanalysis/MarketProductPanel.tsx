@@ -414,8 +414,15 @@ function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | n
   // orden de compra) — también deja pegar con Ctrl+V.
   const { onPaste, onMouseEnter, onMouseLeave, onDragOver, onDragLeave, onDrop, isDragOver } = usePasteFile((file) => uploadImage(file));
 
-  async function submit() {
+  // Pedido del usuario 2026-10-05: antes de enviar se revisa la ortografía
+  // del nombre comercial (una vez por nombre). Solo sugiere, nunca frena.
+  const [spellCheckedName, setSpellCheckedName] = useState<string | null>(null);
+  const [spellingFix, setSpellingFix] = useState<string | null>(null);
+  const productNameState = productName;
+
+  async function submit(nameOverride?: string) {
     setErr(""); setOk("");
+    const productName = (nameOverride ?? productNameState).trim();
     if (!productName || !imageUrl || !primarySupplierId || !primaryCost || !primaryUnits) {
       setErr("Completa nombre, imagen, y el proveedor obligatorio con su costo y unidades.");
       return;
@@ -425,6 +432,20 @@ function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | n
       return;
     }
     setBusy(true);
+    if (spellCheckedName !== productName) {
+      const check = await fetch("/api/market-products/check-spelling", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: productName }),
+      }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      setSpellCheckedName(productName);
+      if (check?.spellingFix) {
+        setBusy(false);
+        setSpellingFix(check.spellingFix);
+        return;
+      }
+    }
+    setSpellingFix(null);
     const res = await fetch("/api/market-products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -617,9 +638,27 @@ function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | n
         </div>
       </div>
 
+      {spellingFix && spellCheckedName === productNameState.trim() && (
+        <div className="bg-gold/10 border border-gold/30 rounded-md p-3 mb-3 text-[12.5px] text-ink">
+          <div className="mb-1.5">Parece que el nombre tiene una falta de ortografía. ¿Quisiste decir <b>{spellingFix}</b>?</div>
+          <div className="flex gap-2.5">
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded border border-teal bg-teal px-2.5 py-1 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
+              onClick={() => { const fix = spellingFix; setProductName(fix); setSpellCheckedName(fix); submit(fix); }}
+            >
+              Sí, corregirlo y enviar
+            </button>
+            <button type="button" disabled={busy} className="text-steel text-[12px] cursor-pointer" onClick={() => submit()}>
+              No, está bien así — enviar
+            </button>
+          </div>
+        </div>
+      )}
       {err && <div className="text-red text-[12.5px] mb-2">{err}</div>}
       {ok && <div className="text-teal text-[12.5px] mb-2">{ok}</div>}
-      <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={submit}>
+      <button type="button" disabled={busy} className="rounded border border-blue bg-blue px-4 py-2 text-[13px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => submit()}>
         Enviar a Bryan
       </button>
     </div>

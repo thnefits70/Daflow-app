@@ -660,3 +660,34 @@ export async function checkCatalogNameSimilarity(params: {
   const fix = result.spellingFix?.trim();
   return { ...result, spellingFix: fix && fix !== params.candidateName.trim() ? fix : null };
 }
+
+// Pedido del usuario 2026-10-05: en Análisis de Mercado no había ninguna
+// llamada de IA donde sumar la revisión de ortografía (en Compras va junto
+// con checkCatalogNameSimilarity), así que esta es una llamada corta aparte,
+// una vez por propuesta y sin la lista del catálogo. Solo sugiere.
+export async function checkNameSpelling(params: { name: string; actorId: string }): Promise<string | null> {
+  const client = getAnthropicClient();
+  const response = await client.messages.create({
+    model: PURCHASE_AI_MODEL,
+    max_tokens: 200,
+    system:
+      "Revisas la ortografía del nombre de un producto. Si tiene palabras mal escritas (letras cambiadas, faltantes o de más, ej. TRASNPARENTE), " +
+      "devuelve el nombre completo corregido, respetando mayúsculas/minúsculas como lo escribió y sin tocar marcas, modelos, medidas ni códigos. " +
+      "No cuentes como error la falta de tildes. " +
+      'Responde SOLO un JSON: {"spellingFix": string|null} (null si no hay errores).',
+    messages: [{ role: "user", content: `Nombre: "${params.name}"` }],
+  });
+
+  await logAiUsage({
+    feature: "analisis_mercado_ortografia",
+    model: PURCHASE_AI_MODEL,
+    actorId: params.actorId,
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
+
+  const textBlock = response.content.find((b) => b.type === "text");
+  if (!textBlock || textBlock.type !== "text") return null;
+  const fix = extractJson<{ spellingFix: string | null }>(textBlock.text).spellingFix?.trim();
+  return fix && fix !== params.name.trim() ? fix : null;
+}
