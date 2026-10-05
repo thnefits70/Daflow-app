@@ -15,6 +15,7 @@ import { SuddenDemandPanel } from "@/components/marketanalysis/SuddenDemandPanel
 import { MaxPurchasePrice } from "@/components/marketanalysis/MaxPurchasePrice";
 import { CopyDropiPrice } from "@/components/shared/CopyDropiPrice";
 import { DropiPriceChangesQueue } from "./DropiPriceChangesQueue";
+import { computePreviewPrice, computeCompetitorComparison } from "./PriceCalculator";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -73,36 +74,6 @@ const BODEGA_LABELS: Record<string, string> = {
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
-}
-
-// Corregido 2026-09-17, pedido explícito del usuario: esta previsualización
-// dividía el costo unitario entre las unidades del lote, como si el costo
-// fuera del lote completo — desde 2026-09-10 batchCost ya es el costo POR
-// UNIDAD (ver bodegaUnitCost en lib/marketProduct.ts), solo el flete se
-// reparte entre unidades. El número que veía Jariel acá no coincidía con el
-// que realmente se guardaba y calculaba server-side.
-function computePreviewPrice(batchCost: number, batchUnits: number, freightCost: number, insurance: number, fulfillment: number, margin: number) {
-  if (!batchCost || !batchUnits || margin >= 100) return null;
-  const bodegaUnitCost = batchCost + (freightCost || 0) / batchUnits;
-  const unitCost = bodegaUnitCost * (1 + insurance / 100);
-  return (unitCost + fulfillment) / (1 - margin / 100);
-}
-
-// Confirmado 2026-09-17, pedido explícito del usuario: comparación contra el
-// precio de la competencia. El margen resultante de vender a ese precio
-// varía según el fulfillment ($0.75 default vs $0.50 chico, únicas dos
-// opciones de la calculadora) — de ahí sale el rango mínimo/máximo, no de
-// negociar el costo con el proveedor.
-function computeCompetitorComparison(batchCost: number, batchUnits: number, freightCost: number, insurance: number, competitorPrice: number) {
-  if (!batchCost || !batchUnits || !competitorPrice) return null;
-  const bodegaUnitCost = batchCost + (freightCost || 0) / batchUnits;
-  const unitCostWithInsurance = bodegaUnitCost * (1 + insurance / 100);
-  const marginAt = (fulfillment: number) => (1 - (unitCostWithInsurance + fulfillment) / competitorPrice) * 100;
-  return {
-    // Fulfillment $0.75 (más caro) deja el margen más bajo; $0.50 deja el más alto.
-    marginMin: marginAt(0.75),
-    marginMax: marginAt(0.50),
-  };
 }
 
 type Tab = "proponer" | "ganadores" | "sinstock" | "despiertan" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "trazabilidad";

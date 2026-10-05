@@ -20,5 +20,7 @@ export async function GET() {
     canDiscardSuggestions(dbUserId(session.user.id), isAdmin),
   ]);
   const countPausedUntil = isPhysicalCountPause() ? PHYSICAL_COUNT_UNTIL.toISOString() : null;
-  return NextResponse.json({ ...data, audiences, canReportStockout, canDiscard, countPausedUntil });
+  // Calculadora de precio (2026-10-05): quien hace las compras frías (Nairoby) y el admin.
+  const canUseCalculator = isAdmin || audiences.includes("cold");
+  return NextResponse.json({ ...data, audiences, canReportStockout, canDiscard, countPausedUntil, canUseCalculator });
 }

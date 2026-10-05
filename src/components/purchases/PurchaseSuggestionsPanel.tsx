@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { PriceCalculator } from "@/components/marketanalysis/PriceCalculator";
 
 type Status = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "descartado" | "no_sale" | "en_compra";
 type DiscardInfo = { id: string; reason: string; reasonLabel: string; note: string | null; byName: string | null; at: string };
@@ -26,7 +27,7 @@ type Row = {
   discardReturned: (DiscardInfo & { why: "urgente" | "vencido" }) | null;
 };
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
-type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null };
+type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null; canUseCalculator?: boolean };
 
 const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = [
   {
@@ -453,6 +454,8 @@ export function PurchaseSuggestionsPanel() {
         <b className="text-ink">{days} día{days === 1 ? "" : "s"}</b>
         {days < 30 ? " (los pedidos se guardan desde el 21 de septiembre; cada día que pasa el cálculo es más preciso)" : ""}. Los combos cuentan como venta de cada producto que los forma.
       </div>
+      {/* Pedido del usuario 2026-10-05: Nairoby necesita la calculadora de Análisis de Mercado para sus compras frías. */}
+      {data.canUseCalculator && <PriceCalculator />}
       {hotFirst ? [hot, cold] : [cold, hot]}
     </div>
   );
