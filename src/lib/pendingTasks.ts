@@ -10,7 +10,7 @@ import { getFinanzasDeptId } from "@/lib/inventoryKpis";
 import { isEndOfMonthQuincena, monthOfPeriod } from "@/lib/payrollCalc";
 import { getMarketingLeadId } from "@/lib/guards";
 import { NICHO_AUTO_MONTHLY_BUDGET_USD } from "@/lib/nichoAi";
-import { getReadyToBuyPendingProposalIds } from "@/lib/marketProduct";
+import { getReadyToBuyPendingProposalIdsByBuyer } from "@/lib/marketProduct";
 import { getNewIdBrandingBoard } from "@/lib/newIdBranding";
 import { CLAIM_GAP_DAYS, findPossibleDoubleRegistrations, getSupplierClaimGaps } from "@/lib/reentrySupplierClaim";
 import { ecuadorDay, getCompiledLot, isBackfillLot } from "@/lib/fulfillmentGuides";
@@ -1345,9 +1345,11 @@ async function getMarketProposalRejectedPurchasePendingItem(href: string): Promi
 // "Listo para comprar" (view=ready-to-buy en api/market-products/route.ts) —
 // lo que Bryan ya decidió comprar y todavía no tiene ninguna solicitud de
 // compra real generada.
-async function getMarketProductReadyToBuyPendingItem(href: string): Promise<PendingItem | null> {
+// Pedido del usuario 2026-10-05: "cold" = lo que propuso el líder de
+// Finanzas (Nairoby, compras frías); "hot" = el resto (Jariel).
+async function getMarketProductReadyToBuyPendingItem(href: string, buyer: "hot" | "cold" = "hot"): Promise<PendingItem | null> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const pendingIds = await getReadyToBuyPendingProposalIds();
+  const pendingIds = (await getReadyToBuyPendingProposalIdsByBuyer())[buyer];
   if (pendingIds.length === 0) return null;
   const rows = await prisma.marketProductProposal.findMany({
     where: { id: { in: pendingIds } },
@@ -4245,6 +4247,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   const purchaseRequesterItems = await getPurchaseRequesterPendingItems(actor.userId, "/area/workspace?tab=compras&ptab=mias");
   items.push(...purchaseRequesterItems);
   items.push(...(await getMarketProposerPendingItems(actor.userId)));
+  if (me.leadsDept.code === "FIN") {
+    const coldReadyToBuyItem = await getMarketProductReadyToBuyPendingItem("/area/workspace?tab=analisis-mercado&ptab=listoparacomprar", "cold");
+    if (coldReadyToBuyItem) items.push(coldReadyToBuyItem);
+  }
 
   const supplierExchangeGestorItem = await getSupplierExchangeGestorPendingItem(actor.userId, "/area/workspace?tab=egresos&otab=proveedor");
   if (supplierExchangeGestorItem) items.push(supplierExchangeGestorItem);
@@ -4374,7 +4380,7 @@ export async function getPossiblePendingTypesForActor(
     if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio");
       if (me.canMarkComboCreatedInDropi) types.push("combos_semana");
     if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
-    if (me.leadsDept.code === "FIN") types.push("compras_frias");
+    if (me.leadsDept.code === "FIN") types.push("compras_frias", "analisis_mercado_listo_comprar", "analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");
     if (me.leadsDept.code === "INV") types.push("compras_urgentes_sin_atender");
     if (me.leadsDept.code === "FIN") {
       types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia", "reclamos_proveedor_atrasados");

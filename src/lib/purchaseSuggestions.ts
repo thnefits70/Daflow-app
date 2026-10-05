@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getFinanceLeadId, getInventoryLeadId } from "@/lib/guards";
 import { formatPurchaseRequestCode, OPEN_PURCHASE_STATUSES, openPurchaseWhere } from "@/lib/purchases";
-import { getReadyToBuyPendingProposalIds } from "@/lib/marketProduct";
+import { getReadyToBuyPendingProposalIdsByBuyer } from "@/lib/marketProduct";
 import { notifyOwner } from "@/lib/notifications";
 
 // Confirmado 2026-09-29, idea de Daniel aprobada por el usuario: "Qué
@@ -102,6 +102,9 @@ export type PurchaseSuggestions = {
   hot: SuggestionRow[];
   cold: SuggestionRow[];
   newProducts: NewProductRow[];
+  // Pedido del usuario 2026-10-05: los productos nuevos que propuso Nairoby
+  // los compra ella (compras frías); los demás, Jariel.
+  coldNewProducts: NewProductRow[];
 };
 
 const STATUS_ORDER: Record<SuggestionStatus, number> = { preguntar_proveedor: 0, urgente: 1, pronto: 2, sin_proveedor: 3, en_compra: 4, descartado: 5, no_sale: 6 };
@@ -137,7 +140,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   const windowStart = new Date(Math.max(now.getTime() - WINDOW_DAYS * DAY_MS, firstBatch?.requestedAt.getTime() ?? now.getTime()));
   const windowDays = Math.max(1, (now.getTime() - windowStart.getTime()) / DAY_MS);
 
-  const [balances, balancesBefore, balancesBeforeCold, dropiSales, externalSales, openPurchases, readyIds] = await Promise.all([
+  const [balances, balancesBefore, balancesBeforeCold, dropiSales, externalSales, openPurchases, readyByBuyer] = await Promise.all([
     latestBalances(),
     latestBalances(new Date(now.getTime() - ESCALATE_DAYS * DAY_MS)),
     latestBalances(new Date(now.getTime() - COLD_ESCALATE_DAYS * DAY_MS)),
@@ -156,8 +159,9 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       select: { catalogItemId: true, requestNumber: true, quantity: true },
       orderBy: { createdAt: "desc" },
     }),
-    getReadyToBuyPendingProposalIds(),
+    getReadyToBuyPendingProposalIdsByBuyer(),
   ]);
+  const readyIds = [...readyByBuyer.hot, ...readyByBuyer.cold];
 
   const sold = new Map<string, number>();
   for (const r of [...dropiSales, ...externalSales]) {
@@ -292,17 +296,21 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       })
     : [];
 
+  const coldReady = new Set(readyByBuyer.cold);
+  const toNewProduct = (p: (typeof proposals)[number]): NewProductRow => ({
+    proposalId: p.id,
+    code: p.code,
+    name: p.productName,
+    photo: p.referenceImageUrl || null,
+    readyToBuyAt: p.readyToBuyAt!.toISOString(),
+  });
+
   return {
     windowDays,
     hot: sortRows(hot),
     cold: sortRows(cold),
-    newProducts: proposals.map((p) => ({
-      proposalId: p.id,
-      code: p.code,
-      name: p.productName,
-      photo: p.referenceImageUrl || null,
-      readyToBuyAt: p.readyToBuyAt!.toISOString(),
-    })),
+    newProducts: proposals.filter((p) => !coldReady.has(p.id)).map(toNewProduct),
+    coldNewProducts: proposals.filter((p) => coldReady.has(p.id)).map(toNewProduct),
   };
 }
 

@@ -398,6 +398,20 @@ export function computeProposalTraceability(p: {
 // guardado, y aun así solo con UN producto por solicitud. Ahora cuenta como
 // comprado también si existe cualquier solicitud (no rechazada) del mismo
 // artículo creada después de marcarse listo.
+// Pedido del usuario 2026-10-05: cada quien compra lo que propuso. Lo que
+// propuso el líder de Finanzas (Nairoby, compras frías) le toca a ella; todo
+// lo demás sigue siendo de Jariel (compras calientes).
+export async function getReadyToBuyPendingProposalIdsByBuyer(): Promise<{ hot: string[]; cold: string[]; financeLeadId: string | null }> {
+  const [ids, financeLead] = await Promise.all([
+    getReadyToBuyPendingProposalIds(),
+    prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "FIN" }, isActive: true }, select: { id: true } }),
+  ]);
+  if (!financeLead || ids.length === 0) return { hot: ids, cold: [], financeLeadId: financeLead?.id ?? null };
+  const coldRows = await prisma.marketProductProposal.findMany({ where: { id: { in: ids }, proposedById: financeLead.id }, select: { id: true } });
+  const cold = new Set(coldRows.map((r) => r.id));
+  return { hot: ids.filter((id) => !cold.has(id)), cold: [...cold], financeLeadId: financeLead.id };
+}
+
 export async function getReadyToBuyPendingProposalIds(): Promise<string[]> {
   const rows = await prisma.marketProductProposal.findMany({
     where: { readyToBuyAt: { not: null }, purchaseRequests: { none: {} } },

@@ -27,7 +27,7 @@ type Row = {
   discardReturned: (DiscardInfo & { why: "urgente" | "vencido" }) | null;
 };
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
-type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null; canUseCalculator?: boolean };
+type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; coldNewProducts?: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null; canUseCalculator?: boolean };
 
 const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = [
   {
@@ -438,7 +438,7 @@ export function PurchaseSuggestionsPanel() {
   const onlyHot = data.audiences.includes("hot") && !data.audiences.includes("cold");
   const hotFirst = !onlyCold;
   const hot = <List key="hot" title="🔥 Compras calientes" sub="30 unidades o menos · Jariel" rows={data.hot} newProducts={data.newProducts} open={!onlyCold} canReportStockout={data.canReportStockout} onChanged={load} />;
-  const cold = <List key="cold" title="❄️ Compras frías" sub="31 a 60 unidades · Nairoby" rows={data.cold} open={!onlyHot} canReportStockout={data.canReportStockout} canDiscard={data.canDiscard} isCold onChanged={load} />;
+  const cold = <List key="cold" title="❄️ Compras frías" sub="31 a 60 unidades · Nairoby" rows={data.cold} newProducts={data.coldNewProducts} open={!onlyHot} canReportStockout={data.canReportStockout} canDiscard={data.canDiscard} isCold onChanged={load} />;
 
   return (
     <div>

@@ -22,7 +22,7 @@ import {
   B2B_MARGIN_DEFAULT,
   nextMarketProductProposalNumber,
   formatMarketProductProposalCode,
-  getReadyToBuyPendingProposalIds,
+  getReadyToBuyPendingProposalIdsByBuyer,
 } from "@/lib/marketProduct";
 import { getAllCurrentStock } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
@@ -377,7 +377,10 @@ export async function GET(req: NextRequest) {
     // Confirmado 2026-09-09: Jariel ve acá lo que Bryan ya marcó listo para
     // comprar, para ejecutar la solicitud real en Control de Compras.
     if (!(await canProposeMarketProduct())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-    const pendingIds = await getReadyToBuyPendingProposalIds();
+    // Pedido del usuario 2026-10-05: cada quien ve lo que le toca comprar —
+    // el líder de Finanzas (Nairoby) lo que propuso ella, los demás el resto.
+    const byBuyer = await getReadyToBuyPendingProposalIdsByBuyer();
+    const pendingIds = isAdmin ? [...byBuyer.hot, ...byBuyer.cold] : byBuyer.financeLeadId === session.user.id ? byBuyer.cold : byBuyer.hot;
     const rows = await prisma.marketProductProposal.findMany({
       where: { id: { in: pendingIds } },
       include: includeFull,
