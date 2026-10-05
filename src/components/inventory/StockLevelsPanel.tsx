@@ -551,7 +551,16 @@ function FormulaInfoButton({ open, onToggle }: { open: boolean; onToggle: () => 
 // momento, el stock de INVESTOCK de todos los productos — no solo los
 // negativos (ya cubiertos en KPIs financieros) ni solo lo de la última
 // semana subida (Control de Inventario).
-export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?: boolean; canEdit?: boolean }) {
+export function StockLevelsPanel({
+  isAdmin = false,
+  canEdit = true,
+  canViewPriceHistory = false,
+}: {
+  isAdmin?: boolean;
+  canEdit?: boolean;
+  // Admin o Nairoby (líder de Finanzas), ver canViewStockPriceHistory en guards.ts.
+  canViewPriceHistory?: boolean;
+}) {
   const [rows, setRows] = useState<StockRow[] | null>(null);
   // Pedido del usuario 2026-10-02: clic en el nombre del producto (solo
   // admin) abre TODO su historial de precio de compra en el tiempo, un color
@@ -1243,7 +1252,7 @@ export function StockLevelsPanel({ isAdmin = false, canEdit = true }: { isAdmin?
                 <span className="text-[12.5px] flex flex-col min-w-0">
                   <span className="flex items-center gap-1.5 min-w-0">
                     <CatalogCode code={r.justCode} />
-                    {isAdmin ? (
+                    {isAdmin || canViewPriceHistory ? (
                       <button
                         type="button"
                         title={`${r.name} · Clic para ver el historial de precio`}

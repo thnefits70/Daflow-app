@@ -177,6 +177,7 @@ export function DeptWorkspaceTabs({
   canVerifyDamageDisposal = false,
   canManageJustCatalog = false,
   canViewStockLevels = false,
+  canViewStockPriceHistory = false,
   merchandiseReentryPendingCount = 0,
   canCaptureMerchandiseOutflow = false,
   canActOnMerchandiseOutflow = false,
@@ -362,6 +363,8 @@ export function DeptWorkspaceTabs({
   // — canManageJustCatalog (Daniel/admin) sigue siendo el único que edita
   // la marca ahí (ver canEdit en StockLevelsPanel).
   canViewStockLevels?: boolean;
+  // Historial de precio en Stock Actual: admin o Nairoby (líder de FIN).
+  canViewStockPriceHistory?: boolean;
   merchandiseReentryPendingCount?: number;
   // Registro de Egresos — mismo patrón sin dept.code que Reingreso
   // (confirmado 2026-08-25): captura (despacho/garantía/deterioro) = equipo
@@ -707,7 +710,7 @@ export function DeptWorkspaceTabs({
           quien no era Daniel/admin; ellos además las tienen, con clic, arriba
           de "Lotes de caducidad"). Desde 2026-10-02 se muestran dentro de
           StockLevelsPanel, plegadas en "Avisos". */}
-      {tab === "stock-actual" && (canManageJustCatalog || canViewStockLevels) && <StockLevelsPanel isAdmin={isAdmin} canEdit={canManageJustCatalog} />}
+      {tab === "stock-actual" && (canManageJustCatalog || canViewStockLevels) && <StockLevelsPanel isAdmin={isAdmin} canEdit={canManageJustCatalog} canViewPriceHistory={canViewStockPriceHistory} />}
       {tab === "reingreso" && (canCaptureMerchandiseReentry || canApproveMerchandiseReentry || canCloseMerchandiseReentry) && (
         <MerchandiseReentryPanel
           canCapture={canCaptureMerchandiseReentry}

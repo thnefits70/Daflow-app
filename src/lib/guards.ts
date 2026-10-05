@@ -1776,6 +1776,17 @@ export async function canActOnImprovementPlan(plan: { deptId: string; leaderId: 
   return false;
 }
 
+// Pedido del usuario 2026-10-05: en "Stock Actual", el clic en el nombre del
+// producto que abre el historial de precio de compra lo ven solo el admin y
+// Nairoby (líder de Finanzas) — nadie más que entre a esa tabla.
+export async function canViewStockPriceHistory() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await getGuardUser(session.user.id);
+  return !!user?.isLeader && user.leadsDept?.code === "FIN";
+}
+
 // Pedido del usuario 2026-10-03: el costo en plata de las garantías (contra
 // el seguro del 6%) solo lo ven el admin y Nairoby (líder de Finanzas).
 export async function canViewWarrantyCost() {
