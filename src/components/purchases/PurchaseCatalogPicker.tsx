@@ -105,11 +105,9 @@ export function PurchaseCatalogPicker({
   const [newCode, setNewCode] = useState(defaultCreateDraft?.newCode ?? "");
   const [newBodega, setNewBodega] = useState<CatalogMarca | "">(defaultCreateDraft?.newBodega ?? "");
   const [newJustCode, setNewJustCode] = useState(defaultCreateDraft?.newJustCode ?? "");
-  // Suministro sin código de afuera: DAFLOW le pone uno (ver lib/supplyCode.ts).
-  // Solo si ya trae código de Just se escribe a mano.
-  const [supplyOwnCode, setSupplyOwnCode] = useState(false);
+  // Suministros: el código lo pone siempre DAFLOW (ver lib/supplyCode.ts).
   const [supplyPreview, setSupplyPreview] = useState<{ name: string; code: string } | null>(null);
-  const autoSupplyCode = newBodega === "MKT_SUMINISTROS" && !supplyOwnCode;
+  const autoSupplyCode = newBodega === "MKT_SUMINISTROS";
   useEffect(() => {
     if (!autoSupplyCode || !newName.trim()) return;
     const name = newName.trim();
@@ -147,7 +145,6 @@ export function PurchaseCatalogPicker({
     setNewCode("");
     setNewBodega("");
     setNewJustCode("");
-    setSupplyOwnCode(false);
     setPhotos([]);
     setSimilarity(null);
     setConfirmStep(false);
@@ -182,7 +179,6 @@ export function PurchaseCatalogPicker({
     setNewCode("");
     setNewBodega("");
     setNewJustCode("");
-    setSupplyOwnCode(false);
     setPhotos([]);
     setSimilarity(null);
     setConfirmStep(false);
@@ -224,9 +220,7 @@ export function PurchaseCatalogPicker({
       return;
     }
     if (!autoSupplyCode && !newJustCode.trim()) {
-      setErr(newBodega === "MKT_SUMINISTROS"
-        ? "Escribe el código de Just del suministro."
-        : "Escribe el ID de Dropi. Si todavía no tiene ID, propónlo en Análisis de Mercado.");
+      setErr("Escribe el ID de Dropi. Si todavía no tiene ID, propónlo en Análisis de Mercado.");
       return;
     }
     if (uploadingPhoto) {
@@ -500,14 +494,8 @@ export function PurchaseCatalogPicker({
                     className="w-full rounded border border-rule px-2.5 py-2 text-[13px]"
                     value={newJustCode}
                     onChange={(e) => setNewJustCode(e.target.value)}
-                    placeholder={newBodega === "MKT_SUMINISTROS" ? "Código que trae de Just" : "Ej. 187749"}
+                    placeholder="Ej. 187749"
                   />
-                )}
-                {newBodega === "MKT_SUMINISTROS" && (
-                  <label className="flex items-center gap-1.5 mt-1.5 text-[11.5px] text-steel cursor-pointer">
-                    <input type="checkbox" checked={supplyOwnCode} onChange={(e) => setSupplyOwnCode(e.target.checked)} />
-                    Ya trae código de Just (escribirlo a mano)
-                  </label>
                 )}
               </div>
             </div>

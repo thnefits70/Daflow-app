@@ -1,9 +1,9 @@
-// Pedido del usuario 2026-10-05: los Suministros nuevos que no traen un
-// código de afuera (Just) reciben uno automático: primero las 3 primeras
+// Pedido del usuario 2026-10-05: todo Suministro nuevo recibe un código
+// automático (Just ya no se usa, nada se copia de ahí): primero las 3 primeras
 // letras del nombre, después la marca (SUM) y al final un número de 3 cifras
 // que sigue la cuenta de todos los suministros con este formato.
 // Ej.: "Papel térmico" → PAP-SUM-001, "Cinta de colores" → CIN-SUM-002.
-// Los que ya entraron con código de Just (001, 45679…) se quedan como están.
+// Los que ya existían con códigos viejos (001, 45679…) se quedan como están.
 
 const STOPWORDS = new Set(["DE", "DEL", "LA", "EL", "LOS", "LAS", "UN", "UNA", "Y", "O", "CON", "PARA", "POR", "EN", "A", "AL"]);
 

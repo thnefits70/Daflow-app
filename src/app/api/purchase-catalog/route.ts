@@ -112,9 +112,9 @@ const createSchema = z.object({
   // Suministros (papel, cinta…) usan su código interno como ID.
   bodega: z.enum(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI", "MKT_SUMINISTROS"], { message: "Elige la marca." }),
   justCode: z.string().trim().max(50).optional(),
-  // Suministro sin código de afuera: el código lo pone DAFLOW (ver supplyCode.ts).
+  // Suministros: el código lo pone siempre DAFLOW (ver supplyCode.ts).
   autoSupplyCode: z.boolean().optional(),
-}).refine((d) => (d.bodega === "MKT_SUMINISTROS" && d.autoSupplyCode) || !!d.justCode, {
+}).refine((d) => d.bodega === "MKT_SUMINISTROS" || !!d.justCode, {
   message: "Falta el ID de Dropi (o el código del suministro).",
 });
 
@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const autoCode = parsed.data.bodega === "MKT_SUMINISTROS" && !!parsed.data.autoSupplyCode;
+  const autoCode = parsed.data.bodega === "MKT_SUMINISTROS";
   if (!autoCode) {
     const justCode = parsed.data.justCode!;
     const idTaken = await prisma.purchaseCatalogItem.findUnique({ where: { justCode }, select: { id: true, name: true } });
