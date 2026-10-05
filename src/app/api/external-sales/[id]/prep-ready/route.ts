@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
-import { notifyFulfilmentLeadExternalSalePrepReady } from "@/lib/externalSales";
+import { notifyColaboradorPackAssigned, notifyFulfilmentLeadExternalSalePrepReady, saleItemsSummary } from "@/lib/externalSales";
 
 const schema = z.object({ photoUrl: z.string().min(1) });
 
@@ -21,7 +21,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const sale = await prisma.externalSale.findUnique({
     where: { id },
-    select: { dispatchAssignedToId: true, prepReadyAt: true, code: true },
+    select: { dispatchAssignedToId: true, prepReadyAt: true, packAssignedToId: true, code: true, items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } } },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   const isAssignee = sale.dispatchAssignedToId === session.user.id;
@@ -34,6 +34,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { prepPhotoUrl: parsed.data.photoUrl, prepReadyAt: new Date(), prepReadyById: session.user.id },
   });
 
-  await notifyFulfilmentLeadExternalSalePrepReady(sale.code);
+  // Pestaña Despacho (2026-10-05): si el líder ya eligió quién embala, el
+  // aviso va directo a esa persona; si no, al líder para que la asigne.
+  if (sale.packAssignedToId) await notifyColaboradorPackAssigned(sale.packAssignedToId, sale.code, saleItemsSummary(sale.items));
+  else await notifyFulfilmentLeadExternalSalePrepReady(sale.code);
   return NextResponse.json(updated);
 }

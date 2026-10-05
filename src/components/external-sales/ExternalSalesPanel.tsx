@@ -5,9 +5,8 @@ import { ExternalSaleDeclareForm } from "./ExternalSaleDeclareForm";
 import { ExternalSaleReviewInbox } from "./ExternalSaleReviewInbox";
 import { ExternalSalePaymentConfirmInbox } from "./ExternalSalePaymentConfirmInbox";
 import { ExternalSaleInvoiceInbox } from "./ExternalSaleInvoiceInbox";
-import { ExternalSaleDispatchInbox } from "./ExternalSaleDispatchInbox";
+import { ExternalSaleDispatchBoard } from "./ExternalSaleDispatchBoard";
 import { ExternalSalePrepPanel } from "./ExternalSalePrepPanel";
-import { ExternalSalePackAssignInbox } from "./ExternalSalePackAssignInbox";
 import { ExternalSalePackDeliveryPanel } from "./ExternalSalePackDeliveryPanel";
 import { ExternalSaleClosingInbox } from "./ExternalSaleClosingInbox";
 import { ExternalSaleAuditSummary } from "./ExternalSaleAuditSummary";
@@ -17,7 +16,7 @@ import { TabGuide } from "@/components/shared/TabGuide";
 import { LocalWarrantyPanel } from "./LocalWarrantyPanel";
 import { WarrantyPickupInbox } from "./WarrantyPickupInbox";
 
-type Tab = "declarar" | "garantias" | "revision" | "pagos" | "facturacion" | "agrupar" | "preparar" | "embalaje" | "entregas" | "devoluciones" | "cierre" | "auditoria" | "historial";
+type Tab = "declarar" | "garantias" | "revision" | "pagos" | "facturacion" | "despacho" | "preparar" | "entregas" | "devoluciones" | "cierre" | "auditoria" | "historial";
 
 export function ExternalSalesPanel({
   canDeclare,
@@ -46,11 +45,19 @@ export function ExternalSalesPanel({
   canClose: boolean;
   isAdmin: boolean;
 }) {
-  const defaultTab: Tab = canDeclare ? "declarar" : canReview ? "revision" : canAssignPrep ? "agrupar" : "historial";
+  // Pedido de Daniel 2026-10-05: Agrupar y Embalaje se juntaron en
+  // "Despacho" (cada venta con sus 3 pasos). "Preparar" queda solo para
+  // quien agrupa sin ser el líder — el líder lo marca dentro de Despacho.
+  const canDispatch = canAssignPrep || canAssignPack;
+  const showPrepTab = canPrep && !canAssignPrep;
+  const defaultTab: Tab = canDeclare ? "declarar" : canReview ? "revision" : canDispatch ? "despacho" : "historial";
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return defaultTab;
-    const t = new URLSearchParams(window.location.search).get("etab");
-    const valid: Tab[] = ["declarar", "garantias", "revision", "pagos", "facturacion", "agrupar", "preparar", "embalaje", "entregas", "devoluciones", "cierre", "auditoria", "historial"];
+    let t = new URLSearchParams(window.location.search).get("etab");
+    // Enlaces viejos (avisos ya enviados, Inicio) a las pestañas que se juntaron.
+    if (t === "agrupar" || t === "embalaje") t = "despacho";
+    if (t === "preparar" && !showPrepTab) t = "despacho";
+    const valid: Tab[] = ["declarar", "garantias", "revision", "pagos", "facturacion", "despacho", "preparar", "entregas", "devoluciones", "cierre", "auditoria", "historial"];
     return (valid as string[]).includes(t ?? "") ? (t as Tab) : defaultTab;
   });
 
@@ -60,9 +67,8 @@ export function ExternalSalesPanel({
     ...(canReview ? [{ id: "revision" as const, label: "Revisión" }] : []),
     ...(canConfirmPayment ? [{ id: "pagos" as const, label: "Pagos" }] : []),
     ...(canInvoice ? [{ id: "facturacion" as const, label: "Facturación" }] : []),
-    ...(canAssignPrep ? [{ id: "agrupar" as const, label: "Agrupar" }] : []),
-    ...(canPrep ? [{ id: "preparar" as const, label: "Preparar" }] : []),
-    ...(canAssignPack ? [{ id: "embalaje" as const, label: "Embalaje" }] : []),
+    ...(canDispatch ? [{ id: "despacho" as const, label: "Despacho" }] : []),
+    ...(showPrepTab ? [{ id: "preparar" as const, label: "Preparar" }] : []),
     ...(canPack ? [{ id: "entregas" as const, label: "Mis entregas" }] : []),
     ...(canReceiveReturn || canConfirmReturn ? [{ id: "devoluciones" as const, label: "Devoluciones" }] : []),
     ...(canClose ? [{ id: "cierre" as const, label: "Cierre" }] : []),
@@ -118,22 +124,16 @@ export function ExternalSalesPanel({
           <ExternalSaleInvoiceInbox />
         </>
       )}
-      {tab === "agrupar" && canAssignPrep && (
+      {tab === "despacho" && canDispatch && (
         <>
-          <TabGuide storageKey="externalsales-agrupar">Asigna cada venta lista a un colaborador de tu equipo para que agrupe los productos según la guía. Si alguien no avanza, abajo podés reasignarla a otra persona.</TabGuide>
-          <ExternalSaleDispatchInbox />
+          <TabGuide storageKey="externalsales-despacho">Cada venta aprobada sale una sola vez con sus 3 pasos: quién agrupa, la foto de que ya está agrupada y quién embala y entrega. Puedes asignar a las dos personas desde el principio; a quien embala le llega el aviso cuando ya esté agrupado. Si alguien no avanza, reasígnala a otra persona.</TabGuide>
+          <ExternalSaleDispatchBoard canAssignGroup={canAssignPrep} canAssignPack={canAssignPack} />
         </>
       )}
-      {tab === "preparar" && canPrep && (
+      {tab === "preparar" && showPrepTab && (
         <>
-          <TabGuide storageKey="externalsales-preparar">Tus ventas asignadas — agrupa los productos, toma fotos según la guía y marca listo para que Daniel asigne quién embala y entrega.</TabGuide>
+          <TabGuide storageKey="externalsales-preparar">Tus ventas asignadas — agrupa los productos, toma fotos según la guía y marca listo para que siga a embalaje y entrega.</TabGuide>
           <ExternalSalePrepPanel />
-        </>
-      )}
-      {tab === "embalaje" && canAssignPack && (
-        <>
-          <TabGuide storageKey="externalsales-embalaje">Inventario ya dejó listos los productos — asigna a alguien de tu equipo para embalar y entregar. Podés imprimir la guía de salida. Si alguien no avanza, abajo podés reasignarla a otra persona.</TabGuide>
-          <ExternalSalePackAssignInbox />
         </>
       )}
       {tab === "entregas" && canPack && (

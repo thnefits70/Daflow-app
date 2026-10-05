@@ -25,6 +25,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     where: { id },
     select: {
       packAssignedToId: true,
+      prepReadyAt: true,
       deliveredAt: true,
       paymentConfirmedAt: true,
       advisorId: true,
@@ -43,6 +44,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
   if (!sale.packAssignedToId) {
     return NextResponse.json({ error: "Todavía no se asigna quién embala." }, { status: 409 });
+  }
+  if (!sale.prepReadyAt) {
+    return NextResponse.json({ error: "Todavía no se agrupa." }, { status: 409 });
   }
   if (!parsed.data.photoUrl) {
     return NextResponse.json({ error: "Falta la foto de la entrega." }, { status: 400 });

@@ -23,7 +23,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     select: { prepReadyAt: true, packAssignedToId: true, deliveredAt: true, dispatchAssignedToId: true, code: true, items: { select: { declaredProductName: true, catalogItem: { select: { name: true } } } } },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  if (!sale.prepReadyAt) return NextResponse.json({ error: "Inventario todavía no la deja lista." }, { status: 409 });
+  // Pedido de Daniel 2026-10-05 (pestaña Despacho): ya se puede elegir quién
+  // embala antes de que se agrupe; el aviso a esa persona sale recién en
+  // prep-ready.
   const reassign = !!parsed.data.reassign;
   if (sale.packAssignedToId && !reassign) return NextResponse.json({ error: "Ya fue asignada." }, { status: 409 });
   if (reassign) {
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: { packAssignedToId: colaborador.id, packAssignedAt: new Date(), packAssignedById: dbUserId(session.user.id) },
   });
 
-  await notifyColaboradorPackAssigned(colaborador.id, sale.code, saleItemsSummary(sale.items));
+  if (sale.prepReadyAt) await notifyColaboradorPackAssigned(colaborador.id, sale.code, saleItemsSummary(sale.items));
   if (sale.dispatchAssignedToId) await notifyGrouperPackAssigned(sale.dispatchAssignedToId, sale.code, saleItemsSummary(sale.items), colaborador.name);
   return NextResponse.json(updated);
 }

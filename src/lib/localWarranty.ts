@@ -758,7 +758,7 @@ export async function createLocalWarranty(input: CreateWarrantyInput, advisorId:
     await notifyOwner(danielId, {
       title: "🛡️ Garantía local por despachar",
       body: `${sale.code} — garantía de ${src.ref} para ${clientName}. Asigna quién agrupa, igual que una venta externa.`,
-      url: `${EXTERNAL_SALES_URL}&etab=agrupar`,
+      url: `${EXTERNAL_SALES_URL}&etab=despacho`,
     }).catch(() => null);
   }
   return { ok: true, id: sale.id, code: sale.code };

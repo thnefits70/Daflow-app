@@ -4128,7 +4128,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const doubleRegItem = await getDamagedDoubleRegistrationPendingItem("/area/reingreso-mercaderia?tab=danos").catch(() => null);
     if (doubleRegItem) items.push(doubleRegItem);
     if (externalSaleDispatchItem) items.push(externalSaleDispatchItem);
-    const externalSalePackItem = await getExternalSalePackPendingItem("/area/workspace?tab=ventas-externas&etab=embalaje");
+    const externalSalePackItem = await getExternalSalePackPendingItem("/area/workspace?tab=ventas-externas&etab=despacho");
     if (externalSalePackItem) items.push(externalSalePackItem);
     const warrantyPickupItem = await getLocalWarrantyPickupPendingItem("/area/workspace?tab=ventas-externas&etab=devoluciones");
     if (warrantyPickupItem) items.push(warrantyPickupItem);

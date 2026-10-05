@@ -144,7 +144,7 @@ export async function notifyInventoryLeadExternalSaleApproved(code: string): Pro
 }
 
 export async function notifyColaboradorDispatchAssigned(colaboradorId: string, code: string, productName: string): Promise<void> {
-  await notifyOwner(colaboradorId, { title: "📦 Preparación asignada", body: `${code} — ${productName}. Agrupa, toma fotos y marca listo.`, url: `${URL_BASE}&etab=entregas` }).catch(() => null);
+  await notifyOwner(colaboradorId, { title: "📦 Preparación asignada", body: `${code} — ${productName}. Agrupa, toma fotos y marca listo.`, url: `${URL_BASE}&etab=preparar` }).catch(() => null);
 }
 
 export async function notifyFinanceLeadExternalSalePendingInvoice(code: string): Promise<void> {
@@ -158,7 +158,7 @@ export async function notifyFinanceLeadExternalSalePendingInvoice(code: string):
 export async function notifyFulfilmentLeadExternalSalePrepReady(code: string): Promise<void> {
   const leadId = await getInventoryLeadId();
   if (!leadId) return;
-  await notifyOwner(leadId, { title: "📦 Venta externa lista para embalar", body: `${code} — ya se agrupó, asigna quién embala y entrega.`, url: `${URL_BASE}&etab=embalaje` }).catch(() => null);
+  await notifyOwner(leadId, { title: "📦 Venta externa lista para embalar", body: `${code} — ya se agrupó, asigna quién embala y entrega.`, url: `${URL_BASE}&etab=despacho` }).catch(() => null);
 }
 
 export async function notifyColaboradorPackAssigned(colaboradorId: string, code: string, productName: string): Promise<void> {

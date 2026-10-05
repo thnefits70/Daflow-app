@@ -10,7 +10,9 @@ export async function GET() {
   if (!(await canPackExternalSale()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const sales = await prisma.externalSale.findMany({
-    where: { packAssignedToId: session.user.id, deliveredAt: null, deletedAt: null },
+    // prepReadyAt: desde 2026-10-05 se puede asignar quién embala antes de
+    // agrupar — recién aparece acá cuando ya está agrupada.
+    where: { packAssignedToId: session.user.id, prepReadyAt: { not: null }, deliveredAt: null, deletedAt: null },
     select: {
       id: true,
       code: true,
