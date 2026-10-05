@@ -447,6 +447,51 @@ export async function generateComboSuggestions(actorId = "system"): Promise<{ cr
   return { created };
 }
 
+// ---- Renombrar los que ya están en pantalla --------------------------------
+
+// Pedido del usuario 2026-10-05: los combos que salieron antes de la regla de
+// nombres ("A Y B", máx. 40) se renombran una vez. Solo los que aún no se
+// crean en Dropi; productos, precio y stock no se tocan.
+const RENAME_SYSTEM_PROMPT = `Pon nombre a combos de productos para publicarlos en Dropi (Ecuador).
+Regla: une los nombres REALES de los productos con " Y ", en el orden que te los doy. Acorta cada nombre a sus palabras clave (quita "Kit", "Premium", marcas, guiones y adjetivos de relleno) pero que se reconozca cada producto. MÁXIMO ${COMBO_NAME_MAX_CHARS} caracteres contando espacios. Sin la palabra "combo". Cada palabra con mayúscula inicial y con tildes y ñ correctas.
+Responde ÚNICAMENTE con JSON (sin markdown): { "names": { "<id>": "Nombre" } }`;
+
+export async function renameOpenComboSuggestions(actorId = "system"): Promise<{ id: string; before: string | null; after: string }[]> {
+  const rows = await prisma.comboSuggestion.findMany({
+    where: { status: { in: ["SUGERIDO", "SELECCIONADO", "PENDIENTE_APROBACION", "APROBADO"] } },
+    select: { id: true, suggestedName: true, items: { select: { role: true, catalogItem: { select: { name: true } } } } },
+  });
+  if (rows.length === 0) return [];
+  const productNames = (r: (typeof rows)[number]) =>
+    [...r.items.filter((i) => i.role !== "LOW"), ...r.items.filter((i) => i.role === "LOW")].map((i) => i.catalogItem.name);
+  let aiNames: Record<string, unknown> = {};
+  try {
+    const client = getAnthropicClient();
+    const response = await client.messages.create({
+      model: COMBO_MATCH_AI_MODEL,
+      max_tokens: COMBO_MATCH_MAX_TOKENS,
+      system: RENAME_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: rows.map((r) => `${r.id}: ${productNames(r).join(" | ")}`).join("\n") }],
+    });
+    await logAiUsage({ feature: "combo_sugerencias_match", model: COMBO_MATCH_AI_MODEL, actorId, inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens });
+    const textBlock = response.content.find((b) => b.type === "text");
+    let text = textBlock && textBlock.type === "text" ? textBlock.text.trim() : "";
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fenced) text = fenced[1].trim();
+    aiNames = (JSON.parse(text) as { names?: Record<string, unknown> }).names ?? {};
+  } catch (err) {
+    console.error("No se pudieron pedir los nombres a la IA, se usan los nombres reales recortados:", err);
+  }
+  const out: { id: string; before: string | null; after: string }[] = [];
+  for (const r of rows) {
+    const after = clampComboName(aiNames[r.id]) ?? comboNameFromProducts(productNames(r));
+    if (!after || after === r.suggestedName) continue;
+    await prisma.comboSuggestion.update({ where: { id: r.id }, data: { suggestedName: after } });
+    out.push({ id: r.id, before: r.suggestedName, after });
+  }
+  return out;
+}
+
 // ---- Precio y stock para la pantalla --------------------------------------
 
 export type ComboPricing = {
