@@ -38,8 +38,8 @@ function useNow(active: boolean): number {
 // Conteo físico de inventario (pedido del usuario 2026-10-02). A CIEGAS:
 // aquí nunca se ve lo que dice el sistema, solo se escribe cuánto hay.
 // Desde 2026-10-05 Daniel asigna cada área a una persona con un horario; la
-// persona empieza (corre su tiempo), cuenta del que más se vende al que
-// menos y avisa cuando termina.
+// persona empieza (corre su tiempo), cuenta del que menos se vende al que
+// más y avisa cuando termina.
 export function StockCountPanel() {
   const [data, setData] = useState<Data | null>(null);
   const [area, setArea] = useState<string>("");
@@ -198,7 +198,7 @@ export function StockCountPanel() {
       {showList && (
         <>
           <div className="text-[12px] bg-cloud border border-rule rounded p-2.5 mb-3 max-w-2xl">
-            Cuenta lo que hay físicamente y escribe el número. Van primero los que <b>más se venden</b>. <b>No cuentes</b> lo que ya está separado para un corte ni la mercadería recién llegada sin registrar. Si un producto está en dos lugares, <b>suma todo</b> antes de escribirlo. Si no está, escribe <b>0</b>.
+            Cuenta lo que hay físicamente y escribe el número. Van primero los que <b>menos se venden</b>. <b>No cuentes</b> lo que ya está separado para un corte ni la mercadería recién llegada sin registrar. Si un producto está en dos lugares, <b>suma todo</b> antes de escribirlo. Si no está, escribe <b>0</b>.
           </div>
 
           <div className="flex flex-wrap items-center gap-2 mb-3">

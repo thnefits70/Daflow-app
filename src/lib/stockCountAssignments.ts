@@ -9,8 +9,8 @@ import { WAREHOUSE_AREAS, areaLabel } from "@/lib/warehouseAreas";
 // - Daniel asigna cada área a UNA persona del equipo de Inventario y elige
 //   un bloque de horario entre cortes (la meta para terminar).
 // - A la persona le llega el aviso y le sale en su Inicio; al pulsar
-//   "Empezar" corre su tiempo; cuenta del producto que más se vende al que
-//   menos; al terminar le avisa a Daniel para que asigne la siguiente.
+//   "Empezar" corre su tiempo; cuenta del producto que menos se vende al que
+//   más; al terminar le avisa a Daniel para que asigne la siguiente.
 // - Lo que el admin desmarca en la lista de diferencias lo vuelve a contar
 //   OTRA persona (área especial "RECOUNT").
 // - El tiempo por producto se guarda: en este primer conteo solo se mide;

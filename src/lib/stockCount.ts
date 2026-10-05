@@ -56,12 +56,12 @@ async function products(area: string | null): Promise<CountableProduct[]> {
     select: { id: true, name: true, justCode: true, photos: true, warehouseArea: true },
     orderBy: [{ warehouseArea: "asc" }, { name: "asc" }],
   });
-  // Del que más se vende al que menos (pedido del usuario 2026-10-05): los
-  // que más se mueven son los que más se descuadran.
+  // Del que menos se vende al que más (el usuario lo cambió el 2026-10-05,
+  // primero se pidió al revés).
   const moved = await recentMovement(items.map((i) => i.id));
   return items
     .map((i) => ({ p: { id: i.id, name: i.name, justCode: i.justCode, photo: i.photos[0] ?? null, area: i.warehouseArea }, moved: moved.get(i.id) ?? 0 }))
-    .sort((a, b) => b.moved - a.moved || a.p.name.localeCompare(b.p.name))
+    .sort((a, b) => a.moved - b.moved || a.p.name.localeCompare(b.p.name))
     .map((x) => x.p);
 }
 
