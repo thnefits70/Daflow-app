@@ -81,7 +81,7 @@ export function windowStatus(now = new Date()): { inWindow: boolean; endsAt: str
 // ---- Movimiento y tiempos -------------------------------------------------
 
 // Unidades que salieron en los últimos 30 días por producto (para ordenar
-// del que más se mueve al que menos).
+// del que menos se mueve al que más).
 export async function recentMovement(catalogItemIds?: string[]): Promise<Map<string, number>> {
   const since = new Date(Date.now() - 30 * 86_400_000);
   const rows = await prisma.stockKardexEntry.groupBy({
