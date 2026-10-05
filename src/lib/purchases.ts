@@ -544,7 +544,7 @@ export type PurchaseLineLeftBehind = { id: string; groupId: string; name: string
 // solo: líneas sin recepción (pagadas, o aprobadas si el proveedor es de
 // crédito) cuyo mismo pedido (groupId) ya tiene otra línea recibida hace más
 // de 24 h. Sale de la lista apenas Inventario la recibe o la reporta.
-export async function getPurchaseLinesLeftBehind(requestedById?: string): Promise<PurchaseLineLeftBehind[]> {
+export async function getPurchaseLinesLeftBehind(requestedById?: string, graceMs: number = LEFT_BEHIND_GRACE_MS): Promise<PurchaseLineLeftBehind[]> {
   const waiting = await prisma.purchaseRequest.findMany({
     where: {
       ...(requestedById ? { requestedById } : {}),
@@ -556,7 +556,7 @@ export async function getPurchaseLinesLeftBehind(requestedById?: string): Promis
   });
   if (waiting.length === 0) return [];
 
-  const cutoff = new Date(Date.now() - LEFT_BEHIND_GRACE_MS);
+  const cutoff = new Date(Date.now() - graceMs);
   const received = await prisma.purchaseRequestReceipt.findMany({
     where: { request: { groupId: { in: [...new Set(waiting.map((w) => w.groupId))] } }, confirmedAt: { lt: cutoff } },
     select: { confirmedAt: true, request: { select: { groupId: true } } },

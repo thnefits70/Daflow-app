@@ -21,6 +21,7 @@ import { getNegativeStockProducts } from "@/lib/stockKardex";
 import { carrierLabel } from "@/lib/carriers";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
 import { getOpenPurchaseCodesByCatalogItem, getPurchaseLinesLeftBehind, getPurchaseLinesOverdue, getShortReceiptsUnclaimed, LEFT_BEHIND_HREF, OVERDUE_ORDERS_HREF } from "@/lib/purchases";
+import { getLinesToConfirm, INVENTORY_RECEIVING_HREF } from "@/lib/purchaseLeftBehind";
 import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
@@ -2180,6 +2181,22 @@ async function getSupplierExchangeFinanceWriteOffPendingItem(href: string): Prom
 // que la reciba — se quedaba invisible mientras seguía "Aprobado" para
 // siempre. El "atrasado" para esos casos ahora cuenta desde reviewedAt (la
 // aprobación) ya que no hay paidAt que usar.
+// Pedido de Jariel 2026-10-05: producto que no se registró con el resto del
+// pedido — Inventario confirma al instante si llegó o no (ver
+// purchaseLeftBehind.ts). Sin cantidades: el equipo no las ve.
+async function getLinesToConfirmPendingItem(): Promise<PendingItem | null> {
+  const lines = await getLinesToConfirm();
+  if (lines.length === 0) return null;
+  return {
+    type: "compras_confirmar_no_llego",
+    icon: "📦",
+    label: "Producto que no se registró con el resto del pedido — confirma si llegó o no",
+    meta: lines.length === 1 ? `${lines[0].name} · ${lines[0].supplierName}` : `${lines.length} productos: ${lines.map((l) => l.name).join(", ")}`,
+    overdue: true,
+    href: INVENTORY_RECEIVING_HREF,
+  };
+}
+
 // Corregido 2026-09-26, pedido del usuario: el equipo de Inventario veía el
 // monto ("$1680.00") en Inicio — mismo criterio de 2026-08-18 que
 // PurchaseReceivingPanel: valores económicos solo para Daniel (líder) y admin.
@@ -3932,6 +3949,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
         getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
         getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes"),
       ]);
+      const linesToConfirmItem = await getLinesToConfirmPendingItem();
+      if (linesToConfirmItem) teamItems.unshift(linesToConfirmItem);
       if (receivingItem) teamItems.push(receivingItem);
       if (replacementItem) teamItems.push(replacementItem);
       if (urgentUnresolvedItem) teamItems.push(urgentUnresolvedItem);
@@ -4108,6 +4127,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getDeteriorResolutionPendingItem("/area/workspace?tab=egresos&otab=deterioro"),
       getExternalSaleDispatchPendingItem("/area/workspace?tab=ventas-externas&etab=despacho"),
     ]);
+    const linesToConfirmItem = await getLinesToConfirmPendingItem();
+    if (linesToConfirmItem) items.unshift(linesToConfirmItem);
     if (receivingItem) items.push(receivingItem);
     if (replacementItem) items.push(replacementItem);
     if (inventoryControlItem) items.push(inventoryControlItem);

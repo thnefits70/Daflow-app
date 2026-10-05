@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canReceivePurchasesTeam, canActOnPurchaseReceiving } from "@/lib/guards";
 import { notifyReceiptRegistered } from "@/lib/purchaseReceiptFromReport";
+import { notifyInventoryLinesToConfirm } from "@/lib/purchaseLeftBehind";
 
 const schema = z.object({
   receivedQuantity: z.number().int().nonnegative(),
@@ -163,6 +164,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   ]);
 
   await notifyReceiptRegistered({ catalogItemId: existing.catalogItemId, itemName: existing.catalogItem.name, quantity: parsed.data.receivedQuantity });
+  // Pedido de Jariel 2026-10-05: si otro producto del mismo pedido sigue sin
+  // registrar, se pregunta al instante a Inventario si llegó o no.
+  await notifyInventoryLinesToConfirm(existing.groupId).catch(() => null);
 
   return NextResponse.json(updated);
 }

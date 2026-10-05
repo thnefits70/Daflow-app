@@ -3,6 +3,7 @@ import { getInventoryLeadId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { getMarketingArrivalActorIds, getMarketingArrivalDispatchViewerIds } from "@/lib/marketingArrivals";
 import { isCatalogItemBranded, catalogItemNeedsRealPhotos, getNewIdBrandingActorIds } from "@/lib/newIdBranding";
+import { notifyInventoryLinesToConfirm } from "@/lib/purchaseLeftBehind";
 
 // Avisos que salen apenas bodega deja registrada una recepción (antes vivían
 // solo en [id]/receipt/route.ts — se comparten con el registro automático
@@ -115,5 +116,6 @@ export async function registerGoodUnitsFromUrgentReport(requestId: string, actor
   await notifyReceiptRegistered({ catalogItemId: existing.catalogItemId, itemName: existing.catalogItem.name, quantity: goodQty, skipLeadNotice: actor.isLead }).catch((err) =>
     console.error("[registerGoodUnitsFromUrgentReport] avisos:", err)
   );
+  await notifyInventoryLinesToConfirm(existing.groupId).catch(() => null);
   return receipt;
 }

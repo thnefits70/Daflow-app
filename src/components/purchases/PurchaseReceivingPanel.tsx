@@ -803,6 +803,23 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     router.refresh();
   }
 
+  // Pedido de Jariel 2026-10-05 — ver not-arrived/route.ts.
+  const [notArrivedConfirmId, setNotArrivedConfirmId] = useState<string | null>(null);
+  async function confirmNotArrived(requestId: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/${requestId}/not-arrived`, { method: "POST" });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      setErr(data?.error ?? "No se pudo registrar.");
+      return;
+    }
+    setNotArrivedConfirmId(null);
+    load();
+    router.refresh();
+  }
+
   async function registerGoodFromReport(reportId: string) {
     setBusy(true);
     setErr("");
@@ -2052,6 +2069,35 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               })}
                             </div>
                           )}
+                          {/* Pedido de Jariel 2026-10-05: lo demás del pedido ya se
+                              registró y esto no — Inventario confirma al instante si
+                              llegó o no. "No llegó" avisa en el momento a Compras. */}
+                          {r.urgentReports.length === 0 && !r.receipt && (r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")) && g.some((o) => o.id !== r.id && o.receipt) && (
+                            <div className="bg-red/10 border border-red/40 rounded-md p-2.5 mb-2 text-[11.5px]">
+                              <div className="font-semibold text-red mb-1.5">Lo demás de este pedido ya se registró y este producto no. ¿Llegó?</div>
+                              {notArrivedConfirmId === r.id ? (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span>¿Seguro que no llegó? Se avisa a Compras para que lo coordine con el proveedor.</span>
+                                  <button type="button" disabled={busy} className="rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => confirmNotArrived(r.id)}>Sí, no llegó</button>
+                                  <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setNotArrivedConfirmId(null); setErr(""); }}>Cancelar</button>
+                                </div>
+                              ) : (
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={!canReceiveTeam && !canApprove}
+                                    className="rounded border border-red/50 text-red px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                    onClick={() => { setNotArrivedConfirmId(r.id); setErr(""); }}
+                                  >
+                                    ✗ No llegó
+                                  </button>
+                                  <span className="text-steel">Si sí llegó, regístralo con &quot;✓ Confirmar que llegó&quot;.</span>
+                                </div>
+                              )}
+                              {notArrivedConfirmId === r.id && err && <div className="text-red mt-1.5">{err}</div>}
+                            </div>
+                          )}
+
                           <div className="flex items-center gap-2">
                             {r.urgentReports.length === 0 && (
                               <button
