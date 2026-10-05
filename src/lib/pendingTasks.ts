@@ -1607,7 +1607,7 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
     items.push({
       type: "compras_pedido_sin_llegar",
       icon: "⏰",
-      label: "Pedido que lleva más de 5 días sin llegar — pregunta al proveedor",
+      label: "Pedido que lleva más de 2 días sin llegar — pregunta al proveedor",
       meta:
         overdueOrders.length === 1
           ? `${overdueOrders[0].name} (${overdueOrders[0].quantity} un.) · ${overdueOrders[0].supplierName} · ${overdueOrders[0].days} días`

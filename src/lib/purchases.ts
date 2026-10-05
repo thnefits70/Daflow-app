@@ -481,10 +481,10 @@ export async function getShortReceiptsUnclaimed(requestedById?: string): Promise
     }));
 }
 
-const OVERDUE_DAYS = 5;
+const OVERDUE_DAYS = 2; // Pedido del usuario 2026-10-05: 2 días para CHEN y contado (9 de cada 10 pedidos llegan antes).
 
 // Pedido del usuario 2026-10-05: pedido completo (ninguna línea recibida) que
-// lleva más de 5 días pagado — o aprobado, si el proveedor es de crédito
+// lleva más de 2 días pagado — o aprobado, si el proveedor es de crédito
 // (CHEN no pasa por pago) — sin llegar a bodega ni tener reporte urgente.
 // Va a quien compró. Lo que no llegó con el resto del pedido lo cubre
 // getPurchaseLinesLeftBehind.
