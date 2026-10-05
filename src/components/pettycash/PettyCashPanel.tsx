@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, Pencil, Archive, RotateCcw, Upload, Camera, ChevronDown } from "lucide-react";
 import { usePasteFile } from "@/lib/usePasteFile";
@@ -242,6 +242,25 @@ function BoxCard({
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [glow, setGlow] = useState(false);
+
+  // Pedido 2026-10-05: en celular las dos cajas ocupan toda la pantalla —
+  // se puede ocultar el detalle de cada una y dejar solo el saldo. Se
+  // recuerda por dispositivo (localStorage), igual que TabGuide. En
+  // computadora no aplica: ahí las cajas van lado a lado.
+  const collapseKey = `pettyCash:collapsed:${box.type}`;
+  const storedCollapsed = useSyncExternalStore(
+    () => () => {},
+    () => localStorage.getItem(collapseKey) === "1",
+    () => false
+  );
+  const [collapsedOverride, setCollapsedOverride] = useState<boolean | null>(null);
+  // Si se llega desde un aviso de Pendientes, la caja se abre igual.
+  const collapsed = collapsedOverride ?? (storedCollapsed && !highlight);
+  function toggleCollapsed() {
+    const next = !collapsed;
+    setCollapsedOverride(next);
+    localStorage.setItem(collapseKey, next ? "1" : "0");
+  }
 
   useEffect(() => {
     if (!highlight) return;
@@ -628,7 +647,17 @@ function BoxCard({
 
       <div className="flex items-center justify-between mb-1">
         <div className="font-semibold text-[14px]">{box.type === "PRINCIPAL" ? "💰 Caja Chica Principal" : "🧾 Caja Chica Secundaria"}</div>
-        {!canManage && <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">Solo lectura</span>}
+        <div className="flex items-center gap-2">
+          {!canManage && <span className="font-mono text-[10px] uppercase text-steel bg-cloud rounded-full px-2 py-0.5">Solo lectura</span>}
+          <button
+            type="button"
+            className="lg:hidden flex items-center gap-1 rounded border border-rule bg-cloud px-2 py-1 text-[11px] font-semibold text-steel cursor-pointer"
+            onClick={toggleCollapsed}
+          >
+            {collapsed ? "Mostrar" : "Ocultar"}
+            <ChevronDown size={13} className={`transition-transform ${collapsed ? "" : "rotate-180"}`} />
+          </button>
+        </div>
       </div>
       <div className={`font-display text-[28px] font-bold mt-1 ${box.isLow ? "text-red" : ""}`}>{money(box.balance)}</div>
       {box.isLow && (
@@ -636,6 +665,11 @@ function BoxCard({
           <span className="w-1.5 h-1.5 rounded-full bg-red shrink-0" /> Saldo bajo el mínimo de {money(box.minThreshold)}.
         </div>
       )}
+      {/* Pendiente de confirmar se sigue viendo aunque la caja esté oculta. */}
+      {collapsed && myPending && canOperate && (
+        <div className="lg:hidden mt-1.5 text-[11.5px] font-semibold text-blue">📥 Te fondearon la caja — toca Mostrar para confirmarlo</div>
+      )}
+      <div className={collapsed ? "max-lg:hidden" : ""}>
       {isAdmin && (
         <div className="mt-1.5 text-[11px] text-steel">
           {editingThreshold ? (
@@ -1001,6 +1035,7 @@ function BoxCard({
           )}
         </div>
       )}
+      </div>
 
       {zoomedUrl && <Lightbox url={zoomedUrl} onClose={() => setZoomedUrl(null)} />}
     </div>
