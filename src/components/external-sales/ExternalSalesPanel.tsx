@@ -20,6 +20,7 @@ type Tab = "declarar" | "garantias" | "revision" | "pagos" | "facturacion" | "de
 
 export function ExternalSalesPanel({
   canDeclare,
+  canManageWarranties,
   canReview,
   canConfirmPayment,
   canInvoice,
@@ -33,6 +34,7 @@ export function ExternalSalesPanel({
   isAdmin,
 }: {
   canDeclare: boolean;
+  canManageWarranties: boolean;
   canReview: boolean;
   canConfirmPayment: boolean;
   canInvoice: boolean;
@@ -50,7 +52,7 @@ export function ExternalSalesPanel({
   // quien agrupa sin ser el líder — el líder lo marca dentro de Despacho.
   const canDispatch = canAssignPrep || canAssignPack;
   const showPrepTab = canPrep && !canAssignPrep;
-  const defaultTab: Tab = canDeclare ? "declarar" : canReview ? "revision" : canDispatch ? "despacho" : "historial";
+  const defaultTab: Tab = canDeclare ? "declarar" : canManageWarranties ? "garantias" : canReview ? "revision" : canDispatch ? "despacho" : "historial";
   const [tab, setTab] = useState<Tab>(() => {
     if (typeof window === "undefined") return defaultTab;
     let t = new URLSearchParams(window.location.search).get("etab");
@@ -63,7 +65,8 @@ export function ExternalSalesPanel({
 
   const tabs: { id: Tab; label: string }[] = [
     ...(canDeclare ? [{ id: "declarar" as const, label: "Declarar" }] : []),
-    ...(canDeclare ? [{ id: "garantias" as const, label: "Garantías" }] : []),
+    // Permiso propio desde 2026-10-05 (antes salía con canDeclare).
+    ...(canManageWarranties ? [{ id: "garantias" as const, label: "Garantías" }] : []),
     ...(canReview ? [{ id: "revision" as const, label: "Revisión" }] : []),
     ...(canConfirmPayment ? [{ id: "pagos" as const, label: "Pagos" }] : []),
     ...(canInvoice ? [{ id: "facturacion" as const, label: "Facturación" }] : []),
@@ -100,15 +103,15 @@ export function ExternalSalesPanel({
           <ExternalSaleDeclareForm />
         </>
       )}
-      {tab === "garantias" && canDeclare && (
+      {tab === "garantias" && canManageWarranties && (
         <>
-          <TabGuide storageKey="externalsales-garantias">Garantías en Guayaquil con nuestro motorizado. Escribe la guía que salió (o la venta VE): DAFLOW copia el cliente, la dirección y los productos. Tú eliges qué falta entregar, el motivo, el cobro y el motorizado. Sigue el mismo camino que una venta externa (agrupar, embalar, motorizado) y el flete se paga por Caja Chica.</TabGuide>
+          <TabGuide storageKey="externalsales-garantias">Garantías en Guayaquil con nuestro motorizado. Escribe la guía que salió (o la venta VE): DAFLOW copia el cliente, la dirección y los productos. Tú eliges qué falta entregar, el motivo, el cobro y el motorizado. Bryan la aprueba antes de que salga; después sigue el mismo camino que una venta externa (agrupar, embalar, motorizado) y el flete se paga por Caja Chica.</TabGuide>
           <LocalWarrantyPanel />
         </>
       )}
       {tab === "revision" && canReview && (
         <>
-          <TabGuide storageKey="externalsales-revision">Aprueba o rechaza las ventas declaradas — un rechazo siempre necesita una justificación.</TabGuide>
+          <TabGuide storageKey="externalsales-revision">Aprueba o rechaza las ventas declaradas y las garantías locales — un rechazo siempre necesita una justificación.</TabGuide>
           <ExternalSaleReviewInbox />
         </>
       )}

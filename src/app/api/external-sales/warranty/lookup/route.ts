@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canDeclareExternalSales } from "@/lib/guards";
+import { canManageLocalWarranties } from "@/lib/guards";
 import { lookupWarrantySource } from "@/lib/localWarranty";
 import { WARRANTY_PICKUP_FREIGHT_AVG } from "@/lib/localWarrantyConstants";
 import { bodegaUnitCost, resolveCostBasisForCatalogItems } from "@/lib/marketProduct";
@@ -11,7 +11,7 @@ export const maxDuration = 60;
 // Pedido del usuario 2026-10-02: el asesor escribe la guía (o la venta
 // VE-000X) y DAFLOW trae solo los datos de lo que de verdad salió.
 export async function GET(req: NextRequest) {
-  if (!(await canDeclareExternalSales())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canManageLocalWarranties())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const ref = req.nextUrl.searchParams.get("ref") ?? "";
   const result = await lookupWarrantySource(ref);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 404 });

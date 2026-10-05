@@ -194,6 +194,7 @@ export function DeptWorkspaceTabs({
   canSubmitFulfillmentRequest = false,
   canViewFulfillmentRequests = false,
   canDeclareExternalSales = false,
+  canManageLocalWarranties = false,
   canReviewExternalSales = false,
   canConfirmExternalSalePayment = false,
   canInvoiceExternalSale = false,
@@ -408,6 +409,7 @@ export function DeptWorkspaceTabs({
   // misma pestaña sin dept.code (Bryan revisa, admin confirma pago, Nairoby
   // cierra); despacho/entregas reusan las guards de Registro de Egresos.
   canDeclareExternalSales?: boolean;
+  canManageLocalWarranties?: boolean;
   canReviewExternalSales?: boolean;
   canConfirmExternalSalePayment?: boolean;
   canInvoiceExternalSale?: boolean;
@@ -744,6 +746,7 @@ export function DeptWorkspaceTabs({
       {tab === "ventas-externas" && canViewExternalSales && (
         <ExternalSalesPanel
           canDeclare={canDeclareExternalSales}
+          canManageWarranties={canManageLocalWarranties}
           canReview={canReviewExternalSales}
           canConfirmPayment={canConfirmExternalSalePayment}
           canInvoice={canInvoiceExternalSale}

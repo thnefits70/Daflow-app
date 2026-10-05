@@ -1201,6 +1201,16 @@ export async function canDeclareExternalSales() {
   return !!user?.canDeclareExternalSales;
 }
 
+// Pedido del usuario 2026-10-05: garantías locales con interruptor propio,
+// separado de las ventas B2B (canDeclareExternalSales ya no da acceso).
+export async function canManageLocalWarranties() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await getGuardUser(session.user.id);
+  return !!user?.canManageLocalWarranties;
+}
+
 export async function canReviewExternalSales() {
   const session = await auth();
   if (!session) return false;
@@ -1351,6 +1361,7 @@ export async function canViewExternalSales() {
   if (session.user.role === "admin") return true;
   return (
     (await canDeclareExternalSales()) ||
+    (await canManageLocalWarranties()) ||
     (await canReviewExternalSales()) ||
     (await canCloseExternalSale()) ||
     (await canCaptureMerchandiseOutflow()) ||

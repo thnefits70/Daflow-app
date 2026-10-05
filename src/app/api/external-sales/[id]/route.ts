@@ -69,11 +69,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const sale = await prisma.externalSale.findUnique({
     where: { id },
-    select: { advisorId: true, reviewStatus: true, code: true, deletedAt: true, isContraEntrega: true, advisor: { select: { externalSaleContraEntrega: true } } },
+    select: { advisorId: true, reviewStatus: true, code: true, kind: true, deletedAt: true, isContraEntrega: true, advisor: { select: { externalSaleContraEntrega: true } } },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.advisorId !== session.user.id && session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (sale.deletedAt) return NextResponse.json({ error: "Esta venta ya fue cancelada." }, { status: 409 });
+  if (sale.kind === "WARRANTY") return NextResponse.json({ error: "Una garantía no se edita: cancélala y crea otra." }, { status: 409 });
   if (sale.reviewStatus !== "REJECTED" && sale.reviewStatus !== "PENDING") {
     return NextResponse.json({ error: "Solo se puede editar mientras está pendiente o rechazada — ya fue aprobada por Bryan." }, { status: 409 });
   }

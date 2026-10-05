@@ -31,11 +31,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const sale = await prisma.externalSale.findUnique({
     where: { id },
-    select: { advisorId: true, reviewStatus: true, code: true, advisor: { select: { externalSaleContraEntrega: true } } },
+    select: { advisorId: true, reviewStatus: true, code: true, kind: true, advisor: { select: { externalSaleContraEntrega: true } } },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.advisorId !== session.user.id && session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (sale.reviewStatus !== "PENDING") return NextResponse.json({ error: "Esta venta ya no está pendiente de revisión." }, { status: 409 });
+  if (sale.kind === "WARRANTY") return NextResponse.json({ error: "Una garantía no se cambia por producto: se aprueba o rechaza entera." }, { status: 409 });
 
   const item = await prisma.externalSaleItem.findUnique({ where: { id: itemId }, select: { saleId: true, rejectedAt: true } });
   if (!item || item.saleId !== id) return NextResponse.json({ error: "Producto no encontrado." }, { status: 404 });
@@ -98,10 +99,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!(await canDeclareExternalSales()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id, itemId } = await params;
-  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { advisorId: true, reviewStatus: true, code: true } });
+  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { advisorId: true, reviewStatus: true, code: true, kind: true } });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.advisorId !== session.user.id && session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (sale.reviewStatus !== "PENDING") return NextResponse.json({ error: "Esta venta ya no está pendiente de revisión." }, { status: 409 });
+  if (sale.kind === "WARRANTY") return NextResponse.json({ error: "Una garantía no se cambia por producto: se aprueba o rechaza entera." }, { status: 409 });
 
   const item = await prisma.externalSaleItem.findUnique({ where: { id: itemId }, select: { saleId: true, rejectedAt: true } });
   if (!item || item.saleId !== id) return NextResponse.json({ error: "Producto no encontrado." }, { status: 404 });

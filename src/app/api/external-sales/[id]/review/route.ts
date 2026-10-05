@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canReviewExternalSales } from "@/lib/guards";
 import { notifyAdvisorReviewResult, notifyInventoryLeadExternalSaleApproved } from "@/lib/externalSales";
+import { notifyLocalWarrantyReviewed } from "@/lib/localWarranty";
 
 const schema = z.discriminatedUnion("approved", [
   z.object({ approved: z.literal(true) }),
@@ -23,9 +24,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const sale = await prisma.externalSale.findUnique({
     where: { id },
-    select: { reviewStatus: true, advisorId: true, code: true, items: { select: { rejectedAt: true } } },
+    select: { reviewStatus: true, advisorId: true, code: true, kind: true, deletedAt: true, items: { select: { rejectedAt: true } } },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+  if (sale.deletedAt) return NextResponse.json({ error: "El asesor ya la canceló." }, { status: 409 });
   if (sale.reviewStatus !== "PENDING") return NextResponse.json({ error: "Ya fue revisada." }, { status: 409 });
   if (parsed.data.approved && sale.items.some((it) => it.rejectedAt)) {
     return NextResponse.json({ error: "Todavía hay productos rechazados pendientes de corrección." }, { status: 409 });
@@ -37,6 +39,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       ? { reviewStatus: "APPROVED", reviewedAt: new Date(), reviewedById: session.user.id }
       : { reviewStatus: "REJECTED", reviewedAt: new Date(), reviewedById: session.user.id, rejectionReason: parsed.data.rejectionReason },
   });
+
+  // Garantía local (pedido del usuario 2026-10-05): avisos propios — el
+  // asesor no sube comprobante ni corrige, y a Daniel le llega como garantía.
+  if (sale.kind === "WARRANTY") {
+    await notifyLocalWarrantyReviewed(sale, parsed.data.approved, parsed.data.approved ? null : parsed.data.rejectionReason);
+    return NextResponse.json(updated);
+  }
 
   await notifyAdvisorReviewResult(sale.advisorId, sale.code, parsed.data.approved, parsed.data.approved ? null : parsed.data.rejectionReason);
   // Confirmado 2026-09-21: pasa a Daniel de una vez sin esperar la factura,

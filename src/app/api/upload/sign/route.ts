@@ -18,6 +18,7 @@ import {
   canCaptureMerchandiseReentry,
   canCaptureMerchandiseOutflow,
   canDeclareExternalSales,
+  canManageLocalWarranties,
   canInvoiceExternalSale,
   canPackExternalSale,
   canManageJustCatalog,
@@ -151,7 +152,7 @@ export async function POST(req: NextRequest) {
     allowed = (await canCaptureMerchandiseOutflow()) || (await canManageOutflowPurchaseGestion());
   }
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-payment-proofs") {
-    allowed = await canDeclareExternalSales();
+    allowed = (await canDeclareExternalSales()) || (await canManageLocalWarranties());
   }
   // Confirmado 2026-09-15, pedido explícito de Marcos: foto de referencia
   // opcional que el asesor adjunta al declarar, solo cuando el producto
@@ -162,7 +163,7 @@ export async function POST(req: NextRequest) {
   // Pedido del usuario 2026-10-02: fotos/videos que el asesor revisó para
   // aceptar una garantía local (GL-000X).
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-warranty-evidence") {
-    allowed = await canDeclareExternalSales();
+    allowed = await canManageLocalWarranties();
   }
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-invoices") {
     allowed = await canInvoiceExternalSale();

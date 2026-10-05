@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canDeclareExternalSales } from "@/lib/guards";
+import { canDeclareExternalSales, canManageLocalWarranties } from "@/lib/guards";
 import { notifyAdminPaymentProofUploaded, expectedTransferAmount, PAYMENT_PROOF_AMOUNT_TOLERANCE } from "@/lib/externalSales";
 import { readExternalSalePaymentProof } from "@/lib/externalSalesAi";
 
@@ -13,7 +13,8 @@ const schema = z.object({ proofUrl: z.string().url(), proofName: z.string().trim
 // prepago o contra-entrega como Marcos).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canDeclareExternalSales()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  // El cobro de una garantía local lo sube quien la gestionó (permiso propio).
+  if (!session || (!(await canDeclareExternalSales()) && !(await canManageLocalWarranties()))) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);

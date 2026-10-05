@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canDeclareExternalSales, dbUserId } from "@/lib/guards";
+import { canManageLocalWarranties, dbUserId } from "@/lib/guards";
 import { createLocalWarranty } from "@/lib/localWarranty";
 
 export const maxDuration = 60;
@@ -43,7 +43,7 @@ const WARRANTY_INCLUDE = {
 // Mis garantías (las del asesor que pregunta).
 export async function GET() {
   const session = await auth();
-  if (!(await canDeclareExternalSales()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canManageLocalWarranties()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const rows = await prisma.externalSale.findMany({
     where: { advisorId: session.user.id, kind: "WARRANTY" },
     include: WARRANTY_INCLUDE,
@@ -53,11 +53,11 @@ export async function GET() {
   return NextResponse.json(rows);
 }
 
-// Crear la garantía (doble confirmación en pantalla). Nace aprobada: el
-// asesor ya revisó las fotos/videos y la pide él mismo a INVESTOCK.
+// Crear la garantía (doble confirmación en pantalla). Desde 2026-10-05 nace
+// esperando a Bryan (pedido del usuario); al aprobar pasa a INVESTOCK.
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!(await canDeclareExternalSales()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canManageLocalWarranties()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const advisorId = dbUserId(session.user.id);
   if (!advisorId) return NextResponse.json({ error: "Solo un asesor puede registrar garantías." }, { status: 403 });
   const parsed = schema.safeParse(await req.json().catch(() => null));

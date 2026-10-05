@@ -55,6 +55,7 @@ type UserProfile = {
   canAddSupplierBankAccounts: boolean;
   canManagePettyCashSecundaria: boolean;
   canDeclareExternalSales: boolean;
+  canManageLocalWarranties: boolean;
   externalSaleContraEntrega: boolean;
   canConfirmMarketingDesign: boolean;
   canConfirmMarketingAdvisor: boolean;
@@ -1081,6 +1082,16 @@ export function ProfileDetail({
               Ventas por fuera de Dropi/Rocket (hoy Jariel, Yair, Marcos y el rol Asesor(a) B2B) — declara producto, cantidad y precio para que Bryan lo apruebe. Aparece en su propia &quot;Mi área de trabajo&quot;.
             </div>
             <PermToggle value={p.canDeclareExternalSales} busy={busy} onChange={(v) => save({ canDeclareExternalSales: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <HandCoins size={11} /> ¿Puede gestionar Garantías locales?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Garantías en Guayaquil con nuestro motorizado (GL-000X), aparte de las ventas B2B — hoy Michelle, Jariel, Yair y Marcos. Bryan aprueba cada garantía antes de que salga.
+            </div>
+            <PermToggle value={p.canManageLocalWarranties} busy={busy} onChange={(v) => save({ canManageLocalWarranties: v })} />
           </div>
 
           {p.canDeclareExternalSales && (

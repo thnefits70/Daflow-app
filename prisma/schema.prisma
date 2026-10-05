@@ -282,6 +282,11 @@ model User {
   // canManagePurchases. Admin siempre puede, sin el flag.
   canDeclareExternalSales Boolean @default(false)
 
+  // Pedido del usuario 2026-10-05: las garantías locales (GL-000X) tienen su
+  // propio interruptor, separado de las ventas B2B — así se activa por
+  // persona (hoy Michelle, Jariel, Yair, Marcos). Admin siempre puede.
+  canManageLocalWarranties Boolean @default(false)
+
   // Confirmado 2026-08-29, pedido explícito del usuario: hoy solo Marcos
   // vende contra entrega (cobra después de despachar); los demás asesores
   // de Ventas Externas venden con pago anticipado. Se congela en

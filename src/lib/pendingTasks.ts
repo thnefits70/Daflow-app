@@ -3223,8 +3223,9 @@ async function getExternalSaleReviewPendingItem(href: string): Promise<PendingIt
   return {
     type: "ventas_externas_revisar",
     icon: "🛍️",
-    label: "Ventas Externas — venta nueva por aprobar",
-    meta: `${rows.length === 1 ? rows[0].code : `${rows.length} ventas`}${overdue ? " · atrasado" : ""}`,
+    // Desde 2026-10-05 también las garantías locales (GL-000X) pasan por acá.
+    label: "Ventas Externas — venta o garantía por aprobar",
+    meta: `${rows.length === 1 ? rows[0].code : `${rows.length} por aprobar`}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
   };

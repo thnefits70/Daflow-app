@@ -3,7 +3,7 @@ import { extractPages, normalizeName, isRocketCode, labelLineUnits, parseGuidesP
 import { resolveGuideLines } from "@/lib/fulfillmentGuides";
 import { significantWords } from "@/lib/justCatalog";
 import { notifyOwner } from "@/lib/notifications";
-import { getInventoryLeadId } from "@/lib/guards";
+import { getInventoryLeadId, getMarketingLeadId } from "@/lib/guards";
 import {
   WARRANTY_CITY,
   WARRANTY_MAX_DAYS,
@@ -258,7 +258,8 @@ async function findGuideInPdfs(fileUrls: string[], guide: string) {
 
 async function usedByPreviousWarranties(where: { warrantySourceGuide?: string; warrantySourceSaleId?: string }): Promise<Map<string, number>> {
   const items = await prisma.externalSaleItem.findMany({
-    where: { warrantyRole: "DELIVER", catalogItemId: { not: null }, sale: { kind: "WARRANTY", deletedAt: null, ...where } },
+    // Una garantía rechazada por Bryan no sale de bodega: no ocupa el tope.
+    where: { warrantyRole: "DELIVER", catalogItemId: { not: null }, sale: { kind: "WARRANTY", deletedAt: null, reviewStatus: { not: "REJECTED" }, ...where } },
     select: { catalogItemId: true, quantity: true },
   });
   const used = new Map<string, number>();
@@ -737,9 +738,9 @@ export async function createLocalWarranty(input: CreateWarrantyInput, advisorId:
       freightCost: input.freightCost,
       isContraEntrega: false,
       facturaSolicitada: "NO",
-      // Nace aprobada: el asesor ya revisó fotos/videos y la pide él mismo.
-      reviewStatus: "APPROVED",
-      reviewedAt: now,
+      // Pedido del usuario 2026-10-05: ya no nace aprobada — Bryan la
+      // aprueba antes de que INVESTOCK la prepare (antes salía de una).
+      reviewStatus: "PENDING",
       // Sin cobro no hay pago que confirmar.
       paymentConfirmedAt: charge > 0 ? null : now,
       warrantySourceGuide: src.kind === "GUIDE" ? src.ref : null,
@@ -753,15 +754,35 @@ export async function createLocalWarranty(input: CreateWarrantyInput, advisorId:
     select: { id: true, code: true },
   });
 
+  const bryanId = await getMarketingLeadId();
+  if (bryanId) {
+    await notifyOwner(bryanId, {
+      title: "🛡️ Garantía local por aprobar",
+      body: `${sale.code} — garantía de ${src.ref} para ${clientName}. Revisa el motivo y las fotos antes de que salga.`,
+      url: `${EXTERNAL_SALES_URL}&etab=revision`,
+    }).catch(() => null);
+  }
+  return { ok: true, id: sale.id, code: sale.code };
+}
+
+// Resultado de la revisión de Bryan (pedido del usuario 2026-10-05): si
+// aprueba, a Daniel le llega igual que antes le llegaba al crearla; si
+// rechaza, al asesor con el motivo (no se corrige: se crea otra si hace falta).
+export async function notifyLocalWarrantyReviewed(sale: { code: string; advisorId: string }, approved: boolean, reason: string | null): Promise<void> {
+  await notifyOwner(sale.advisorId, {
+    title: approved ? "✅ Garantía aprobada por Bryan" : "❌ Garantía rechazada por Bryan",
+    body: approved ? `${sale.code} — ya pasó a INVESTOCK para prepararla.` : `${sale.code} — ${reason ?? "sin motivo detallado"}. No sale nada de bodega; si hace falta, crea otra garantía corregida.`,
+    url: `${EXTERNAL_SALES_URL}&etab=garantias`,
+  }).catch(() => null);
+  if (!approved) return;
   const danielId = await getInventoryLeadId();
   if (danielId) {
     await notifyOwner(danielId, {
       title: "🛡️ Garantía local por despachar",
-      body: `${sale.code} — garantía de ${src.ref} para ${clientName}. Asigna quién agrupa, igual que una venta externa.`,
+      body: `${sale.code} — aprobada por Bryan. Asigna quién agrupa, igual que una venta externa.`,
       url: `${EXTERNAL_SALES_URL}&etab=despacho`,
     }).catch(() => null);
   }
-  return { ok: true, id: sale.id, code: sale.code };
 }
 
 // Lo que el motorizado tiene que traer y bodega todavía no confirmó.

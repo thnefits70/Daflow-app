@@ -19,9 +19,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
-  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { reviewStatus: true, advisorId: true, code: true } });
+  const sale = await prisma.externalSale.findUnique({ where: { id }, select: { reviewStatus: true, advisorId: true, code: true, kind: true } });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.reviewStatus !== "PENDING") return NextResponse.json({ error: "Esta venta ya fue revisada." }, { status: 409 });
+  if (sale.kind === "WARRANTY") return NextResponse.json({ error: "Una garantía se aprueba o rechaza entera, no por producto." }, { status: 409 });
 
   const item = await prisma.externalSaleItem.findUnique({
     where: { id: itemId },

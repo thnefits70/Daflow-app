@@ -9,6 +9,8 @@ export async function GET() {
     include: {
       items: { include: { catalogItem: { select: { name: true, photos: true, justCode: true } } }, orderBy: { createdAt: "asc" } },
       advisor: { select: { name: true } },
+      // Garantías locales (desde 2026-10-05 también pasan por Bryan).
+      warrantySourceSale: { select: { code: true } },
     },
     orderBy: { createdAt: "asc" },
   });

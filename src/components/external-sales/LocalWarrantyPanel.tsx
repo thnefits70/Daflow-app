@@ -207,7 +207,7 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
       setStep("edit");
       return;
     }
-    setDone(`Garantía ${json.code} enviada a INVESTOCK.`);
+    setDone(`Garantía ${json.code} enviada a Bryan para aprobar. Cuando la apruebe pasa a INVESTOCK.`);
     setRef("");
     reset();
     onCreated();
@@ -492,7 +492,7 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
           {step === "confirm2" && (
             <div className="border border-gold rounded-md p-3 bg-cloud text-[12.5px] max-w-xl">
               <div className="font-bold text-[13.5px] mb-1">¿Seguro?</div>
-              <div>Al confirmar se crea la garantía, se avisa a INVESTOCK para prepararla y <b>ya no se puede cambiar el motivo ni los productos.</b></div>
+              <div>Al confirmar se crea la garantía y le llega a Bryan para aprobarla; cuando la apruebe pasa a INVESTOCK. <b>Ya no se puede cambiar el motivo ni los productos</b> (mientras espera a Bryan sí puedes cancelarla).</div>
               <div className="flex gap-2 mt-2.5">
                 <button type="button" className="rounded border border-rule px-3 py-1.5 font-semibold cursor-pointer" onClick={() => setStep("edit")} disabled={saving}>Cancelar</button>
                 <button type="button" className="rounded border border-gold bg-gold px-3 py-1.5 font-bold text-navy cursor-pointer disabled:opacity-60" onClick={save} disabled={saving}>
@@ -529,6 +529,8 @@ type WarrantyRow = {
   freightPaidAt: string | null;
   freightPaidBy: { name: string } | null;
   deletedAt: string | null;
+  reviewStatus: "PENDING" | "APPROVED" | "REJECTED";
+  rejectionReason: string | null;
   items: { id: string; quantity: number; warrantyRole: string | null; warrantyReason: string | null; discountsStock: boolean; declaredProductName: string; pickupReceivedAt: string | null; pickupReceivedBy: { name: string } | null; catalogItem: { name: string } | null }[];
 };
 
@@ -568,6 +570,8 @@ function PickupAdvice({ worth, minQty }: { worth: boolean; minQty: number }) {
 
 function statusOf(w: WarrantyRow): string {
   if (w.deletedAt) return "Cancelada";
+  if (w.reviewStatus === "PENDING") return "Esperando aprobación de Bryan";
+  if (w.reviewStatus === "REJECTED") return "Rechazada por Bryan";
   if (w.freightPaidAt) return `Cerrada · flete pagado${w.freightPaidBy ? ` por ${w.freightPaidBy.name}` : ""}`;
   if (w.clientReceivedAt) return "Entregada al cliente · flete por pagar";
   if (w.returnedAt) return w.returnConfirmedAt ? "No se entregó · volvió a bodega" : "No se entregó · esperando que vuelva a bodega";
@@ -581,7 +585,7 @@ function statusOf(w: WarrantyRow): string {
 function MyWarranties() {
   const [rows, setRows] = useState<WarrantyRow[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<{ id: string; action: "received" | "notDelivered" } | null>(null);
+  const [confirm, setConfirm] = useState<{ id: string; action: "received" | "notDelivered" | "cancel" } | null>(null);
   const [err, setErr] = useState("");
 
   function load() {
@@ -592,11 +596,13 @@ function MyWarranties() {
   }
   useEffect(load, []);
 
-  async function act(id: string, action: "received" | "notDelivered") {
+  async function act(id: string, action: "received" | "notDelivered" | "cancel") {
     setBusy(id);
     setErr("");
     const res =
-      action === "received"
+      action === "cancel"
+        ? await fetch(`/api/external-sales/${id}`, { method: "DELETE" })
+        : action === "received"
         ? await fetch(`/api/external-sales/${id}/client-received`, { method: "POST" })
         : await fetch(`/api/external-sales/${id}/report-return`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason: "Garantía no entregada al cliente" }) });
     const json = await res.json().catch(() => null);
@@ -655,9 +661,17 @@ function MyWarranties() {
               <div className="mt-0.5 text-steel">
                 Cobro {money(w.totalAmount)} · Flete {money(w.freightCost ?? 0)} ({w.pickupPersonName})
               </div>
+              {w.reviewStatus === "REJECTED" && !w.deletedAt && (
+                <div className="mt-1 text-red">Motivo de Bryan: {w.rejectionReason ?? "—"}. No sale nada de bodega; si hace falta, crea otra garantía corregida.</div>
+              )}
               <div className="flex flex-wrap items-center gap-2 mt-2">
-                <a href={`/ventas-externas/${w.id}/guia`} target="_blank" rel="noreferrer" className="rounded border border-rule px-2.5 py-1 font-semibold">Ver guía {w.code}</a>
-                {w.totalAmount > 0 && !w.paymentConfirmedAt && !w.deletedAt && (
+                {w.reviewStatus === "APPROVED" && <a href={`/ventas-externas/${w.id}/guia`} target="_blank" rel="noreferrer" className="rounded border border-rule px-2.5 py-1 font-semibold">Ver guía {w.code}</a>}
+                {w.reviewStatus === "PENDING" && !w.deletedAt && confirm?.id !== w.id && (
+                  <button type="button" className="rounded border border-rule px-2.5 py-1 font-semibold cursor-pointer" onClick={() => setConfirm({ id: w.id, action: "cancel" })}>
+                    Cancelar garantía
+                  </button>
+                )}
+                {w.reviewStatus === "APPROVED" && w.totalAmount > 0 && !w.paymentConfirmedAt && !w.deletedAt && (
                   <label className="rounded border border-rule px-2.5 py-1 font-semibold cursor-pointer">
                     {w.paymentProofUrl ? "Cambiar comprobante del cobro" : "Subir comprobante del cobro"}
                     <input type="file" accept="image/*,application/pdf" className="hidden" disabled={busy === w.id} onChange={(e) => e.target.files?.[0] && uploadProof(w.id, e.target.files[0])} />
@@ -676,7 +690,11 @@ function MyWarranties() {
                 )}
                 {confirm?.id === w.id && (
                   <span className="flex flex-wrap items-center gap-2 bg-cloud border border-rule rounded px-2 py-1">
-                    {confirm.action === "received" ? "¿Confirmas que el cliente recibió la garantía? Se habilita el pago del flete." : "¿Confirmas que NO se pudo entregar? La mercadería vuelve a bodega y el flete igual se paga."}
+                    {confirm.action === "cancel"
+                      ? "¿Cancelar esta garantía? Bryan ya no la verá y no sale nada de bodega."
+                      : confirm.action === "received"
+                      ? "¿Confirmas que el cliente recibió la garantía? Se habilita el pago del flete."
+                      : "¿Confirmas que NO se pudo entregar? La mercadería vuelve a bodega y el flete igual se paga."}
                     <button type="button" disabled={busy === w.id} className="rounded border border-gold bg-gold px-2 py-0.5 font-bold text-navy cursor-pointer" onClick={() => act(w.id, confirm.action)}>
                       {busy === w.id ? "Guardando…" : "Sí, confirmar"}
                     </button>
