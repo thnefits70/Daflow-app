@@ -4,7 +4,7 @@ import { canViewComboSuggestions } from "@/lib/guards";
 import { priceCombos } from "@/lib/comboSuggestions";
 import type { ComboSuggestionStatus } from "@/generated/prisma/client";
 
-const CATALOG_SELECT = { id: true, name: true, photos: true, nicho: true } as const;
+const CATALOG_SELECT = { id: true, name: true, justCode: true, photos: true, nicho: true } as const;
 const VALID_STATUSES: ComboSuggestionStatus[] = ["SUGERIDO", "SELECCIONADO", "PENDIENTE_APROBACION", "APROBADO", "RECHAZADO", "CREADO_EN_DROPI"];
 
 // Pedido del usuario 2026-09-30: cada sugerencia trae su precio Dropi y su

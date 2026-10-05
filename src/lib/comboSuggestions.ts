@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getAnthropicClient } from "@/lib/nancy";
 import { logAiUsage } from "@/lib/aiUsage";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
-import { resolveCostBasisForCatalogItems, computeComboDropiPrice, computeMarketProductSalePrice, DROPI_MARGIN_DEFAULT } from "@/lib/marketProduct";
+import { resolveCostBasisForCatalogItems, computeComboDropiPrice, computeMarketProductSalePrice, bodegaUnitCost, COMBO_FULFILLMENT_COST, DROPI_MARGIN_DEFAULT } from "@/lib/marketProduct";
 import { recommendedDropiStock } from "@/lib/dropiStockRecommendation";
 
 const COMBO_MATCH_AI_MODEL = "claude-sonnet-5";
@@ -426,6 +426,15 @@ export type ComboPricing = {
   referenceStock: number | null;
   limitingItemId: string | null;
   recommendedStock: number | null;
+  // Pedido del usuario 2026-10-05: al pulsar el precio se ve de dónde sale.
+  formula: ComboPriceFormula | null;
+};
+
+export type ComboPriceFormula = {
+  parts: { catalogItemId: string; quantity: number; unitCost: number; insuranceRatePercent: number; withInsurance: number; subtotal: number }[];
+  fulfillment: number;
+  benistock: number;
+  marginPercent: number;
 };
 
 export async function priceCombos(list: { id: string; parts: { catalogItemId: string; quantity: number }[] }[]): Promise<Map<string, ComboPricing>> {
@@ -436,7 +445,21 @@ export async function priceCombos(list: { id: string; parts: { catalogItemId: st
     const missing = c.parts.filter((p) => !costBasis.has(p.catalogItemId)).map((p) => p.catalogItemId);
     let dropiPrice: number | null = null;
     let separatePrice: number | null = null;
+    let formula: ComboPriceFormula | null = null;
     if (missing.length === 0 && c.parts.length > 0) {
+      // Mismos pasos que computeComboDropiPrice, separados para mostrarlos.
+      const parts = c.parts.map((p) => {
+        const cb = costBasis.get(p.catalogItemId)!;
+        const unitCost = bodegaUnitCost(cb.batchCost, cb.freightCost, cb.batchUnits);
+        const withInsurance = unitCost * (1 + cb.insuranceRatePercent / 100);
+        return { catalogItemId: p.catalogItemId, quantity: p.quantity, unitCost, insuranceRatePercent: cb.insuranceRatePercent, withInsurance, subtotal: withInsurance * p.quantity };
+      });
+      formula = {
+        parts,
+        fulfillment: COMBO_FULFILLMENT_COST,
+        benistock: parts.reduce((acc, x) => acc + x.subtotal, 0) + COMBO_FULFILLMENT_COST,
+        marginPercent: DROPI_MARGIN_DEFAULT,
+      };
       dropiPrice = computeComboDropiPrice(
         c.parts.map((p) => ({ ...costBasis.get(p.catalogItemId)!, quantity: p.quantity })),
         DROPI_MARGIN_DEFAULT
@@ -468,6 +491,7 @@ export async function priceCombos(list: { id: string; parts: { catalogItemId: st
       referenceStock,
       limitingItemId,
       recommendedStock: referenceStock === null ? null : recommendedDropiStock(referenceStock),
+      formula,
     });
   }
   return out;

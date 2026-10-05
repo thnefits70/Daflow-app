@@ -3,9 +3,16 @@
 import { useEffect, useState, useCallback } from "react";
 import { CheckCircle2, Copy, Check, TrendingUp, TrendingDown, Sparkles } from "lucide-react";
 
-type CatalogRef = { id: string; name: string; photos: string[]; nicho: string | null };
+type CatalogRef = { id: string; name: string; justCode: string | null; photos: string[]; nicho: string | null };
 type Item = { id: string; catalogItemId: string; quantity: number; role: "WINNER" | "LOW"; fromComboCode: string | null; catalogItem: CatalogRef };
+type Formula = {
+  parts: { catalogItemId: string; quantity: number; unitCost: number; insuranceRatePercent: number; withInsurance: number; subtotal: number }[];
+  fulfillment: number;
+  benistock: number;
+  marginPercent: number;
+};
 type Pricing = {
+  formula: Formula | null;
   dropiPrice: number | null;
   separatePrice: number | null;
   missingCostItemIds: string[];
@@ -54,7 +61,7 @@ function MatchScoreBadge({ score }: { score: number | null }) {
 
 // Pedido del usuario 2026-09-30: todo listo para copiar y pegar en Dropi
 // con un solo clic.
-function CopyField({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function CopyField({ label, value, hint, onValueClick }: { label: string; value: string; hint?: string; onValueClick?: () => void }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
@@ -67,9 +74,16 @@ function CopyField({ label, value, hint }: { label: string; value: string; hint?
   }
   return (
     <div className="flex flex-col gap-0.5 min-w-[150px]">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-steel">{label}</div>
+      {/* Pedido del usuario 2026-10-05: títulos resaltados. */}
+      <div className="text-[11.5px] font-bold uppercase tracking-wide text-teal">{label}</div>
       <div className="flex items-center gap-1.5">
-        <span className="text-[14px] font-bold text-ink">{value}</span>
+        {onValueClick ? (
+          <button type="button" onClick={onValueClick} title="Ver cómo se calculó" className="text-[14px] font-bold text-ink underline decoration-dotted underline-offset-2 cursor-pointer hover:text-teal">
+            {value}
+          </button>
+        ) : (
+          <span className="text-[14px] font-bold text-ink">{value}</span>
+        )}
         <button type="button" onClick={copy} className="inline-flex items-center gap-1 rounded border border-rule px-1.5 py-0.5 text-[10.5px] font-semibold text-steel cursor-pointer hover:border-teal hover:text-teal">
           {copied ? <Check size={11} /> : <Copy size={11} />} {copied ? "Copiado" : "Copiar"}
         </button>
@@ -94,6 +108,8 @@ function Products({ s }: { s: Suggestion }) {
               {it.quantity > 1 ? `${it.quantity} × ` : ""}
               {it.catalogItem.name}
             </span>
+            {/* Pedido del usuario 2026-10-05: ID de Dropi de cada producto del combo. */}
+            <span className="text-[10.5px] font-semibold text-ink bg-cloud rounded px-1.5">{it.catalogItem.justCode ? `ID ${it.catalogItem.justCode}` : "sin ID"}</span>
             <span className="text-[10px] text-steel">
               ({winner ? "ganador" : "baja salida"}{it.fromComboCode ? ` · viene del combo ${it.fromComboCode}` : ""})
             </span>
@@ -131,6 +147,42 @@ function AiReason({ s }: { s: Suggestion }) {
   );
 }
 
+// Pedido del usuario 2026-10-05: al pulsar el precio Dropi se ve la fórmula
+// con los productos del combo (misma cuenta que computeComboDropiPrice).
+function PriceFormula({ s, shownPrice }: { s: Suggestion; shownPrice: number }) {
+  const f = s.pricing?.formula;
+  if (!f) return <div className="mt-2 text-[11.5px] text-steel bg-cloud rounded px-2.5 py-2">No se puede mostrar la fórmula: falta el costo de algún producto.</div>;
+  const nameById = new Map(s.items.map((it) => [it.catalogItemId, it.catalogItem]));
+  const live = Math.round((f.benistock / (1 - f.marginPercent / 100)) * 100) / 100;
+  return (
+    <div className="mt-2 text-[11.5px] bg-cloud rounded px-3 py-2.5 flex flex-col gap-1">
+      <div className="font-bold text-ink">Cómo se calculó el precio Dropi</div>
+      {f.parts.map((p) => {
+        const c = nameById.get(p.catalogItemId);
+        return (
+          <div key={p.catalogItemId} className="text-steel">
+            <b className="text-ink">{c?.name ?? "Producto"}</b>
+            {c?.justCode && <> (ID {c.justCode})</>}: costo {money(p.unitCost)} + seguro {p.insuranceRatePercent}% = {money(p.withInsurance)}
+            {p.quantity > 1 && <> × {p.quantity}</>} → <b className="text-ink">{money(p.subtotal)}</b>
+          </div>
+        );
+      })}
+      <div className="text-steel">+ fulfillment (una sola vez por combo) → <b className="text-ink">{money(f.fulfillment)}</b></div>
+      <div className="text-steel border-t border-rule pt-1">
+        Costo total del combo = <b className="text-ink">{money(f.benistock)}</b>
+      </div>
+      <div className="text-steel">
+        Precio Dropi = {money(f.benistock)} ÷ (1 − {f.marginPercent}%) = {money(f.benistock)} ÷ {(1 - f.marginPercent / 100).toFixed(2)} = <b className="text-ink">{money(live)}</b>
+      </div>
+      {Math.abs(live - shownPrice) >= 0.01 && (
+        <div className="text-[10.5px]" style={{ color: "var(--color-gold)" }}>
+          El precio aprobado ({money(shownPrice)}) quedó fijo al aprobarse; con los costos de hoy daría {money(live)}.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PriceLine({ s, price }: { s: Suggestion; price: number | null }) {
   const p = s.pricing;
   if (price === null) return <div className="text-[11.5px] text-red">Falta el costo de algún producto — no se puede calcular el precio.</div>;
@@ -160,6 +212,7 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
   const [rejectReason, setRejectReason] = useState("");
   const [brandById, setBrandById] = useState<Record<string, Marca | "">>({});
   const [codeById, setCodeById] = useState<Record<string, string>>({});
+  const [formulaOpen, setFormulaOpen] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     const res = await fetch("/api/combo-suggestions");
@@ -329,11 +382,23 @@ export function ComboSuggestionsBoard({ canApprove, canAct, canMarkCreated }: { 
                   </div>
                   <div className="flex flex-wrap gap-x-6 gap-y-2.5 mb-2.5">
                     <CopyField label="Nombre" value={s.suggestedName ?? ""} />
-                    {price !== null && <CopyField label="Precio Dropi" value={price.toFixed(2)} hint="Gana mínimo 20%" />}
+                    {price !== null && (
+                      <CopyField
+                        label="Precio Dropi"
+                        value={price.toFixed(2)}
+                        hint="Gana mínimo 20% · toca el precio para ver la fórmula"
+                        onValueClick={() => setFormulaOpen((o) => ({ ...o, [s.id]: !o[s.id] }))}
+                      />
+                    )}
                     {p?.recommendedStock != null && (
                       <CopyField label="Stock para Dropi" value={String(p.recommendedStock)} hint={`Real en bodega: alcanza para ${p.referenceStock} · recomendado`} />
                     )}
                   </div>
+                  {price !== null && formulaOpen[s.id] && (
+                    <div className="mb-2.5">
+                      <PriceFormula s={s} shownPrice={price} />
+                    </div>
+                  )}
                   <Products s={s} />
                   <div className="mt-3 pt-2.5 border-t border-rule">
                     {canMarkCreated ? (
