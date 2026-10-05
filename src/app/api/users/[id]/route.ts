@@ -63,6 +63,7 @@ const updateSchema = z.object({
   canConfirmMarketingDesign: z.boolean().optional(),
   canConfirmMarketingAdvisor: z.boolean().optional(),
   canAssignCancelledGuideItems: z.boolean().optional(),
+  canUploadFulfillmentGuides: z.boolean().optional(),
   // Responsable de Reingreso (2026-10-02): solo el admin lo asigna, y solo
   // una persona a la vez — dárselo a alguien se lo quita a quien lo tenía.
   isReentryResponsible: z.boolean().optional(),
@@ -175,6 +176,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.canConfirmMarketingDesign !== undefined) data.canConfirmMarketingDesign = d.canConfirmMarketingDesign;
   if (d.canConfirmMarketingAdvisor !== undefined) data.canConfirmMarketingAdvisor = d.canConfirmMarketingAdvisor;
   if (d.canAssignCancelledGuideItems !== undefined) data.canAssignCancelledGuideItems = d.canAssignCancelledGuideItems;
+  if (d.canUploadFulfillmentGuides !== undefined) data.canUploadFulfillmentGuides = d.canUploadFulfillmentGuides;
   if (d.canMarkComboCreatedInDropi !== undefined) data.canMarkComboCreatedInDropi = d.canMarkComboCreatedInDropi;
   if (d.canLinkStoreProducts !== undefined) data.canLinkStoreProducts = d.canLinkStoreProducts;
   if (d.canPublishMarketProduct !== undefined) data.canPublishMarketProduct = d.canPublishMarketProduct;

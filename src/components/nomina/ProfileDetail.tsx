@@ -59,6 +59,7 @@ type UserProfile = {
   canConfirmMarketingDesign: boolean;
   canConfirmMarketingAdvisor: boolean;
   canAssignCancelledGuideItems: boolean;
+  canUploadFulfillmentGuides: boolean;
   isReentryResponsible: boolean;
   canMarkComboCreatedInDropi: boolean;
   canLinkStoreProducts: boolean;
@@ -1135,6 +1136,16 @@ export function ProfileDetail({
               Una vez que Bryan gestiona un lote de guías canceladas con la transportadora/Dropi, esta persona (hoy el rol Asesor(a) B2B) ve esas guías y carga qué productos y cantidades venían en cada una, para que vuelvan solas al inventario.
             </div>
             <PermToggle value={p.canAssignCancelledGuideItems} busy={busy} onChange={(v) => save({ canAssignCancelledGuideItems: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Sube los PDF de guías del corte de Fulfillment?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Respaldo de Daniel: sube los PDF de guías de Dropi y envía el corte para que el equipo empiece a preparar. Confirmar el corte (lo que descuenta el Kardex) sigue siendo solo de Daniel.
+            </div>
+            <PermToggle value={p.canUploadFulfillmentGuides} busy={busy} onChange={(v) => save({ canUploadFulfillmentGuides: v })} />
           </div>
 
           {isAdmin && (

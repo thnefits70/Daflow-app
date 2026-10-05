@@ -582,6 +582,7 @@ async function purchasesUserContext(userId: string) {
       department: { select: { code: true } },
       purchasingNewRequestsBlocked: true,
       canApprovePurchaseRequests: true,
+      canUploadFulfillmentGuides: true,
     },
   });
 }
@@ -1080,12 +1081,15 @@ export async function canViewMerchandiseOutflow() {
 // 2026-10-01, pedido del usuario: Fulfillment se fusionó en INVESTOCK (INV)
 // y el Líder de Inventarios "hace todo": sube los PDF, envía el corte y lo
 // confirma. El resto del equipo saca la mercadería.
+// 2026-10-05, pedido del usuario: interruptor canUploadFulfillmentGuides para
+// que alguien más (respaldo de Daniel) suba los PDF y envíe el corte.
+// Confirmar sigue siendo solo del líder (canConfirmFulfillmentLot).
 export async function canSubmitFulfillmentRequest() {
   const session = await auth();
   if (!session) return false;
   const user = await purchasesUserContext(session.user.id);
   if (!user) return false;
-  return !!user.isLeader && user.leadsDept?.code === "INV";
+  return (!!user.isLeader && user.leadsDept?.code === "INV") || user.canUploadFulfillmentGuides;
 }
 
 // Visibilidad de solo lectura del compendiado — Daniel/admin (mismo criterio

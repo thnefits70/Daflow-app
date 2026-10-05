@@ -317,6 +317,11 @@ model User {
   // Mismo patrón que canConfirmMarketingDesign/Advisor: delegado puntual,
   // EXCLUSIVO de quien tiene el flag — ni siquiera admin actúa, solo ve.
   canAssignCancelledGuideItems Boolean @default(false)
+  // Pedido del usuario 2026-10-05: respaldo de Daniel para el corte de
+  // Fulfillment — quien tenga el flag sube los PDF de guías de Dropi y envía
+  // el corte, igual que el Líder de Inventarios. Confirmar el corte (lo que
+  // descuenta el Kardex) sigue siendo solo del líder.
+  canUploadFulfillmentGuides Boolean @default(false)
   // Solo informativo (mismo espíritu que Store.brand) — qué marca asesora
   // esta persona, para mostrarla junto a su nombre cuando confirma. Nunca se
   // usa para filtrar ni bloquear quién ve o puede confirmar qué llegada.
