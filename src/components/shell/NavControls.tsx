@@ -1,28 +1,23 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, RotateCw } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 // Pedido del usuario 2026-10-05: instalada como app (Mac "Añadir al Dock",
 // iPhone "Añadir a inicio") DAFLOW no tiene barra del navegador — no había
-// cómo volver a la página anterior ni refrescar. Estos dos botones van en la
-// barra del menú lateral (y en la barra superior del celular).
+// cómo volver a la página anterior. Este botón va en la barra del menú
+// lateral (y en la barra superior del celular).
+// Sin botón "Refrescar": pedido del usuario, debe ser automático — al volver
+// a DAFLOW tras un rato fuera se recarga sola (ver AppVersionWatcher).
 // `labeled`: versión con texto para el menú lateral de computadora; sin él,
-// solo íconos para la barra superior del celular.
+// solo ícono para la barra superior del celular.
 export function NavControls({ homeHref, labeled = false, className = "" }: { homeHref: string; labeled?: boolean; className?: string }) {
   const router = useRouter();
-  const [reloading, setReloading] = useState(false);
 
   const goBack = () => {
     // Si se abrió directo (desde un aviso o el ícono) no hay historial: va al Inicio.
     if (window.history.length > 1) router.back();
     else router.push(homeHref);
-  };
-
-  const reload = () => {
-    setReloading(true);
-    window.location.reload();
   };
 
   const BTN = labeled
@@ -33,10 +28,6 @@ export function NavControls({ homeHref, labeled = false, className = "" }: { hom
       <button type="button" onClick={goBack} className={BTN} aria-label="Volver atrás" title="Volver atrás">
         <ArrowLeft size={labeled ? 14 : 18} />
         {labeled && "Atrás"}
-      </button>
-      <button type="button" onClick={reload} disabled={reloading} className={BTN} aria-label="Refrescar página" title="Refrescar página">
-        <RotateCw size={labeled ? 13 : 17} className={reloading ? "animate-spin" : ""} />
-        {labeled && "Refrescar"}
       </button>
     </div>
   );
