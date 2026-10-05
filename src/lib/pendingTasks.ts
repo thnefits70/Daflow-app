@@ -3841,7 +3841,6 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // pestaña interna "Finanzas" (?ptab=finanzas, leído por
     // PurchaseControlPanel).
     const comDept = deptOf("COM");
-    const comPaymentsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas` : "/admin";
     const comCreditsHref = comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin";
     // Confirmado 2026-08-27: "Registro de Egresos" (donde vive la vista de
     // solo lectura de Cambio con proveedor) solo se ve desde la página del
@@ -3864,7 +3863,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPettyCashLowBalanceItems(financeHref),
       getPettyCashUnconfirmedFunderItems(null, financeHref),
       getAdminPaymentsPendingItem(`${financeHref}?tab=pagosadmin`),
-      getPurchaseShippingPendingItem(comPaymentsHref),
+      // Pedido del usuario 2026-10-05: fletes por pagar y "esperando que el
+      // colaborador resuelva el pago" los atiende Nairoby (Finanzas, ya los
+      // ve en su Inicio) — el admin no hace nada ahí.
+      Promise.resolve(null),
       getPurchaseCreditsPendingItem(comCreditsHref),
       getPurchaseRefundBankConfirmPendingItem(comCreditsHref),
       getSupplierExchangeRejectedAdminPendingItem(invEgresosHref),
@@ -3877,7 +3879,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       getPersonalPurchaseTransferConfirmPendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseTransferClosePendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
       getPersonalPurchaseCashConfirmPendingItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
-      getPersonalPurchasePaymentWatchItem("/admin/nomina?tab=pagos&ptab=comprasfinanzas"),
+      Promise.resolve(null),
       getPayrollTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
       getPayrollIessTransferPendingItem(true, "/admin/nomina?tab=pagos&ptab=roles"),
       getExternalSalePaymentConfirmPendingItem(mktVentasPagosHref),
