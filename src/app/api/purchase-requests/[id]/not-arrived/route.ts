@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canReceivePurchasesTeam, canActOnPurchaseReceiving } from "@/lib/guards";
+import { canReceivePurchasesTeam, canActOnPurchaseReceiving, getPurchaseApproverIds } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { LEFT_BEHIND_HREF } from "@/lib/purchases";
 import { getLinesToConfirm, resolveInventoryLinesToConfirm } from "@/lib/purchaseLeftBehind";
@@ -39,6 +39,16 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     await notifyOwner(line.requestedById, {
       title: "🚨 Mercadería no recibida — coordina con el proveedor",
       body: `${line.name} (${line.quantity} un.) · ${line.supplierName} — Inventario confirmó que no llegó con el resto del pedido. Acuerda si llega otro día, crédito a favor o devolución del dinero.`,
+      url: LEFT_BEHIND_HREF,
+    }).catch(() => null);
+  }
+  // Pedido del usuario 2026-10-05: Bryan (quien aprueba compras) no gestiona
+  // nada de esto, pero debe quedar enterado — solo aviso.
+  for (const approverId of await getPurchaseApproverIds()) {
+    if (approverId === line.requestedById) continue;
+    await notifyOwner(approverId, {
+      title: "📦 Mercadería no recibida (solo aviso)",
+      body: `${line.name} (${line.quantity} un.) · ${line.supplierName} — Inventario confirmó que no llegó con el resto del pedido. ${line.requestedByName ?? "Compras"} lo coordina con el proveedor.`,
       url: LEFT_BEHIND_HREF,
     }).catch(() => null);
   }
