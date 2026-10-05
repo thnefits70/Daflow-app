@@ -605,6 +605,10 @@ export type CatalogDuplicateCheck = {
   suspected: boolean;
   matchedName: string | null;
   message: string | null;
+  // Pedido del usuario 2026-10-05: nombre corregido si tiene faltas de
+  // ortografía (ej. TRASNPARENTE → TRANSPARENTE). Va en la misma llamada de
+  // IA que ya existía, sin costo extra. Solo sugiere, nunca bloquea.
+  spellingFix?: string | null;
 };
 
 // Segunda capa del catálogo (más allá del match exacto por nombre, que se
@@ -628,7 +632,10 @@ export async function checkCatalogNameSimilarity(params: {
       "Te doy un nombre nuevo y la lista de nombres que YA existen. Busca si el nombre nuevo podría ser " +
       "el MISMO producto que uno ya existente, escrito distinto (ej. abreviado, con typo, orden de palabras distinto) — " +
       "no productos simplemente relacionados o de la misma categoría. " +
-      'Responde SOLO un JSON: {"suspected": boolean, "matchedName": string|null, "message": string|null}. ' +
+      "Además revisa la ortografía del nombre nuevo: si tiene palabras mal escritas (letras cambiadas, faltantes o de más, ej. TRASNPARENTE), " +
+      "pon en spellingFix el nombre completo corregido, respetando mayúsculas/minúsculas como lo escribió y sin tocar marcas, modelos, medidas ni códigos. " +
+      "No cuentes como error la falta de tildes. Si no hay errores, spellingFix=null. " +
+      'Responde SOLO un JSON: {"suspected": boolean, "matchedName": string|null, "message": string|null, "spellingFix": string|null}. ' +
       "message es una pregunta breve en español para confirmarle a la persona, solo si suspected=true, ej. " +
       '"¿Esto es lo mismo que \'X\' que ya existe, o es un producto realmente diferente?"',
     messages: [
@@ -649,5 +656,7 @@ export async function checkCatalogNameSimilarity(params: {
 
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") return { suspected: false, matchedName: null, message: null };
-  return extractJson<CatalogDuplicateCheck>(textBlock.text);
+  const result = extractJson<CatalogDuplicateCheck>(textBlock.text);
+  const fix = result.spellingFix?.trim();
+  return { ...result, spellingFix: fix && fix !== params.candidateName.trim() ? fix : null };
 }

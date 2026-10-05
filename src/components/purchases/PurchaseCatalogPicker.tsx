@@ -124,7 +124,7 @@ export function PurchaseCatalogPicker({
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const { onPaste: onPastePhoto, onMouseEnter: onPasteHoverIn, onMouseLeave: onPasteHoverOut } = usePasteFile((file) => addPhotos([file]));
-  const [similarity, setSimilarity] = useState<{ suspected: boolean; matchedName: string | null; message: string | null } | null>(null);
+  const [similarity, setSimilarity] = useState<{ suspected: boolean; matchedName: string | null; message: string | null; spellingFix?: string | null } | null>(null);
   const [checkingSimilarity, setCheckingSimilarity] = useState(false);
   const [confirmStep, setConfirmStep] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -206,8 +206,9 @@ export function PurchaseCatalogPicker({
     setUploadingPhoto(false);
   }
 
-  async function goToConfirm() {
-    if (!newName.trim()) {
+  async function goToConfirm(nameOverride?: string) {
+    const name = (nameOverride ?? newName).trim();
+    if (!name) {
       setErr("Escribe el nombre del producto, mercadería o insumo.");
       return;
     }
@@ -239,7 +240,7 @@ export function PurchaseCatalogPicker({
       res = await fetch("/api/purchase-catalog/check-name", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim() }),
+        body: JSON.stringify({ name }),
       });
     } catch {
       setCheckingSimilarity(false);
@@ -534,7 +535,7 @@ export function PurchaseCatalogPicker({
                 type="button"
                 disabled={checkingSimilarity || uploadingPhoto}
                 className="rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-                onClick={goToConfirm}
+                onClick={() => goToConfirm()}
               >
                 {checkingSimilarity ? "Revisando…" : "Continuar"}
               </button>
@@ -545,6 +546,27 @@ export function PurchaseCatalogPicker({
           </>
         ) : (
           <>
+            {similarity?.spellingFix && (
+              <div className="flex items-start gap-2 bg-gold/10 border border-gold/30 rounded-md p-3 mb-3 text-[12.5px]" style={{ color: "var(--color-gold)" }}>
+                <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                <div className="text-ink">
+                  <div className="mb-1.5">Parece que el nombre tiene una falta de ortografía. ¿Quisiste decir <b>{similarity.spellingFix}</b>?</div>
+                  <div className="flex gap-2.5">
+                    <button
+                      type="button"
+                      disabled={checkingSimilarity}
+                      className="rounded border border-teal bg-teal px-2.5 py-1 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
+                      onClick={() => { const fix = similarity.spellingFix!; setNewName(fix); goToConfirm(fix); }}
+                    >
+                      {checkingSimilarity ? "Revisando…" : "Sí, corregirlo"}
+                    </button>
+                    <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => setSimilarity({ ...similarity, spellingFix: null })}>
+                      No, está bien así
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             {similarity?.suspected && (
               <div className="flex items-start gap-2 bg-gold/10 border border-gold/30 rounded-md p-3 mb-3 text-[12.5px]" style={{ color: "var(--color-gold)" }}>
                 <AlertTriangle size={14} className="mt-0.5 shrink-0" />
