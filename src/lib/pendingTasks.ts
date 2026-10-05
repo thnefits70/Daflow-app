@@ -20,7 +20,7 @@ import { fullCountCompleted, getActiveCount, getCountView, getDifferences, getSu
 import { getNegativeStockProducts } from "@/lib/stockKardex";
 import { carrierLabel } from "@/lib/carriers";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
-import { getOpenPurchaseCodesByCatalogItem } from "@/lib/purchases";
+import { getOpenPurchaseCodesByCatalogItem, getPurchaseLinesLeftBehind, LEFT_BEHIND_HREF } from "@/lib/purchases";
 import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
@@ -1585,6 +1585,23 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
   const groups = [...byGroup.values()];
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const items: PendingItem[] = [];
+
+  // Pedido del usuario 2026-10-05: lo que no llegó con el resto del pedido
+  // (ver getPurchaseLinesLeftBehind) — a quien compró, para que lo coordine.
+  const leftBehind = await getPurchaseLinesLeftBehind(userId);
+  if (leftBehind.length > 0) {
+    items.push({
+      type: "compras_falta_mercaderia",
+      icon: "🚨",
+      label: "Mercadería que no llegó con el resto del pedido — coordina con el proveedor",
+      meta:
+        leftBehind.length === 1
+          ? `${leftBehind[0].name} (${leftBehind[0].quantity} un.) · ${leftBehind[0].supplierName}`
+          : `${leftBehind.length} productos: ${leftBehind.map((l) => l.name).join(", ")}`,
+      overdue: true,
+      href: LEFT_BEHIND_HREF,
+    });
+  }
 
   // Pedido del usuario 2026-10-03: las que se cerraron con "No se reenvía"
   // (close-rejection) ya no cuentan.

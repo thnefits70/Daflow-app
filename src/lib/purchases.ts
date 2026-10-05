@@ -419,7 +419,66 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
     if (invLeader) pushes.push({ ownerId: invLeader.id, title: "🚨 Urgente — flete pagado sin revisar mercadería", body, url: "/area/workspace" });
   }
 
+  for (const r of await getPurchaseLinesLeftBehind()) {
+    if (!r.requestedById) continue;
+    pushes.push({
+      ownerId: r.requestedById,
+      title: "📦 Falta mercadería de un pedido — coordina con el proveedor",
+      body: `${r.name} (${r.quantity} un.) · ${r.supplierName} — el resto del pedido ya llegó a bodega y esto no.`,
+      url: LEFT_BEHIND_HREF,
+    });
+  }
+
   return pushes;
+}
+
+export const LEFT_BEHIND_HREF = "/area/workspace?tab=compras&ptab=mias";
+// Margen para que el equipo termine de contar todo el pedido (cada producto
+// se recibe por separado, minutos de diferencia) antes de dar por faltante.
+const LEFT_BEHIND_GRACE_MS = 2 * 60 * 60 * 1000;
+
+export type PurchaseLineLeftBehind = { id: string; groupId: string; name: string; quantity: number; supplierName: string; requestedById: string | null; since: Date };
+
+// Pedido del usuario 2026-10-05 (caso candado de Zheng wu, 2 oct): Inventario
+// recibió parte del pedido y el producto que no vino quedó "Pagada" sin
+// recepción ni reporte urgente — nadie le avisó a Jariel. Esto lo detecta
+// solo: líneas sin recepción (pagadas, o aprobadas si el proveedor es de
+// crédito) cuyo mismo pedido (groupId) ya tiene otra línea recibida hace más
+// de 2 h. Sale de la lista apenas Inventario la recibe o la reporta.
+export async function getPurchaseLinesLeftBehind(requestedById?: string): Promise<PurchaseLineLeftBehind[]> {
+  const waiting = await prisma.purchaseRequest.findMany({
+    where: {
+      ...(requestedById ? { requestedById } : {}),
+      receipt: null,
+      urgentReports: { none: {} },
+      OR: [{ status: "PAID" }, { status: "APPROVED", supplier: { paymentMode: "CREDITO" } }],
+    },
+    select: { id: true, groupId: true, quantity: true, requestedById: true, catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
+  });
+  if (waiting.length === 0) return [];
+
+  const cutoff = new Date(Date.now() - LEFT_BEHIND_GRACE_MS);
+  const received = await prisma.purchaseRequestReceipt.findMany({
+    where: { request: { groupId: { in: [...new Set(waiting.map((w) => w.groupId))] } }, confirmedAt: { lt: cutoff } },
+    select: { confirmedAt: true, request: { select: { groupId: true } } },
+  });
+  const firstReceived = new Map<string, Date>();
+  for (const r of received) {
+    if (!r.confirmedAt) continue;
+    const cur = firstReceived.get(r.request.groupId);
+    if (!cur || r.confirmedAt < cur) firstReceived.set(r.request.groupId, r.confirmedAt);
+  }
+  return waiting
+    .filter((w) => firstReceived.has(w.groupId))
+    .map((w) => ({
+      id: w.id,
+      groupId: w.groupId,
+      name: w.catalogItem.name,
+      quantity: w.quantity,
+      supplierName: w.supplier?.name ?? "proveedor",
+      requestedById: w.requestedById,
+      since: firstReceived.get(w.groupId)!,
+    }));
 }
 
 // Confirmado 2026-07-31: una cotización suele traer varios productos — se
