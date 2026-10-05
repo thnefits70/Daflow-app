@@ -9,7 +9,7 @@ import { canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurch
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes, formatPurchaseRequestCode } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
-import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
+import { reviewApprovedPurchaseGroup, shippingFromSupplierTotal } from "@/lib/purchaseAi";
 
 // Pedido del usuario 2026-10-01: a Jariel no le salían en "Mis solicitudes"
 // las compras del mes pasado — los historiales tenían un tope fijo (50/100/40
@@ -253,6 +253,7 @@ export async function GET(req: NextRequest) {
                 justification: r.justification,
               })),
               totalCost: groupRows.reduce((s, r) => s + r.totalCost, 0),
+              shippingFromSupplierTotal: shippingFromSupplierTotal(groupRows),
               quoteReadTotal: r0.quoteReadTotal,
               anyLineCodeOnly: groupRows.some((r) => !!r.quoteReferenceCode),
               bankAccount: r0.bankAccount,

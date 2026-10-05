@@ -329,6 +329,18 @@ export type PurchaseGroupReviewResult = {
 // imágenes (esas ya se leyeron y validaron en su paso correspondiente), solo
 // cruza los datos ya confirmados para que admin confíe en el resultado sin
 // tener que revisar cada campo uno por uno.
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+// Flete que cobra el mismo proveedor de la compra (no incluido en el precio)
+// — es el que aparece sumado en el total de su cotización.
+export function shippingFromSupplierTotal(
+  rows: { supplierId: string; carrierId: string | null; shippingIncluded: boolean; shippingCostTotal: number | null }[]
+): number {
+  return rows
+    .filter((r) => !r.shippingIncluded && r.carrierId === r.supplierId)
+    .reduce((s, r) => s + (r.shippingCostTotal ?? 0), 0);
+}
+
 export async function reviewApprovedPurchaseGroup(params: {
   actorId: string | null;
   deptId?: string;
@@ -336,6 +348,12 @@ export async function reviewApprovedPurchaseGroup(params: {
   requestNumber: number | null;
   lines: { name: string; justCode: string | null; quantity: number; unitCost: number; totalCost: number; justification: string | null }[];
   totalCost: number;
+  // Confirmado 2026-10-05 (falsa alarma reportada por el usuario, SC-150
+  // Compel): la cotización del proveedor trae su propio flete sumado al
+  // total, pero aquí solo se pasaban las líneas — 332.93 vs 341.29 era
+  // exactamente el flete de $8.36. Es el flete que cobra el MISMO proveedor
+  // (carrierId = supplierId, sin "flete incluido en el precio").
+  shippingFromSupplierTotal: number;
   quoteReadTotal: number | null;
   anyLineCodeOnly: boolean;
   bankAccount: { bankName: string; bankAccountType: string; bankAccountNumber: string; bankAccountHolder: string } | null;
@@ -363,6 +381,8 @@ export async function reviewApprovedPurchaseGroup(params: {
       justificacion_precio_sobre_historial: l.justification,
     })),
     total_a_pagar_por_las_lineas: params.totalCost,
+    flete_cobrado_por_el_mismo_proveedor: round2(params.shippingFromSupplierTotal),
+    total_lineas_mas_flete: round2(params.totalCost + params.shippingFromSupplierTotal),
     total_leido_por_ia_en_la_cotizacion_al_solicitar: params.quoteReadTotal,
     // Confirmado 2026-09-21: ya no se pide una orden de compra de respaldo —
     // cuando una línea trae solo código (sin nombre), quien solicitó ya
@@ -385,8 +405,10 @@ export async function reviewApprovedPurchaseGroup(params: {
       "te doy YA fue validado en su propio paso (cotización leída por IA al solicitar, precio justificado si superó " +
       "el historial, crédito con el proveedor ya reservado, etc.) — tu trabajo es cruzarlos TODOS juntos una vez " +
       "más y darle a Andrés (quien va a pagar) la confianza de que no hay que revisar nada a mano. " +
-      "Verifica específicamente: (1) que total_a_pagar_por_las_lineas coincida con total_leido_por_ia_en_la_cotizacion_al_solicitar " +
-      "(si este último es null, no lo marques como problema — pasa cuando la cotización solo traía código); " +
+      "Verifica específicamente: (1) que total_leido_por_ia_en_la_cotizacion_al_solicitar coincida con total_a_pagar_por_las_lineas " +
+      "O con total_lineas_mas_flete (la cotización del proveedor muchas veces ya trae su flete sumado — si coincide con " +
+      "cualquiera de los dos, con diferencia de hasta 0.05 por redondeo, está correcto y NO es problema); " +
+      "(si total_leido_por_ia_en_la_cotizacion_al_solicitar es null, no lo marques como problema — pasa cuando la cotización solo traía código); " +
       "(2) que CUALQUIER producto con justificacion_precio_sobre_historial en null tenga sentido como precio normal " +
       "(no puedes saber el historial exacto, así que no inventes un problema aquí — solo repórtalo si el patrón se ve " +
       "claramente anómalo, ej. precio 0 o negativo); (3) que cuenta_bancaria_para_transferir no sea null " +

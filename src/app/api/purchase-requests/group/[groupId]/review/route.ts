@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { notifyOwner } from "@/lib/notifications";
 import { releaseCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 import { canActOnPurchaseApproval } from "@/lib/guards";
-import { reviewApprovedPurchaseGroup } from "@/lib/purchaseAi";
+import { reviewApprovedPurchaseGroup, shippingFromSupplierTotal } from "@/lib/purchaseAi";
 import { notifySupplierShippingTeamOfNewOrders } from "@/lib/supplierShippingPush";
 import { cancelMarketProposal } from "@/lib/marketProposalCancel";
 
@@ -161,6 +161,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
           justification: r.justification,
         })),
         totalCost: rows.reduce((s, r) => s + r.totalCost, 0),
+        shippingFromSupplierTotal: shippingFromSupplierTotal(rows),
         quoteReadTotal: r0.quoteReadTotal,
         anyLineCodeOnly: rows.some((r) => !!r.quoteReferenceCode),
         bankAccount: r0.bankAccount,
