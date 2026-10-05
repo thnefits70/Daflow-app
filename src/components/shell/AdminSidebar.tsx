@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { NotificationBell } from "@/components/shared/NotificationBell";
+import { NavControls } from "@/components/shell/NavControls";
 
 type Department = { id: string; name: string; code: string };
 
@@ -98,9 +99,12 @@ export function AdminSidebar({
           <BrandMark logoUrl={logoUrl} size={22} light chip={!!logoUrl} />
           <span className="font-display font-bold text-[14px]">DAFLOW</span>
         </Link>
-        <button type="button" onClick={() => setOpen(true)} className="p-1.5 text-white cursor-pointer" aria-label="Abrir menú">
-          <Menu size={20} />
-        </button>
+        <div className="flex items-center gap-1">
+          <NavControls homeHref="/admin" />
+          <button type="button" onClick={() => setOpen(true)} className="p-1.5 text-white cursor-pointer" aria-label="Abrir menú">
+            <Menu size={20} />
+          </button>
+        </div>
       </div>
 
       {open && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setOpen(false)} />}
@@ -147,6 +151,7 @@ export function AdminSidebar({
         </div>
         <div className="text-[10px] tracking-[.14em] uppercase text-teal">Panel</div>
         <h1 className="text-[17px] font-bold mt-1">Administrador</h1>
+        <NavControls homeHref="/admin" labeled className="hidden md:flex mt-3" />
       </div>
 
       <div className="flex-1 overflow-y-auto py-2.5 min-h-0" onClick={() => setOpen(false)}>

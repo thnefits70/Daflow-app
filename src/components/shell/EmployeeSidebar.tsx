@@ -10,6 +10,7 @@ import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { SoundToggle } from "@/components/shared/SoundToggle";
 import { NotificationBell } from "@/components/shared/NotificationBell";
+import { NavControls } from "@/components/shell/NavControls";
 
 export function EmployeeSidebar({
   deptName,
@@ -54,9 +55,12 @@ export function EmployeeSidebar({
           <BrandMark logoUrl={logoUrl} size={22} light chip={!!logoUrl} />
           <span className="font-display font-bold text-[14px]">DAFLOW</span>
         </Link>
-        <button type="button" onClick={() => setOpen(true)} className="p-1.5 text-white cursor-pointer" aria-label="Abrir menú">
-          <Menu size={20} />
-        </button>
+        <div className="flex items-center gap-1">
+          <NavControls homeHref="/area" />
+          <button type="button" onClick={() => setOpen(true)} className="p-1.5 text-white cursor-pointer" aria-label="Abrir menú">
+            <Menu size={20} />
+          </button>
+        </div>
       </div>
 
       {open && <div className="fixed inset-0 bg-black/50 z-30 md:hidden" onClick={() => setOpen(false)} />}
@@ -92,6 +96,7 @@ export function EmployeeSidebar({
             {userName && <div className="text-[11.5px] text-[#B9C2CC] truncate">{userName}</div>}
           </div>
         </div>
+        <NavControls homeHref="/area" labeled className="hidden md:flex mt-3" />
       </div>
 
       <div className="flex-1 overflow-y-auto py-2.5 min-h-0" onClick={() => setOpen(false)}>
