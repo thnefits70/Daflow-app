@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { PriceCalculator } from "@/components/marketanalysis/PriceCalculator";
+import { splitByVariant } from "@/lib/variantMix";
 
 type Status = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "descartado" | "no_sale" | "en_compra";
 type DiscardInfo = { id: string; reason: string; reasonLabel: string; note: string | null; byName: string | null; at: string };
@@ -25,6 +26,7 @@ type Row = {
   thisWeek: boolean;
   discard: DiscardInfo | null;
   discardReturned: (DiscardInfo & { why: "urgente" | "vencido" }) | null;
+  variants?: { label: string; units: number }[] | null;
 };
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
 type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; coldNewProducts?: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null; canUseCalculator?: boolean };
@@ -233,6 +235,17 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged }: { r: R
             ) : null}
             {r.suggestedQty && r.supplierName ? " · " : ""}
             {r.supplierName ? `Última compra: ${r.supplierName}` : ""}
+          </div>
+        )}
+        {/* Ventas por variante (2026-10-05): cómo repartir lo que se compra por color/talla. */}
+        {r.variants && (
+          <div className="text-[12px] text-steel">
+            {r.suggestedQty ? "Reparto por color/talla: " : "Lo que más sale (de cada 100): "}
+            <b className="text-ink">
+              {splitByVariant(r.suggestedQty ?? 100, r.variants)
+                .map((m) => `${m.label} ${m.qty}`)
+                .join(" · ")}
+            </b>
           </div>
         )}
         {r.thisWeek && <div className="text-[11.5px] text-amber font-semibold mt-0.5">Comprar o descartar esta semana</div>}

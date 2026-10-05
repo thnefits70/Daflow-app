@@ -12,6 +12,7 @@ import { TabGuide } from "@/components/shared/TabGuide";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 import { SupplierStockoutPanel } from "@/components/marketanalysis/SupplierStockoutPanel";
 import { SuddenDemandPanel } from "@/components/marketanalysis/SuddenDemandPanel";
+import { VariantSalesPanel } from "@/components/marketanalysis/VariantSalesPanel";
 import { MaxPurchasePrice } from "@/components/marketanalysis/MaxPurchasePrice";
 import { CopyDropiPrice } from "@/components/shared/CopyDropiPrice";
 import { DropiPriceChangesQueue } from "./DropiPriceChangesQueue";
@@ -76,7 +77,7 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-type Tab = "proponer" | "ganadores" | "sinstock" | "despiertan" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "trazabilidad";
+type Tab = "proponer" | "ganadores" | "sinstock" | "despiertan" | "variantes" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "trazabilidad";
 
 export function MarketProductPanel({
   canPropose,
@@ -115,6 +116,9 @@ export function MarketProductPanel({
     // Confirmado 2026-09-29, pedido de Daniel: productos que casi no salían y
     // de pronto salen 4 o más en un día (Jariel deja su nota ahí).
     ...(canPropose || canResolveStockout || canReview ? [{ key: "despiertan" as Tab, label: "Productos que despiertan" }] : []),
+    // Pedido del usuario 2026-10-05 (etapa 1 de variantes): qué color / talla
+    // se vende más de cada producto. Mismo público que "Productos que despiertan".
+    ...(canPropose || canResolveStockout || canReview ? [{ key: "variantes" as Tab, label: "Ventas por variante" }] : []),
     // Confirmado 2026-09-10, pedido de Jariel: seguimiento de sus propios
     // productos propuestos (en qué van, quién los aprobó/rechazó, etc.) —
     // antes GET ?view=mine existía en la API pero ninguna pantalla lo
@@ -179,6 +183,7 @@ export function MarketProductPanel({
       )}
       {tab === "sinstock" && <SupplierStockoutPanel canReport={canReportStockout} canResolve={canResolveStockout} />}
       {tab === "despiertan" && <SuddenDemandPanel />}
+      {tab === "variantes" && <VariantSalesPanel />}
       {tab === "mispropuestas" && <MyProposalsView />}
       {tab === "listoparacomprar" && <ReadyToBuyQueue />}
       {tab === "consulta" && <PricingConsultaTable />}

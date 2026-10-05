@@ -3,6 +3,7 @@ import { getFinanceLeadId, getInventoryLeadId } from "@/lib/guards";
 import { formatPurchaseRequestCode, OPEN_PURCHASE_STATUSES, openPurchaseWhere } from "@/lib/purchases";
 import { getReadyToBuyPendingProposalIdsByBuyer } from "@/lib/marketProduct";
 import { notifyOwner } from "@/lib/notifications";
+import { getVariantSales, MIX_MIN_UNITS } from "@/lib/variantSales";
 
 // Confirmado 2026-09-29, idea de Daniel aprobada por el usuario: "Qué
 // comprar". Compras calientes (30 o menos, más los productos nuevos que
@@ -93,6 +94,9 @@ export type SuggestionRow = {
   // Descarte vigente, o el último que ya dejó de valer (y por qué volvió).
   discard: DiscardInfo | null;
   discardReturned: (DiscardInfo & { why: "urgente" | "vencido" }) | null;
+  // Colores/tallas que salieron en los últimos 30 días (2026-10-05), para
+  // repartir lo que se compra. null si no tiene variantes o hay muy pocas.
+  variants: { label: string; units: number }[] | null;
 };
 
 export type NewProductRow = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
@@ -284,8 +288,18 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       thisWeek,
       discard: status === "descartado" ? discard : null,
       discardReturned,
+      variants: null,
     };
     (stock <= HOT_MAX ? hot : cold).push(row);
+  }
+
+  // Reparto por color/talla (Ventas por variante): solo con 2 variantes o
+  // más y suficientes unidades leídas para que el reparto signifique algo.
+  const rowIds = [...hot, ...cold].filter((r) => r.status !== "no_sale").map((r) => r.catalogItemId);
+  if (rowIds.length > 0) {
+    const { products } = await getVariantSales({ days: WINDOW_DAYS, catalogItemIds: rowIds });
+    const mixByItem = new Map(products.filter((p) => p.variants.length >= 2 && p.variantUnits >= MIX_MIN_UNITS).map((p) => [p.catalogItemId, p.variants.map(({ label, units }) => ({ label, units }))]));
+    for (const r of [...hot, ...cold]) r.variants = mixByItem.get(r.catalogItemId) ?? null;
   }
 
   const proposals = readyIds.length
