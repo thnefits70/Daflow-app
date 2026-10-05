@@ -5,6 +5,7 @@ import { Truck, CheckCircle2, Plus, Bell, AlertTriangle } from "lucide-react";
 import { PurchaseSupplierPicker, type BankAccountDTO, type PurchaseSupplierDTO } from "./PurchaseSupplierPicker";
 import { PurchaseOperationDocuments } from "./PurchaseOperationDocuments";
 import { actorName } from "@/lib/actorName";
+import { groupShippingTotal } from "@/lib/purchaseShipping";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 
@@ -335,7 +336,7 @@ function ShippingPaymentSection({ g, onUpdate, isAdmin, canPettyCashSecundaria }
           canPettyCashSecundaria={canPettyCashSecundaria}
           initialCarrier={carrier ? { id: carrier.id, name: carrier.name, location: null, email: null, bankAccounts: carrier.bankAccounts, contacts: [] } : null}
           initialCarrierBankAccountId={r0.carrierBankAccountId}
-          initialCost={r0.shippingCostTotal != null ? String(r0.shippingCostTotal) : ""}
+          initialCost={r0.shippingCostTotal != null ? String(groupShippingTotal(g)) : ""}
           initialMethod={r0.shippingPaymentMethod}
           onDone={() => setCorrecting(false)}
           submitLabel="Guardar corrección"
@@ -348,7 +349,7 @@ function ShippingPaymentSection({ g, onUpdate, isAdmin, canPettyCashSecundaria }
     <div className="mt-3 pt-3 border-t border-rule">
       <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 text-[12px] font-semibold" style={{ color: "var(--color-gold)" }}>
-          <Truck size={13} /> Flete pendiente — ${(r0.shippingCostTotal ?? 0).toFixed(2)} a {carrier?.name ?? "transportista"}
+          <Truck size={13} /> Flete pendiente — ${groupShippingTotal(g).toFixed(2)} a {carrier?.name ?? "transportista"}
         </div>
         {/* Confirmado 2026-09-15, pedido explícito del usuario: Jariel puso
             mal el transportista/monto en un flete real (SC-064) y no había
@@ -500,7 +501,9 @@ function CarrierInfoForm({
       shippingCarrierPending: false,
       carrier: { id: carrier.id, name: carrier.name, bankAccounts: carrier.bankAccounts },
       carrierBankAccountId,
-      shippingCostTotal: n,
+      // El parche se aplica igual a todas las filas: se reparte para que la
+      // suma del grupo siga dando n (el reparto real por cantidad llega al recargar).
+      shippingCostTotal: n / g.length,
       shippingPaymentMethod: method,
       shippingPaymentTiming: "ON_DELIVERY",
     });
@@ -609,7 +612,7 @@ function buildResubmitDraft(g: Row[]) {
     shippingCarrierPending: r0.shippingCarrierPending,
     carrier: r0.carrier ? { id: r0.carrier.id, name: r0.carrier.name, location: null, email: null, bankAccounts: r0.carrier.bankAccounts, contacts: [] } : null,
     carrierBankAccountId: r0.carrierBankAccountId,
-    shippingCostTotal: r0.shippingCostTotal != null ? String(r0.shippingCostTotal) : "",
+    shippingCostTotal: r0.shippingCostTotal != null ? String(groupShippingTotal(g)) : "",
     shippingPaymentMethod: "TRANSFER",
     shippingPaymentTiming: r0.shippingPaymentTiming ?? "WITH_PURCHASE",
     editingGroupId: r0.groupId,
@@ -631,7 +634,11 @@ function GroupCard({
   canPettyCashSecundaria: boolean;
 }) {
   const groupId = g[0].groupId;
-  const total = g.reduce((s, r) => s + r.totalCost, 0);
+  // Pedido del usuario 2026-10-05 (SC-150): el flete que cobra el mismo
+  // proveedor es parte de lo que se le paga — el total de la tarjeta lo suma,
+  // igual que la cotización.
+  const supplierShipping = !g[0].shippingIncluded && g[0].carrier?.id === g[0].supplier.id ? groupShippingTotal(g) : 0;
+  const total = g.reduce((s, r) => s + r.totalCost, 0) + supplierShipping;
   const rejected = g[0].status === "REJECTED";
   const isCreditoSupplier = g[0].supplier.paymentMode === "CREDITO";
   const [reminded, setReminded] = useState(false);
@@ -730,7 +737,11 @@ function GroupCard({
               <span className="text-steel-dim">(crédito de ${reservedTotal.toFixed(2)} aplicado)</span> · {formatDateTime(g[0].requestedAt)}
             </div>
           ) : (
-            <div className="text-[11.5px] text-steel">${total.toFixed(2)} · {formatDateTime(g[0].requestedAt)}</div>
+            <div className="text-[11.5px] text-steel">
+              ${total.toFixed(2)}
+              {supplierShipping > 0 && <span className="text-steel-dim"> (incluye flete ${supplierShipping.toFixed(2)})</span>}
+              {" "}· {formatDateTime(g[0].requestedAt)}
+            </div>
           )}
         </div>
       </div>

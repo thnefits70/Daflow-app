@@ -13,6 +13,7 @@ import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOper
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { PriceTrendChart, PriceHistoryBreakdownList } from "./PriceTrendChart";
 import type { SupplierPriceHistory, SupplierPricePoint } from "@/lib/purchases";
+import { shippingDueWithMerchandise, groupShippingTotal } from "@/lib/purchaseShipping";
 
 type InvoiceStatus = "PENDING" | "COMPLETE" | "PARTIAL" | "NON_FISCAL" | "NONE";
 
@@ -62,6 +63,8 @@ type Row = {
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
   shippingPaymentMethod: "TRANSFER" | "PETTY_CASH" | null;
   shippingCostTotal: number | null;
+  supplierId: string;
+  carrierId: string | null;
   carrier: { name: string } | null;
   carrierBankAccount: {
     bankName: string;
@@ -497,7 +500,8 @@ export function PurchaseInvoicingPanel({
   }
 
   function netAmountFor(groupId: string) {
-    const total = currentGroupRows(groupId).reduce((s, r) => s + r.totalCost, 0);
+    const g = currentGroupRows(groupId);
+    const total = g.reduce((s, r) => s + r.totalCost, 0) + shippingDueWithMerchandise(g);
     const reservedTotal = reservedCredits.reduce((s, c) => s + c.amount, 0);
     const appliedTotal = availableCredits.filter((c) => selectedCreditIds.includes(c.id)).reduce((s, c) => s + c.amount, 0);
     return Math.max(0, total - reservedTotal - appliedTotal);
@@ -553,7 +557,7 @@ export function PurchaseInvoicingPanel({
   async function verifyShippingProof(groupId: string, url: string) {
     setShippingProofVerifying(true);
     setShippingProofVerifyResult(null);
-    const expectedAmount = currentGroupRows(groupId)[0]?.shippingCostTotal ?? 0;
+    const expectedAmount = groupShippingTotal(currentGroupRows(groupId));
     const res = await fetch("/api/purchase-requests/verify-payment", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -820,7 +824,18 @@ export function PurchaseInvoicingPanel({
   // Confirmado 2026-08-03: solo aparece acá una vez que quien solicitó pidió
   // el pago con un clic (antes de eso no hay nada que Finanzas deba hacer).
   const pendingShippingGroups = groupRows(
-    rows.filter((r) => !r.shippingIncluded && r.shippingPaymentTiming === "ON_DELIVERY" && r.shippingPaymentRequestedAt && !r.shippingPaidAt && r.shippingPaymentMethod !== "PETTY_CASH")
+    rows.filter(
+      (r) =>
+        !r.shippingIncluded &&
+        !r.shippingPaidAt &&
+        r.shippingPaymentMethod !== "PETTY_CASH" &&
+        (r.shippingPaymentTiming === "ON_DELIVERY"
+          ? !!r.shippingPaymentRequestedAt
+          : // Pedido del usuario 2026-10-05 (SC-150): flete "junto con la compra"
+            // que quedó sin pagar cuando la mercadería ya se pagó — antes no
+            // aparecía en ningún lado.
+            r.shippingPaymentTiming === "WITH_PURCHASE" && r.status !== "APPROVED" && (r.shippingCostTotal ?? 0) > 0)
+    )
   );
 
   return (
@@ -857,7 +872,8 @@ export function PurchaseInvoicingPanel({
           <div className="flex flex-col gap-2.5">
             {approvedGroups.map((g) => {
               const groupId = g[0].groupId;
-              const total = g.reduce((s, r) => s + r.totalCost, 0);
+              const shipping = shippingDueWithMerchandise(g);
+              const total = g.reduce((s, r) => s + r.totalCost, 0) + shipping;
               const linkedCredit = groupCredits[groupId]?.linked ?? 0;
               const netToPay = Math.max(0, total - linkedCredit);
               return (
@@ -900,6 +916,11 @@ export function PurchaseInvoicingPanel({
                       <span className="font-display text-[16px] font-bold text-teal leading-tight">{money(netToPay)}</span>
                       {linkedCredit > 0 && (
                         <span className="text-[9.5px] text-steel-dim text-right leading-tight line-through">{money(total)}</span>
+                      )}
+                      {shipping > 0 && (
+                        <span className="text-[9.5px] font-semibold text-gold text-right leading-tight">
+                          Incluye flete {money(shipping)} (mismo proveedor)
+                        </span>
                       )}
                       <span className="font-mono text-[10.5px] text-steel">{formatPurchaseRequestCode(g[0].requestNumber)}</span>
                       {groupCredits[groupId] && (() => {
@@ -1149,7 +1170,7 @@ export function PurchaseInvoicingPanel({
                       ))}
                     </div>
                     <div className="flex flex-col items-end shrink-0 gap-0.5">
-                      <span className="font-display text-[16px] font-bold text-teal leading-tight">{money(r0.shippingCostTotal ?? 0)}</span>
+                      <span className="font-display text-[16px] font-bold text-teal leading-tight">{money(groupShippingTotal(g))}</span>
                       <span className="font-mono text-[10.5px] text-steel">{formatPurchaseRequestCode(r0.requestNumber)}</span>
                     </div>
                   </div>

@@ -1487,14 +1487,23 @@ export async function getPurchaseMerchandisePaymentsShortcut(): Promise<{
 // "Fletes pendientes".
 async function getPurchaseShippingPendingItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.purchaseRequest.findMany({
-    where: { shippingIncluded: false, shippingPaymentTiming: "ON_DELIVERY", shippingPaymentRequestedAt: { not: null }, shippingPaidAt: null },
-    select: { groupId: true, shippingCostTotal: true, shippingPaymentRequestedAt: true },
+    where: {
+      shippingIncluded: false,
+      shippingPaidAt: null,
+      OR: [
+        { shippingPaymentTiming: "ON_DELIVERY", shippingPaymentRequestedAt: { not: null } },
+        // Pedido del usuario 2026-10-05 (SC-150): flete "junto con la compra"
+        // que quedó sin pagar aunque la mercadería ya se pagó.
+        { shippingPaymentTiming: "WITH_PURCHASE", shippingPaymentMethod: { not: "PETTY_CASH" }, shippingCostTotal: { gt: 0 }, status: { in: ["PAID", "RECEIVED_PENDING_REVIEW", "RECEIVED"] } },
+      ],
+    },
+    select: { groupId: true, shippingCostTotal: true, shippingPaymentRequestedAt: true, paidAt: true },
   });
   if (rows.length === 0) return null;
 
   const byGroup = new Map<string, { total: number; requestedAt: Date | null }>();
   for (const r of rows) {
-    const cur = byGroup.get(r.groupId) ?? { total: 0, requestedAt: r.shippingPaymentRequestedAt };
+    const cur = byGroup.get(r.groupId) ?? { total: 0, requestedAt: r.shippingPaymentRequestedAt ?? r.paidAt };
     cur.total += r.shippingCostTotal ?? 0;
     byGroup.set(r.groupId, cur);
   }

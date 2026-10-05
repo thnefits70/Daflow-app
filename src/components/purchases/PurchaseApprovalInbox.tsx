@@ -11,6 +11,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { PriceTrendChart, PriceHistoryBreakdownList } from "./PriceTrendChart";
 import type { SupplierPriceHistory, PriceHistoryStats, SupplierPricePoint } from "@/lib/purchases";
 import { CatalogCode, CopyValueButton } from "@/components/shared/CatalogCode";
+import { shippingDueWithMerchandise, groupShippingTotal } from "@/lib/purchaseShipping";
 
 // Copiada de lib/purchases.ts (no se puede importar el original: arrastra
 // prisma/pg al bundle del cliente y rompe el build — ver commit que lo
@@ -44,6 +45,10 @@ type Row = {
   shippingIncluded: boolean;
   shippingPaymentTiming: "WITH_PURCHASE" | "ON_DELIVERY" | null;
   shippingCostTotal: number | null;
+  shippingPaymentMethod: "TRANSFER" | "PETTY_CASH" | null;
+  shippingPaidAt: string | null;
+  supplierId: string;
+  carrierId: string | null;
   catalogItemId: string;
   catalogItem: { name: string; photos: string[]; awaitingDropiId?: boolean };
   supplier: { id: string; name: string; paymentMode?: "PREPAGO" | "CREDITO" };
@@ -448,7 +453,8 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   }
 
   function netAmountFor(groupId: string) {
-    const total = currentGroupRows(groupId).reduce((s, r) => s + r.totalCost, 0);
+    const g = currentGroupRows(groupId);
+    const total = g.reduce((s, r) => s + r.totalCost, 0) + shippingDueWithMerchandise(g);
     return Math.max(0, total - reservedTotalFor(groupId));
   }
 
@@ -478,7 +484,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   async function verifyShippingProof(groupId: string, url: string) {
     setShippingProofVerifying(true);
     setShippingProofVerifyResult(null);
-    const expectedAmount = currentGroupRows(groupId)[0]?.shippingCostTotal ?? 0;
+    const expectedAmount = groupShippingTotal(currentGroupRows(groupId));
     const res = await fetch("/api/purchase-requests/verify-payment", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -715,7 +721,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
           <div className="flex flex-col gap-2">
             {historyGroups.map((g) => {
               const groupId = g[0].groupId;
-              const total = g.reduce((s, r) => s + r.totalCost, 0);
+              const total = g.reduce((s, r) => s + r.totalCost, 0) + (!g[0].shippingIncluded && g[0].carrierId === g[0].supplierId ? groupShippingTotal(g) : 0);
               const isRejected = g[0].status === "REJECTED";
               const meta = STATUS_META[g[0].status];
               const timeline = buildTimeline(g[0]);
@@ -784,10 +790,11 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
       <div className="flex flex-col gap-2.5">
       {groups.map((g) => {
         const groupId = g[0].groupId;
-        const total = g.reduce((s, r) => s + r.totalCost, 0);
+        const total = g.reduce((s, r) => s + r.totalCost, 0) + shippingDueWithMerchandise(g);
         const justification = g.find((r) => r.justification)?.justification ?? null;
         const summary = buildValidationSummary(g);
-        const canPayShippingNow = !g[0].shippingIncluded && g[0].shippingPaymentTiming === "WITH_PURCHASE";
+        // El flete del mismo proveedor ya va sumado al total (misma transferencia).
+        const canPayShippingNow = !g[0].shippingIncluded && g[0].shippingPaymentTiming === "WITH_PURCHASE" && g[0].carrierId !== g[0].supplierId;
         return (
           <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
             <div className="flex items-start justify-between gap-3 flex-wrap mb-1.5">
@@ -875,6 +882,9 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                     <div className="text-[9px] font-semibold uppercase tracking-wide text-steel">Total a pagar</div>
                   )}
                   <div className="font-display text-[22px] font-bold text-teal leading-tight">${netAmountFor(groupId).toFixed(2)}</div>
+                  {shippingDueWithMerchandise(g) > 0 && (
+                    <div className="text-[9.5px] font-semibold text-gold">Incluye flete ${shippingDueWithMerchandise(g).toFixed(2)} (mismo proveedor)</div>
+                  )}
                 </div>
               </div>
             </div>

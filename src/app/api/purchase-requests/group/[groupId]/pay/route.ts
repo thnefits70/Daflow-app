@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { canPayMerchandisePurchases } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { findDuplicatePaymentProofUse, formatPurchaseRequestCode } from "@/lib/purchases";
+import { shippingDueWithMerchandise } from "@/lib/purchaseShipping";
 
 // Confirmado 2026-08-06: si el crédito disponible con el proveedor cubre
 // TODO lo que corresponde pagar, no hay transferencia real que respaldar
@@ -74,7 +75,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   }
 
   const allCreditIdsToApply = [...reservedIds, ...appliedCreditIds];
-  const total = rows.reduce((s, r) => s + r.totalCost, 0);
+  // Flete del mismo proveedor "junto con la compra" — va en la misma
+  // transferencia y queda pagado con el mismo comprobante (ver purchaseShipping.ts).
+  const shippingWithMerchandise = shippingDueWithMerchandise(rows);
+  const total = rows.reduce((s, r) => s + r.totalCost, 0) + shippingWithMerchandise;
   const netAmount = Math.max(0, total - reservedTotal - appliedTotal);
   // Confirmado 2026-09-23, revisión anti-fraude pedida por el usuario: no se
   // transfiere a una cuenta que el admin todavía no verificó, y una cuenta
@@ -110,6 +114,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
         paymentProofUrl: parsed.data.paymentProofUrl ?? null,
         paymentProofReceiptNumber: parsed.data.paymentProofReceiptNumber?.trim() || null,
         paidById: isAdmin ? null : session.user.id,
+        ...(shippingWithMerchandise > 0
+          ? {
+              shippingPaidAt: paidAt,
+              shippingPaymentProofUrl: parsed.data.paymentProofUrl ?? null,
+              shippingPaymentProofReceiptNumber: parsed.data.paymentProofReceiptNumber?.trim() || null,
+              shippingPaidById: isAdmin ? null : session.user.id,
+            }
+          : {}),
       },
     }),
     ...(allCreditIdsToApply.length > 0
