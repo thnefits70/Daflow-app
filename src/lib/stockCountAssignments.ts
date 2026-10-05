@@ -30,13 +30,16 @@ export function countAreaLabel(area: string): string {
 
 const EC_OFFSET_MS = 5 * 60 * 60 * 1000;
 const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+// Cambiado por el usuario 2026-10-05: solo dos horarios, y el conteo SOLO se
+// habilita dentro de ellos (fuera no se puede empezar ni guardar).
 const WEEKDAY_BLOCKS: [number, number, string][] = [
-  [8 * 60 + 45, 11 * 60 + 45, "Mañana"],
-  [12 * 60 + 15, 13 * 60 + 45, "Mediodía"],
-  [14 * 60 + 15, 16 * 60 + 45, "Tarde"],
+  [8 * 60 + 45, 9 * 60 + 45, "Mañana"],
+  [16 * 60 + 30, 18 * 60, "Tarde"],
 ];
-// El sábado hay un solo corte y el equipo trabaja hasta las 12:00.
-const SATURDAY_BLOCKS: [number, number, string][] = [[9 * 60, 12 * 60, "Sábado"]];
+// El sábado se sale a las 12:30: solo el horario de la mañana.
+const SATURDAY_BLOCKS: [number, number, string][] = [[8 * 60 + 45, 9 * 60 + 45, "Mañana"]];
+
+export const COUNT_HOURS_TEXT = "de 8:45 a 9:45 y de 4:30 a 6:00 pm (sábado solo 8:45 a 9:45)";
 
 export type CountWindow = { label: string; start: string; end: string };
 
@@ -200,6 +203,7 @@ export async function startAssignment(id: string, userId: string): Promise<Resul
   const a = await prisma.stockCountAssignment.findUnique({ where: { id } });
   if (!a || a.assigneeId !== userId) return { ok: false, error: "Este conteo no está asignado a ti." };
   if (a.finishedAt) return { ok: false, error: "Ya terminaste este conteo." };
+  if (!windowStatus().inWindow) return { ok: false, error: `El conteo se habilita ${COUNT_HOURS_TEXT}.` };
   if (!a.startedAt) await prisma.stockCountAssignment.update({ where: { id }, data: { startedAt: new Date(), lastActivityAt: new Date() } });
   return { ok: true };
 }

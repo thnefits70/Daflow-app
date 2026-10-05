@@ -59,6 +59,11 @@ export function StockCountPanel() {
       .catch(() => setData(null));
   }
   useEffect(load, []);
+  // Cada minuto, para que el conteo se habilite/cierre solo a la hora.
+  useEffect(() => {
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, []);
 
   const count = data?.count ?? null;
   const board = data?.board ?? null;
@@ -163,6 +168,7 @@ export function StockCountPanel() {
   const mineIds = new Set(mine?.productIds ?? []);
   const recounting = mine?.area === "RECOUNT";
   const canEdit = (p: CountView["products"][number]) => {
+    if (!isLead && !board?.window.inWindow) return false;
     if (recounting && mineIds.has(p.id)) return !!mine?.startedAt && p.recount;
     if (locked) return false;
     if (mine && mineIds.has(p.id)) return !!mine.startedAt;
@@ -305,9 +311,9 @@ function MyAssignment({ a, now, board, busy, onAction }: { a: AssignmentView; no
         {a.total} producto(s) · Meta: terminar antes de las <b>{hour(a.deadline)}</b>
         {a.estimateSec !== null && <> · Tiempo estimado: <b>{minutes(a.estimateSec)}</b></>}
       </div>
-      {w && !w.inWindow && w.nextStart && <div className="text-[12.5px] text-gold font-semibold mt-1">Ahora toca sacar el corte. Sigue contando a las {hour(w.nextStart)}; lo que ya contaste no se pierde.</div>}
+      {w && !w.inWindow && <div className="text-[12.5px] text-gold font-semibold mt-1">El conteo está cerrado ahora.{w.nextStart ? ` Se habilita a las ${hour(w.nextStart)}` : ""}; lo que ya contaste no se pierde.</div>}
       {!a.startedAt ? (
-        <button type="button" disabled={busy} className="mt-2 rounded border border-teal bg-teal px-3.5 py-2 font-bold text-navy cursor-pointer disabled:opacity-50" onClick={() => onAction("start")}>
+        <button type="button" disabled={busy || !w?.inWindow} className="mt-2 rounded border border-teal bg-teal px-3.5 py-2 font-bold text-navy cursor-pointer disabled:opacity-50" onClick={() => onAction("start")}>
           Empezar conteo
         </button>
       ) : (
@@ -389,7 +395,7 @@ function AssignBoard({ count, board, busy, setBusy, post, reload }: {
     <section className="border border-rule rounded-md p-3 mb-4 max-w-4xl">
       <div className="font-display font-bold text-[14px] mb-1">Asignar áreas</div>
       <div className="text-[12px] text-steel mb-2">
-        Una persona por área, una área a la vez. Se cuenta entre cortes: 8:45–11:45, 12:15–13:45 y 14:15–16:45 (sábado 9:00–12:00). A la persona le llega un aviso y le sale en su Inicio; cuando termine, te avisa para que asignes la siguiente.
+        Una persona por área, un área a la vez. El conteo solo se habilita de 8:45 a 9:45 y de 4:30 a 6:00 pm (sábado solo 8:45 a 9:45). A la persona le llega un aviso y le sale en su Inicio; cuando termine, te avisa para que asignes la siguiente.
       </div>
       {count.status === "COUNTING" && (
         <div className="flex flex-col gap-1.5">

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentStock } from "@/lib/stockKardex";
 import { WAREHOUSE_AREAS } from "@/lib/warehouseAreas";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
-import { MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, openAssignmentFor, recentMovement } from "@/lib/stockCountAssignments";
+import { COUNT_HOURS_TEXT, MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, openAssignmentFor, recentMovement, windowStatus } from "@/lib/stockCountAssignments";
 
 // Conteo físico de inventario — pedido del usuario 2026-10-02.
 // - FULL: conteo general de toda la bodega (una vez). Cuando el admin lo
@@ -137,6 +137,8 @@ export async function recordCount(params: { countId: string; catalogItemId: stri
     if (!mine) return { ok: false, error: "Este producto no es de tu área asignada." };
   }
   if (assignment && mine && !assignment.startedAt) return { ok: false, error: "Primero pulsa «Empezar conteo»." };
+  // Fuera de los dos horarios solo Daniel puede corregir.
+  if (!params.isLead && !windowStatus().inWindow) return { ok: false, error: `El conteo se habilita ${COUNT_HOURS_TEXT}.` };
 
   const now = new Date();
   // Tiempo de este producto: desde el anterior que contó esta persona.
