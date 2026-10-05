@@ -428,8 +428,62 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
       url: LEFT_BEHIND_HREF,
     });
   }
+  for (const r of await getPurchaseLinesOverdue()) {
+    if (!r.requestedById) continue;
+    pushes.push({
+      ownerId: r.requestedById,
+      title: `📦 Pedido sin llegar hace ${r.days} días — pregunta al proveedor`,
+      body: `${r.name} (${r.quantity} un.) · ${r.supplierName} — todavía no llega a bodega.`,
+      url: LEFT_BEHIND_HREF,
+    });
+  }
 
   return pushes;
+}
+
+const OVERDUE_DAYS = 5;
+
+// Pedido del usuario 2026-10-05: pedido completo (ninguna línea recibida) que
+// lleva más de 5 días pagado — o aprobado, si el proveedor es de crédito
+// (CHEN no pasa por pago) — sin llegar a bodega ni tener reporte urgente.
+// Va a quien compró. Lo que no llegó con el resto del pedido lo cubre
+// getPurchaseLinesLeftBehind.
+export async function getPurchaseLinesOverdue(requestedById?: string): Promise<(PurchaseLineLeftBehind & { days: number })[]> {
+  const cutoff = new Date(Date.now() - OVERDUE_DAYS * 24 * 60 * 60 * 1000);
+  const rows = await prisma.purchaseRequest.findMany({
+    where: {
+      ...(requestedById ? { requestedById } : {}),
+      receipt: null,
+      urgentReports: { none: {} },
+      OR: [
+        { status: "PAID", paidAt: { lt: cutoff } },
+        { status: "APPROVED", supplier: { paymentMode: "CREDITO" }, reviewedAt: { lt: cutoff } },
+      ],
+    },
+    select: { id: true, groupId: true, quantity: true, requestedById: true, paidAt: true, reviewedAt: true, catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
+  });
+  if (rows.length === 0) return [];
+  const groupsWithReceipt = new Set(
+    (await prisma.purchaseRequest.findMany({
+      where: { groupId: { in: [...new Set(rows.map((r) => r.groupId))] }, receipt: { isNot: null } },
+      select: { groupId: true },
+    })).map((r) => r.groupId)
+  );
+  return rows
+    .filter((r) => !groupsWithReceipt.has(r.groupId))
+    .map((r) => {
+      const since = (r.paidAt ?? r.reviewedAt)!;
+      return {
+        id: r.id,
+        groupId: r.groupId,
+        name: r.catalogItem.name,
+        quantity: r.quantity,
+        supplierName: r.supplier?.name ?? "proveedor",
+        requestedById: r.requestedById,
+        since,
+        days: Math.floor((Date.now() - since.getTime()) / (24 * 60 * 60 * 1000)),
+      };
+    });
 }
 
 export const LEFT_BEHIND_HREF = "/area/workspace?tab=compras&ptab=mias";

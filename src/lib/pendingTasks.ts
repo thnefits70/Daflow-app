@@ -20,7 +20,7 @@ import { fullCountCompleted, getActiveCount, getCountView, getDifferences, getSu
 import { getNegativeStockProducts } from "@/lib/stockKardex";
 import { carrierLabel } from "@/lib/carriers";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
-import { getOpenPurchaseCodesByCatalogItem, getPurchaseLinesLeftBehind, LEFT_BEHIND_HREF } from "@/lib/purchases";
+import { getOpenPurchaseCodesByCatalogItem, getPurchaseLinesLeftBehind, getPurchaseLinesOverdue, LEFT_BEHIND_HREF } from "@/lib/purchases";
 import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
@@ -1598,6 +1598,20 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
         leftBehind.length === 1
           ? `${leftBehind[0].name} (${leftBehind[0].quantity} un.) · ${leftBehind[0].supplierName}`
           : `${leftBehind.length} productos: ${leftBehind.map((l) => l.name).join(", ")}`,
+      overdue: true,
+      href: LEFT_BEHIND_HREF,
+    });
+  }
+  const overdueOrders = await getPurchaseLinesOverdue(userId);
+  if (overdueOrders.length > 0) {
+    items.push({
+      type: "compras_pedido_sin_llegar",
+      icon: "⏰",
+      label: "Pedido que lleva más de 5 días sin llegar — pregunta al proveedor",
+      meta:
+        overdueOrders.length === 1
+          ? `${overdueOrders[0].name} (${overdueOrders[0].quantity} un.) · ${overdueOrders[0].supplierName} · ${overdueOrders[0].days} días`
+          : `${overdueOrders.length} productos: ${overdueOrders.map((l) => l.name).join(", ")}`,
       overdue: true,
       href: LEFT_BEHIND_HREF,
     });
