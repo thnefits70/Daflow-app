@@ -3,7 +3,7 @@ import { z } from "zod";
 import { canSubmitFulfillmentRequest } from "@/lib/guards";
 import { addGuidesLine, parseGuidesPdf, rocketNameCode, ROCKET_NAME_PREFIX, type ParsedGuidesLine, type ParsedWarrantyLine } from "@/lib/dropiGuidesPdf";
 import { learnBrandsFromManifest } from "@/lib/manifestBrand";
-import { findAlreadyUploadedGuides, resolveGuideLines } from "@/lib/fulfillmentGuides";
+import { alreadyUploadedMessage, findAlreadyUploadedGuides, resolveGuideLines } from "@/lib/fulfillmentGuides";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 
 // Un PDF de ~280 páginas tarda ~2-3 s en leerse; con 40 PDF hace falta más
@@ -114,11 +114,7 @@ export async function POST(req: NextRequest) {
 
   const already = await findAlreadyUploadedGuides([...guides.keys()]);
   if (already.length > 0) {
-    const when = already[0].requestedAt.toLocaleString("es-EC", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" });
-    return NextResponse.json(
-      { error: `${already.length} de estas guías ya se subieron el ${when} (ej. ${already[0].number}) — este PDF ya está en un corte, no se vuelve a sumar.` },
-      { status: 409 }
-    );
+    return NextResponse.json({ error: alreadyUploadedMessage(already, guides.size) }, { status: 409 });
   }
 
   // Un código que solo aparece en una garantía también necesita saber qué

@@ -136,13 +136,49 @@ export async function resolveGuideLines(lines: ParsedGuidesLine[], opts: { skipS
   });
 }
 
-export async function findAlreadyUploadedGuides(numbers: string[]): Promise<{ number: string; requestedAt: Date }[]> {
+export type AlreadyUploadedGuide = { number: string; batchId: string; requestedAt: Date; lotDay: string | null; corte: number | null; by: string | null };
+
+export async function findAlreadyUploadedGuides(numbers: string[]): Promise<AlreadyUploadedGuide[]> {
   if (numbers.length === 0) return [];
   const found = await prisma.fulfillmentRequestGuide.findMany({
     where: { guideNumber: { in: numbers } },
-    select: { guideNumber: true, batch: { select: { requestedAt: true } } },
+    select: { guideNumber: true, batch: { select: { id: true, requestedAt: true, requestedBy: { select: { name: true } }, lot: { select: { day: true, corte: true } } } } },
   });
-  return found.map((f) => ({ number: f.guideNumber, requestedAt: f.batch.requestedAt }));
+  return found.map((f) => ({
+    number: f.guideNumber,
+    batchId: f.batch.id,
+    requestedAt: f.batch.requestedAt,
+    lotDay: f.batch.lot?.day ?? null,
+    corte: f.batch.lot?.corte ?? null,
+    by: f.batch.requestedBy?.name ?? null,
+  }));
+}
+
+// Caso real 2026-10-06: el PDF de las 12:05 ya estaba en el Corte 5 de hoy
+// (73 guías) y además traía 1 guía que Dropi reimprimió del día anterior; el
+// aviso decía solo "ya se subieron el 05-oct" y parecía que el PDF era viejo.
+// Ahora dice en qué corte(s) está cada grupo y qué hacer.
+export function alreadyUploadedMessage(already: AlreadyUploadedGuide[], totalGuides: number): string {
+  const groups = new Map<string, AlreadyUploadedGuide[]>();
+  for (const a of already) groups.set(a.batchId, [...(groups.get(a.batchId) ?? []), a]);
+  const today = ecuadorDay(new Date());
+  // "Corte 5 de hoy (12:19, DANIEL MORAN)" / "Corte 5 del 05 oct (11:53, …)"
+  const where = (a: AlreadyUploadedGuide) => {
+    const time = a.requestedAt.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" });
+    const day = a.lotDay ?? ecuadorDay(a.requestedAt);
+    const date = day === today ? "de hoy" : `del ${a.requestedAt.toLocaleDateString("es-EC", { day: "2-digit", month: "short", timeZone: "America/Guayaquil" })}`;
+    return `${a.corte ? `Corte ${a.corte}` : "corte"} ${date} (${time}${a.by ? `, ${a.by}` : ""})`;
+  };
+  const sorted = [...groups.values()].sort((x, y) => y.length - x.length);
+  if (already.length === totalGuides && sorted.length === 1) {
+    return `Este PDF ya se subió: sus ${totalGuides} guías están en el ${where(sorted[0][0])}. No hace falta subirlo otra vez.`;
+  }
+  const lines = sorted.map((g) => `${g.length === 1 ? `1 guía (${g[0].number})` : `${g.length} guías`} en el ${where(g[0])}`).join("; ");
+  const whatToDo =
+    already.length === totalGuides
+      ? "Todas sus guías ya están en un corte — no hace falta subirlo otra vez."
+      : `Las otras ${totalGuides - already.length} son nuevas: quita de Dropi las que ya salieron, descarga el PDF otra vez y súbelo.`;
+  return `${already.length} de las ${totalGuides} guías de este PDF ya se subieron antes: ${lines}. ${whatToDo}`;
 }
 
 // ---- Lote por corte -------------------------------------------------------
@@ -357,7 +393,7 @@ type ItemRow = {
 export async function applyGuidesImport(input: GuidesApplyInput, userId: string | null): Promise<GuidesApplyResult> {
   const dup = await findAlreadyUploadedGuides(input.guides.map((g) => g.number));
   if (dup.length > 0) {
-    return { ok: false, error: `${dup.length} guía(s) de este PDF ya se subieron antes (ej. ${dup[0].number}) — no se vuelven a sumar.` };
+    return { ok: false, error: alreadyUploadedMessage(dup, input.guides.length) };
   }
 
   // Motivo de cada garantía: obligatorio. Se reutiliza la categoría con el
