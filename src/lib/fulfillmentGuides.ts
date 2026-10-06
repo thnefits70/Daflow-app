@@ -288,7 +288,11 @@ export type WarrantyDecision =
   | { mode: "PARTIAL"; catalogItemIds: string[] }
   // Solo una pieza: de qué producto es y qué pieza (sale del stock de
   // repuestos aparte, nunca del Kardex del producto).
-  | { mode: "PIECE"; catalogItemId: string; piece: string };
+  | { mode: "PIECE"; catalogItemId: string; piece: string }
+  // Pedido de Daniel 2026-10-06: solo una pieza, pero sacada de un producto
+  // del stock — sale como el producto completo (se escanea y se descuenta
+  // del Kardex) y la pieza queda anotada.
+  | { mode: "PIECE_STOCK"; catalogItemId: string; piece: string };
 
 // reason: motivo de la garantía (pedido del usuario 2026-09-30) — nombre de
 // un WarrantyCategory existente o uno nuevo que se crea al guardar. De ahí
@@ -555,7 +559,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
     const parts = expand(w.code);
     if (!parts) continue;
     const d = w.decision;
-    if (d.mode === "PIECE") {
+    if (d.mode === "PIECE" || d.mode === "PIECE_STOCK") {
       if (!parts.some((p) => p.catalogItemId === d.catalogItemId)) return { ok: false, error: `Garantía ${w.guide}: la pieza debe ser de uno de los productos de esa guía.` };
       if (!d.piece.trim()) return { ok: false, error: `Garantía ${w.guide}: escribe qué pieza sale.` };
       itemRows.push({
@@ -565,7 +569,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
         fromComboCode: parts[0].fromCombo,
         carrier: w.carrier,
         warrantyGuide: w.guide,
-        warrantyMode: "PIECE",
+        warrantyMode: d.mode,
         warrantyPiece: d.piece.trim(),
         warrantyCategoryId: categoryIdByReason.get(w.reason.trim()),
         breakdown: [],
@@ -855,7 +859,7 @@ export async function getCompiledLot(lotId: string) {
           fromComboCode: it.fromComboCode,
           pieceConfirmedAt: it.pieceConfirmedAt,
         });
-        // (piece = pieza en modo PIECE; en los demás, el color/talla de la guía)
+        // (piece = pieza en modo PIECE/PIECE_STOCK; en los demás, el color/talla de la guía)
         continue;
       }
       const carrier = it.carrier ?? NO_CARRIER;

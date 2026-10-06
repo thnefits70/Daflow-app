@@ -53,6 +53,7 @@ const schema = z.object({
           z.object({ mode: z.literal("COMPLETE") }),
           z.object({ mode: z.literal("PARTIAL"), catalogItemIds: z.array(z.string().min(1)).min(1) }),
           z.object({ mode: z.literal("PIECE"), catalogItemId: z.string().min(1), piece: z.string().trim().min(1).max(200) }),
+          z.object({ mode: z.literal("PIECE_STOCK"), catalogItemId: z.string().min(1), piece: z.string().trim().min(1).max(200) }),
         ]),
         // Motivo de la garantía — de ahí sale solo el KPI de Garantías.
         reason: z.string().trim().min(1, "Elige el motivo de cada garantía.").max(80),

@@ -121,6 +121,7 @@ export function manifestCode(n: number): string {
 
 function warrantyText(w: LotWarrantyLine) {
   if (w.mode === "PIECE") return `Solo pieza: ${w.piece}`;
+  if (w.mode === "PIECE_STOCK") return `Solo pieza: ${w.piece} (se descuenta el producto)`;
   const variant = w.piece ? ` · ${w.piece}` : "";
   if (w.mode === "PARTIAL") return `Solo esta parte del combo${variant}`;
   return `Completo${variant}`;

@@ -61,7 +61,7 @@ function RowCode({ code }: { code: string }) {
   return <span className="font-mono text-[10.5px] font-bold rounded bg-navy/5 border border-rule px-1.5 py-0.5">{rocketLabel(code)}</span>;
 }
 // Garantía: qué sale de verdad (lo marca Yair, confirmado por el usuario).
-type WarrantyDecision = { mode: "COMPLETE" } | { mode: "PARTIAL"; catalogItemIds: string[] } | { mode: "PIECE"; catalogItemId: string; piece: string } | null;
+type WarrantyDecision = { mode: "COMPLETE" } | { mode: "PARTIAL"; catalogItemIds: string[] } | { mode: "PIECE" | "PIECE_STOCK"; catalogItemId: string; piece: string } | null;
 
 // Pedido del usuario 2026-09-28: los productos de ALF con ID provisional
 // (nombre termina en "- ALF") no tocan INVESTOCK, pero salen en el corte y
@@ -321,7 +321,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     if (!wd || partsOf(w.code).length === 0) return false;
     if (!warrantyReasons[w.guide]?.trim()) return false;
     if (wd.mode === "PARTIAL") return wd.catalogItemIds.length > 0;
-    if (wd.mode === "PIECE") return !!wd.catalogItemId && !!wd.piece.trim();
+    if (wd.mode === "PIECE" || wd.mode === "PIECE_STOCK") return !!wd.catalogItemId && !!wd.piece.trim();
     return true;
   }
   const pendingWarranty = warranty.filter((w, i) => !warrantyReady(i, w)).length;
@@ -455,10 +455,14 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
               </div>
             )}
             <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="radio" checked={wd?.mode === "PIECE"} onChange={() => set({ mode: "PIECE", catalogItemId: parts[0].item.id, piece: "" })} />
+              <input type="radio" checked={wd?.mode === "PIECE"} onChange={() => set({ mode: "PIECE", catalogItemId: parts[0].item.id, piece: wd && "piece" in wd ? wd.piece : "" })} />
               Solo una pieza <span className="text-steel text-[10.5px]">(sale del stock de repuestos, no descuenta el producto)</span>
             </label>
-            {wd?.mode === "PIECE" && (
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" checked={wd?.mode === "PIECE_STOCK"} onChange={() => set({ mode: "PIECE_STOCK", catalogItemId: parts[0].item.id, piece: wd && "piece" in wd ? wd.piece : "" })} />
+              Solo una pieza <span className="text-steel text-[10.5px]">(sale del stock, se descuenta el producto)</span>
+            </label>
+            {(wd?.mode === "PIECE" || wd?.mode === "PIECE_STOCK") && (
               <div className="pl-5 flex items-center gap-1.5 flex-wrap">
                 {isCombo && (
                   <select

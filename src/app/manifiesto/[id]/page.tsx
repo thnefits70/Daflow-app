@@ -18,6 +18,7 @@ function fmtTime(d: Date) {
 
 function warrantyText(mode: string, piece: string | null) {
   if (mode === "PIECE") return `Solo pieza: ${piece}`;
+  if (mode === "PIECE_STOCK") return `Solo pieza: ${piece} (se descuenta el producto)`;
   const variant = piece ? ` (${piece})` : "";
   if (mode === "PARTIAL") return `Solo esta parte del combo${variant}`;
   return `Completo${variant}`;
