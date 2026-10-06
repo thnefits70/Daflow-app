@@ -41,7 +41,7 @@ function daysBetween(from: string, to: string): number {
 
 // Unidades por producto y por día desde `fromDay`. Una garantía de solo una
 // pieza sale del stock de repuestos, no cuenta (mismo criterio que Qué comprar).
-async function salesByItemDay(fromDay: string, catalogItemIds?: string[]): Promise<Map<string, Map<string, number>>> {
+export async function salesByItemDay(fromDay: string, catalogItemIds?: string[]): Promise<Map<string, Map<string, number>>> {
   const rows = await prisma.fulfillmentRequestItem.findMany({
     where: {
       ...(catalogItemIds ? { catalogItemId: { in: catalogItemIds } } : {}),

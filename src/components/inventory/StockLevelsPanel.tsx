@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
-import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, Copy, AlertTriangle, ChevronDown, Bell, SlidersHorizontal, Download, LineChart } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, Copy, AlertTriangle, ChevronDown, Bell, SlidersHorizontal, Download, LineChart, TrendingUp } from "lucide-react";
+import { DailyDispatchChart, type DailyDispatchDay } from "./DailyDispatchChart";
 import { StockCountReview } from "./StockCountReview";
 import { ZeroCostCorrectionCard } from "./ZeroCostCorrectionCard";
 import { CatalogCode } from "@/components/shared/CatalogCode";
@@ -576,6 +577,19 @@ export function StockLevelsPanel({
       .then((res) => (res.ok ? res.json() : []))
       .then((data: SupplierPriceHistory[]) => setPriceHistory(data))
       .catch(() => setPriceHistory([]));
+  }
+  // Pedido de Bryan 2026-10-06: tendencia de unidades despachadas por día.
+  const [dispatchFor, setDispatchFor] = useState<{ name: string; justCode: string | null } | null>(null);
+  const [dispatchDays, setDispatchDays] = useState<DailyDispatchDay[] | null>(null);
+  const [dispatchError, setDispatchError] = useState(false);
+  function openDispatchTrend(r: { catalogItemId: string; name: string; justCode: string | null }) {
+    setDispatchFor({ name: r.name, justCode: r.justCode });
+    setDispatchDays(null);
+    setDispatchError(false);
+    fetch(`/api/purchase-catalog/${r.catalogItemId}/daily-dispatch`, { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data: { days: DailyDispatchDay[] }) => setDispatchDays(data.days))
+      .catch(() => setDispatchError(true));
   }
   // Pedido del usuario 2026-10-01: cortes contados que Daniel aún no confirma.
   const [unconfirmedDispatch, setUnconfirmedDispatch] = useState<{ lots: number; units: number; since: string | null } | null>(null);
@@ -1253,6 +1267,15 @@ export function StockLevelsPanel({
                 <span className="text-[12.5px] flex flex-col min-w-0">
                   <span className="flex items-center gap-1.5 min-w-0">
                     <CatalogCode code={r.justCode} />
+                    <button
+                      type="button"
+                      title="Ver unidades despachadas por día (últimos 30 días)"
+                      aria-label="Ver unidades despachadas por día"
+                      className="shrink-0 text-steel-dim hover:text-teal cursor-pointer"
+                      onClick={() => openDispatchTrend(r)}
+                    >
+                      <TrendingUp size={13} />
+                    </button>
                     {isAdmin || canViewPriceHistory ? (
                       <button
                         type="button"
@@ -1503,6 +1526,61 @@ export function StockLevelsPanel({
                   );
                 })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {dispatchFor && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={() => setDispatchFor(null)}>
+          <div className="bg-surface border border-rule rounded-md p-4 max-w-[640px] w-full max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="flex items-center gap-1.5 text-[13px] font-bold min-w-0">
+                <TrendingUp size={14} className="text-teal shrink-0" />
+                <span className="min-w-0">
+                  Unidades despachadas por día — {dispatchFor.justCode ? `${dispatchFor.justCode} · ` : ""}
+                  {dispatchFor.name}
+                </span>
+              </div>
+              <button type="button" className="text-steel text-[12px] cursor-pointer shrink-0" onClick={() => setDispatchFor(null)}>
+                Cerrar
+              </button>
+            </div>
+            {dispatchError ? (
+              <div className="text-steel text-[12px] py-8 text-center">No se pudo cargar. Intenta de nuevo.</div>
+            ) : dispatchDays === null ? (
+              <div className="text-steel text-[12px] py-8 text-center">Cargando despachos…</div>
+            ) : (
+              (() => {
+                const known = dispatchDays.filter((d) => d.units !== null);
+                const total = known.reduce((sum, d) => sum + (d.units ?? 0), 0);
+                const daysWithSales = known.filter((d) => (d.units ?? 0) > 0).length;
+                const avg = known.length > 0 ? total / known.length : 0;
+                return (
+                  <>
+                    <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+                      <div className="border border-rule rounded p-2">
+                        <div className="text-[18px] font-bold">{total}</div>
+                        <div className="text-[10.5px] text-steel">unidades en total</div>
+                      </div>
+                      <div className="border border-rule rounded p-2">
+                        <div className="text-[18px] font-bold">{avg.toLocaleString("es-EC", { maximumFractionDigits: 1 })}</div>
+                        <div className="text-[10.5px] text-steel">promedio por día</div>
+                      </div>
+                      <div className="border border-rule rounded p-2">
+                        <div className="text-[18px] font-bold">{daysWithSales}</div>
+                        <div className="text-[10.5px] text-steel">días con despacho</div>
+                      </div>
+                    </div>
+                    <DailyDispatchChart days={dispatchDays} />
+                    <div className="text-[10px] text-steel-dim text-center mt-2">
+                      Sale de los cortes guardados en DAFLOW (combos separados en sus productos, sin garantías de una sola pieza).
+                      {known.length < dispatchDays.length &&
+                        ` Los cortes se guardan desde el ${known[0]?.day.split("-").reverse().join("/") ?? "—"}, así que hay ${known.length} días de datos.`}
+                    </div>
+                  </>
+                );
+              })()
+            )}
           </div>
         </div>
       )}
