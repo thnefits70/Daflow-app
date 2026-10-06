@@ -1271,10 +1271,10 @@ export function StockLevelsPanel({
                       type="button"
                       title="Ver unidades despachadas por día (últimos 30 días)"
                       aria-label="Ver unidades despachadas por día"
-                      className="shrink-0 text-steel-dim hover:text-teal cursor-pointer"
+                      className="shrink-0 w-7 h-7 flex items-center justify-center rounded border border-teal/40 bg-teal/10 text-teal hover:bg-teal/25 cursor-pointer"
                       onClick={() => openDispatchTrend(r)}
                     >
-                      <TrendingUp size={13} />
+                      <TrendingUp size={16} />
                     </button>
                     {isAdmin || canViewPriceHistory ? (
                       <button
