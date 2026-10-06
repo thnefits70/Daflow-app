@@ -466,7 +466,7 @@ function ReviewItemRow({ item, repeated, canAct, onChanged, onExpandPhoto }: { i
 
   return (
     <div className="bg-cloud rounded-md p-3">
-      <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center gap-2.5">
         {item.photoUrls[0] && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -476,7 +476,7 @@ function ReviewItemRow({ item, repeated, canAct, onChanged, onExpandPhoto }: { i
             onClick={() => onExpandPhoto(item.photoUrls[0])}
           />
         )}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-[150px]">
           {nameNeedsReview ? (
             <div className="text-[10.5px] text-steel mb-1">
               Nombre declarado por el colaborador{item.declaredName ? <>: <b className="text-ink">&quot;{item.declaredName}&quot;</b></> : ""} — vincula el producto correcto abajo
@@ -510,19 +510,19 @@ function ReviewItemRow({ item, repeated, canAct, onChanged, onExpandPhoto }: { i
             </div>
           )}
           {item.damagedQty > 0 && (
-            <div className="flex items-center gap-1.5 mt-1 text-[11px]">
+            <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px]">
               <AlertTriangle size={11} className="text-red" />
-              <span className="text-red font-semibold">{item.damagedQty} unidades dañadas</span>
+              <span className="text-red font-semibold whitespace-nowrap">{item.damagedQty} unidades dañadas</span>
               {(item.damageReason?.name || item.damageReasonOther) && (
                 <span className="font-mono text-[9.5px] text-steel bg-surface rounded-full px-1.5 py-0.5">{item.damageReason?.name ?? item.damageReasonOther}</span>
               )}
             </div>
           )}
         </div>
-        {item.goodQty > 0 && <span className="text-[11.5px] text-green font-semibold shrink-0">{item.goodQty} buenas</span>}
+        {item.goodQty > 0 && <span className="text-[11.5px] text-green font-semibold shrink-0 whitespace-nowrap">{item.goodQty} buenas</span>}
 
         {damageNeedsReview && !solving && !claiming && (
-          <div className="shrink-0 flex gap-1.5">
+          <div className="w-full sm:w-auto sm:shrink-0 flex flex-wrap gap-1.5">
             <button
               type="button"
               disabled={busy || !canAct}
