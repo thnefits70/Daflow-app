@@ -307,6 +307,28 @@ export function PurchaseUrgentReportsPanel({
   }
   useEffect(load, []);
 
+  // Pedido del usuario 2026-10-06 (SC-008): el admin confirma que sí llegó
+  // todo y que el equipo contó mal — ver receipt/confirm-full.
+  const [confirmFullId, setConfirmFullId] = useState<string | null>(null);
+  const [confirmFullNote, setConfirmFullNote] = useState("");
+  async function confirmFullReceipt(requestId: string) {
+    if (!confirmFullNote.trim()) { setErr("Explica cómo se confirmó que llegó todo."); return; }
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/${requestId}/receipt/confirm-full`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: confirmFullNote.trim() }),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo corregir."); return; }
+    setConfirmFullId(null);
+    setConfirmFullNote("");
+    load();
+    router.refresh();
+  }
+
   async function submitExcessGestion(reportId: string) {
     if (!excessGestionNoteInput.trim()) { setErr("Explica qué averiguaste con el proveedor."); return; }
     setBusy(true);
@@ -574,6 +596,23 @@ export function PurchaseUrgentReportsPanel({
                   )
                 ) : (
                   <div className="text-steel-dim italic text-[11.5px]">Esperando que Compras abra el reclamo con el proveedor.</div>
+                )}
+                {isAdmin && (
+                  confirmFullId === s.id ? (
+                    <div className="bg-surface border border-teal/40 rounded-md p-2.5 mt-2">
+                      <div className="text-[11.5px] font-semibold mb-1.5">¿Llegaron las {s.quantity} un. completas? Se corrige la compra a {s.quantity} un. y se quita de esta lista. El stock no se toca: eso lo ajusta el conteo físico.</div>
+                      <textarea value={confirmFullNote} onChange={(e) => setConfirmFullNote(e.target.value)} rows={2} placeholder="Cómo se confirmó (ej. se volvió a contar: una bolsa de 200 y otra de 100)" className="w-full rounded border border-rule bg-cloud px-2 py-1.5 text-[11.5px] mb-2" />
+                      {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+                      <div className="flex items-center gap-2">
+                        <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => confirmFullReceipt(s.id)}>Sí, llegó completo</button>
+                        <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setConfirmFullId(null); setErr(""); }}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="button" className="mt-2 ml-2 rounded border border-teal/50 text-teal px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer" onClick={() => { setConfirmFullId(s.id); setConfirmFullNote(""); setErr(""); }}>
+                      Sí llegó completo (se contó mal)
+                    </button>
+                  )
                 )}
               </div>
             ))}

@@ -22,6 +22,8 @@ export type OperationDocRow = {
   receipt: {
     photoUrls: string[];
     receivedQuantity: number;
+    originalReceivedQuantity?: number | null;
+    quantityCorrectionNote?: string | null;
     aiPhotoMatch: boolean | null;
     aiPhotoNote: string | null;
     confirmedBy: { name: string } | null;
@@ -171,6 +173,11 @@ export function PurchaseOperationDocuments({ rows }: { rows: OperationDocRow[] }
                 <div className="text-steel">
                   {r.receipt.receivedQuantity} un. recibidas · confirmado por {actorName(r.receipt.confirmedBy?.name)}
                 </div>
+                {r.receipt.originalReceivedQuantity != null && r.receipt.originalReceivedQuantity !== r.receipt.receivedQuantity && (
+                  <div className="text-steel-dim text-[11px]">
+                    Corregido: el equipo había anotado {r.receipt.originalReceivedQuantity} un.{r.receipt.quantityCorrectionNote ? <> — &quot;{r.receipt.quantityCorrectionNote}&quot;</> : null}
+                  </div>
+                )}
                 {r.receipt.aiPhotoNote && (
                   <div className={`flex items-center gap-1 mt-0.5 ${r.receipt.aiPhotoMatch ? "text-teal" : "text-steel"}`}>
                     🤖 {r.receipt.aiPhotoNote}
