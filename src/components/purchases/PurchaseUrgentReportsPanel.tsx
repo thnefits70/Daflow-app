@@ -96,6 +96,7 @@ function canCancelResolution(res: Resolution): boolean {
 
 type Report = {
   id: string;
+  requestId: string;
   damagedQty: number;
   missingQty: number;
   incompleteQty: number;
@@ -761,6 +762,27 @@ export function PurchaseUrgentReportsPanel({
                     {hideMoney ? `${totalReported(r)} un. en disputa` : `$${(totalReported(r) * claimUnitCost(r)).toFixed(2)} en disputa`}
                   </div>
                   <div className="text-[12px] mb-2">{r.description}</div>
+
+                  {/* Pedido del usuario 2026-10-06 (SC-008): el reclamo
+                      automático de un faltante viejo se anula si en verdad
+                      llegó todo — ver receipt/confirm-full. */}
+                  {isAdmin && r.description.startsWith("Faltante sin reclamar") && r.resolutions.length === 0 && (
+                    confirmFullId === r.requestId ? (
+                      <div className="bg-surface border border-teal/40 rounded-md p-2.5 mb-2">
+                        <div className="text-[11.5px] font-semibold mb-1.5">¿Llegaron las {r.request.quantity} un. completas? Se anula este reclamo y la compra queda en {r.request.quantity} un. El stock no se toca: eso lo ajusta el conteo físico.</div>
+                        <textarea value={confirmFullNote} onChange={(e) => setConfirmFullNote(e.target.value)} rows={2} placeholder="Cómo se confirmó (ej. se volvió a contar: una bolsa de 200 y otra de 100)" className="w-full rounded border border-rule bg-cloud px-2 py-1.5 text-[11.5px] mb-2" />
+                        {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+                        <div className="flex items-center gap-2">
+                          <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => confirmFullReceipt(r.requestId)}>Sí, llegó completo</button>
+                          <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setConfirmFullId(null); setErr(""); }}>Cancelar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" className="mb-2 rounded border border-teal/50 text-teal px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer" onClick={() => { setConfirmFullId(r.requestId); setConfirmFullNote(""); setErr(""); }}>
+                        Sí llegó completo (se contó mal) — anular reclamo
+                      </button>
+                    )
+                  )}
 
                   {/* Confirmado 2026-09-29, pedido de Bryan: Daniel solo avisa
                       que no llegó; Jariel, que habla con el proveedor, marca

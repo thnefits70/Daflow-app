@@ -28,30 +28,42 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       quantity: true,
       status: true,
       receipt: { select: { receivedQuantity: true, originalReceivedQuantity: true } },
-      _count: { select: { urgentReports: true } },
+      urgentReports: { where: { rejectedAt: null }, select: { id: true, description: true, _count: { select: { resolutions: true } } } },
     },
   });
   if (!existing || !existing.receipt) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (!["RECEIVED", "RECEIVED_PENDING_REVIEW"].includes(existing.status)) {
     return NextResponse.json({ error: "Esta compra todavía no se recibe." }, { status: 409 });
   }
-  if (existing._count.urgentReports > 0) {
-    return NextResponse.json({ error: "Esta compra ya tiene un reclamo abierto; resuélvelo desde ahí." }, { status: 409 });
+  // Si ya se abrió el reclamo automático de "Faltante sin reclamar"
+  // (short-receipt-claim) y todavía no se coordinó nada con el proveedor, se
+  // anula junto con la corrección (caso SC-008: se pulsó el botón rojo).
+  // Cualquier otro reclamo sigue su camino normal.
+  const autoClaimIds = existing.urgentReports.filter((r) => r.description?.startsWith("Faltante sin reclamar") && r._count.resolutions === 0).map((r) => r.id);
+  if (autoClaimIds.length !== existing.urgentReports.length) {
+    return NextResponse.json({ error: "Esta compra ya tiene un reclamo en curso con el proveedor; resuélvelo desde ahí." }, { status: 409 });
   }
   if (existing.receipt.receivedQuantity >= existing.quantity) {
     return NextResponse.json({ error: "Ya figura como recibida completa." }, { status: 409 });
   }
 
-  const updated = await prisma.purchaseRequestReceipt.update({
-    where: { requestId: id },
-    data: {
-      receivedQuantity: existing.quantity,
-      originalReceivedQuantity: existing.receipt.originalReceivedQuantity ?? existing.receipt.receivedQuantity,
-      quantityCorrectedById: null,
-      quantityCorrectedAt: new Date(),
-      quantityCorrectionNote: parsed.data.note,
-    },
-  });
+  const now = new Date();
+  const [updated] = await prisma.$transaction([
+    prisma.purchaseRequestReceipt.update({
+      where: { requestId: id },
+      data: {
+        receivedQuantity: existing.quantity,
+        originalReceivedQuantity: existing.receipt.originalReceivedQuantity ?? existing.receipt.receivedQuantity,
+        quantityCorrectedById: null,
+        quantityCorrectedAt: now,
+        quantityCorrectionNote: parsed.data.note,
+      },
+    }),
+    prisma.purchaseRequestUrgentReport.updateMany({
+      where: { id: { in: autoClaimIds } },
+      data: { rejectedAt: now, rejectedById: null, rejectionReason: `Sí llegó completo: ${parsed.data.note}` },
+    }),
+  ]);
 
   return NextResponse.json(updated);
 }
