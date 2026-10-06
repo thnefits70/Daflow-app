@@ -3683,12 +3683,17 @@ const IMPROVEMENT_PLAN_REVIEW_OVERDUE_DAYS = 7;
 // canActOnImprovementPlan) solo los gestiona él — antes el recordatorio le
 // llegaba al líder del departamento (que puede ser la misma persona en el
 // plan) y nunca al admin. forAdmin=true trae solo esos.
+// 2026-10-06: solo colaboradores que siguen activos (y, para el líder, que
+// siguen en su departamento) — igual que el listado de la pestaña
+// (getDeptRosterWithImprovementPlanStatus). Caso HEIDY MORALES: ya no
+// estaba en la empresa, el aviso seguía saliendo y al hacer clic no
+// aparecía nadie.
 async function getImprovementPlanPendingItems(leaderDeptId: string | null, href: string): Promise<PendingItem[]> {
   const plans = await prisma.improvementPlan.findMany({
     where:
       leaderDeptId === null
-        ? { leaderId: null, stage: { not: "CERRADO" } }
-        : { deptId: leaderDeptId, leaderId: { not: null }, stage: { not: "CERRADO" } },
+        ? { leaderId: null, stage: { not: "CERRADO" }, collaborator: { isActive: true } }
+        : { deptId: leaderDeptId, leaderId: { not: null }, stage: { not: "CERRADO" }, collaborator: { isActive: true, deptId: leaderDeptId } },
     select: {
       stage: true,
       stageDeadline: true,
