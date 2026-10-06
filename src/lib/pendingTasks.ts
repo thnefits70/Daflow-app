@@ -727,10 +727,8 @@ async function getFillRateJustificationPendingItem(deptId: string, href: string)
 // PayStub) sin fecha de corte fija, y de ahí en adelante el OR se reduce
 // solo a MonthlyLegalRole porque PayStub ya no recibe filas nuevas. Con el
 // sistema nuevo, "falta" significa: la quincena de fin de mes de esa
-// persona todavía no se publicó, o su sueldo declarado en IESS no está
-// configurado (publish/route.ts la salta en silencio si
-// PayrollProfile.iessDeclaredSalary es null) — ambos resolubles por
-// Nairoby desde Roles de pago.
+// persona todavía no se publicó. Quien no tiene sueldo declarado en IESS
+// (no afiliado, publish/route.ts lo salta) no cuenta — ver abajo.
 async function countMissingPayStubs(month: number, year: number): Promise<number> {
   const monthStr = `${year}-${pad2(month)}`;
   const [activeUsers, stubs, roles, externalProfiles] = await Promise.all([
@@ -739,6 +737,13 @@ async function countMissingPayStubs(month: number, year: number): Promise<number
     prisma.monthlyLegalRole.findMany({ where: { month: monthStr, isCurrent: true }, select: { employeeId: true } }),
     prisma.payrollProfile.findMany({ where: { externalPaymentMode: true }, select: { userId: true } }),
   ]);
+  // Pedido del usuario 2026-10-06 (caso real: JOAO SALTOS, entró 2026-09-23,
+  // todavía sin afiliar) — sin sueldo declarado en IESS la persona no está
+  // afiliada, publish/route.ts no le arma Rol del mes, así que tampoco
+  // "falta": quedaba un aviso a Nairoby que no podía resolver. Vuelve a
+  // contar solo cuando se le llena el sueldo IESS.
+  const affiliated = await prisma.payrollProfile.findMany({ where: { iessDeclaredSalary: { not: null } }, select: { userId: true } });
+  const affiliatedIds = new Set(affiliated.map((p) => p.userId));
   // Fix confirmado 2026-08-31 (caso real: Elsa Yambay, ingresó 2026-08-14)
   // — mismo bug que eligibleForMonth ya resuelve para Colaborador del mes:
   // sin filtrar por startDate, alguien contratado en agosto aparecía como
@@ -752,7 +757,7 @@ async function countMissingPayStubs(month: number, year: number): Promise<number
   // Su propio control vive en ExternalPayment, ver
   // getExternalPaymentPendingItem.
   const externalIds = new Set(externalProfiles.map((p) => p.userId));
-  const eligible = eligibleForMonth(activeUsers, monthStr).filter((u) => !externalIds.has(u.id));
+  const eligible = eligibleForMonth(activeUsers, monthStr).filter((u) => !externalIds.has(u.id) && affiliatedIds.has(u.id));
   const coveredIds = new Set([...stubs.map((s) => s.userId), ...roles.map((r) => r.employeeId)]);
   return eligible.filter((u) => !coveredIds.has(u.id)).length;
 }
