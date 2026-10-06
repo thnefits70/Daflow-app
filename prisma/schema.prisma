@@ -6243,8 +6243,13 @@ model MerchandiseReentryItem {
   correctedBy   User?     @relation("MerchandiseReentryItemCorrectedBy", fields: [correctedById], references: [id], onDelete: SetNull)
   correctedAt   DateTime?
 
-  goodQty    Int @default(0)
-  damagedQty Int @default(0)
+  goodQty       Int   @default(0)
+  damagedQty    Int   @default(0)
+  // Stock por variante (pedido del usuario 2026-10-06): de qué color/talla
+  // son las buenas de este producto en el lote, [{ name, qty }]. Joel lo
+  // elige al escanear; se guarda igual en todas las filas de guía del mismo
+  // producto del lote (es el total del producto, no de cada guía).
+  variantCounts Json?
 
   damageReasonId    String?
   damageReason      MerchandiseDamageReason? @relation(fields: [damageReasonId], references: [id], onDelete: SetNull)
@@ -7716,7 +7721,7 @@ model ProductVariant {
 // de un color/talla. El saldo de la variante es la suma. Es un DESGLOSE del
 // Kardex (que sigue siendo el stock oficial del producto): lo que no se sabe
 // de qué color fue queda como "Sin identificar" = Kardex − suma de variantes.
-// reason: COUNT (ajuste al conteo físico), SALE (corte confirmado),
+// reason: COUNT (ajuste al conteo físico), SALE (corte confirmado), RETURN (devolución),
 // PURCHASE (compra que entró al Kardex). refId + reason evita contar dos veces.
 model ProductVariantMovement {
   id        String         @id @default(cuid())

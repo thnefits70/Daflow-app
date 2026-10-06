@@ -10,9 +10,10 @@ import { getVariantResolver } from "@/lib/variantSales";
 // - SALE: el corte que Daniel confirma, según el color/talla de las guías.
 // - PURCHASE: la compra que entra al Kardex, según lo que escribió quien
 //   recibió.
-// Devoluciones, daños, garantías, ventas externas y ajustes todavía no
-// traen color/talla: mueven solo el Kardex y se ven en "Sin identificar"
-// hasta el siguiente conteo por área.
+// - RETURN: la devolución escaneada, según el color que eligió Joel.
+// Daños, garantías, ventas externas y ajustes todavía no traen color/talla:
+// mueven solo el Kardex y se ven en "Sin identificar" hasta el siguiente
+// conteo por área.
 // Nada de esto frena el Kardex: si falla, se registra en el log y sigue.
 
 type VariantCount = { name: string; qty: number };
@@ -132,4 +133,61 @@ export async function getVariantStock(catalogItemIds: string[]): Promise<Map<str
     out.set(id, { variants, unidentified: (total.get(id) ?? 0) - sum });
   }
   return out;
+}
+
+// ---- Devoluciones (Reingreso por escaneo, pedido del usuario 2026-10-06) ----
+// La etiqueta de la guía no trae el color, así que Joel dice de qué
+// color/talla son las buenas de cada producto (total del lote, no por guía).
+
+export type ReentryVariantProduct = { catalogItemId: string; name: string; variantNames: string[]; good: number; variantCounts: VariantCount[] | null; ok: boolean };
+
+// Productos del lote escaneado que tienen lista oficial: cuántas buenas hay
+// (escaneadas − dañadas − faltantes) y si el desglose ya cuadra. Solo antes
+// de enviar (después las dañadas ya se descontaron de las buenas).
+export async function getReentryVariantStatus(batchId: string): Promise<ReentryVariantProduct[]> {
+  const items = await prisma.merchandiseReentryItem.findMany({
+    where: { batchId, catalogItemId: { not: null }, OR: [{ guideId: { not: null } }, { scanDamage: true }] },
+    select: { catalogItemId: true, guideId: true, scanDamage: true, goodQty: true, damagedQty: true, missingQty: true, variantCounts: true, catalogItem: { select: { name: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+  const ids = [...new Set(items.map((i) => i.catalogItemId!))];
+  if (ids.length === 0) return [];
+  const official = await prisma.productVariant.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true, name: true }, orderBy: { name: "asc" } });
+  const out: ReentryVariantProduct[] = [];
+  for (const id of ids) {
+    const names = official.filter((v) => v.catalogItemId === id).map((v) => v.name);
+    if (names.length === 0) continue;
+    const mine = items.filter((i) => i.catalogItemId === id);
+    const scanned = mine.filter((i) => i.guideId).reduce((s, i) => s + i.goodQty, 0);
+    const off = mine.filter((i) => i.scanDamage).reduce((s, i) => s + i.damagedQty + i.missingQty, 0);
+    const good = Math.max(0, scanned - off);
+    const first = mine.find((i) => i.guideId);
+    const counts = Array.isArray(first?.variantCounts) ? (first.variantCounts as VariantCount[]) : null;
+    const sum = counts?.reduce((s, v) => s + v.qty, 0) ?? 0;
+    out.push({ catalogItemId: id, name: mine[0].catalogItem?.name ?? "Producto", variantNames: names, good, variantCounts: counts, ok: good === 0 || (counts !== null && sum === good) });
+  }
+  return out;
+}
+
+export async function setReentryVariants(batchId: string, catalogItemId: string, raw: VariantCount[]): Promise<{ ok: true } | { ok: false; error: string }> {
+  const status = (await getReentryVariantStatus(batchId)).find((p) => p.catalogItemId === catalogItemId);
+  if (!status) return { ok: false, error: "Este producto no tiene colores/tallas registrados." };
+  const list = raw.map((v) => ({ name: v.name.replace(/\s+/g, " ").trim(), qty: v.qty })).filter((v) => v.name && v.qty > 0);
+  if (new Set(list.map((v) => v.name.toLowerCase())).size !== list.length) return { ok: false, error: "Un color/talla está repetido." };
+  const sum = list.reduce((s, v) => s + v.qty, 0);
+  if (sum !== status.good) return { ok: false, error: `La suma tiene que dar ${status.good} (las buenas de este producto).` };
+  await prisma.merchandiseReentryItem.updateMany({ where: { batchId, catalogItemId, guideId: { not: null } }, data: { variantCounts: list } });
+  return { ok: true };
+}
+
+// Lo bueno que entra al Kardex suma a cada color/talla (una sola vez por
+// producto y lote, aunque venga en varias guías).
+export async function applyReturnToVariants(batchId: string, catalogItemId: string, counts: VariantCount[]): Promise<void> {
+  const existing = await prisma.productVariant.findMany({ where: { catalogItemId }, select: { id: true, name: true } });
+  const rows: { variantId: string; quantity: number; reason: string; refId: string }[] = [];
+  for (const c of counts) {
+    if (c.qty <= 0) continue;
+    rows.push({ variantId: await findOrCreateVariant(catalogItemId, c.name, existing), quantity: c.qty, reason: "RETURN", refId: `${batchId}:${catalogItemId}` });
+  }
+  await prisma.productVariantMovement.createMany({ data: rows, skipDuplicates: true });
 }

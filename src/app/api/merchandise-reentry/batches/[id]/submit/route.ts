@@ -5,6 +5,7 @@ import { canCaptureMerchandiseReentry, getInventoryLeadId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { autoApproveReadyReentryItems } from "@/lib/merchandiseReentry";
 import { applyScanDamage } from "@/lib/reentryGuideScan";
+import { getReentryVariantStatus } from "@/lib/variantStock";
 
 // La doble confirmación ("¿Estás seguro?" Sí/No) vive del lado del cliente
 // — esta ruta es el único Sí que de verdad congela el lote. A partir de acá
@@ -22,6 +23,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (batch.createdById !== session.user.id) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.submittedAt) return NextResponse.json({ error: "Este lote ya fue enviado." }, { status: 409 });
   if (batch.items.length === 0) return NextResponse.json({ error: "Agrega al menos un producto antes de enviar." }, { status: 409 });
+
+  // Stock por variante (2026-10-06): los productos con colores/tallas
+  // necesitan que se diga de qué color son las buenas, y que cuadre con lo
+  // que quedó después de marcar dañadas y faltantes.
+  const variantMissing = (await getReentryVariantStatus(id)).filter((p) => !p.ok);
+  if (variantMissing.length > 0) {
+    return NextResponse.json({ error: `Falta decir de qué color/talla son: ${variantMissing.map((p) => p.name).join(", ")}.` }, { status: 409 });
+  }
 
   // 2026-10-02: en lotes escaneados, lo marcado como dañado se descuenta de
   // las buenas de las guías en el mismo paso en que se congela el lote.

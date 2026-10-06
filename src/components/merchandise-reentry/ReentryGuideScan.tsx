@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Camera, Check, Keyboard, Loader2, X } from "lucide-react";
 import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import { CatalogCode } from "@/components/shared/CatalogCode";
@@ -574,6 +574,115 @@ function MissingEditor({ batchId, catalogItemId, max, current, onSaved, onCancel
         <button type="button" disabled={!valid || saving} className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={save}>
           {saving ? "Guardando…" : n === 0 ? "Quitar faltantes" : "Guardar faltantes"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+type VariantProduct = { catalogItemId: string; name: string; variantNames: string[]; good: number; variantCounts: { name: string; qty: number }[] | null; ok: boolean };
+
+// Stock por variante (pedido del usuario 2026-10-06): la etiqueta de la guía
+// no trae el color, así que para los productos con colores/tallas Joel dice
+// de qué color son las que regresaron buenas. `version` cambia cada vez que
+// cambian las guías o las dañadas, para volver a leer.
+export function ScannedProductsVariants({ batchId, version }: { batchId: string; version: string }) {
+  const [rows, setRows] = useState<VariantProduct[] | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  const load = useCallback(() => {
+    fetch(`/api/merchandise-reentry/batches/${batchId}/variants`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setRows(Array.isArray(d) ? d : null))
+      .catch(() => setRows(null));
+  }, [batchId]);
+  useEffect(load, [load, version]);
+
+  if (!rows || rows.length === 0) return null;
+
+  async function save(p: VariantProduct) {
+    const d = drafts[p.catalogItemId] ?? {};
+    const variants = p.variantNames.map((name) => ({ name, qty: Number(d[name] ?? "") || 0 }));
+    setSaving(p.catalogItemId);
+    setError("");
+    const r = await fetch(`/api/merchandise-reentry/batches/${batchId}/variants`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ catalogItemId: p.catalogItemId, variants }),
+    }).catch(() => null);
+    setSaving(null);
+    if (!r?.ok) {
+      const j = r ? await r.json().catch(() => null) : null;
+      return setError(j?.error ?? "No se pudo guardar.");
+    }
+    setDrafts((s) => {
+      const n = { ...s };
+      delete n[p.catalogItemId];
+      return n;
+    });
+    load();
+  }
+
+  const pending = rows.filter((p) => !p.ok).length;
+  return (
+    <div className="bg-surface border border-teal/40 rounded-md p-3 mb-3">
+      <div className="font-display font-bold text-[14px] mb-0.5">Paso 3 · ¿De qué color/talla son?</div>
+      <div className="text-[11px] text-steel mb-2.5">
+        La guía no dice el color. Mira las que regresaron buenas y pon cuántas son de cada uno.
+        {pending > 0 && <span className="text-gold font-semibold"> Faltan {pending} producto(s).</span>}
+      </div>
+      {error && <div className="text-red text-[11.5px] mb-2">{error}</div>}
+      <div className="flex flex-col gap-2">
+        {rows.map((p) => {
+          const d = drafts[p.catalogItemId];
+          const editing = !!d || !p.ok;
+          const values = d ?? Object.fromEntries((p.variantCounts ?? []).map((v) => [v.name, String(v.qty)]));
+          const sum = p.variantNames.reduce((s, n) => s + (Number(values[n] ?? "") || 0), 0);
+          return (
+            <div key={p.catalogItemId} className={`rounded-md border p-2 ${p.ok ? "border-green/40 bg-green/5" : "border-gold/50 bg-gold/10"}`}>
+              <div className="flex items-center gap-2 text-[12.5px]">
+                <span className="font-semibold flex-1 min-w-0 truncate">{p.name}</span>
+                <span className="text-steel text-[11.5px] shrink-0">{p.good} buena(s)</span>
+                {p.ok && !d && <Check size={14} className="text-green shrink-0" />}
+              </div>
+              {p.ok && !d && p.variantCounts && (
+                <div className="text-[11.5px] text-steel mt-0.5">
+                  {p.variantCounts.map((v) => `${v.name} ${v.qty}`).join(" · ")}{" "}
+                  <button type="button" className="text-teal font-semibold cursor-pointer" onClick={() => setDrafts((s) => ({ ...s, [p.catalogItemId]: values }))}>
+                    Cambiar
+                  </button>
+                </div>
+              )}
+              {editing && p.good > 0 && (
+                <div className="mt-1.5 flex flex-col gap-1.5">
+                  {p.variantNames.map((name) => (
+                    <div key={name} className="flex items-center gap-2">
+                      <span className="flex-1 min-w-0 truncate text-[12.5px]">{name}</span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        placeholder="0"
+                        className="w-20 rounded border border-rule bg-cloud px-2 py-1.5 text-[13px] text-right"
+                        value={values[name] ?? ""}
+                        onChange={(e) => setDrafts((s) => ({ ...s, [p.catalogItemId]: { ...values, [name]: e.target.value } }))}
+                      />
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[11.5px] flex-1 ${sum !== p.good ? "text-red" : "text-steel"}`}>
+                      Suma {sum} de {p.good}
+                    </span>
+                    <button type="button" disabled={saving === p.catalogItemId || sum !== p.good} className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => save(p)}>
+                      {saving === p.catalogItemId ? "Guardando…" : "Guardar"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { recordKardexEntry } from "@/lib/stockKardex";
+import { applyReturnToVariants } from "@/lib/variantStock";
 import { autoApproveReadyReentryItems, maybeMarkBatchClosed, notifyFinanceLeadWeeklyBatchReady } from "@/lib/merchandiseReentry";
 
 // Confirmado 2026-09-23, pedido explícito del usuario: "de ahora en adelante
@@ -24,7 +25,7 @@ import { autoApproveReadyReentryItems, maybeMarkBatchClosed, notifyFinanceLeadWe
 export async function autoRestockApprovedReentryItems(batchId?: string): Promise<number> {
   const items = await prisma.merchandiseReentryItem.findMany({
     where: { goodQty: { gt: 0 }, justUploadedAt: null, approvedAt: { not: null }, batch: { submittedAt: { not: null }, ...(batchId ? { id: batchId } : {}) } },
-    select: { id: true, batchId: true, catalogItemId: true, goodQty: true, unitCost: true },
+    select: { id: true, batchId: true, catalogItemId: true, goodQty: true, unitCost: true, variantCounts: true },
     orderBy: { createdAt: "asc" },
   });
   let restocked = 0;
@@ -46,8 +47,11 @@ export async function autoRestockApprovedReentryItems(batchId?: string): Promise
       unitCost: item.unitCost ?? null,
       occurredAt: new Date(),
     })
-      .then(() => { restocked++; })
-      .catch((err) => console.error("[autoRestockApprovedReentryItems] No se pudo registrar la entrada de Kardex:", err));
+      .then(() => { restocked++; return true; })
+      .catch((err) => { console.error("[autoRestockApprovedReentryItems] No se pudo registrar la entrada de Kardex:", err); return false; })
+      // Stock por variante (2026-10-06): el color que eligió Joel, solo si entró al Kardex.
+      .then((ok) => (ok && Array.isArray(item.variantCounts) ? applyReturnToVariants(item.batchId, item.catalogItemId!, item.variantCounts as { name: string; qty: number }[]) : undefined))
+      .catch((e) => console.error("[variant stock return]", e));
   }
   for (const id of touchedBatches) await maybeMarkBatchClosed(id);
   return restocked;

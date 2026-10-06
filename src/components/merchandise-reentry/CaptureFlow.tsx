@@ -6,7 +6,7 @@ import { ProductMatchPicker, type MatchCatalogItem, type MatchCombo, type Produc
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { ExpandableName } from "@/components/ui/ExpandableName";
-import { GuideScanner, ScannedGuidesList, ScannedProductsDamage, type ScanGuideDTO } from "./ReentryGuideScan";
+import { GuideScanner, ScannedGuidesList, ScannedProductsDamage, ScannedProductsVariants, type ScanGuideDTO } from "./ReentryGuideScan";
 
 const DAMAGE_REASONS = ["Producto roto", "Empaque abierto", "Humedad/manchado", "Golpeado", "Otro"];
 
@@ -233,6 +233,7 @@ export function CaptureFlow() {
       {!adding && <GuideScanner batchId={batch.id} onChanged={loadDraft} onManual={(r) => { setManualReason(r); setAdding(true); }} />}
       <ScannedGuidesList guides={batch.guides ?? []} items={batch.items} onChanged={loadDraft} />
       <ScannedProductsDamage batchId={batch.id} items={batch.items} onChanged={loadDraft} />
+      <ScannedProductsVariants batchId={batch.id} version={batch.items.map((i) => `${i.id}:${i.goodQty}:${i.damagedQty}:${i.missingQty}`).join("|")} />
 
       {manualItems.length > 0 && <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-1.5">Registrados a mano</div>}
       <div className="flex flex-col gap-2 mb-3">
