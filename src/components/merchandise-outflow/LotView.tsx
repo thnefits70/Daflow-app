@@ -36,6 +36,10 @@ export type LotPickLine = ItemView & {
   confirmedAt: string | null;
   confirmedByName: string | null;
   block: string;
+  // Stock por variante (2026-10-06): lo que salió "Sin variante" en las guías.
+  noVariantUnits?: number;
+  variantOptions?: string[];
+  variantPicked?: { name: string; qty: number }[] | null;
 };
 export type LotBlock = { carrier: string; assigneeId: string | null; assigneeName: string | null; assignedAt: string | null };
 // ID provisional de ALF (temporal, 2026-09-28): no está en INVESTOCK.

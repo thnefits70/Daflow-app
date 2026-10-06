@@ -8,6 +8,7 @@ import { lineBlock, NO_CARRIER, sortCarriers, VARIANT_CARRIER_UNKNOWN } from "@/
 import { areaRank } from "@/lib/warehouseAreas";
 import { guayaquilMonth, syncWarrantyMonth } from "@/lib/warrantyKpi";
 import { linkProductsFromGuides } from "@/lib/storeTracking";
+import { lotNoVariantUnits } from "@/lib/variantStock";
 
 export const NO_BRAND = "SIN_MARCA";
 
@@ -154,6 +155,14 @@ export async function findAlreadyUploadedGuides(numbers: string[]): Promise<Alre
   }));
 }
 
+// "Corte 5 de hoy (12:19, DANIEL MORAN)" / "Corte 5 del 05-oct (11:53, …)"
+export function alreadyUploadedWhere(a: AlreadyUploadedGuide): string {
+  const time = a.requestedAt.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" });
+  const day = a.lotDay ?? ecuadorDay(a.requestedAt);
+  const date = day === ecuadorDay(new Date()) ? "de hoy" : `del ${a.requestedAt.toLocaleDateString("es-EC", { day: "2-digit", month: "short", timeZone: "America/Guayaquil" })}`;
+  return `${a.corte ? `Corte ${a.corte}` : "corte"} ${date} (${time}${a.by ? `, ${a.by}` : ""})`;
+}
+
 // Caso real 2026-10-06: el PDF de las 12:05 ya estaba en el Corte 5 de hoy
 // (73 guías) y además traía 1 guía que Dropi reimprimió del día anterior; el
 // aviso decía solo "ya se subieron el 05-oct" y parecía que el PDF era viejo.
@@ -161,14 +170,7 @@ export async function findAlreadyUploadedGuides(numbers: string[]): Promise<Alre
 export function alreadyUploadedMessage(already: AlreadyUploadedGuide[], totalGuides: number): string {
   const groups = new Map<string, AlreadyUploadedGuide[]>();
   for (const a of already) groups.set(a.batchId, [...(groups.get(a.batchId) ?? []), a]);
-  const today = ecuadorDay(new Date());
-  // "Corte 5 de hoy (12:19, DANIEL MORAN)" / "Corte 5 del 05 oct (11:53, …)"
-  const where = (a: AlreadyUploadedGuide) => {
-    const time = a.requestedAt.toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" });
-    const day = a.lotDay ?? ecuadorDay(a.requestedAt);
-    const date = day === today ? "de hoy" : `del ${a.requestedAt.toLocaleDateString("es-EC", { day: "2-digit", month: "short", timeZone: "America/Guayaquil" })}`;
-    return `${a.corte ? `Corte ${a.corte}` : "corte"} ${date} (${time}${a.by ? `, ${a.by}` : ""})`;
-  };
+  const where = alreadyUploadedWhere;
   const sorted = [...groups.values()].sort((x, y) => y.length - x.length);
   if (already.length === totalGuides && sorted.length === 1) {
     return `Este PDF ya se subió: sus ${totalGuides} guías están en el ${where(sorted[0][0])}. No hace falta subirlo otra vez.`;
@@ -803,6 +805,12 @@ export type LotPickLine = ItemView & {
   confirmedByName: string | null;
   // Bloque del manifiesto (transportadora que se va primero) — ver lineBlock.
   block: string;
+  // Stock por variante (2026-10-06): unidades que en las guías salieron sin
+  // color/talla, los colores oficiales del producto y lo que el equipo dijo
+  // que sacó de cada uno para esas unidades.
+  noVariantUnits: number;
+  variantOptions: string[];
+  variantPicked: { name: string; qty: number }[] | null;
 };
 
 export async function getCompiledLot(lotId: string) {
@@ -979,8 +987,19 @@ export async function getCompiledLot(lotId: string) {
       confirmedAt: p?.confirmedAt ?? null,
       confirmedByName: nameOf(p?.confirmedById ?? null),
       block: blockOf(view.catalogItemId),
+      noVariantUnits: 0,
+      variantOptions: [],
+      variantPicked: Array.isArray(p?.variantCounts) ? (p.variantCounts as { name: string; qty: number }[]) : null,
     };
   });
+  const noVariant = await lotNoVariantUnits(lot.id, picking).catch(() => new Map<string, { units: number; options: string[] }>());
+  for (const p of picking) {
+    const nv = noVariant.get(p.catalogItemId);
+    if (nv) {
+      p.noVariantUnits = nv.units;
+      p.variantOptions = nv.options;
+    }
+  }
   // Un bloque por transportadora que manda en algún producto, con quién lo
   // tiene asignado (si Daniel ya lo asignó).
   const blocks = sortCarriers([...new Set(picking.map((p) => p.block))]).map((carrier) => {

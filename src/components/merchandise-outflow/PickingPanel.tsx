@@ -49,6 +49,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
   const [manualCode, setManualCode] = useState("");
   const [current, setCurrent] = useState<LotPickLine | null>(null);
   const [qty, setQty] = useState("");
+  const [pickVariants, setPickVariants] = useState<Record<string, string>>({});
   const [notFound, setNotFound] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -180,7 +181,13 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
     }
     setCurrent(line);
     setQty(line.picked !== null ? String(line.picked) : "");
+    setPickVariants(Object.fromEntries((line.variantPicked ?? []).map((v) => [v.name, String(v.qty)])));
   }
+
+  // Stock por variante (2026-10-06): de lo que salió "Sin variante" en las
+  // guías, cuántas sacó de cada color/talla (obligatorio si hay).
+  const pickVariantsNeeded = current ? Math.min(current.noVariantUnits ?? 0, Number(qty) || 0) : 0;
+  const pickVariantsSum = Object.values(pickVariants).reduce((s, v) => s + (Number(v) || 0), 0);
 
   async function savePick() {
     if (!current) return;
@@ -189,12 +196,17 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
       setErr("Escribe cuántos sacaste (un número).");
       return;
     }
+    if (pickVariantsNeeded > 0 && pickVariantsSum !== pickVariantsNeeded) {
+      setErr(`Los colores/tallas tienen que sumar ${pickVariantsNeeded}.`);
+      return;
+    }
+    const variants = pickVariantsNeeded > 0 ? Object.entries(pickVariants).map(([name, v]) => ({ name, qty: Number(v) || 0 })).filter((v) => v.qty > 0) : undefined;
     setBusy(true);
     setErr("");
     const res = await fetch(`/api/fulfillment-lots/${lot.id}/picks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ catalogItemId: current.catalogItemId, quantity: n }),
+      body: JSON.stringify({ catalogItemId: current.catalogItemId, quantity: n, variants }),
     });
     const json = await res.json().catch(() => null);
     setBusy(false);
@@ -204,6 +216,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
     }
     setCurrent(null);
     setQty("");
+    setPickVariants({});
     setManualCode("");
     if (autoScan) startScan();
     onChanged();
@@ -522,12 +535,36 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                     onChange={(e) => setQty(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && savePick()}
                   />
-                  <button type="button" disabled={busy || qty === ""} className="rounded border border-teal bg-teal px-3 py-1.5 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-50" onClick={savePick}>
+                  <button type="button" disabled={busy || qty === "" || (pickVariantsNeeded > 0 && pickVariantsSum !== pickVariantsNeeded)} className="rounded border border-teal bg-teal px-3 py-1.5 text-[12.5px] font-bold text-navy cursor-pointer disabled:opacity-50" onClick={savePick}>
                     {busy ? "Guardando…" : "Registrar"}
                   </button>
                   <button type="button" className="text-[12px] text-steel cursor-pointer" onClick={() => setCurrent(null)}>
                     Cancelar
                   </button>
+                </div>
+              )}
+              {!current.confirmedAt && pickVariantsNeeded > 0 && (
+                <div className="mt-2.5 rounded-md border border-gold/50 bg-gold/10 p-2.5">
+                  <div className="text-[12px] font-semibold mb-1.5">
+                    {pickVariantsNeeded} {pickVariantsNeeded === 1 ? "salió" : "salieron"} sin color/talla en la guía: ¿de cuál sacaste?
+                  </div>
+                  {(current.variantOptions ?? []).map((name) => (
+                    <div key={name} className="flex items-center gap-2 mb-1.5">
+                      <span className="flex-1 min-w-0 truncate text-[12.5px]">{name}</span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        placeholder="0"
+                        className="w-20 rounded border border-rule bg-surface px-2 py-1.5 text-[13px] font-mono text-right"
+                        value={pickVariants[name] ?? ""}
+                        onChange={(e) => setPickVariants((s) => ({ ...s, [name]: e.target.value }))}
+                      />
+                    </div>
+                  ))}
+                  <div className={`text-[11.5px] ${pickVariantsSum !== pickVariantsNeeded ? "text-red" : "text-steel"}`}>
+                    Suma {pickVariantsSum} de {pickVariantsNeeded}
+                  </div>
                 </div>
               )}
               {err && <div className="text-red text-[12px] mt-2">{err}</div>}

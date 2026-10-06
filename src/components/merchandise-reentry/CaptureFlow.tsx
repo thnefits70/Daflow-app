@@ -233,7 +233,7 @@ export function CaptureFlow() {
       {!adding && <GuideScanner batchId={batch.id} onChanged={loadDraft} onManual={(r) => { setManualReason(r); setAdding(true); }} />}
       <ScannedGuidesList guides={batch.guides ?? []} items={batch.items} onChanged={loadDraft} />
       <ScannedProductsDamage batchId={batch.id} items={batch.items} onChanged={loadDraft} />
-      <ScannedProductsVariants batchId={batch.id} version={batch.items.map((i) => `${i.id}:${i.goodQty}:${i.damagedQty}:${i.missingQty}`).join("|")} />
+      <ScannedProductsVariants batchId={batch.id} version={batch.items.map((i) => `${i.id}:${i.goodQty}`).join("|")} />
 
       {manualItems.length > 0 && <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-1.5">Registrados a mano</div>}
       <div className="flex flex-col gap-2 mb-3">

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { CARRIER_GUIDE_FORMATS, splitGuideBuffer } from "@/lib/cancelledGuidesLabels";
-import { lookupGuide } from "@/lib/localWarranty";
+import { cacheGuideLabelsForBatch, lookupGuide } from "@/lib/localWarranty";
+import { detectReturnVariants } from "@/lib/variantStock";
 import { costOfKardexOutEntries } from "@/lib/sellingCost";
 import { formatMerchandiseReentryCode } from "@/lib/merchandiseReentry";
 
@@ -111,6 +112,27 @@ export async function scanGuideIntoBatch(params: { batchId: string; raw: string;
     costs.set(line.catalogItemId, cost);
   }
 
+  // 6. Stock por variante (2026-10-06): el color/talla que dice la etiqueta
+  // de esta guía. Las guías viejas se leen del PDF la primera vez.
+  let detected = new Map<string, { name: string; qty: number }[]>();
+  try {
+    let gv = await prisma.fulfillmentRequestGuide.findUnique({ where: { guideNumber: row.guideNumber }, select: { batchId: true, labelVariants: true } });
+    if (gv && gv.labelVariants === null) {
+      await cacheGuideLabelsForBatch(gv.batchId);
+      gv = await prisma.fulfillmentRequestGuide.findUnique({ where: { guideNumber: row.guideNumber }, select: { batchId: true, labelVariants: true } });
+    }
+    if (gv && Array.isArray(gv.labelVariants)) {
+      detected = await detectReturnVariants({
+        fulfillmentBatchId: gv.batchId,
+        labelVariants: gv.labelVariants as { code: string; variant: string | null; qty: number }[],
+        lines: src.lines.map((l) => ({ catalogItemId: l.catalogItemId, quantity: l.quantity })),
+      });
+    }
+  } catch (e) {
+    // Nunca frena el escaneo: lo que no se detecta lo completa Joel.
+    console.error("[reentry scan variants]", e);
+  }
+
   try {
     const guide = await prisma.merchandiseReentryGuide.create({
       data: {
@@ -128,6 +150,7 @@ export async function scanGuideIntoBatch(params: { batchId: string; raw: string;
               aiRecognized: true,
               goodQty: l.quantity,
               unitCost: costs.get(l.catalogItemId) ?? null,
+              variantCounts: detected.get(l.catalogItemId) ?? undefined,
             })),
             // Código sin producto de INVESTOCK: entra sin identificar y Daniel
             // lo vincula en Revisión (como un producto puesto a mano).

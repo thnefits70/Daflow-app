@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { extractPages, normalizeName, isRocketCode, labelLineUnits, parseGuidesPages, rocketNameCode, ROCKET_NAME_PREFIX, ROCKET_PREFIX, type PdfLine, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
 import { resolveGuideLines } from "@/lib/fulfillmentGuides";
 import { significantWords } from "@/lib/justCatalog";
@@ -275,10 +276,19 @@ async function usedByPreviousWarranties(where: { warrantySourceGuide?: string; w
 export async function cacheGuideLabelsForBatch(batchId: string): Promise<number> {
   const batch = await prisma.fulfillmentRequestBatch.findUnique({
     where: { id: batchId },
-    select: { fileUrls: true, source: true, guides: { where: { labelCachedAt: null }, select: { id: true, guideNumber: true, carrier: true, codes: true } } },
+    select: {
+      fileUrls: true,
+      source: true,
+      // 2026-10-06: también las ya leídas a las que les falta el color/talla
+      // por guía (labelVariants), para las devoluciones.
+      guides: { where: { OR: [{ labelCachedAt: null }, { labelVariants: { equals: Prisma.DbNull } }] }, select: { id: true, guideNumber: true, carrier: true, codes: true, labelCachedAt: true } },
+    },
   });
   if (!batch || batch.guides.length === 0 || batch.fileUrls.length === 0) return 0;
+  // Releer solo por el color (guías ya leídas) no repite la revisión del corte.
+  const firstRead = batch.guides.some((g) => !g.labelCachedAt);
   const found = new Map<string, { products: LabelProduct[]; manifestDay: string | null }>();
+  const variantsByGuide = new Map<string, { code: string; variant: string | null; qty: number }[]>();
   // Revisión automática del corte (pedido del usuario 2026-10-03, ver corteIssues).
   const issues: string[] = [];
   const registered = new Set(// Todas las de DAFLOW: una guía re-subida en otro corte ya está registrada.
@@ -301,7 +311,8 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
     try {
       const parsed = parseGuidesPages(pages);
       corte = parsed.guideUnits;
-      issues.push(...corteIssues(parsed, decodeURIComponent(url.split("/").pop() ?? "PDF").replace(/^[0-9a-f-]{36}-/, ""), registered));
+      for (const [g, list] of Object.entries(parsed.guideVariants)) variantsByGuide.set(g.toUpperCase(), [...(variantsByGuide.get(g.toUpperCase()) ?? []), ...list]);
+      if (firstRead) issues.push(...corteIssues(parsed, decodeURIComponent(url.split("/").pop() ?? "PDF").replace(/^[0-9a-f-]{36}-/, ""), registered));
     } catch (e) {
       console.error("[cacheGuideLabelsForBatch] No se pudo interpretar el PDF como corte", url, e);
     }
@@ -341,15 +352,21 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
   let filled = 0;
   for (const g of batch.guides) {
     const f = found.get(g.guideNumber);
+    const labelVariants = variantsByGuide.get(g.guideNumber.toUpperCase()) ?? [];
+    // Ya leída antes: solo le falta el color/talla por guía.
+    if (g.labelCachedAt) {
+      await prisma.fulfillmentRequestGuide.update({ where: { id: g.id }, data: { labelVariants } });
+      continue;
+    }
     // Sin etiqueta en el PDF: se guarda vacío igual (con la fecha) para no
     // volver a abrir el PDF por esta guía; el escaneo avisa y usa los códigos.
     await prisma.fulfillmentRequestGuide.update({
       where: { id: g.id },
-      data: { labelProducts: f?.products ?? [], manifestDay: f?.manifestDay ?? null, labelCachedAt: now },
+      data: { labelProducts: f?.products ?? [], manifestDay: f?.manifestDay ?? null, labelCachedAt: now, labelVariants },
     });
     filled++;
   }
-  const empty = batch.guides.filter((g) => !(found.get(g.guideNumber)?.products.length));
+  const empty = batch.guides.filter((g) => !g.labelCachedAt && !(found.get(g.guideNumber)?.products.length));
   if (empty.length) issues.push(`${empty.length} guía(s) sin ningún producto leído en su etiqueta (ej. ${empty.slice(0, 3).map((g) => g.guideNumber).join(", ")}): si regresan, no se podrán escanear.`);
   if (issues.length) {
     await prisma.fulfillmentRequestBatch.update({ where: { id: batchId }, data: { parseWarnings: { push: issues.map((i) => `Revisión automática: ${i}`) } } }).catch(() => null);

@@ -2882,6 +2882,12 @@ model FulfillmentRequestGuide {
   labelProducts Json?
   manifestDay   String?
   labelCachedAt DateTime?
+  // Stock por variante (pedido del usuario 2026-10-06): color/talla de cada
+  // producto en la etiqueta de esta guía, leído del PDF del corte:
+  // [{ code, variant, qty }] (variant null = la etiqueta no lo dice). Sirve
+  // para saber de qué color es una devolución al escanear la guía. null =
+  // todavía no se leyó (guías anteriores: se lee la primera vez que hace falta).
+  labelVariants Json?
   createdAt     DateTime                @default(now())
 
   @@index([batchId])
@@ -3006,9 +3012,13 @@ model FulfillmentLotPick {
   lot           FulfillmentLot @relation(fields: [lotId], references: [id], onDelete: Cascade)
   catalogItemId String
 
-  pickedQty  Int
-  pickedById String?
-  pickedAt   DateTime @default(now())
+  pickedQty     Int
+  pickedById    String?
+  pickedAt      DateTime @default(now())
+  // Stock por variante (pedido del usuario 2026-10-06): de las unidades que
+  // en las guías salieron "Sin variante", qué color/talla sacó el equipo de
+  // la percha: [{ name, qty }].
+  variantCounts Json?
 
   confirmedQty  Int?
   confirmedAt   DateTime?

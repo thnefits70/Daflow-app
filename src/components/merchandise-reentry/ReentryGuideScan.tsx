@@ -579,12 +579,15 @@ function MissingEditor({ batchId, catalogItemId, max, current, onSaved, onCancel
   );
 }
 
-type VariantProduct = { catalogItemId: string; name: string; variantNames: string[]; good: number; variantCounts: { name: string; qty: number }[] | null; ok: boolean };
+type VC = { name: string; qty: number };
+type VariantProduct = { catalogItemId: string; name: string; variantNames: string[]; scanned: number; detected: VC[]; manual: VC[]; needed: number; ok: boolean };
 
-// Stock por variante (pedido del usuario 2026-10-06): la etiqueta de la guía
-// no trae el color, así que para los productos con colores/tallas Joel dice
-// de qué color son las que regresaron buenas. `version` cambia cada vez que
-// cambian las guías o las dañadas, para volver a leer.
+const vcText = (l: VC[]) => l.map((v) => `${v.name} ${v.qty}`).join(" · ");
+
+// Stock por variante (pedido del usuario 2026-10-06): DAFLOW lee el
+// color/talla en la etiqueta de cada guía escaneada; solo lo que la guía no
+// dice lo completa Joel. `version` cambia cada vez que cambian las guías,
+// para volver a leer.
 export function ScannedProductsVariants({ batchId, version }: { batchId: string; version: string }) {
   const [rows, setRows] = useState<VariantProduct[] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Record<string, string>>>({});
@@ -629,33 +632,37 @@ export function ScannedProductsVariants({ batchId, version }: { batchId: string;
     <div className="bg-surface border border-teal/40 rounded-md p-3 mb-3">
       <div className="font-display font-bold text-[14px] mb-0.5">Paso 3 · ¿De qué color/talla son?</div>
       <div className="text-[11px] text-steel mb-2.5">
-        La guía no dice el color. Mira las que regresaron buenas y pon cuántas son de cada uno.
+        DAFLOW lee el color en la guía. Solo pon el color de las que la guía no dice.
         {pending > 0 && <span className="text-gold font-semibold"> Faltan {pending} producto(s).</span>}
       </div>
       {error && <div className="text-red text-[11.5px] mb-2">{error}</div>}
       <div className="flex flex-col gap-2">
         {rows.map((p) => {
           const d = drafts[p.catalogItemId];
-          const editing = !!d || !p.ok;
-          const values = d ?? Object.fromEntries((p.variantCounts ?? []).map((v) => [v.name, String(v.qty)]));
+          const editing = p.needed > 0 && (!!d || !p.ok);
+          const values = d ?? Object.fromEntries(p.manual.map((v) => [v.name, String(v.qty)]));
           const sum = p.variantNames.reduce((s, n) => s + (Number(values[n] ?? "") || 0), 0);
           return (
             <div key={p.catalogItemId} className={`rounded-md border p-2 ${p.ok ? "border-green/40 bg-green/5" : "border-gold/50 bg-gold/10"}`}>
               <div className="flex items-center gap-2 text-[12.5px]">
                 <span className="font-semibold flex-1 min-w-0 truncate">{p.name}</span>
-                <span className="text-steel text-[11.5px] shrink-0">{p.good} buena(s)</span>
+                <span className="text-steel text-[11.5px] shrink-0">{p.scanned} escaneada(s)</span>
                 {p.ok && !d && <Check size={14} className="text-green shrink-0" />}
               </div>
-              {p.ok && !d && p.variantCounts && (
+              {p.detected.length > 0 && <div className="text-[11.5px] text-steel mt-0.5">Leído en las guías: {vcText(p.detected)}</div>}
+              {p.ok && !d && p.manual.length > 0 && (
                 <div className="text-[11.5px] text-steel mt-0.5">
-                  {p.variantCounts.map((v) => `${v.name} ${v.qty}`).join(" · ")}{" "}
+                  Tú pusiste: {vcText(p.manual)}{" "}
                   <button type="button" className="text-teal font-semibold cursor-pointer" onClick={() => setDrafts((s) => ({ ...s, [p.catalogItemId]: values }))}>
                     Cambiar
                   </button>
                 </div>
               )}
-              {editing && p.good > 0 && (
+              {editing && (
                 <div className="mt-1.5 flex flex-col gap-1.5">
+                  <div className="text-[11.5px] font-semibold">
+                    {p.needed} sin color en la guía: ¿de qué color/talla son?
+                  </div>
                   {p.variantNames.map((name) => (
                     <div key={name} className="flex items-center gap-2">
                       <span className="flex-1 min-w-0 truncate text-[12.5px]">{name}</span>
@@ -671,10 +678,10 @@ export function ScannedProductsVariants({ batchId, version }: { batchId: string;
                     </div>
                   ))}
                   <div className="flex items-center gap-2">
-                    <span className={`text-[11.5px] flex-1 ${sum !== p.good ? "text-red" : "text-steel"}`}>
-                      Suma {sum} de {p.good}
+                    <span className={`text-[11.5px] flex-1 ${sum !== p.needed ? "text-red" : "text-steel"}`}>
+                      Suma {sum} de {p.needed}
                     </span>
-                    <button type="button" disabled={saving === p.catalogItemId || sum !== p.good} className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => save(p)}>
+                    <button type="button" disabled={saving === p.catalogItemId || sum !== p.needed} className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => save(p)}>
                       {saving === p.catalogItemId ? "Guardando…" : "Guardar"}
                     </button>
                   </div>

@@ -50,7 +50,7 @@ export async function autoRestockApprovedReentryItems(batchId?: string): Promise
       .then(() => { restocked++; return true; })
       .catch((err) => { console.error("[autoRestockApprovedReentryItems] No se pudo registrar la entrada de Kardex:", err); return false; })
       // Stock por variante (2026-10-06): el color que eligió Joel, solo si entró al Kardex.
-      .then((ok) => (ok && Array.isArray(item.variantCounts) ? applyReturnToVariants(item.batchId, item.catalogItemId!, item.variantCounts as { name: string; qty: number }[]) : undefined))
+      .then((ok) => (ok && Array.isArray(item.variantCounts) ? applyReturnToVariants(item.id, item.catalogItemId!, item.goodQty, item.variantCounts as { name: string; qty: number }[]) : undefined))
       .catch((e) => console.error("[variant stock return]", e));
   }
   for (const id of touchedBatches) await maybeMarkBatchClosed(id);

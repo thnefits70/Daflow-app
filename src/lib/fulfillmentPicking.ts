@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { recordKardexEntry } from "@/lib/stockKardex";
 import { notifyOwner } from "@/lib/notifications";
 import { formatMerchandiseOutflowCode, nextMerchandiseOutflowNumber } from "@/lib/merchandiseOutflow";
@@ -26,7 +27,7 @@ const BACKFILL_NO_SCAN = "Este es un manifiesto atrasado: esa mercadería ya sal
 
 const LOT_URL = "/area/workspace?tab=egresos&otab=solicitud";
 
-export async function recordPick(params: { lotId: string; catalogItemId: string; quantity: number; userId: string | null; onlyAssigned?: boolean }): Promise<Result> {
+export async function recordPick(params: { lotId: string; catalogItemId: string; quantity: number; variants?: { name: string; qty: number }[]; userId: string | null; onlyAssigned?: boolean }): Promise<Result> {
   const lot = await getCompiledLot(params.lotId);
   if (!lot) return { ok: false, error: "No encontrado." };
   if (lot.status !== "SENT") return { ok: false, error: lot.status === "DRAFT" ? "Este corte todavía no se envía." : "Este corte ya se cerró." };
@@ -39,10 +40,23 @@ export async function recordPick(params: { lotId: string; catalogItemId: string;
   }
   if (!Number.isInteger(params.quantity) || params.quantity < 0) return { ok: false, error: "Cantidad inválida." };
 
+  // Stock por variante (pedido del usuario 2026-10-06): si en las guías
+  // salieron unidades "Sin variante", el equipo dice qué color/talla sacó
+  // para esas unidades (obligatorio, para que el stock por color cuadre).
+  const required = Math.min(line.noVariantUnits, params.quantity);
+  let variantCounts: { name: string; qty: number }[] | undefined;
+  if (required > 0) {
+    const list = (params.variants ?? []).filter((v) => v.qty > 0);
+    if (list.length === 0) return { ok: false, error: `Di de qué color/talla son las ${required} que salieron sin color en la guía. Si no ves las casillas, cierra y vuelve a abrir la pantalla.` };
+    if (list.some((v) => !line.variantOptions.includes(v.name))) return { ok: false, error: "Elige un color/talla de la lista." };
+    if (list.reduce((s, v) => s + v.qty, 0) !== required) return { ok: false, error: `Los colores/tallas tienen que sumar ${required}.` };
+    variantCounts = list;
+  }
+
   await prisma.fulfillmentLotPick.upsert({
     where: { lotId_catalogItemId: { lotId: params.lotId, catalogItemId: params.catalogItemId } },
-    create: { lotId: params.lotId, catalogItemId: params.catalogItemId, pickedQty: params.quantity, pickedById: params.userId },
-    update: { pickedQty: params.quantity, pickedById: params.userId, pickedAt: new Date() },
+    create: { lotId: params.lotId, catalogItemId: params.catalogItemId, pickedQty: params.quantity, pickedById: params.userId, variantCounts },
+    update: { pickedQty: params.quantity, pickedById: params.userId, pickedAt: new Date(), variantCounts: variantCounts ?? Prisma.DbNull },
   });
 
   // Pedido del usuario 2026-10-01: los cortes se contaban pero nadie los
