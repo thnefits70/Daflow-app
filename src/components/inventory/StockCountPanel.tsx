@@ -350,7 +350,7 @@ export function StockCountPanel() {
                   <span className="text-steel font-mono text-[11px] w-6 text-right shrink-0">{i + 1}</span>
                   {p.photo && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.photo} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
+                    <img loading="lazy" decoding="async" src={p.photo} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold truncate">{p.name}</div>

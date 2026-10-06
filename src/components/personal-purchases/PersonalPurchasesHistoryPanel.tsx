@@ -111,7 +111,7 @@ export function PersonalPurchasesHistoryPanel() {
                     <div className="flex items-center justify-between gap-2 text-[12px]">
                       <span className="flex items-center gap-2 min-w-0">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <img loading="lazy" decoding="async"
                           src={it.livePhotoUrl}
                           alt="Foto del producto"
                           className="w-10 h-10 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
@@ -120,7 +120,7 @@ export function PersonalPurchasesHistoryPanel() {
                         />
                         {it.optionalPhotoUrl && (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img
+                          <img loading="lazy" decoding="async"
                             src={it.optionalPhotoUrl}
                             alt="Foto extra"
                             className="w-10 h-10 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
@@ -157,7 +157,7 @@ export function PersonalPurchasesHistoryPanel() {
           onClick={() => setZoomedPhoto(null)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
+          <img loading="lazy" decoding="async" src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
         </div>
       )}
     </div>

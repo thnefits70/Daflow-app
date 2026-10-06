@@ -381,7 +381,7 @@ export function ScannedProductsDamage({ batchId, items, onChanged }: { batchId: 
             >
               {p.photo ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={p.photo} alt={p.name} className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
+                <img loading="lazy" decoding="async" src={p.photo} alt={p.name} className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
               ) : (
                 <div className="w-11 h-11 rounded border border-rule bg-cloud shrink-0" />
               )}

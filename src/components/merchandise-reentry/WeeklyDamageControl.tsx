@@ -155,7 +155,7 @@ function OriginProof({ rows, onClaimChanged }: { rows: BreakdownRow[]; onClaimCh
               {b.photoUrls.map((url) => (
                 <a key={url} href={url} target="_blank" rel="noreferrer" title="Ver foto en grande">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="Foto al recibir la devolución" className="w-16 h-16 object-cover rounded border border-rule" />
+                  <img loading="lazy" decoding="async" src={url} alt="Foto al recibir la devolución" className="w-16 h-16 object-cover rounded border border-rule" />
                 </a>
               ))}
             </div>
@@ -178,7 +178,7 @@ function GroupList({ groups, totalLabel, showOrigin = false, onClaimChanged }: {
           <div className="p-2.5 flex items-center gap-2.5">
             {g.photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={g.photoUrl} alt={g.name} className="w-8 h-8 object-cover rounded border border-rule shrink-0" />
+              <img loading="lazy" decoding="async" src={g.photoUrl} alt={g.name} className="w-8 h-8 object-cover rounded border border-rule shrink-0" />
             ) : (
               <span className="w-8 h-8 shrink-0" />
             )}
@@ -334,7 +334,7 @@ function DisposalCard({ batch, canVerify, onChanged }: { batch: WeeklyBatchDTO; 
               <div className="flex items-center gap-2.5">
                 {g.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={g.photoUrl} alt={g.name} className="w-8 h-8 object-cover rounded border border-rule shrink-0" />
+                  <img loading="lazy" decoding="async" src={g.photoUrl} alt={g.name} className="w-8 h-8 object-cover rounded border border-rule shrink-0" />
                 ) : (
                   <span className="w-8 h-8 shrink-0" />
                 )}

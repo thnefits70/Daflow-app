@@ -115,7 +115,7 @@ function SnapshotCard({ s, title, tone }: { s: Snapshot; title: string; tone: "r
     <div className={`flex-1 min-w-[14rem] bg-surface border rounded-md p-2.5 ${tone === "red" ? "border-red/40" : "border-teal/40"}`}>
       <div className={`text-[10.5px] font-bold uppercase tracking-wide mb-1 ${tone === "red" ? "text-red" : "text-teal"}`}>{title}</div>
       <div className="flex gap-2 items-start">
-        {s.photo && <img src={s.photo} alt="" className="w-11 h-11 rounded object-cover border border-rule shrink-0" />}
+        {s.photo && <img loading="lazy" decoding="async" src={s.photo} alt="" className="w-11 h-11 rounded object-cover border border-rule shrink-0" />}
         <div className="min-w-0">
           <div className="text-[12.5px] font-semibold">{s.name}</div>
           <div className="text-[11px] font-mono text-steel">{s.justCode ?? "sin código"}</div>

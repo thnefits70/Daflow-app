@@ -260,7 +260,7 @@ export function CaptureFlow() {
               <div className="flex items-center gap-3">
                 {item.photoUrls[0] && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={item.photoUrls[0]} alt={itemName(item)} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+                  <img loading="lazy" decoding="async" src={item.photoUrls[0]} alt={itemName(item)} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="text-[12.5px] font-semibold flex items-center gap-1.5 min-w-0">
@@ -508,7 +508,7 @@ function AddItemForm({ batchId, existingItems, manualReason, onAdded, onCancel }
             <div className="flex flex-col gap-2">
               {selected.photos[0] && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={selected.photos[0]} alt={selected.name} className="w-16 h-16 object-cover rounded-md border border-green/40" />
+                <img loading="lazy" decoding="async" src={selected.photos[0]} alt={selected.name} className="w-16 h-16 object-cover rounded-md border border-green/40" />
               )}
               <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
                 <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">

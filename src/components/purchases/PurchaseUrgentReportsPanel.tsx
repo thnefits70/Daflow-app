@@ -767,7 +767,7 @@ export function PurchaseUrgentReportsPanel({
                         <video key={i} src={url} controls className="w-20 h-20 rounded object-cover border border-rule bg-cloud" />
                       ) : (
                         <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                          <img src={url} alt="" className="w-20 h-20 rounded object-cover border border-rule" />
+                          <img loading="lazy" decoding="async" src={url} alt="" className="w-20 h-20 rounded object-cover border border-rule" />
                         </a>
                       )
                     )}

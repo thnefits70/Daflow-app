@@ -143,7 +143,7 @@ function Side({ s }: { s: DuplicateSide }) {
     <span className="flex items-center gap-2 min-w-0">
       {s.photo && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={s.photo} alt="" className="w-9 h-9 rounded object-cover shrink-0" />
+        <img loading="lazy" decoding="async" src={s.photo} alt="" className="w-9 h-9 rounded object-cover shrink-0" />
       )}
       <span className="min-w-0">
         <b className="block truncate">{s.name}</b>

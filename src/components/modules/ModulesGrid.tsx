@@ -117,7 +117,7 @@ export function ModulesGrid({
               <div className="h-28 bg-cloud flex items-center justify-center overflow-hidden">
                 {m.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={m.imageUrl} alt={m.title} className="w-full h-full object-cover" />
+                  <img loading="lazy" decoding="async" src={m.imageUrl} alt={m.title} className="w-full h-full object-cover" />
                 ) : (
                   (() => {
                     const { Icon, color } = iconForModule(m.title);

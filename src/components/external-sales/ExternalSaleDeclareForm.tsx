@@ -303,7 +303,7 @@ function FixItemForm({
       <div className="flex items-center gap-2.5 bg-surface border border-rule rounded-md p-2 mb-2">
         {product.photos[0] && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={product.photos[0]} alt={product.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
+          <img loading="lazy" decoding="async" src={product.photos[0]} alt={product.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
         )}
         <div className="flex-1 min-w-0 text-[12px] font-semibold flex items-center gap-1.5">
           <CatalogCode code={product.justCode} />
@@ -580,11 +580,11 @@ function ItemsEditor({
             <div key={i} className="flex items-center gap-2 bg-cloud rounded-md p-2">
               {it.product.photos[0] ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={it.product.photos[0]} alt={it.product.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
+                <img loading="lazy" decoding="async" src={it.product.photos[0]} alt={it.product.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
               ) : (
                 it.sellerReferencePhotoUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={it.sellerReferencePhotoUrl} alt={it.product.name} title="Foto de referencia que adjuntaste" className="w-9 h-9 object-cover rounded border border-gold/50 shrink-0" />
+                  <img loading="lazy" decoding="async" src={it.sellerReferencePhotoUrl} alt={it.product.name} title="Foto de referencia que adjuntaste" className="w-9 h-9 object-cover rounded border border-gold/50 shrink-0" />
                 )
               )}
               <div className="flex-1 min-w-0 text-[12px]">
@@ -636,7 +636,7 @@ function ItemsEditor({
             <div className="flex items-center gap-2.5 mb-2">
               {draftProduct.photos[0] && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={draftProduct.photos[0]} alt={draftProduct.name} className="w-11 h-11 object-cover rounded border border-green/40 shrink-0" />
+                <img loading="lazy" decoding="async" src={draftProduct.photos[0]} alt={draftProduct.name} className="w-11 h-11 object-cover rounded border border-green/40 shrink-0" />
               )}
               <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
                 <CatalogCode code={draftProduct.justCode} />
@@ -664,7 +664,7 @@ function ItemsEditor({
                 {draftReferencePhotoUrl ? (
                   <div className="flex items-center gap-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={draftReferencePhotoUrl} alt="" className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
+                    <img loading="lazy" decoding="async" src={draftReferencePhotoUrl} alt="" className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
                     <button type="button" className="text-[11px] font-semibold text-red cursor-pointer" onClick={() => setDraftReferencePhotoUrl(null)}>Quitar</button>
                   </div>
                 ) : (
@@ -758,7 +758,7 @@ function PriceCheckPanel({ searchUrl, useB2CPricing }: { searchUrl: string; useB
               <div className="flex items-center gap-2.5">
                 {product.photos[0] && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={product.photos[0]} alt={product.name} className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
+                  <img loading="lazy" decoding="async" src={product.photos[0]} alt={product.name} className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
                 )}
                 <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
                   <CatalogCode code={product.justCode} />
@@ -1349,7 +1349,7 @@ export function ExternalSaleDeclareForm() {
                         Foto de entrega al motorizado{s.deliveredAt ? ` · ${formatDateTime(s.deliveredAt)}` : ""}
                       </div>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={s.deliveryPhotoUrl} alt="Entrega al motorizado" className="w-20 h-20 object-cover rounded border border-rule" />
+                      <img loading="lazy" decoding="async" src={s.deliveryPhotoUrl} alt="Entrega al motorizado" className="w-20 h-20 object-cover rounded border border-rule" />
                     </a>
                   )}
                   {s.returnedAt ? (

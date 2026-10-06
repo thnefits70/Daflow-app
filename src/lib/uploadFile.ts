@@ -67,7 +67,10 @@ export async function uploadFile(file: File, folder: string, signUrl: string = "
     for (let attempt = 0; attempt < 3; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, 1500 * attempt));
       try {
-        const { error } = await supabase.storage.from(BUCKET).uploadToSignedUrl(path, token, body);
+        // Cada archivo tiene nombre único y nunca cambia: el navegador lo
+        // guarda un año y no lo vuelve a descargar (2026-10-06, para bajar el
+        // consumo de datos de Supabase).
+        const { error } = await supabase.storage.from(BUCKET).uploadToSignedUrl(path, token, body, { cacheControl: "31536000" });
         if (!error) {
           lastError = "";
           break;

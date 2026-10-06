@@ -77,7 +77,7 @@ export function ExternalSalePackDeliveryPanel() {
                   <div key={it.id} className="flex items-center gap-3">
                     {photo && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <img loading="lazy" decoding="async"
                         src={photo}
                         alt={it.catalogItem?.name ?? it.declaredProductName}
                         title={isReference ? "Foto de referencia del asesor (el producto no está matriculado)" : undefined}
@@ -104,7 +104,7 @@ export function ExternalSalePackDeliveryPanel() {
                 {photoUrl ? (
                   <div className="flex items-center gap-2 mb-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={photoUrl} alt="Foto de la entrega" className="w-16 h-16 object-cover rounded border border-rule" />
+                    <img loading="lazy" decoding="async" src={photoUrl} alt="Foto de la entrega" className="w-16 h-16 object-cover rounded border border-rule" />
                     <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => { setPhotoUrl(null); setTaking(true); }}>Volver a tomar</button>
                   </div>
                 ) : taking ? (

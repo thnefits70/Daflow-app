@@ -86,7 +86,7 @@ export function ModuleDetail({
         <div className="w-32 h-24 shrink-0 bg-cloud border border-rule rounded-md overflow-hidden flex items-center justify-center relative group">
           {mod.imageUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={mod.imageUrl} alt={mod.title} className="w-full h-full object-cover" />
+            <img loading="lazy" decoding="async" src={mod.imageUrl} alt={mod.title} className="w-full h-full object-cover" />
           ) : (
             <ModuleIcon size={26} style={{ color: moduleIconColor }} strokeWidth={1.75} />
           )}

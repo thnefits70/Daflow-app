@@ -175,7 +175,7 @@ export function RecognitionPanel({
             <div className="w-12 h-12 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center shrink-0">
               {selectedPerson.photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={selectedPerson.photoUrl} alt={selectedPerson.name} className="w-full h-full object-cover" />
+                <img loading="lazy" decoding="async" src={selectedPerson.photoUrl} alt={selectedPerson.name} className="w-full h-full object-cover" />
               ) : (
                 <User size={20} className="text-steel" />
               )}
@@ -353,7 +353,7 @@ export function RecognitionPanel({
               <div className="w-10 h-10 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center shrink-0">
                 {p.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.photoUrl} alt={p.name} className="w-full h-full object-cover" />
+                  <img loading="lazy" decoding="async" src={p.photoUrl} alt={p.name} className="w-full h-full object-cover" />
                 ) : (
                   <User size={16} className="text-steel" />
                 )}

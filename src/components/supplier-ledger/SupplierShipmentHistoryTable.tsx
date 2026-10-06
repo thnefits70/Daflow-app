@@ -148,7 +148,7 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
             <li key={r.id} className="flex gap-3 p-3">
               {r.productImageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={r.productImageUrl} alt={r.productName} className="w-12 h-12 shrink-0 object-cover rounded-lg border border-neutral-200" />
+                <img loading="lazy" decoding="async" src={r.productImageUrl} alt={r.productName} className="w-12 h-12 shrink-0 object-cover rounded-lg border border-neutral-200" />
               ) : (
                 <div className="w-12 h-12 shrink-0 rounded-lg border border-neutral-200 bg-neutral-100" />
               )}
@@ -165,7 +165,7 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
               </div>
               {r.photoUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={r.photoUrl} alt="Foto enviada" className="w-12 h-12 shrink-0 object-cover rounded-lg border border-emerald-200" />
+                <img loading="lazy" decoding="async" src={r.photoUrl} alt="Foto enviada" className="w-12 h-12 shrink-0 object-cover rounded-lg border border-emerald-200" />
               )}
             </li>
           ))}
@@ -192,7 +192,7 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
                   <td className="px-3 py-2">
                     {r.productImageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={r.productImageUrl} alt={r.productName} className="w-12 h-12 object-cover rounded-md border border-neutral-200" />
+                      <img loading="lazy" decoding="async" src={r.productImageUrl} alt={r.productName} className="w-12 h-12 object-cover rounded-md border border-neutral-200" />
                     ) : (
                       <span className="text-neutral-400">—</span>
                     )}
@@ -203,7 +203,7 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
                   <td className="px-3 py-2">
                     {r.photoUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={r.photoUrl} alt="Foto enviada" className="w-16 h-16 object-cover rounded-md border border-neutral-200" />
+                      <img loading="lazy" decoding="async" src={r.photoUrl} alt="Foto enviada" className="w-16 h-16 object-cover rounded-md border border-neutral-200" />
                     ) : (
                       <span className="text-neutral-400">—</span>
                     )}

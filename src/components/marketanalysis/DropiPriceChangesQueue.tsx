@@ -54,7 +54,7 @@ export function DropiPriceChangesQueue() {
               <div className="flex items-start gap-3 mb-2">
                 {c.photo && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={c.photo} alt="" className="w-14 h-14 rounded object-cover shrink-0" />
+                  <img loading="lazy" decoding="async" src={c.photo} alt="" className="w-14 h-14 rounded object-cover shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-[13.5px]">{c.name}</div>

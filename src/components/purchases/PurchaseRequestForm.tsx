@@ -1327,7 +1327,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                   PDF
                 </a>
               ) : (
-                <img src={quoteImageUrl} alt="" className="w-14 h-14 rounded object-cover border border-rule" />
+                <img loading="lazy" decoding="async" src={quoteImageUrl} alt="" className="w-14 h-14 rounded object-cover border border-rule" />
               )}
               <div className="flex-1 text-[12.5px] text-steel">
                 Escrito ({lines.length} {lines.length === 1 ? "producto" : "productos"}): <b className="text-ink">${total.toFixed(2)}</b>

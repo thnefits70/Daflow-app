@@ -36,7 +36,7 @@ function DocThumb({ url }: { url: string }) {
       <FileText size={18} className="text-steel" />
     </div>
   ) : (
-    <img src={url} alt="" className="w-11 h-11 rounded object-cover border border-rule shrink-0" />
+    <img loading="lazy" decoding="async" src={url} alt="" className="w-11 h-11 rounded object-cover border border-rule shrink-0" />
   );
 }
 
@@ -154,7 +154,7 @@ export function PurchaseOperationDocuments({ rows }: { rows: OperationDocRow[] }
                 <div className="flex flex-wrap gap-1.5 mb-1">
                   {r.receipt.photoUrls.map((u, i) => (
                     <a key={i} href={u} target="_blank" rel="noopener noreferrer">
-                      <img src={u} alt="" className="w-16 h-16 rounded object-cover border border-rule" />
+                      <img loading="lazy" decoding="async" src={u} alt="" className="w-16 h-16 rounded object-cover border border-rule" />
                     </a>
                   ))}
                 </div>

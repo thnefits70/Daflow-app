@@ -72,7 +72,7 @@ export function ProofPreview({ url, filename, size = 56 }: { url: string; filena
           // shrink-0 + maxWidth "none": junto a un texto largo en celular, la
           // fila aplastaba la miniatura a lo ancho (se veía como una tira fina).
           <a href={url} target="_blank" rel="noopener noreferrer" className="shrink-0" title="Clic derecho para copiar la imagen · clic para verla completa">
-            <img
+            <img loading="lazy" decoding="async"
               src={url}
               alt="Comprobante"
               className="rounded object-cover border border-rule cursor-pointer"

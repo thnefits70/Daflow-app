@@ -94,14 +94,14 @@ function Lightbox({ url, onClose }: { url: string; onClose: () => void }) {
       className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6 cursor-zoom-out"
       onClick={onClose}
     >
-      <img src={url} alt="Comprobante ampliado" className="max-w-full max-h-full rounded-md shadow-lg" onClick={(e) => e.stopPropagation()} />
+      <img loading="lazy" decoding="async" src={url} alt="Comprobante ampliado" className="max-w-full max-h-full rounded-md shadow-lg" onClick={(e) => e.stopPropagation()} />
     </div>
   );
 }
 
 function ProofThumb({ url, onZoom }: { url: string; onZoom: () => void }) {
   return (
-    <img
+    <img loading="lazy" decoding="async"
       src={url}
       alt="Comprobante"
       title="Doble clic para ampliar"

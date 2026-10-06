@@ -191,7 +191,7 @@ export function LiveCameraCapture({ folder, onCaptured, onCancel, allowUpload = 
       ) : previewUrl ? (
         <div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={previewUrl} alt="Foto tomada" className="w-full max-w-xs aspect-[4/3] object-cover rounded-md" />
+          <img loading="lazy" decoding="async" src={previewUrl} alt="Foto tomada" className="w-full max-w-xs aspect-[4/3] object-cover rounded-md" />
           {uploading && <div className="text-[11.5px] text-steel-dim mt-2">Subiendo…</div>}
           {uploadError && (
             <div className="mt-2">

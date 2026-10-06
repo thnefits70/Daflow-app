@@ -26,7 +26,7 @@ function ProductCard({ p }: { p: Product }) {
       <div className="flex items-start gap-3">
         {p.photo ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={p.photo} alt="" className="w-12 h-12 rounded object-cover bg-cloud shrink-0" />
+          <img loading="lazy" decoding="async" src={p.photo} alt="" className="w-12 h-12 rounded object-cover bg-cloud shrink-0" />
         ) : (
           <div className="w-12 h-12 rounded bg-cloud shrink-0" />
         )}

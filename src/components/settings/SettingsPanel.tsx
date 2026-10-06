@@ -467,7 +467,7 @@ export function SettingsPanel({
           <div className="w-full h-24 border-[1.5px] border-dashed border-rule rounded-md flex items-center justify-center bg-cloud overflow-hidden mb-3">
             {banner ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={banner} alt="Banner" className="max-w-full max-h-full object-contain opacity-70" />
+              <img loading="lazy" decoding="async" src={banner} alt="Banner" className="max-w-full max-h-full object-contain opacity-70" />
             ) : (
               <span className="text-[12px] text-steel">Sin banner</span>
             )}
@@ -500,7 +500,7 @@ export function SettingsPanel({
           <div className="w-12 h-12 border-[1.5px] border-dashed border-rule rounded-md flex items-center justify-center bg-cloud overflow-hidden">
             {favicon ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={favicon} alt="Favicon" className="max-w-full max-h-full object-contain" />
+              <img loading="lazy" decoding="async" src={favicon} alt="Favicon" className="max-w-full max-h-full object-contain" />
             ) : (
               <span className="text-[9px] text-steel text-center px-1">Por defecto</span>
             )}
@@ -652,7 +652,7 @@ export function SettingsPanel({
             {tfQrDataUrl && (
               <div className="flex justify-center mb-3.5">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={tfQrDataUrl} alt="Código QR del autenticador" className="w-36 h-36 rounded border border-rule bg-white p-2" />
+                <img loading="lazy" decoding="async" src={tfQrDataUrl} alt="Código QR del autenticador" className="w-36 h-36 rounded border border-rule bg-white p-2" />
               </div>
             )}
             <div className="flex gap-2">

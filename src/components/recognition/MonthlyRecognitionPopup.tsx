@@ -191,7 +191,7 @@ export function MonthlyRecognitionPopup() {
         >
           {celebration.winnerPhotoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={celebration.winnerPhotoUrl} alt={celebration.winnerName} className="w-full h-full object-cover object-top" />
+            <img loading="lazy" decoding="async" src={celebration.winnerPhotoUrl} alt={celebration.winnerName} className="w-full h-full object-cover object-top" />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-[28px] font-display font-bold text-steel">{firstName[0]}</div>
           )}

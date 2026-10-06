@@ -56,7 +56,7 @@ export function GuideVariantReview() {
               <div className="flex items-center gap-2">
                 {r.photo && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={r.photo} alt="" className="w-9 h-9 rounded object-cover shrink-0" />
+                  <img loading="lazy" decoding="async" src={r.photo} alt="" className="w-9 h-9 rounded object-cover shrink-0" />
                 )}
                 <div className="min-w-0">
                   <div className="font-semibold truncate">{r.name}</div>

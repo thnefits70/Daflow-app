@@ -204,7 +204,7 @@ function Timeline({
             {i.batch.documentPhotoUrls.map((p, n) => (
               <a key={p} href={p} target="_blank" rel="noopener noreferrer">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p} alt={`Foto ${n + 1}`} className="w-12 h-12 object-cover rounded border border-rule" />
+                <img loading="lazy" decoding="async" src={p} alt={`Foto ${n + 1}`} className="w-12 h-12 object-cover rounded border border-rule" />
               </a>
             ))}
           </span>
@@ -359,7 +359,7 @@ function Timeline({
                     {r.photoUrls.map((u) => (
                       <a key={u} href={u} target="_blank" rel="noreferrer">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={u} alt="Reemplazo recibido" className="w-12 h-12 object-cover rounded border border-rule" />
+                        <img loading="lazy" decoding="async" src={u} alt="Reemplazo recibido" className="w-12 h-12 object-cover rounded border border-rule" />
                       </a>
                     ))}
                   </div>
@@ -472,7 +472,7 @@ export function DeteriorTraceList({
                 <button type="button" className="w-full flex items-start gap-3 text-left cursor-pointer" onClick={() => setExpanded(isOpen ? null : i.id)}>
                   {photo && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photo} alt={i.catalogItem?.name ?? i.declaredName} className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
+                    <img loading="lazy" decoding="async" src={photo} alt={i.catalogItem?.name ?? i.declaredName} className="w-11 h-11 object-cover rounded border border-rule shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
                     {i.catalogItem && <CatalogCode code={i.catalogItem.justCode} />}

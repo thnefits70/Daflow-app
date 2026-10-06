@@ -197,7 +197,7 @@ export function NominaGrid({
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center mb-2 sm:mb-2.5">
               {u.photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={u.photoUrl} alt={u.name} className="w-full h-full object-cover" />
+                <img loading="lazy" decoding="async" src={u.photoUrl} alt={u.name} className="w-full h-full object-cover" />
               ) : (
                 <User size={22} className="text-steel" />
               )}

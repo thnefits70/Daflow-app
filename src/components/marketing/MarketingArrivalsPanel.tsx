@@ -33,7 +33,7 @@ function PhotoRow({ label, urls }: { label: string; urls: string[] }) {
       <div className="flex gap-2 flex-wrap">
         {urls.map((u, i) => (
           <div key={i} className="bg-cloud rounded border border-rule flex items-center justify-center w-36 h-36 shrink-0">
-            <img src={u} alt="" className="max-w-full max-h-full object-contain" />
+            <img loading="lazy" decoding="async" src={u} alt="" className="max-w-full max-h-full object-contain" />
           </div>
         ))}
       </div>

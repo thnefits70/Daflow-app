@@ -475,7 +475,7 @@ function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | n
         {imageUrl ? (
           <div className="mt-1.5 flex items-center gap-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={imageUrl} alt="Imagen referencial" className="w-16 h-16 object-cover rounded border border-rule cursor-pointer" />
+            <img loading="lazy" decoding="async" src={imageUrl} alt="Imagen referencial" className="w-16 h-16 object-cover rounded border border-rule cursor-pointer" />
             <div className="text-[12px] text-teal">
               Imagen subida ✓ <button type="button" className="text-steel underline decoration-dotted ml-1 cursor-pointer" onClick={() => setImageUrl("")}>Cambiar</button>
               <div className="text-steel text-[11px] mt-0.5">Doble clic en la imagen para verla más grande</div>
@@ -688,7 +688,7 @@ function ReviewQueue({ canAct }: { canAct: boolean }) {
       {rows.map((p) => (
         <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-start gap-3 mb-2">
-            <img src={p.referenceImageUrl} alt="" className="w-16 h-16 rounded object-cover shrink-0" />
+            <img loading="lazy" decoding="async" src={p.referenceImageUrl} alt="" className="w-16 h-16 rounded object-cover shrink-0" />
             <div className="flex-1">
               <div className="font-semibold text-[13.5px]">{p.code} — {p.productName}</div>
               <div className="text-[12px] text-steel">{p.platform === "BOTH" ? "Dropi + Rocket" : p.platform === "DROPI" ? "Dropi" : "Rocket"} · Propuesto por {p.proposedBy?.name ?? "—"} · {formatDateTime(p.proposedAt)}</div>
@@ -784,7 +784,7 @@ function CatalogMissingIdQueue() {
         {rows.map((p) => (
           <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
             <div className="flex items-start gap-3 mb-2">
-              {p.photos[0] && <img src={p.photos[0]} alt="" className="w-16 h-16 rounded object-cover shrink-0" />}
+              {p.photos[0] && <img loading="lazy" decoding="async" src={p.photos[0]} alt="" className="w-16 h-16 rounded object-cover shrink-0" />}
               <div className="flex-1">
                 <div className="font-semibold text-[13.5px]">{p.name}</div>
                 <div className="text-[12px] text-steel">Bodega: {BODEGA_LABELS[p.bodega ?? ""] ?? "—"} · Creado por {p.createdBy?.name ?? "—"}</div>
@@ -867,7 +867,7 @@ function PublishQueue() {
       {rows.map((p) => (
         <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-start gap-3 mb-2">
-            <img src={p.referenceImageUrl} alt="" className="w-16 h-16 rounded object-cover shrink-0" />
+            <img loading="lazy" decoding="async" src={p.referenceImageUrl} alt="" className="w-16 h-16 rounded object-cover shrink-0" />
             <div className="flex-1">
               <div className="font-semibold text-[13.5px]">{p.code} — {p.productName}</div>
               {/* Pedido del usuario 2026-09-30 (Bryan, casco SC-124). */}
@@ -887,7 +887,7 @@ function PublishQueue() {
             <div className="bg-inset rounded-md p-3">
               <div className="text-[13px] font-bold mb-1.5">¿Seguro?</div>
               <div className="flex items-center gap-2.5 mb-2.5">
-                <img src={p.referenceImageUrl} alt="" className="w-12 h-12 rounded object-cover border border-rule shrink-0" />
+                <img loading="lazy" decoding="async" src={p.referenceImageUrl} alt="" className="w-12 h-12 rounded object-cover border border-rule shrink-0" />
                 <div className="text-[12px] text-steel">
                   Vas a guardar el ID <b className="text-ink">{dropiId[p.id]}</b> para <b className="text-ink">{p.productName}</b> — verifica que sea esta foto y no la de otro producto que estés subiendo al mismo tiempo.
                 </div>
@@ -1046,7 +1046,7 @@ function PublishedHistoryView() {
         const image = p.catalogItem?.photos?.[0] || p.referenceImageUrl;
         return (
           <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5 flex items-start gap-3.5">
-            {image && <img src={image} alt={p.productName} className="w-16 h-16 rounded object-cover border border-rule shrink-0" />}
+            {image && <img loading="lazy" decoding="async" src={image} alt={p.productName} className="w-16 h-16 rounded object-cover border border-rule shrink-0" />}
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-[13.5px]">{p.code} — {p.productName}</div>
               <div className="text-[12.5px] text-ink mt-0.5">ID de Dropi: <b>{p.dropiProductId ?? "—"}</b> · Precio de Dropi: <b>{money(p.calculatedSalePrice)}</b></div>
@@ -1126,7 +1126,7 @@ function PricingConsultaTable() {
             <div key={r.id} className="flex items-center gap-2.5 bg-surface border border-rule rounded-md p-2.5">
               {r.photos[0] && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={r.photos[0]} alt={r.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+                <img loading="lazy" decoding="async" src={r.photos[0]} alt={r.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
               )}
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-semibold truncate flex items-center gap-1.5">
@@ -1266,7 +1266,7 @@ function MyProposalsView() {
               )}
             </div>
             {image && (
-              <img
+              <img loading="lazy" decoding="async"
                 src={image}
                 alt={p.productName}
                 className="w-28 h-28 object-cover rounded border border-rule shrink-0 cursor-pointer"
@@ -1648,7 +1648,7 @@ function UnfoundWinnersView({ onPropose }: { onPropose: (p: ProposePrefill) => v
             {imageUrl ? (
               <div className="flex flex-col items-center gap-1">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imageUrl} alt="Imagen del producto" className="w-24 h-24 object-cover rounded border border-rule cursor-pointer" />
+                <img loading="lazy" decoding="async" src={imageUrl} alt="Imagen del producto" className="w-24 h-24 object-cover rounded border border-rule cursor-pointer" />
                 <button type="button" className="text-[11px] text-steel underline decoration-dotted cursor-pointer" onClick={() => setImageUrl("")}>Cambiar</button>
               </div>
             ) : (
@@ -1730,7 +1730,7 @@ function UnfoundWinnersView({ onPropose }: { onPropose: (p: ProposePrefill) => v
             return (
               <div key={r.id} className={`bg-surface border rounded-md p-3 flex items-start gap-3 ${editingId === r.id ? "border-teal" : "border-rule"}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={r.imageUrl} alt={r.productName} className="w-20 h-20 object-cover rounded border border-rule shrink-0 cursor-pointer" />
+                <img loading="lazy" decoding="async" src={r.imageUrl} alt={r.productName} className="w-20 h-20 object-cover rounded border border-rule shrink-0 cursor-pointer" />
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                     <span className="font-semibold text-[13.5px] text-ink">{r.productName}</span>

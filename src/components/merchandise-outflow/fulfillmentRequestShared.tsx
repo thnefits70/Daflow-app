@@ -140,7 +140,7 @@ export function CompiledResult({ batch, canEditVariants = false }: { batch: Comp
             <div className="flex items-center gap-2.5">
               {l.photos[0] ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={l.photos[0]} alt="" className="w-7 h-7 object-cover rounded border border-rule shrink-0" />
+                <img loading="lazy" decoding="async" src={l.photos[0]} alt="" className="w-7 h-7 object-cover rounded border border-rule shrink-0" />
               ) : (
                 <div className="w-7 h-7 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel">
                   <Package size={12} />

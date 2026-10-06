@@ -138,11 +138,11 @@ export function ProductMatchPicker({
         <div className="flex items-center gap-2.5 mb-2.5">
           {referencePhotoUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={referencePhotoUrl} alt="Foto del reingreso" className="w-14 h-14 object-cover rounded border border-rule" />
+            <img loading="lazy" decoding="async" src={referencePhotoUrl} alt="Foto del reingreso" className="w-14 h-14 object-cover rounded border border-rule" />
           )}
           {confirming.photos[0] ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={confirming.photos[0]} alt={confirming.name} className="w-14 h-14 object-cover rounded border border-green/40" />
+            <img loading="lazy" decoding="async" src={confirming.photos[0]} alt={confirming.name} className="w-14 h-14 object-cover rounded border border-green/40" />
           ) : (
             <div className="w-14 h-14 rounded border border-dashed border-rule flex items-center justify-center text-steel" title="Este producto del catálogo todavía no tiene foto de referencia">
               <Clock size={16} />
@@ -267,7 +267,7 @@ export function ProductMatchPicker({
             <button key={c.id} type="button" className="flex items-center gap-2.5 p-2 hover:bg-surface cursor-pointer text-left" onClick={() => setConfirming(c)}>
               {c.photos[0] ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.photos[0]} alt={c.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
+                <img loading="lazy" decoding="async" src={c.photos[0]} alt={c.name} className="w-9 h-9 object-cover rounded border border-rule shrink-0" />
               ) : (
                 <div className="w-9 h-9 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel">
                   <Clock size={13} />

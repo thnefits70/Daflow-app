@@ -37,7 +37,7 @@ export function ProductThumb({ url, alt, size = "md" }: { url: string | null; al
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt={alt} className={`${box} shrink-0 object-cover rounded-lg border border-neutral-200 bg-white`} />
+    <img loading="lazy" decoding="async" src={url} alt={alt} className={`${box} shrink-0 object-cover rounded-lg border border-neutral-200 bg-white`} />
   );
 }
 

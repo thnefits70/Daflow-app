@@ -74,7 +74,7 @@ function ProductRow({ p, historyStart }: { p: Product; historyStart: string | nu
     <div className="flex items-center gap-3 py-2.5 border-b border-rule last:border-b-0">
       {p.photo ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={p.photo} alt="" className="w-11 h-11 rounded object-cover bg-cloud shrink-0" />
+        <img loading="lazy" decoding="async" src={p.photo} alt="" className="w-11 h-11 rounded object-cover bg-cloud shrink-0" />
       ) : (
         <div className="w-11 h-11 rounded bg-cloud shrink-0" />
       )}

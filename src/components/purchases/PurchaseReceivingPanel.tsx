@@ -1142,7 +1142,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         <video key={i} src={url} controls className="w-full h-32 rounded object-contain border border-rule bg-navy" />
                       ) : (
                         <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-navy rounded border border-rule flex items-center justify-center h-32">
-                          <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                          <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                         </a>
                       )
                     )}
@@ -1204,7 +1204,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         <div className="grid grid-cols-4 gap-2 mt-2">
                           {(internalPhotoUrls[pr.id] ?? []).map((url, i) => (
                             <div key={i} className="relative bg-navy rounded border border-rule flex items-center justify-center h-24">
-                              <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                              <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                               <button
                                 type="button"
                                 className="absolute top-1 right-1 bg-navy/80 rounded-full p-0.5 cursor-pointer"
@@ -1399,7 +1399,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       <video key={i} src={url} controls className="w-full h-32 rounded object-contain border border-rule bg-navy" />
                     ) : (
                       <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-navy rounded border border-rule flex items-center justify-center h-32">
-                        <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                        <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                       </a>
                     )
                   )}
@@ -1491,7 +1491,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       <div className="grid grid-cols-3 gap-2 mb-2.5">
                         {replacementPhotoUrls.map((url, i) => (
                           <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-24">
-                            <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                            <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                           </a>
                         ))}
                       </div>
@@ -1535,7 +1535,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     <div className="grid grid-cols-3 gap-2 mb-2.5">
                       {pr.replacementPhotoUrls.map((url, i) => (
                         <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-navy rounded border border-rule flex items-center justify-center h-24">
-                          <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                          <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                         </a>
                       ))}
                     </div>
@@ -1660,7 +1660,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     <div className="flex gap-2 flex-wrap my-2">
                       {r.catalogItem.photos.map((url, i) => (
                         <a key={i} href={url} target="_blank" rel="noopener noreferrer" title="Foto de referencia — como se registró el producto" className="bg-cloud rounded border border-teal/40 flex items-center justify-center w-24 h-24 overflow-hidden">
-                          <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                          <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                         </a>
                       ))}
                     </div>
@@ -1736,7 +1736,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                             <div className="grid grid-cols-3 gap-2 mb-3">
                               {r.catalogItem.photos.map((url, i) => (
                                 <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-teal/40 flex items-center justify-center h-56">
-                                  <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                                  <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                                 </a>
                               ))}
                             </div>
@@ -1757,7 +1757,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               {receivedPhotoUrls.map((url, i) => (
                                 <div key={i} className="relative">
                                   <a href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-56">
-                                    <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                                    <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                                   </a>
                                   <button
                                     type="button"
@@ -1937,7 +1937,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                             <div className="grid grid-cols-3 gap-2 mb-3">
                               {r.catalogItem.photos.map((url, i) => (
                                 <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-teal/40 flex items-center justify-center h-48">
-                                  <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                                  <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                                 </a>
                               ))}
                             </div>
@@ -1992,7 +1992,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                                     <video src={url} controls className="w-full h-48 rounded object-contain border border-rule bg-cloud" />
                                   ) : (
                                     <a href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-48">
-                                      <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                                      <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                                     </a>
                                   )}
                                   <button type="button" className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer" onClick={() => removeUrgentMedia(i)}>
@@ -2306,7 +2306,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                             <div className="grid grid-cols-4 gap-2 mb-2.5">
                               {r.catalogItem.photos.map((url, i) => (
                                 <a key={`ref${i}`} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-teal/40 flex items-center justify-center h-32">
-                                  <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                                  <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                                 </a>
                               ))}
                             </div>
@@ -2319,7 +2319,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       <div className="grid grid-cols-4 gap-2 mb-2.5">
                         {r.receipt.photoUrls.map((url, i) => (
                           <a key={`p${i}`} href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-32">
-                            <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                            <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                           </a>
                         ))}
                         {r.receipt.videoUrls.map((url, i) => (
@@ -2558,7 +2558,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                                 <video src={url} controls className="w-full h-32 rounded object-contain border border-rule bg-cloud" />
                               ) : (
                                 <a href={url} target="_blank" rel="noopener noreferrer" className="bg-cloud rounded border border-rule flex items-center justify-center h-32">
-                                  <img src={url} alt="" className="max-w-full max-h-full object-contain" />
+                                  <img loading="lazy" decoding="async" src={url} alt="" className="max-w-full max-h-full object-contain" />
                                 </a>
                               )}
                               <button type="button" className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer" onClick={() => removeLateMedia(i)}>

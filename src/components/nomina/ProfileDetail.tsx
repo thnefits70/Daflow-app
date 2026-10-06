@@ -668,7 +668,7 @@ export function ProfileDetail({
           <div className="w-24 h-24 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center mb-2">
             {p.photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={p.photoUrl} alt={p.name} className="w-full h-full object-cover" />
+              <img loading="lazy" decoding="async" src={p.photoUrl} alt={p.name} className="w-full h-full object-cover" />
             ) : (
               <User size={30} className="text-steel" />
             )}
@@ -1357,7 +1357,7 @@ export function ProfileDetail({
                 )}
                 {showCv && cvKind(p.cvUrl, p.cvName) === "image" && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.cvUrl} alt={p.cvName || "CV"} className="w-full rounded mt-3 border border-rule" />
+                  <img loading="lazy" decoding="async" src={p.cvUrl} alt={p.cvName || "CV"} className="w-full rounded mt-3 border border-rule" />
                 )}
               </>
             ) : (

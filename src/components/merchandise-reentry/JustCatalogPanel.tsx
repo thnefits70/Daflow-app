@@ -359,7 +359,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
           <div key={item.id} className="flex items-center gap-2.5 bg-surface border border-rule rounded-md px-3 py-2">
             {item.photos[0] ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <img loading="lazy" decoding="async"
                 src={item.photos[0]}
                 alt={item.name}
                 className="w-8 h-8 object-cover rounded border border-rule shrink-0 cursor-zoom-in"
@@ -401,7 +401,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
           onClick={() => setLightboxUrl(null)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightboxUrl} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md shadow-2xl" onClick={(e) => e.stopPropagation()} />
+          <img loading="lazy" decoding="async" src={lightboxUrl} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md shadow-2xl" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </div>

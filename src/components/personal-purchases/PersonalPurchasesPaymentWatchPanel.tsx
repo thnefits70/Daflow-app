@@ -106,7 +106,7 @@ export function PersonalPurchasesPaymentWatchPanel({ canReopenPrice = false }: {
                     <div key={it.id}>
                     <div className="flex gap-2.5 items-center">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <img loading="lazy" decoding="async"
                         src={it.livePhotoUrl}
                         alt="Foto del producto"
                         className="w-12 h-12 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
@@ -115,7 +115,7 @@ export function PersonalPurchasesPaymentWatchPanel({ canReopenPrice = false }: {
                       />
                       {it.optionalPhotoUrl && (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img
+                        <img loading="lazy" decoding="async"
                           src={it.optionalPhotoUrl}
                           alt="Foto extra"
                           className="w-12 h-12 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
@@ -157,7 +157,7 @@ export function PersonalPurchasesPaymentWatchPanel({ canReopenPrice = false }: {
           onClick={() => setZoomedPhoto(null)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
+          <img loading="lazy" decoding="async" src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
         </div>
       )}
     </div>

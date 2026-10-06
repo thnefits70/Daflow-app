@@ -32,7 +32,7 @@ export function ConfirmPhotosBelongTo({
       <div className="flex gap-2 mb-3">
         {photos.map((p, i) => (
           // eslint-disable-next-line @next/next/no-img-element
-          <img key={i} src={p} alt="" className="w-16 h-16 rounded object-cover border border-rule" />
+          <img loading="lazy" decoding="async" key={i} src={p} alt="" className="w-16 h-16 rounded object-cover border border-rule" />
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2">

@@ -206,7 +206,7 @@ export function DeteriorResolutionInbox({ canAct }: { canAct: boolean }) {
           <div className="flex items-center gap-3 mb-2.5">
             {(item.photoUrls[0] ?? item.batch.documentPhotoUrls[0]) && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.photoUrls[0] ?? item.batch.documentPhotoUrls[0]} alt={itemName(item)} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
+              <img loading="lazy" decoding="async" src={item.photoUrls[0] ?? item.batch.documentPhotoUrls[0]} alt={itemName(item)} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
             )}
             <div className="flex-1 min-w-0">
               <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">
@@ -235,7 +235,7 @@ export function DeteriorResolutionInbox({ canAct }: { canAct: boolean }) {
               {item.batch.documentPhotoUrls.map((p, i) => (
                 <a key={p} href={p} target="_blank" rel="noopener noreferrer">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p} alt={`Foto ${i + 1}`} className="w-14 h-14 object-cover rounded border border-rule" />
+                  <img loading="lazy" decoding="async" src={p} alt={`Foto ${i + 1}`} className="w-14 h-14 object-cover rounded border border-rule" />
                 </a>
               ))}
             </div>

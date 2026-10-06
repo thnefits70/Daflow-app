@@ -26,7 +26,7 @@ function Avatar({ photoUrl, name }: { photoUrl: string | null; name: string }) {
     <div className="w-9 h-9 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center shrink-0">
       {photoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={photoUrl} alt={name} className="w-full h-full object-cover" />
+        <img loading="lazy" decoding="async" src={photoUrl} alt={name} className="w-full h-full object-cover" />
       ) : (
         <User size={15} className="text-steel" />
       )}

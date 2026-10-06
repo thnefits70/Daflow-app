@@ -181,7 +181,7 @@ export function AreaGateShell({
               {userPhotoUrl && (
                 <div className="w-10 h-10 rounded-full overflow-hidden border-2 border-teal/70 shrink-0">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={userPhotoUrl} alt={userName} className="w-full h-full object-cover object-top" />
+                  <img loading="lazy" decoding="async" src={userPhotoUrl} alt={userName} className="w-full h-full object-cover object-top" />
                 </div>
               )}
               <div className="min-w-0">

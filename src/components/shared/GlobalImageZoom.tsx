@@ -49,7 +49,7 @@ export function GlobalImageZoom() {
       onClick={() => setZoomUrl(null)}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <img loading="lazy" decoding="async"
         src={zoomUrl}
         alt="Imagen ampliada"
         className="max-w-full max-h-full rounded-md shadow-lg"

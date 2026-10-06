@@ -90,7 +90,7 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
   return (
     <div className="bg-surface border border-rule rounded-md p-4">
       <div className="flex items-center gap-3 mb-3.5">
-        {item.photos[0] && <img src={item.photos[0]} alt="" className="w-10 h-10 rounded object-cover border border-rule shrink-0" />}
+        {item.photos[0] && <img loading="lazy" decoding="async" src={item.photos[0]} alt="" className="w-10 h-10 rounded object-cover border border-rule shrink-0" />}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <ExpandableName text={item.name} className="text-[14.5px] font-bold" />
@@ -177,13 +177,13 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
                       <div className="flex items-center gap-3 flex-wrap">
                         {s.latestQuoteImageUrl && (
                           <a href={s.latestQuoteImageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">
-                            {isPdf(s.latestQuoteImageUrl) ? <FileText size={13} /> : <img src={s.latestQuoteImageUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
+                            {isPdf(s.latestQuoteImageUrl) ? <FileText size={13} /> : <img loading="lazy" decoding="async" src={s.latestQuoteImageUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
                             Ver cotización
                           </a>
                         )}
                         {s.latestPurchaseOrderUrl && (
                           <a href={s.latestPurchaseOrderUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">
-                            {isPdf(s.latestPurchaseOrderUrl) ? <FileText size={13} /> : <img src={s.latestPurchaseOrderUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
+                            {isPdf(s.latestPurchaseOrderUrl) ? <FileText size={13} /> : <img loading="lazy" decoding="async" src={s.latestPurchaseOrderUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
                             Ver orden de compra
                           </a>
                         )}
@@ -252,7 +252,7 @@ export function PurchasePriceExplorer() {
                 className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] hover:bg-cloud cursor-pointer border-b border-rule last:border-none"
                 onClick={() => select(item)}
               >
-                {item.photos[0] && <img src={item.photos[0]} alt="" className="w-7 h-7 rounded object-cover shrink-0" />}
+                {item.photos[0] && <img loading="lazy" decoding="async" src={item.photos[0]} alt="" className="w-7 h-7 rounded object-cover shrink-0" />}
                 <ExpandableName text={item.name} className="flex-1" />
                 {(item.code || item.justCode) && (
                   <span className="text-[10.5px] text-steel shrink-0 font-mono">{item.code || item.justCode}</span>

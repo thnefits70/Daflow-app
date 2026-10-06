@@ -93,7 +93,7 @@ function linkedDecision(r: Row): Decision {
 function PhotoThumb({ url }: { url: string | undefined }) {
   return url ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={url} alt="" className="w-6 h-6 object-cover rounded border border-rule shrink-0" />
+    <img loading="lazy" decoding="async" src={url} alt="" className="w-6 h-6 object-cover rounded border border-rule shrink-0" />
   ) : (
     <div className="w-6 h-6 rounded border border-dashed border-rule flex items-center justify-center text-steel shrink-0">
       <Package size={11} />

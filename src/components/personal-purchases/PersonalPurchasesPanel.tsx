@@ -427,7 +427,7 @@ export function PersonalPurchasesPanel() {
             {draft.livePhotoUrl ? (
               <div className="flex items-center gap-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={draft.livePhotoUrl} alt="Foto del producto" className="w-20 h-20 object-cover rounded-md border border-rule" />
+                <img loading="lazy" decoding="async" src={draft.livePhotoUrl} alt="Foto del producto" className="w-20 h-20 object-cover rounded-md border border-rule" />
                 <button type="button" className="text-[11.5px] text-blue font-semibold cursor-pointer" onClick={() => { setDraft((d) => ({ ...d, livePhotoUrl: null })); setTakingPhoto("main"); }}>Volver a tomar</button>
               </div>
             ) : takingPhoto === "main" ? (
@@ -450,7 +450,7 @@ export function PersonalPurchasesPanel() {
               {draft.optionalPhotoUrl ? (
                 <div className="flex items-center gap-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={draft.optionalPhotoUrl} alt="Foto extra" className="w-16 h-16 object-cover rounded-md border border-rule" />
+                  <img loading="lazy" decoding="async" src={draft.optionalPhotoUrl} alt="Foto extra" className="w-16 h-16 object-cover rounded-md border border-rule" />
                   <button type="button" className="text-[11px] text-steel-dim underline cursor-pointer" onClick={() => setDraft((d) => ({ ...d, optionalPhotoUrl: null }))}>Quitar</button>
                 </div>
               ) : takingPhoto === "extra" ? (

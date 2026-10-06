@@ -883,7 +883,7 @@ export function PurchaseInvoicingPanel({
                       {g.map((r) => (
                         <div key={r.id} className="text-[13.5px] font-bold flex items-center gap-1.5 flex-wrap">
                           {r.catalogItem.photos[0] && (
-                            <img
+                            <img loading="lazy" decoding="async"
                               src={r.catalogItem.photos[0]}
                               alt=""
                               title="Doble clic para ampliar"
@@ -1156,7 +1156,7 @@ export function PurchaseInvoicingPanel({
                         <span key={r.id} className="flex items-center gap-1.5">
                           {i > 0 && <span className="text-steel font-normal">,</span>}
                           {r.catalogItem.photos[0] && (
-                            <img
+                            <img loading="lazy" decoding="async"
                               src={r.catalogItem.photos[0]}
                               alt=""
                               title="Doble clic para ampliar"
@@ -1374,7 +1374,7 @@ export function PurchaseInvoicingPanel({
                     {g.map((r) => (
                       <div key={r.id} className="text-[13.5px] font-bold flex items-center gap-1.5 flex-wrap">
                         {r.catalogItem.photos[0] && (
-                          <img
+                          <img loading="lazy" decoding="async"
                             src={r.catalogItem.photos[0]}
                             alt=""
                             title="Doble clic para ampliar"
@@ -1521,7 +1521,7 @@ export function PurchaseInvoicingPanel({
                           </div>
                           {isImageUrl(invoiceDocUrl[groupId]) ? (
                             <a href={invoiceDocUrl[groupId]} target="_blank" rel="noopener noreferrer" className="block w-fit">
-                              <img src={invoiceDocUrl[groupId]} alt="Vista previa de la factura" className="max-h-52 rounded border border-rule" />
+                              <img loading="lazy" decoding="async" src={invoiceDocUrl[groupId]} alt="Vista previa de la factura" className="max-h-52 rounded border border-rule" />
                             </a>
                           ) : (
                             <iframe src={invoiceDocUrl[groupId]} className="w-full h-52 rounded border border-rule bg-white" title="Vista previa de la factura" />
@@ -1643,7 +1643,7 @@ export function PurchaseInvoicingPanel({
                           </div>
                           {isImageUrl(replaceDocUrl[groupId]) ? (
                             <a href={replaceDocUrl[groupId]} target="_blank" rel="noopener noreferrer" className="block w-fit">
-                              <img src={replaceDocUrl[groupId]} alt="Vista previa del nuevo documento" className="max-h-52 rounded border border-rule" />
+                              <img loading="lazy" decoding="async" src={replaceDocUrl[groupId]} alt="Vista previa del nuevo documento" className="max-h-52 rounded border border-rule" />
                             </a>
                           ) : (
                             <iframe src={replaceDocUrl[groupId]} className="w-full h-52 rounded border border-rule bg-white" title="Vista previa del nuevo documento" />
@@ -1728,7 +1728,7 @@ export function PurchaseInvoicingPanel({
           className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-6 cursor-zoom-out"
           onClick={() => setZoomedPhoto(null)}
         >
-          <img src={zoomedPhoto} alt="" className="max-w-full max-h-full rounded-md object-contain" />
+          <img loading="lazy" decoding="async" src={zoomedPhoto} alt="" className="max-w-full max-h-full rounded-md object-contain" />
         </div>
       )}
 

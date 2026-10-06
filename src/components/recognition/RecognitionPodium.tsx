@@ -49,7 +49,7 @@ export function RecognitionPodium() {
               >
                 {p.photoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.photoUrl} alt={p.name} className="w-full h-full object-cover object-top" />
+                  <img loading="lazy" decoding="async" src={p.photoUrl} alt={p.name} className="w-full h-full object-cover object-top" />
                 ) : (
                   <User size={isFirst ? 18 : 14} className="text-steel" />
                 )}

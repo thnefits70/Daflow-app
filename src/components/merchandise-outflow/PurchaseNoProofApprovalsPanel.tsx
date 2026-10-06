@@ -172,7 +172,7 @@ export function PurchaseNoProofApprovalsPanel() {
             <div className="flex items-center gap-3 mb-2.5">
               {item.catalogItem?.photos[0] && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={item.catalogItem.photos[0]} alt={name} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
+                <img loading="lazy" decoding="async" src={item.catalogItem.photos[0]} alt={name} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
               )}
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">

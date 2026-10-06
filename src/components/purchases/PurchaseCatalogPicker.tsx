@@ -383,7 +383,7 @@ export function PurchaseCatalogPicker({
   if (value) {
     return (
       <div className="flex items-center gap-2.5 bg-cloud border border-rule rounded-md px-3 py-2.5">
-        {value.photos[0] && <img src={value.photos[0]} alt="" className="w-9 h-9 rounded object-cover shrink-0" />}
+        {value.photos[0] && <img loading="lazy" decoding="async" src={value.photos[0]} alt="" className="w-9 h-9 rounded object-cover shrink-0" />}
         <div className="flex-1 min-w-0">
           <div className="text-[13.5px] font-semibold flex items-center gap-1.5">
             <CatalogCode code={value.justCode} />
@@ -442,7 +442,7 @@ export function PurchaseCatalogPicker({
             <div className="flex gap-2 mb-3">
               {photos.map((p, i) => (
                 <div key={i} className="relative">
-                  <img src={p} alt="" className="w-16 h-16 rounded object-cover border border-rule" />
+                  <img loading="lazy" decoding="async" src={p} alt="" className="w-16 h-16 rounded object-cover border border-rule" />
                   <button
                     type="button"
                     title="Quitar esta foto"
@@ -601,7 +601,7 @@ export function PurchaseCatalogPicker({
               {newDescription.trim() && <div className="text-[12px] text-steel mb-2">{newDescription.trim()}</div>}
               <div className="flex gap-1.5">
                 {photos.map((p, i) => (
-                  <img key={i} src={p} alt="" className="w-12 h-12 rounded object-cover" />
+                  <img loading="lazy" decoding="async" key={i} src={p} alt="" className="w-12 h-12 rounded object-cover" />
                 ))}
               </div>
             </div>

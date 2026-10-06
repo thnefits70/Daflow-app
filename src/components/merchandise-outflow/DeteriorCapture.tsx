@@ -276,7 +276,7 @@ export function DeteriorCapture({ allowUpload = false, onReported }: { allowUplo
                 <div className="flex items-center gap-2.5">
                   {item.catalogItem?.photos[0] && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.catalogItem.photos[0]} alt={itemName(item)} className="w-10 h-10 object-cover rounded border border-rule shrink-0 cursor-zoom-in" onClick={() => setZoomedPhoto(item.catalogItem!.photos[0])} />
+                    <img loading="lazy" decoding="async" src={item.catalogItem.photos[0]} alt={itemName(item)} className="w-10 h-10 object-cover rounded border border-rule shrink-0 cursor-zoom-in" onClick={() => setZoomedPhoto(item.catalogItem!.photos[0])} />
                   )}
                   <div className="flex-1 min-w-0 flex items-center justify-between gap-2">
                     <span className="text-[12.5px] font-semibold flex items-center gap-1.5 min-w-0">
@@ -321,7 +321,7 @@ export function DeteriorCapture({ allowUpload = false, onReported }: { allowUplo
             {batch.documentPhotoUrls.map((p, i) => (
               <div key={p} className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p} alt={`Foto ${i + 1}`} className="w-20 h-20 object-cover rounded-md border border-rule cursor-zoom-in" onClick={() => setZoomedPhoto(p)} />
+                <img loading="lazy" decoding="async" src={p} alt={`Foto ${i + 1}`} className="w-20 h-20 object-cover rounded-md border border-rule cursor-zoom-in" onClick={() => setZoomedPhoto(p)} />
                 <button type="button" title="Quitar esta foto" className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red text-white flex items-center justify-center cursor-pointer" onClick={() => removePhoto(i)}>
                   <X size={11} />
                 </button>
@@ -369,7 +369,7 @@ export function DeteriorCapture({ allowUpload = false, onReported }: { allowUplo
       {zoomedPhoto && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center cursor-zoom-out p-6" onClick={() => setZoomedPhoto(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={zoomedPhoto} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md shadow-2xl" onClick={(e) => e.stopPropagation()} />
+          <img loading="lazy" decoding="async" src={zoomedPhoto} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md shadow-2xl" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </div>
@@ -414,7 +414,7 @@ function AddDeteriorItemForm({ batchId, onAdded, onCancel }: { batchId: string; 
           <div className="flex items-center gap-2.5 bg-green/10 border border-green/35 rounded-md p-2.5">
             {selected.photos[0] && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={selected.photos[0]} alt={selected.name} className="w-10 h-10 object-cover rounded border border-green/40 shrink-0" />
+              <img loading="lazy" decoding="async" src={selected.photos[0]} alt={selected.name} className="w-10 h-10 object-cover rounded border border-green/40 shrink-0" />
             )}
             <div className="flex-1 min-w-0 text-[12.5px] font-semibold flex items-center gap-1.5">
               <CatalogCode code={selected.justCode} />

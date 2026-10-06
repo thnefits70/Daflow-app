@@ -186,7 +186,7 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
                     <div key={it.id} className="border-b border-rule last:border-0 pb-3 last:pb-0">
                       <div className="flex gap-2.5 mb-1.5">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <img loading="lazy" decoding="async"
                           src={it.livePhotoUrl}
                           alt="Foto del producto"
                           className="w-16 h-16 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
@@ -195,7 +195,7 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
                         />
                         {it.optionalPhotoUrl && (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img
+                          <img loading="lazy" decoding="async"
                             src={it.optionalPhotoUrl}
                             alt="Foto extra"
                             className="w-16 h-16 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
@@ -275,7 +275,7 @@ export function PersonalPurchasesFinancePanel({ isAdmin = false }: { isAdmin?: b
           onClick={() => setZoomedPhoto(null)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
+          <img loading="lazy" decoding="async" src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
         </div>
       )}
     </div>

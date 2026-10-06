@@ -134,7 +134,7 @@ function MonthlyRolePreview({ roleId }: { roleId: string }) {
             <div className="mt-4 pt-3 border-t border-gray-300">
               <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Comprobante de pago</div>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={data.payoutProofUrl} alt="Comprobante de pago" className="max-w-full rounded border border-gray-300" />
+              <img loading="lazy" decoding="async" src={data.payoutProofUrl} alt="Comprobante de pago" className="max-w-full rounded border border-gray-300" />
             </div>
           )}
         </div>

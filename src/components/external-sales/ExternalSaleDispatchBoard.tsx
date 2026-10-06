@@ -53,7 +53,7 @@ function SaleItems({ s }: { s: SaleDTO }) {
             <div key={it.id} className="flex items-center gap-2">
               {photo && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <img loading="lazy" decoding="async"
                   src={photo}
                   alt={it.catalogItem?.name ?? it.declaredProductName}
                   title={isReference ? "Foto de referencia del asesor (el producto no está matriculado)" : undefined}
@@ -224,7 +224,7 @@ export function ExternalSaleDispatchBoard({ canAssignGroup, canAssignPack }: { c
                   <div className="flex items-center gap-2">
                     {s.prepPhotoUrl && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={s.prepPhotoUrl} alt="Foto de los productos agrupados" className="w-10 h-10 object-cover rounded border border-rule" />
+                      <img loading="lazy" decoding="async" src={s.prepPhotoUrl} alt="Foto de los productos agrupados" className="w-10 h-10 object-cover rounded border border-rule" />
                     )}
                     <div className="text-[11.5px] text-green flex items-center gap-1">
                       <CheckCircle2 size={12} /> Listo{s.prepReadyBy ? ` por ${s.prepReadyBy.name}` : ""} · {formatDateTime(s.prepReadyAt!)}
@@ -242,7 +242,7 @@ export function ExternalSaleDispatchBoard({ canAssignGroup, canAssignPack }: { c
                       {photoUrl ? (
                         <div className="flex items-center gap-2 mb-2">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={photoUrl} alt="Foto de los productos" className="w-16 h-16 object-cover rounded border border-rule" />
+                          <img loading="lazy" decoding="async" src={photoUrl} alt="Foto de los productos" className="w-16 h-16 object-cover rounded border border-rule" />
                           <button type="button" className="text-[11px] text-blue font-semibold cursor-pointer" onClick={() => { setPhotoUrl(null); setTaking(true); }}>Volver a tomar</button>
                         </div>
                       ) : taking ? (

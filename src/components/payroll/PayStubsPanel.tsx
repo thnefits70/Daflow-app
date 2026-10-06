@@ -32,7 +32,7 @@ function StubPreview({ url, name }: { url: string; name: string }) {
   }
   if (kind === "image") {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={url} alt={name} className="w-full rounded mt-2.5 border border-rule" />;
+    return <img loading="lazy" decoding="async" src={url} alt={name} className="w-full rounded mt-2.5 border border-rule" />;
   }
   return null;
 }

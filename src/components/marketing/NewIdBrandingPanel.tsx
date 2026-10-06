@@ -46,7 +46,7 @@ function Thumbs({ label, urls }: { label: string; urls: string[] }) {
       <div className="flex gap-2 flex-wrap">
         {urls.map((u, i) => (
           <div key={i} className="bg-cloud rounded border border-rule flex items-center justify-center w-24 h-24 shrink-0">
-            <img src={u} alt="" className="max-w-full max-h-full object-contain" />
+            <img loading="lazy" decoding="async" src={u} alt="" className="max-w-full max-h-full object-contain" />
           </div>
         ))}
       </div>
@@ -214,7 +214,7 @@ export function NewIdBrandingPanel() {
             {view !== "pending" && (
               <div className="bg-cloud rounded border border-rule flex items-center justify-center w-20 h-20 shrink-0">
                 {e.referencePhotos[0] || e.arrivalPhotos[0] ? (
-                  <img src={e.referencePhotos[0] || e.arrivalPhotos[0]} alt="" className="max-w-full max-h-full object-contain" />
+                  <img loading="lazy" decoding="async" src={e.referencePhotos[0] || e.arrivalPhotos[0]} alt="" className="max-w-full max-h-full object-contain" />
                 ) : (
                   <span className="text-[10px] text-steel text-center px-1">Sin foto</span>
                 )}

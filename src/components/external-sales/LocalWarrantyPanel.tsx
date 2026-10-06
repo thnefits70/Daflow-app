@@ -292,7 +292,7 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
                       <input type="checkbox" checked={!!st?.on} disabled={left <= 0} onChange={(e) => setLine(l.catalogItemId, { on: e.target.checked })} />
                       {l.photo && (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={l.photo} alt="" className="w-8 h-8 rounded object-cover" />
+                        <img loading="lazy" decoding="async" src={l.photo} alt="" className="w-8 h-8 rounded object-cover" />
                       )}
                       <span className="flex-1">
                         <b>{l.name}</b> <span className="text-steel font-mono text-[11px]">{l.code ?? ""}</span>

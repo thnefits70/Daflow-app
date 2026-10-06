@@ -291,7 +291,7 @@ export function LoginForm({ logoUrl }: { logoUrl: string | null }) {
             {enrollQrDataUrl && (
               <div className="flex justify-center mb-4">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={enrollQrDataUrl} alt="Código QR del autenticador" className="w-40 h-40 rounded border border-rule bg-white p-2" />
+                <img loading="lazy" decoding="async" src={enrollQrDataUrl} alt="Código QR del autenticador" className="w-40 h-40 rounded border border-rule bg-white p-2" />
               </div>
             )}
             {enrollSecret && (

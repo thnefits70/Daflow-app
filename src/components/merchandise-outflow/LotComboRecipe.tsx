@@ -21,7 +21,7 @@ function PartList({ parts, tone }: { parts: Part[]; tone?: "old" }) {
         <div key={p.key} className={`flex items-center gap-2 rounded-md border px-2 py-1 text-[11.5px] ${tone === "old" ? "border-red/30 bg-red/5" : "border-rule bg-surface"}`}>
           {p.photo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.photo} alt="" className="w-7 h-7 object-cover rounded border border-rule shrink-0" />
+            <img loading="lazy" decoding="async" src={p.photo} alt="" className="w-7 h-7 object-cover rounded border border-rule shrink-0" />
           ) : (
             <div className="w-7 h-7 rounded border border-dashed border-rule shrink-0" />
           )}

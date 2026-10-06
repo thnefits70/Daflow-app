@@ -132,7 +132,7 @@ function ReplacementArrivalForm({ item, onDone }: { item: ItemDTO; onDone: () =>
           {photos.map((p, idx) => (
             <div key={p} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p} alt={`Foto ${idx + 1}`} className="w-14 h-14 object-cover rounded border border-rule" />
+              <img loading="lazy" decoding="async" src={p} alt={`Foto ${idx + 1}`} className="w-14 h-14 object-cover rounded border border-rule" />
               <button type="button" title="Quitar" className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red text-white flex items-center justify-center cursor-pointer" onClick={() => setPhotos(photos.filter((x) => x !== p))}>
                 <X size={10} />
               </button>
@@ -335,7 +335,7 @@ export function SupplierExchangeResolutionInbox({
                 {r.photoUrls.map((u) => (
                   <a key={u} href={u} target="_blank" rel="noreferrer">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={u} alt="Reemplazo recibido" className="w-12 h-12 object-cover rounded border border-rule" />
+                    <img loading="lazy" decoding="async" src={u} alt="Reemplazo recibido" className="w-12 h-12 object-cover rounded border border-rule" />
                   </a>
                 ))}
               </div>
@@ -488,7 +488,7 @@ export function SupplierExchangeResolutionInbox({
               <div className="flex gap-1.5 flex-wrap">
                 {batch.documentPhotoUrls.map((p, i) => (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img key={i} src={p} alt={`Evidencia ${i + 1}`} className="w-14 h-14 object-cover rounded border border-rule" />
+                  <img loading="lazy" decoding="async" key={i} src={p} alt={`Evidencia ${i + 1}`} className="w-14 h-14 object-cover rounded border border-rule" />
                 ))}
               </div>
             )}
@@ -499,7 +499,7 @@ export function SupplierExchangeResolutionInbox({
                   <div className="flex items-center gap-3">
                     {item.catalogItem?.photos[0] && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={item.catalogItem.photos[0]} alt={itemName(item)} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
+                      <img loading="lazy" decoding="async" src={item.catalogItem.photos[0]} alt={itemName(item)} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-semibold flex items-center gap-1.5 min-w-0">

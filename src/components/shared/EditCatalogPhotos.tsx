@@ -93,7 +93,7 @@ export function EditCatalogPhotos({
           {photos.map((p, i) => (
             <div key={i} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p} alt="" className="w-16 h-16 rounded object-cover border border-rule" />
+              <img loading="lazy" decoding="async" src={p} alt="" className="w-16 h-16 rounded object-cover border border-rule" />
               <button
                 type="button"
                 title="Quitar esta foto"

@@ -133,7 +133,7 @@ export function ExternalSaleReviewInbox() {
                   <div className="flex items-start gap-2">
                     {it.catalogItem?.photos[0] && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={it.catalogItem.photos[0]} alt={it.catalogItem.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+                      <img loading="lazy" decoding="async" src={it.catalogItem.photos[0]} alt={it.catalogItem.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="text-[12.5px] font-semibold flex items-center gap-1.5 flex-wrap">
@@ -250,7 +250,7 @@ function WarrantyDetails({ s }: { s: SaleDTO }) {
           <div key={it.id} className="rounded-md p-2 border bg-cloud border-rule flex items-start gap-2">
             {it.catalogItem?.photos[0] && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={it.catalogItem.photos[0]} alt={name(it)} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+              <img loading="lazy" decoding="async" src={it.catalogItem.photos[0]} alt={name(it)} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
             )}
             <div className="flex-1 min-w-0">
               <div className="text-[12.5px] font-semibold flex items-center gap-1.5 flex-wrap">
@@ -275,7 +275,7 @@ function WarrantyDetails({ s }: { s: SaleDTO }) {
               <video key={url} src={url} controls className="w-40 h-28 rounded border border-rule bg-black" />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
-              <img key={url} src={url} alt={`Evidencia ${i + 1}`} className="w-20 h-20 object-cover rounded border border-rule" />
+              <img loading="lazy" decoding="async" key={url} src={url} alt={`Evidencia ${i + 1}`} className="w-20 h-20 object-cover rounded border border-rule" />
             )
           )}
         </div>

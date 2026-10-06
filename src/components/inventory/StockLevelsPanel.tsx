@@ -1246,7 +1246,7 @@ export function StockLevelsPanel({
                   // catálogo junto al stock, para verificar que el producto
                   // contado es el mismo que corresponde al código — doble
                   // clic la amplía (GlobalImageZoom).
-                  <img src={r.photos[0]} alt="" className="w-8 h-8 rounded object-cover border border-rule shrink-0" />
+                  <img loading="lazy" decoding="async" src={r.photos[0]} alt="" className="w-8 h-8 rounded object-cover border border-rule shrink-0" />
                 ) : (
                   <div className="w-8 h-8 rounded border border-dashed border-rule shrink-0" />
                 )}

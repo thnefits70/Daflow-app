@@ -264,7 +264,7 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
           onClick={() => setLightboxUrl(null)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightboxUrl} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md shadow-2xl" onClick={(e) => e.stopPropagation()} />
+          <img loading="lazy" decoding="async" src={lightboxUrl} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-md shadow-2xl" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </div>
@@ -337,7 +337,7 @@ function ReadyItemRow({
       <div className="flex items-center gap-2.5">
         {item.photoUrls[0] && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <img loading="lazy" decoding="async"
             src={item.photoUrls[0]}
             alt={itemName(item)}
             className="w-9 h-9 object-cover rounded border border-rule cursor-zoom-in"
@@ -469,7 +469,7 @@ function ReviewItemRow({ item, repeated, canAct, onChanged, onExpandPhoto }: { i
       <div className="flex flex-wrap items-center gap-2.5">
         {item.photoUrls[0] && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <img loading="lazy" decoding="async"
             src={item.photoUrls[0]}
             alt={itemName(item)}
             className="w-10 h-10 object-cover rounded border border-rule shrink-0 cursor-zoom-in"

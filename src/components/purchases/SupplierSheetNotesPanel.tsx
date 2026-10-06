@@ -102,7 +102,7 @@ export function SupplierSheetNotesPanel() {
                 <div className="flex flex-wrap items-start gap-3">
                   {n.order?.photoUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={n.order.photoUrl} alt="" className="h-14 w-14 shrink-0 rounded border border-rule object-cover" />
+                    <img loading="lazy" decoding="async" src={n.order.photoUrl} alt="" className="h-14 w-14 shrink-0 rounded border border-rule object-cover" />
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="mb-1 text-[11.5px] text-steel">

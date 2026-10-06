@@ -26,7 +26,7 @@ function Attachment({ url, name, type }: { url: string; name: string; type: stri
   if (isImage) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={url} alt={name} className="max-w-[200px] max-h-[200px] rounded-md mt-1 block" />
+      <img loading="lazy" decoding="async" src={url} alt={name} className="max-w-[200px] max-h-[200px] rounded-md mt-1 block" />
     );
   }
   return (
@@ -195,7 +195,7 @@ export function PayrollChat({ employeeId, canSend }: { employeeId: string; canSe
             <div className="flex items-center gap-2 mb-1.5 bg-surface border border-rule rounded px-2.5 py-1.5">
               {pendingFile.type.startsWith("image/") ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={pendingFile.url} alt={pendingFile.name} className="w-8 h-8 object-cover rounded shrink-0" />
+                <img loading="lazy" decoding="async" src={pendingFile.url} alt={pendingFile.name} className="w-8 h-8 object-cover rounded shrink-0" />
               ) : (
                 <FileText size={14} className="shrink-0" />
               )}

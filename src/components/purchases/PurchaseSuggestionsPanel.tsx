@@ -204,7 +204,7 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged }: { r: R
     <div className="flex items-center gap-3 px-3 py-2.5 border-b border-rule last:border-b-0">
       {r.photo ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={r.photo} alt="" className="w-10 h-10 rounded object-cover bg-cloud shrink-0" />
+        <img loading="lazy" decoding="async" src={r.photo} alt="" className="w-10 h-10 rounded object-cover bg-cloud shrink-0" />
       ) : (
         <div className="w-10 h-10 rounded bg-cloud shrink-0" />
       )}
@@ -405,7 +405,7 @@ function List({
                 <div key={p.proposalId} className="flex items-center gap-3 px-3 py-2.5 border-b border-rule last:border-b-0">
                   {p.photo ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.photo} alt="" className="w-10 h-10 rounded object-cover bg-cloud shrink-0" />
+                    <img loading="lazy" decoding="async" src={p.photo} alt="" className="w-10 h-10 rounded object-cover bg-cloud shrink-0" />
                   ) : (
                     <div className="w-10 h-10 rounded bg-cloud shrink-0" />
                   )}

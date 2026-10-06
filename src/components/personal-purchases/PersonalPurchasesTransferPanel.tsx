@@ -222,7 +222,7 @@ export function PersonalPurchasesTransferPanel({ isAdmin }: { isAdmin: boolean }
           onClick={() => setZoomedPhoto(null)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
+          <img loading="lazy" decoding="async" src={zoomedPhoto} alt="Foto ampliada" className="max-w-full max-h-full object-contain rounded-md" />
         </div>
       )}
     </div>
@@ -235,7 +235,7 @@ function ItemsWithPhotos({ items, onZoom }: { items: ItemWithPhoto[]; onZoom: (u
       {items.map((it, i) => (
         <div key={i} className="flex items-center gap-2 text-[11.5px] text-steel-dim">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <img loading="lazy" decoding="async"
             src={it.livePhotoUrl}
             alt="Foto del producto"
             className="w-10 h-10 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"
@@ -244,7 +244,7 @@ function ItemsWithPhotos({ items, onZoom }: { items: ItemWithPhoto[]; onZoom: (u
           />
           {it.optionalPhotoUrl && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <img loading="lazy" decoding="async"
               src={it.optionalPhotoUrl}
               alt="Foto extra"
               className="w-10 h-10 object-cover rounded-md border border-rule shrink-0 cursor-zoom-in"

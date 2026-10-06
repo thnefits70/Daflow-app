@@ -43,7 +43,7 @@ export function SupplierShippingPhotoCapture({ token, requestId, initialPhotoUrl
   if (photoUrl) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
-      <img src={photoUrl} alt="Foto enviada" className="w-24 h-24 object-cover rounded-md border border-neutral-200" />
+      <img loading="lazy" decoding="async" src={photoUrl} alt="Foto enviada" className="w-24 h-24 object-cover rounded-md border border-neutral-200" />
     );
   }
 

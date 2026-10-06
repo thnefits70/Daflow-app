@@ -802,7 +802,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                 {g.map((r) => (
                   <div key={r.id} className="flex items-center gap-1.5 text-[14px] font-bold">
                     {r.catalogItem.photos[0] && (
-                      <img
+                      <img loading="lazy" decoding="async"
                         src={r.catalogItem.photos[0]}
                         alt=""
                         title="Doble clic para ampliar"
@@ -1037,7 +1037,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
             <div className="flex items-center gap-2 mb-2.5">
               {g[0].quoteImageUrl ? (
                 <a href={g[0].quoteImageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">
-                  {isPdf(g[0].quoteImageUrl) ? <FileText size={13} /> : <img src={g[0].quoteImageUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
+                  {isPdf(g[0].quoteImageUrl) ? <FileText size={13} /> : <img loading="lazy" decoding="async" src={g[0].quoteImageUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
                   Ver cotización
                 </a>
               ) : (
@@ -1045,7 +1045,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
               )}
               {g[0].purchaseOrderUrl && (
                 <a href={g[0].purchaseOrderUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[11.5px] text-blue font-semibold cursor-pointer">
-                  {isPdf(g[0].purchaseOrderUrl) ? <FileText size={13} /> : <img src={g[0].purchaseOrderUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
+                  {isPdf(g[0].purchaseOrderUrl) ? <FileText size={13} /> : <img loading="lazy" decoding="async" src={g[0].purchaseOrderUrl} alt="" className="w-6 h-6 rounded object-cover border border-rule" />}
                   Ver orden de compra
                 </a>
               )}
@@ -1352,7 +1352,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
           className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-6 cursor-zoom-out"
           onClick={() => setZoomedPhoto(null)}
         >
-          <img src={zoomedPhoto} alt="" className="max-w-full max-h-full rounded-md object-contain" />
+          <img loading="lazy" decoding="async" src={zoomedPhoto} alt="" className="max-w-full max-h-full rounded-md object-contain" />
         </div>
       )}
 

@@ -68,7 +68,7 @@ export function ComboComponentBuilder({
             <div key={c.catalogItem.id} className="flex items-center gap-2.5 bg-surface border border-rule rounded-md p-2">
               {c.catalogItem.photos[0] ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.catalogItem.photos[0]} alt={c.catalogItem.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+                <img loading="lazy" decoding="async" src={c.catalogItem.photos[0]} alt={c.catalogItem.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
               ) : (
                 <div className="w-10 h-10 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel">
                   <Clock size={14} />
@@ -110,7 +110,7 @@ export function ComboComponentBuilder({
             <button key={c.id} type="button" className="flex items-center gap-2.5 p-2 text-left hover:bg-surface cursor-pointer" onClick={() => addComponent(c)}>
               {c.photos[0] ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.photos[0]} alt={c.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+                <img loading="lazy" decoding="async" src={c.photos[0]} alt={c.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
               ) : (
                 <div className="w-10 h-10 rounded border border-dashed border-rule shrink-0 flex items-center justify-center text-steel">
                   <Clock size={14} />

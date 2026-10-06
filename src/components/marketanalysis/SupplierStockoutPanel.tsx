@@ -180,7 +180,7 @@ export function SupplierStockoutPanel({ canReport, canResolve }: { canReport: bo
                   <div className="flex items-center gap-2.5 mb-2.5">
                     {selected.photos[0] ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={selected.photos[0]} alt={selected.name} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
+                      <img loading="lazy" decoding="async" src={selected.photos[0]} alt={selected.name} className="w-12 h-12 object-cover rounded border border-rule shrink-0" />
                     ) : null}
                     <span className="text-[12.5px] font-semibold flex items-center gap-1.5 flex-wrap min-w-0">
                       <CatalogCode code={selected.justCode} />
@@ -230,7 +230,7 @@ export function SupplierStockoutPanel({ canReport, canResolve }: { canReport: bo
               <div className="flex items-center gap-2.5 mb-1.5">
                 {r.catalogItem.photos[0] ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={r.catalogItem.photos[0]} alt={r.catalogItem.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
+                  <img loading="lazy" decoding="async" src={r.catalogItem.photos[0]} alt={r.catalogItem.name} className="w-10 h-10 object-cover rounded border border-rule shrink-0" />
                 ) : null}
                 <div className="text-[13px] font-semibold flex items-center gap-1.5 flex-wrap min-w-0">
                   <CatalogCode code={r.catalogItem.justCode} />

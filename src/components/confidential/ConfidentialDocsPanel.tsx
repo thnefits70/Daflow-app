@@ -40,7 +40,7 @@ function DocViewer({ id, fileName }: { id: string; fileName: string }) {
   }
   if (kind === "image") {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={`/api/confidential-documents/${id}/view`} alt={fileName} className="w-full rounded mt-2.5 border border-rule" />;
+    return <img loading="lazy" decoding="async" src={`/api/confidential-documents/${id}/view`} alt={fileName} className="w-full rounded mt-2.5 border border-rule" />;
   }
   return <div className="text-[12px] text-steel mt-2">Este tipo de archivo no se puede previsualizar aquí.</div>;
 }

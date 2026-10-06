@@ -276,7 +276,7 @@ export function UnfoundWinnersCarousel() {
               style={{ width: CARD_W }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.imageUrl} alt={p.productName} draggable={false} className="w-full object-cover bg-white" style={{ height: CARD_W }} />
+              <img loading="lazy" decoding="async" src={p.imageUrl} alt={p.productName} draggable={false} className="w-full object-cover bg-white" style={{ height: CARD_W }} />
               <div className="px-2.5 py-2">
                 <div className="text-[16px] font-bold text-teal leading-tight">
                   {p.competitorPrice !== null ? `$${p.competitorPrice.toFixed(2)}` : "Sin precio"}

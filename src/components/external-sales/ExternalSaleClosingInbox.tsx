@@ -149,7 +149,7 @@ export function ExternalSaleClosingInbox() {
             {s.paymentProofUrl && <ProofPreview url={s.paymentProofUrl} filename={s.paymentProofName ?? undefined} size={48} />}
             {s.deliveryPhotoUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={s.deliveryPhotoUrl} alt="Foto de la entrega" className="w-12 h-12 object-cover rounded border border-rule" />
+              <img loading="lazy" decoding="async" src={s.deliveryPhotoUrl} alt="Foto de la entrega" className="w-12 h-12 object-cover rounded border border-rule" />
             )}
           </div>
 

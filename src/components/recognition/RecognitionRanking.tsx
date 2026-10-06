@@ -236,7 +236,7 @@ export function RecognitionRanking({
                 <div className="w-9 h-9 rounded-full overflow-hidden bg-cloud border border-rule flex items-center justify-center shrink-0">
                   {p.photoUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.photoUrl} alt={p.name} className="w-full h-full object-cover" />
+                    <img loading="lazy" decoding="async" src={p.photoUrl} alt={p.name} className="w-full h-full object-cover" />
                   ) : (
                     <User size={16} className="text-steel" />
                   )}
