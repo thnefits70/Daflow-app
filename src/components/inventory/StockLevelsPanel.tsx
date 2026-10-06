@@ -94,6 +94,7 @@ type StockRow = {
   pendingAdjustmentQuantity?: number | null;
   notPurchasedYet?: boolean;
   pendingDropiId?: string | null;
+  variantStock?: { variants: { id: string; name: string; stock: number }[]; unidentified: number } | null;
 };
 type SortKey = "name" | "balance" | "proveedor" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
 // Confirmado 2026-09-21, pedido explícito del usuario: además de ordenar
@@ -1280,6 +1281,13 @@ export function StockLevelsPanel({
                       exigir el ID): lo pone Heidy en "Publicar en Dropi". */}
                   {!r.notPurchasedYet && !r.justCode && !r.pendingDropiId && r.bodega !== "MKT_SUMINISTROS" && (
                     <span className="text-[10.5px] font-semibold text-gold mt-0.5">Sin ID · lo pone <B2BAdvisorName /></span>
+                  )}
+                  {/* Stock por variante (2026-10-06): desglose por color/talla. */}
+                  {r.variantStock && (
+                    <span className="text-[11px] text-steel mt-0.5">
+                      {r.variantStock.variants.map((v) => `${v.name} ${v.stock}`).join(" · ")}
+                      {r.variantStock.unidentified !== 0 && <span className={r.variantStock.unidentified < 0 ? "text-red" : "text-gold"}> · Sin identificar {r.variantStock.unidentified}</span>}
+                    </span>
                   )}
                 </span>
                 {/* Desde 2026-09-28: la marca viene de Análisis de Mercado / Control de Compras; solo el admin corrige. */}

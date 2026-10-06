@@ -7,6 +7,7 @@ import { recomputeAutoFillRate } from "@/lib/autoFillRate";
 import { carrierLabel } from "@/lib/carriers";
 import { getInventoryLeadId } from "@/lib/guards";
 import { computeGuideHolds, holdSummary } from "@/lib/fulfillmentHolds";
+import { applyLotSalesToVariants } from "@/lib/variantStock";
 
 // Parte 3 del plan acordado con el usuario 2026-09-23:
 //   - Joel y Scott escanean UNA vez el QR de la percha y escriben cuántos
@@ -312,6 +313,11 @@ async function maybeCloseLot(lotId: string) {
   if (pending) return;
   const closed = await prisma.fulfillmentLot.updateMany({ where: { id: lotId, status: "SENT" }, data: { status: "CLOSED", closedAt: new Date() } });
   if (closed.count === 0) return;
+
+  // Stock por variante (2026-10-06): lo despachado sale de cada color/talla
+  // según las guías, sin pasar de lo que Daniel confirmó.
+  const dispatched = new Map(lot.picking.map((p) => [p.catalogItemId, Math.min(p.confirmedQty ?? 0, p.normalNeeded)]));
+  await applyLotSalesToVariants(lotId, dispatched).catch((e) => console.error("[variant stock sale]", e));
 
   const missing = lot.picking.filter((p) => (p.confirmedQty ?? 0) < p.needed);
   if (missing.length === 0) return;

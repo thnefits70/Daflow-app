@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getInventoryLeadId } from "@/lib/guards";
 import { effectiveUnitCost } from "@/lib/purchases";
 import { getZeroCostCorrections } from "@/lib/sellingCost";
+import { applyReceiptToVariants } from "@/lib/variantStock";
 import type { MarketProductBodega, StockMovementType } from "@/generated/prisma/client";
 
 // Fase 3 (INVESTOCK) — confirmado 2026-09-09: el número de stock propio de
@@ -94,7 +95,7 @@ export async function recordKardexEntry(params: {
     }
   }
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const entry = await tx.stockKardexEntry.create({
       data: {
         catalogItemId: params.catalogItemId,
@@ -134,6 +135,12 @@ export async function recordKardexEntry(params: {
 
     return entry;
   });
+  // Stock por variante (2026-10-06): la compra suma a cada color/talla lo
+  // que se recibió. Nunca frena la entrada al Kardex.
+  if (params.type === "IN" && params.purchaseRequestReceiptId) {
+    await applyReceiptToVariants(params.purchaseRequestReceiptId).catch((e) => console.error("[variant stock purchase]", e));
+  }
+  return result;
 }
 
 export type KardexReleaseResult = { entriesPosted: number; catalogItemId: string };

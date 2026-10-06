@@ -155,7 +155,14 @@ export async function GET(req: NextRequest) {
       orderBy: { requestedAt: "asc" },
       include: purchaseRequestInclude,
     });
-    return NextResponse.json(rows);
+    // Stock por variante (2026-10-06): colores/tallas oficiales de cada
+    // producto, para pedir cuántos llegaron de cada uno al recibir.
+    const variants = await prisma.productVariant.findMany({
+      where: { catalogItemId: { in: [...new Set(rows.map((r) => r.catalogItemId))] } },
+      select: { catalogItemId: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    return NextResponse.json(rows.map((r) => ({ ...r, variantNames: variants.filter((v) => v.catalogItemId === r.catalogItemId).map((v) => v.name) })));
   }
 
   // Confirmado 2026-08-25: mercadería ya RECIBIDA, para el bloque de

@@ -14,7 +14,8 @@ import { useFormDraft } from "@/lib/useFormDraft";
 import { isScreenPhotoNote } from "@/lib/receiptPhotoScreen";
 import { WAREHOUSE_AREAS, areaLabel, type WarehouseArea } from "@/lib/warehouseAreas";
 
-type ReceiptDraftData = { receivedQty: string; receivedPhotoUrls: string[]; receivedVideoUrls: string[]; comment: string; minorDifferenceConfirmed: boolean };
+type ReceiptVariantRow = { name: string; qty: string; added: boolean };
+type ReceiptDraftData ={ receivedQty: string; receivedPhotoUrls: string[]; receivedVideoUrls: string[]; comment: string; minorDifferenceConfirmed: boolean };
 function isReceiptDraftEmpty(d: ReceiptDraftData) {
   return !d.receivedQty.trim() && d.receivedPhotoUrls.length === 0 && d.receivedVideoUrls.length === 0 && !d.comment.trim();
 }
@@ -44,6 +45,8 @@ type Row = {
   requestedAt: string;
   paidAt: string | null;
   catalogItem: { name: string; photos: string[]; justCode: string | null; hasExpiration: boolean; awaitingDropiId: boolean; warehouseArea: string | null };
+  // Colores/tallas oficiales del producto (stock por variante, 2026-10-06).
+  variantNames?: string[];
   supplier: { name: string; paymentMode?: "PREPAGO" | "CREDITO" };
   requestedBy: { name: string } | null;
   paidBy: { name: string } | null;
@@ -260,6 +263,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   const [openId, setOpenId] = useState<string | null>(null);
   const [urgentId, setUrgentId] = useState<string | null>(null);
   const [receivedQty, setReceivedQty] = useState("");
+  const [receiptVariants, setReceiptVariants] = useState<ReceiptVariantRow[] | null>(null);
   const [receivedPhotoUrls, setReceivedPhotoUrls] = useState<string[]>([]);
   const [takingPhoto, setTakingPhoto] = useState(false);
   const [aiChecking, setAiChecking] = useState(false);
@@ -595,9 +599,19 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     if (res.ok) setAiResult(data);
   }
 
-  async function confirmReceipt(id: string, item: { hasExpiration: boolean; awaitingDropiId: boolean }) {
+  // Stock por variante (2026-10-06): casillas por color/talla de la compra abierta.
+  function receiptVariantRows(r: Row): ReceiptVariantRow[] {
+    return receiptVariants ?? (r.variantNames ?? []).map((name) => ({ name, qty: "", added: false }));
+  }
+
+  async function confirmReceipt(id: string, item: { hasExpiration: boolean; awaitingDropiId: boolean }, variantRows: ReceiptVariantRow[] | null = null) {
     if (receivedPhotoUrls.length < 2 || !receivedQty) {
       setErr("Falta la cantidad recibida y al menos 2 fotos.");
+      return;
+    }
+    const variants = variantRows?.map((v) => ({ name: v.name.trim(), qty: v.qty.trim() === "" ? 0 : Number(v.qty) })).filter((v) => v.qty > 0);
+    if (variantRows && variants!.some((v) => !v.name)) {
+      setErr("Falta el nombre del color/talla nuevo.");
       return;
     }
     const asksExpiration = !item.awaitingDropiId;
@@ -614,6 +628,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         receivedQuantity: Number(receivedQty),
+        variants: variants ?? undefined,
         photoUrls: receivedPhotoUrls,
         videoUrls: receivedVideoUrls,
         comment: comment.trim() || undefined,
@@ -637,6 +652,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     setExpirationForm((m) => { const next = { ...m }; delete next[id]; return next; });
     clearReceiptDraft();
     setOpenId(null);
+    setReceiptVariants(null);
     setReceivedQty("");
     setReceivedPhotoUrls([]);
     setReceivedVideoUrls([]);
@@ -1674,6 +1690,33 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               </div>
                             )}
                           </div>
+                          {(r.variantNames?.length ?? 0) > 0 && (() => {
+                            // Stock por variante (2026-10-06): obligatorio decir cuántos de cada color/talla.
+                            const rows = receiptVariantRows(r);
+                            const sum = rows.reduce((s, v) => s + (Number(v.qty) || 0), 0);
+                            return (
+                              <div className="mb-2.5 rounded-md border border-teal/40 px-3 py-2">
+                                <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">¿Cuántos llegaron de cada color/talla?</div>
+                                {rows.map((v, i) => (
+                                  <div key={i} className="flex items-center gap-2 mb-1.5">
+                                    {v.added ? (
+                                      <input className="flex-1 min-w-0 rounded border border-rule px-2 py-1.5 text-[13px]" placeholder="Color o talla nuevo" maxLength={60} value={v.name} onChange={(e) => setReceiptVariants(rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+                                    ) : (
+                                      <span className="flex-1 min-w-0 truncate text-[13px]">{v.name}</span>
+                                    )}
+                                    <input type="number" inputMode="numeric" min={0} className="w-20 rounded border border-rule px-2 py-1.5 text-[13.5px] text-right" placeholder="0" value={v.qty} onChange={(e) => setReceiptVariants(rows.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))} />
+                                  </div>
+                                ))}
+                                <button type="button" className="text-teal text-[12px] font-semibold cursor-pointer" onClick={() => setReceiptVariants([...rows, { name: "", qty: "", added: true }])}>
+                                  ➕ Llegó otro color/talla
+                                </button>
+                                <div className={`text-[12px] mt-1 ${receivedQty !== "" && sum !== Number(receivedQty) ? "text-red" : "text-steel"}`}>
+                                  Suma: <b>{sum}</b>
+                                  {receivedQty !== "" && sum !== Number(receivedQty) && " — tiene que dar la cantidad recibida"}
+                                </div>
+                              </div>
+                            );
+                          })()}
                           {r.urgentReports.length > 0 && (
                             <div className="flex items-start gap-1.5 bg-red/10 border border-red/30 rounded-md px-3 py-2 mb-2.5 text-[11.5px] text-red">
                               <AlertTriangle size={13} className="shrink-0 mt-0.5" />
@@ -1852,11 +1895,12 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                                 !receivedQty ||
                                 (!r.catalogItem.awaitingDropiId && expirationLotMissing(r.id, r.catalogItem.hasExpiration, receivedQty)) ||
                                 Number(receivedQty) !== (r.urgentReports.length > 0 ? goodQuantity(r) : r.quantity) ||
+                                ((r.variantNames?.length ?? 0) > 0 && receiptVariantRows(r).reduce((s, v) => s + (Number(v.qty) || 0), 0) !== Number(receivedQty)) ||
                                 (aiResult?.likelyMatch === false && !(aiResult.minorDifferenceOnly && minorDifferenceConfirmed))
                               }
                               title={aiChecking ? "Espera a que la IA termine de comparar las fotos" : undefined}
                               className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-                              onClick={() => confirmReceipt(r.id, r.catalogItem)}
+                              onClick={() => confirmReceipt(r.id, r.catalogItem, (r.variantNames?.length ?? 0) > 0 ? receiptVariantRows(r) : null)}
                             >
                               {aiChecking ? "Verificando fotos…" : "✓ Confirmar que llegó"}
                             </button>
@@ -2121,7 +2165,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                                 disabled={!canReceiveTeam}
                                 title={!canReceiveTeam ? "Exclusivo del equipo de Inventario" : undefined}
                                 className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                                onClick={() => { setOpenId(r.id); setReceivedPhotoUrls([]); setReceivedVideoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); setReceivedQty(""); setComment(""); setErr(""); }}
+                                onClick={() => { setOpenId(r.id); setReceiptVariants(null); setReceivedPhotoUrls([]); setReceivedVideoUrls([]); setAiResult(null); setMinorDifferenceConfirmed(false); setReceivedQty(""); setComment(""); setErr(""); }}
                               >
                                 ✓ Confirmar que llegó
                               </button>

@@ -3563,6 +3563,9 @@ model PurchaseRequestReceipt {
   request   PurchaseRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   receivedQuantity Int
+  // Stock por variante (2026-10-06): cuántos llegaron de cada color/talla,
+  // [{ name, qty }]. Obligatorio si el producto ya tiene lista oficial.
+  variantCounts    Json?
   photoUrls        String[]
   // Confirmado 2026-08-18: pedido explícito del usuario — evidencia en video
   // ADEMÁS de las fotos (que siguen siendo obligatorias), opcional, útil
@@ -7702,10 +7705,30 @@ model ProductVariant {
   countedAt     DateTime?
   createdAt     DateTime            @default(now())
 
-  aliases ProductVariantAlias[]
+  aliases   ProductVariantAlias[]
+  movements ProductVariantMovement[]
 
   @@unique([catalogItemId, name])
   @@index([catalogItemId])
+}
+
+// Stock por variante (pedido del usuario 2026-10-06): cada entrada o salida
+// de un color/talla. El saldo de la variante es la suma. Es un DESGLOSE del
+// Kardex (que sigue siendo el stock oficial del producto): lo que no se sabe
+// de qué color fue queda como "Sin identificar" = Kardex − suma de variantes.
+// reason: COUNT (ajuste al conteo físico), SALE (corte confirmado),
+// PURCHASE (compra que entró al Kardex). refId + reason evita contar dos veces.
+model ProductVariantMovement {
+  id        String         @id @default(cuid())
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantity  Int
+  reason    String
+  refId     String
+  createdAt DateTime       @default(now())
+
+  @@unique([variantId, reason, refId])
+  @@index([variantId])
 }
 
 // Cómo llega escrita una variante en las guías y a cuál de la lista oficial

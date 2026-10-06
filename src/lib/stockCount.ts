@@ -4,6 +4,7 @@ import { getCurrentStock } from "@/lib/stockKardex";
 import { WAREHOUSE_AREAS } from "@/lib/warehouseAreas";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
 import { variantSuggestions } from "@/lib/variantSales";
+import { applyCountToVariants } from "@/lib/variantStock";
 import { COUNT_HOURS_TEXT, MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, openAssignmentFor, recentMovement, windowStatus } from "@/lib/stockCountAssignments";
 
 // Conteo físico de inventario — pedido del usuario 2026-10-02.
@@ -264,6 +265,8 @@ async function saveCountedVariants(countId: string) {
         .filter((e) => !counted.some((v) => v.name.toLowerCase() === e.name.toLowerCase()))
         .map((e) => prisma.productVariant.update({ where: { id: e.id }, data: { countedQty: 0, countedAt: now } })),
     ]);
+    // Stock por variante: cada color queda en lo contado.
+    await applyCountToVariants(l.catalogItemId, counted, countId).catch((e) => console.error("[variant stock count]", e));
   }
 }
 

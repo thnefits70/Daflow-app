@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { canViewStockLevels } from "@/lib/guards";
 import { getAllCurrentStock } from "@/lib/stockKardex";
 import { getUnconfirmedDispatchSummary } from "@/lib/fulfillmentPicking";
+import { getVariantStock } from "@/lib/variantStock";
 import {
   bodegaUnitCost,
   computeBenistockPrice,
@@ -46,9 +47,18 @@ export async function GET() {
   // Cambiado 2026-09-30, pedido del usuario: el costo para los precios sale
   // de lo que queda de verdad en bodega (ver sellingCost.ts), no del
   // promedio del Kardex ni del costo fijo de la propuesta de Jariel.
-  const costBasisByItemId = await resolveCostBasisForCatalogItems(rows.map((r) => r.catalogItemId));
+  const [costBasisByItemId, variantStock] = await Promise.all([
+    resolveCostBasisForCatalogItems(rows.map((r) => r.catalogItemId)),
+    // Stock por variante (2026-10-06): desglose por color/talla.
+    getVariantStock(rows.map((r) => r.catalogItemId)),
+  ]);
 
   const withPrices = rows.map((r) => {
+    const variants = variantStock.get(r.catalogItemId) ?? null;
+    return withPrice({ ...r, variantStock: variants });
+  });
+
+  function withPrice<T extends (typeof rows)[number]>(r: T) {
     // Confirmado 2026-09-15, pedido explícito del usuario: agrega "Precio
     // proveedor" y "Puesto en bodega" (costo sin y con flete por unidad) y
     // "Precio Dropi" — este último estimado con el mismo criterio de
@@ -71,7 +81,7 @@ export async function GET() {
       b2cPrice1Unit: computeB2CPrice({ ...base, totalQuantity: 1 }),
       b2cPrice2to11: computeB2CPrice({ ...base, totalQuantity: 2 }),
     };
-  });
+  }
 
   return NextResponse.json({ rows: withPrices, unconfirmedDispatch });
 }

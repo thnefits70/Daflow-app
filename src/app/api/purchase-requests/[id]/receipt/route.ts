@@ -35,6 +35,8 @@ const schema = z.object({
       quantity: z.number().int().positive(),
     })
     .optional(),
+  // Stock por variante (2026-10-06): cuántos llegaron de cada color/talla.
+  variants: z.array(z.object({ name: z.string().max(60), qty: z.number().int().min(0) })).max(40).optional(),
 });
 
 // Confirmado 2026-08-18: pedido explícito del usuario — cualquiera del
@@ -129,11 +131,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "La cantidad del lote no puede ser mayor a la cantidad recibida." }, { status: 400 });
   }
 
+  // Stock por variante (pedido del usuario 2026-10-06): si el producto ya
+  // tiene su lista de colores/tallas (del conteo), es obligatorio decir
+  // cuántos llegaron de cada uno, y la suma tiene que dar lo recibido.
+  const hasVariants = (await prisma.productVariant.count({ where: { catalogItemId: existing.catalogItemId } })) > 0;
+  const variants = (parsed.data.variants ?? []).map((v) => ({ name: v.name.replace(/\s+/g, " ").trim(), qty: v.qty })).filter((v) => v.name && v.qty > 0);
+  if (hasVariants) {
+    if (variants.length === 0) return NextResponse.json({ error: "Escribe cuántos llegaron de cada color/talla. Si no ves las casillas, cierra y vuelve a abrir la pantalla." }, { status: 400 });
+    if (new Set(variants.map((v) => v.name.toLowerCase())).size !== variants.length) return NextResponse.json({ error: "Un color/talla está repetido: súmalo en una sola casilla." }, { status: 400 });
+    if (variants.reduce((s, v) => s + v.qty, 0) !== parsed.data.receivedQuantity) return NextResponse.json({ error: "La suma de los colores/tallas no da la cantidad recibida." }, { status: 400 });
+  }
+
   const [, updated] = await prisma.$transaction([
     prisma.purchaseRequestReceipt.create({
       data: {
         requestId: id,
         receivedQuantity: parsed.data.receivedQuantity,
+        variantCounts: hasVariants ? variants : undefined,
         photoUrls: parsed.data.photoUrls,
         videoUrls: parsed.data.videoUrls ?? [],
         comment: parsed.data.comment || null,
