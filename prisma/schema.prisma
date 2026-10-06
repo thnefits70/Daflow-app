@@ -2074,6 +2074,7 @@ model PurchaseCatalogItem {
   fulfillmentRequestItems        FulfillmentRequestItem[]
   fulfillmentRequestVariantNotes FulfillmentRequestVariantNote[]
   productVariants                ProductVariant[]
+  productVariantAliases          ProductVariantAlias[]
   // Confirmado 2026-09-23: reportes de Compras de que este producto ya no
   // se consigue con ningún proveedor (ver SupplierStockoutReport).
   supplierStockoutReports        SupplierStockoutReport[]
@@ -7701,7 +7702,28 @@ model ProductVariant {
   countedAt     DateTime?
   createdAt     DateTime            @default(now())
 
+  aliases ProductVariantAlias[]
+
   @@unique([catalogItemId, name])
+  @@index([catalogItemId])
+}
+
+// Cómo llega escrita una variante en las guías y a cuál de la lista oficial
+// corresponde (pedido del usuario 2026-10-06): "Gris7cafe" → Gris con café.
+// Lo decide Daniel una vez y queda para siempre. ignored = "No es un color"
+// (ej. "De Colores"). label es el nombre ya limpio (canonicalVariantLabel).
+model ProductVariantAlias {
+  id            String              @id @default(cuid())
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  label         String
+  variantId     String?
+  variant       ProductVariant?     @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  ignored       Boolean             @default(false)
+  decidedById   String?
+  decidedAt     DateTime            @default(now())
+
+  @@unique([catalogItemId, label])
   @@index([catalogItemId])
 }
 

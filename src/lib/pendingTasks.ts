@@ -31,6 +31,7 @@ import { formerLeaderIdsFor, isSummaryComplete } from "@/lib/formerLeaders";
 import { getUnlinkedShanghaiCount } from "@/lib/storeTracking";
 import { getCountedUnconfirmedLots, overdueCountedLots } from "@/lib/fulfillmentPicking";
 import { getDropiPriceChanges } from "@/lib/dropiPriceChanges";
+import { getUnmatchedGuideVariants } from "@/lib/variantSales";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -486,6 +487,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   reingreso_mercaderia_verificacion_semanal: "Reingreso de mercadería — lote semanal de dañados por verificar",
   egresos_deterioro_resolucion: "Deterioro en bodega — falta tu decisión",
   lotes_caducidad_alerta: "Productos vencidos o que vencen en 6 meses o menos",
+  variantes_guias_unir: "Colores/tallas de las guías por unir con la lista del conteo",
   ids_sin_marca: "Productos o combos sin marca o sin ID de Dropi",
   productos_sin_area: "Productos sin área de bodega (A…G)",
   reclamos_proveedor_atrasados: "Reclamos al proveedor trabados o pasados por alto",
@@ -3116,6 +3118,23 @@ async function getExpirationLotsPendingItem(href: string): Promise<PendingItem |
   };
 }
 
+// Pedido del usuario 2026-10-06: colores/tallas de las guías escritos
+// distinto a la lista oficial del conteo — Daniel dice a cuál corresponden.
+// Se quita solo cuando ya no queda ninguno por unir.
+async function getGuideVariantsPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await getUnmatchedGuideVariants();
+  if (rows.length === 0) return null;
+  const products = new Set(rows.map((r) => r.catalogItemId)).size;
+  return {
+    type: "variantes_guias_unir",
+    icon: "🎨",
+    label: "Colores/tallas de las guías por unir",
+    meta: `${rows.length} nombre${rows.length === 1 ? "" : "s"} en ${products} producto${products === 1 ? "" : "s"}`,
+    overdue: false,
+    href,
+  };
+}
+
 // Pedido del usuario 2026-10-02: la marca se pone sola (al crear el producto,
 // o el combo la aprende de su manifiesto — lib/manifestBrand.ts), pero si
 // algún ID queda sin marca o un producto sin ID de Dropi, Daniel lo ve en
@@ -4188,6 +4207,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (deteriorResolutionItem) items.push(deteriorResolutionItem);
     const expirationLotsItem = await getExpirationLotsPendingItem("/area/reingreso-mercaderia?tab=productos#lotes-caducidad").catch(() => null);
     if (expirationLotsItem) items.push(expirationLotsItem);
+    const guideVariantsItem = await getGuideVariantsPendingItem("/area/conteo-inventario#variantes").catch(() => null);
+    if (guideVariantsItem) items.push(guideVariantsItem);
     const missingBrandItem = await getMissingBrandPendingItem("/area/workspace?tab=stock-actual").catch(() => null);
     if (missingBrandItem) items.push(missingBrandItem);
     const missingAreaItem = await getMissingWarehouseAreaPendingItem("/area/workspace?tab=stock-actual&filtro=sin-area").catch(() => null);
@@ -4403,7 +4424,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "conteo_inventario", "stock_negativo", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
+      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "variantes_guias_unir", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "conteo_inventario", "stock_negativo", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
