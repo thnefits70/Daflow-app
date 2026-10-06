@@ -91,6 +91,8 @@ export async function GET(_req: NextRequest) {
           unitCost: true,
           totalCost: true,
           paidAt: true,
+          requestNumber: true,
+          requestedAt: true,
           catalogItem: { select: { name: true, justCode: true } },
           supplier: { select: { id: true, name: true, paymentMode: true } },
         },

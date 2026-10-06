@@ -118,7 +118,7 @@ type Report = {
   excessGestionAt: string | null;
   excessConfirmedBy: { name: string } | null;
   excessConfirmedAt: string | null;
-  request: { quantity: number; unitCost: number; totalCost: number; catalogItem: { name: string; justCode: string | null }; supplier: { id: string; name: string; paymentMode?: string } };
+  request: { quantity: number; unitCost: number; totalCost: number; requestNumber?: number; requestedAt?: string; catalogItem: { name: string; justCode: string | null }; supplier: { id: string; name: string; paymentMode?: string } };
   // Confirmado 2026-08-25: "Reclamo posterior al cierre" — mismo modelo,
   // isLateClaim distingue este camino del "Informar urgente" normal. Ya
   // solo llega acá una vez que Daniel confirmó la baja en Just.
@@ -150,6 +150,12 @@ function claimUnitCost(r: Report) {
 
 function money(n: number) {
   return `$${n.toFixed(2)}`;
+}
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString("es-MX");
+}
+function daysSince(value: string) {
+  return Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 86400000));
 }
 function isVideoUrl(url: string) {
   return /\.(mp4|mov|webm|avi|m4v)($|\?)/i.test(url);
@@ -746,6 +752,14 @@ export function PurchaseUrgentReportsPanel({
                   <div className="text-[11.5px] text-steel mb-1">
                     {r.request.supplier.name} — {hideMoney ? "" : `pagado ${money(r.request.totalCost)} · `}{r.request.quantity} un. pedidas
                   </div>
+                  {/* Pedido del usuario 2026-10-06: desde cuándo está esto —
+                      fecha de la compra y días desde el reporte. */}
+                  {r.request.requestedAt && (
+                    <div className="text-[11.5px] text-steel mb-1">
+                      {r.request.requestNumber != null && <>SC-{String(r.request.requestNumber).padStart(3, "0")} · </>}
+                      Compra del {formatDate(r.request.requestedAt)} · reclamo abierto hace <b>{daysSince(r.reportedAt)} {daysSince(r.reportedAt) === 1 ? "día" : "días"}</b>
+                    </div>
+                  )}
                   {r.isLateClaim && r.originUncertain && !hideMoney && (
                     <div className="flex items-center gap-1.5 text-[11px] mb-1" style={{ color: "var(--color-gold)" }}>
                       <AlertTriangle size={11} /> Origen incierto — usando costo promedio ${r.estimatedUnitCost?.toFixed(2)}/un.
