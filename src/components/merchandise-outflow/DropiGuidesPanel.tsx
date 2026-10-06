@@ -725,6 +725,14 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                 <RegisterComboForm initialCode={res.kind === "comboNoRecipe" ? res.comboCode : r.code} initialLabel={r.name} onRegistered={() => read(true)} onCancel={() => setRegistering(null)} />
               ) : (
                 <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
+                  {res.kind === "unknown" && res.suggestion && res.suggestion.justCode && (
+                    // Copia del ID fuera del botón de selección, para copiar y
+                    // pegar sin elegir el producto por accidente (pedido 2026-10-06).
+                    <span className="flex items-center gap-1 rounded border border-steel/40 px-2 py-1">
+                      <span className="font-mono text-[9.5px] font-bold uppercase text-steel">ID</span>
+                      <CatalogCode code={res.suggestion.justCode} />
+                    </span>
+                  )}
                   {res.kind === "unknown" && res.suggestion && (
                     <button
                       type="button"
