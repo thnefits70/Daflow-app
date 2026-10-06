@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { recordKardexEntry } from "@/lib/stockKardex";
-import { applyReturnToVariants } from "@/lib/variantStock";
+import { applyReturnToVariants, detectReturnVariants } from "@/lib/variantStock";
+import { cacheGuideLabelsForBatch } from "@/lib/localWarranty";
 import { autoApproveReadyReentryItems, maybeMarkBatchClosed, notifyFinanceLeadWeeklyBatchReady } from "@/lib/merchandiseReentry";
 
 // Confirmado 2026-09-23, pedido explícito del usuario: "de ahora en adelante
@@ -69,7 +70,7 @@ export async function autoReingresoReadyCancelledGuides(reportIds?: string[]): P
       fulfillmentRemovedAt: { not: null },
       ...(reportIds ? { id: { in: reportIds } } : {}),
     },
-    select: { id: true, items: { select: { catalogItemId: true, quantity: true } } },
+    select: { id: true, guideNumber: true, items: { select: { id: true, catalogItemId: true, quantity: true } } },
   });
   let done = 0;
   for (const report of ready) {
@@ -79,20 +80,61 @@ export async function autoReingresoReadyCancelledGuides(reportIds?: string[]): P
     });
     if (claimed.count === 0) continue;
     done++;
+    // Stock por variante (2026-10-06): el color/talla que dice la etiqueta
+    // de la guía cancelada (como en las devoluciones escaneadas).
+    const qtyByItem = new Map<string, number>();
+    for (const i of report.items) if (i.catalogItemId) qtyByItem.set(i.catalogItemId, (qtyByItem.get(i.catalogItemId) ?? 0) + i.quantity);
+    const lines = [...qtyByItem].map(([catalogItemId, quantity]) => ({ catalogItemId, quantity }));
+    const colors = await cancelledGuideColors(report.guideNumber, lines).catch((e) => {
+      console.error("[variant stock cancelled guide]", e);
+      return new Map<string, { name: string; qty: number }[]>();
+    });
     // Secuencial, no en paralelo: cada línea depende del saldo que dejó la
     // anterior del mismo producto.
     for (const item of report.items) {
       if (!item.catalogItemId) continue;
-      await recordKardexEntry({
+      const ok = await recordKardexEntry({
         catalogItemId: item.catalogItemId,
         type: "IN",
         quantity: item.quantity,
         unitCost: null,
         occurredAt: new Date(),
-      }).catch((err) => console.error("[autoReingresoReadyCancelledGuides] No se pudo registrar la entrada de Kardex:", err));
+      })
+        .then(() => true)
+        .catch((err) => {
+          console.error("[autoReingresoReadyCancelledGuides] No se pudo registrar la entrada de Kardex:", err);
+          return false;
+        });
+      // El color se reparte entre las filas del mismo producto.
+      const pool = colors.get(item.catalogItemId);
+      if (ok && pool?.length) {
+        const mine: { name: string; qty: number }[] = [];
+        let left = item.quantity;
+        for (const c of pool) {
+          const take = Math.min(c.qty, left);
+          if (take <= 0) continue;
+          mine.push({ name: c.name, qty: take });
+          c.qty -= take;
+          left -= take;
+        }
+        await applyReturnToVariants(item.id, item.catalogItemId, item.quantity, mine).catch((e) => console.error("[variant stock cancelled guide]", e));
+      }
     }
   }
   return done;
+}
+
+// Color/talla de cada producto según la etiqueta de la guía cancelada.
+async function cancelledGuideColors(guideNumber: string, lines: { catalogItemId: string; quantity: number }[]): Promise<Map<string, { name: string; qty: number }[]>> {
+  if (lines.length === 0) return new Map();
+  let gv = await prisma.fulfillmentRequestGuide.findFirst({ where: { guideNumber: { equals: guideNumber, mode: "insensitive" } }, select: { batchId: true, guideNumber: true, labelVariants: true } });
+  if (!gv) return new Map();
+  if (gv.labelVariants === null) {
+    await cacheGuideLabelsForBatch(gv.batchId);
+    gv = await prisma.fulfillmentRequestGuide.findUnique({ where: { guideNumber: gv.guideNumber }, select: { batchId: true, guideNumber: true, labelVariants: true } });
+  }
+  if (!gv || !Array.isArray(gv.labelVariants)) return new Map();
+  return detectReturnVariants({ fulfillmentBatchId: gv.batchId, labelVariants: gv.labelVariants as { code: string; variant: string | null; qty: number }[], lines });
 }
 
 // Ciclo semanal de dañados de Reingreso: el corte del sábado se cierra solo

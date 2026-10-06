@@ -73,8 +73,8 @@ export async function applyReceiptToVariants(receiptId: string): Promise<void> {
 // confirmado por Daniel). Lo que salió sin color en la guía se descuenta
 // del color que el equipo dijo que sacó; si no dijo, queda en
 // "Sin identificar".
-export async function applyLotSalesToVariants(lotId: string, dispatchedByItem: Map<string, number>): Promise<void> {
-  const itemIds = [...dispatchedByItem.keys()].filter((id) => (dispatchedByItem.get(id) ?? 0) > 0);
+export async function applyLotSalesToVariants(lotId: string, dispatchedByItem: Map<string, number>, warrantyByItem: Map<string, number> = new Map()): Promise<void> {
+  const itemIds = [...new Set([...dispatchedByItem.keys(), ...warrantyByItem.keys()])].filter((id) => (dispatchedByItem.get(id) ?? 0) + (warrantyByItem.get(id) ?? 0) > 0);
   if (itemIds.length === 0) return;
   const official = await prisma.productVariant.findMany({ where: { catalogItemId: { in: itemIds } }, select: { id: true, catalogItemId: true, name: true } });
   if (official.length === 0) return;
@@ -108,6 +108,24 @@ export async function applyLotSalesToVariants(lotId: string, dispatchedByItem: M
       const take = Math.min(qty, left);
       if (take <= 0) continue;
       total.set(variantId, (total.get(variantId) ?? 0) + take);
+      left -= take;
+    }
+  }
+  // Garantías completas o de parte del combo (2026-10-06): el color/talla que
+  // traía la etiqueta de la guía de garantía, sin pasar de lo que salió
+  // como garantía. Las de "solo una pieza" no tocan el stock del producto.
+  const warrantyItems = await prisma.fulfillmentRequestItem.findMany({
+    where: { batch: { lotId }, catalogItemId: { in: [...withList] }, warrantyGuide: { not: null }, warrantyMode: { in: ["COMPLETE", "PARTIAL"] }, warrantyPiece: { not: null } },
+    select: { catalogItemId: true, quantity: true, warrantyPiece: true },
+  });
+  for (const itemId of withList) {
+    let left = warrantyByItem.get(itemId) ?? 0;
+    for (const w of warrantyItems.filter((x) => x.catalogItemId === itemId)) {
+      const name = resolve(itemId, w.warrantyPiece!);
+      const v = name ? official.find((o) => o.catalogItemId === itemId && o.name.toLowerCase() === name.toLowerCase()) : undefined;
+      const take = v ? Math.min(w.quantity, left) : 0;
+      if (take <= 0) continue;
+      total.set(v!.id, (total.get(v!.id) ?? 0) + take);
       left -= take;
     }
   }

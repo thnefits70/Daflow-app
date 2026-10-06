@@ -331,7 +331,9 @@ async function maybeCloseLot(lotId: string) {
   // Stock por variante (2026-10-06): lo despachado sale de cada color/talla
   // según las guías, sin pasar de lo que Daniel confirmó.
   const dispatched = new Map(lot.picking.map((p) => [p.catalogItemId, Math.min(p.confirmedQty ?? 0, p.normalNeeded)]));
-  await applyLotSalesToVariants(lotId, dispatched).catch((e) => console.error("[variant stock sale]", e));
+  // Garantías (2026-10-06): lo que salió de más sobre el despacho normal, hasta lo pedido como garantía.
+  const warrantyOut = new Map(lot.picking.map((p) => [p.catalogItemId, Math.min(Math.max(0, (p.confirmedQty ?? 0) - p.normalNeeded), p.warrantyNeeded)]));
+  await applyLotSalesToVariants(lotId, dispatched, warrantyOut).catch((e) => console.error("[variant stock sale]", e));
 
   const missing = lot.picking.filter((p) => (p.confirmedQty ?? 0) < p.needed);
   if (missing.length === 0) return;
