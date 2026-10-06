@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { requireAdminSession, canManageNomina } from "@/lib/guards";
 import { hashPassword } from "@/lib/password";
+import { closeImprovementPlansOfInactiveCollaborators } from "@/lib/improvementPlan";
 import { assignB2BAdvisorRole, revokeB2BAdvisorRole, B2B_ADVISOR_TITLES } from "@/lib/b2bAdvisorRole";
 
 function omitPasswordHash<T extends { passwordHash: string; twoFactorSecret?: string | null; twoFactorBackupCodes?: string[] }>(
@@ -208,6 +209,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   try {
     const user = await prisma.user.update({ where: { id }, data });
+    if (d.isActive === false) await closeImprovementPlansOfInactiveCollaborators().catch(() => null);
     return NextResponse.json({
       ...omitPasswordHash(user),
       ...(b2bResult ? { b2bPreviousHolders: b2bResult.previousHolders, b2bMovedToMkt: b2bResult.movedToMkt } : {}),

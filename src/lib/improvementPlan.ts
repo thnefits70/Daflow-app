@@ -349,6 +349,26 @@ async function notifyAdminFinalStageOnce(planId: string): Promise<void> {
   }).catch(() => null);
 }
 
+// 2026-10-06: un plan no puede seguir abierto si el colaborador ya salió de
+// la empresa (caso HEIDY MORALES) — se cierra sin resultado (outcome null,
+// se ve "—" en el panel admin) y sin avisarle a nadie. Se llama al
+// desactivar un usuario y también desde los pendientes de Inicio, para
+// limpiar los que ya estaban desactivados antes de este cambio.
+export async function closeImprovementPlansOfInactiveCollaborators(): Promise<void> {
+  await prisma.improvementPlan.updateMany({
+    where: { stage: { not: "CERRADO" }, collaborator: { isActive: false } },
+    data: {
+      stage: "CERRADO",
+      closedAt: new Date(),
+      closureNotes: "Cerrado automáticamente: el colaborador ya no está en la empresa.",
+      pendingClosureOutcome: null,
+      pendingClosureNotes: null,
+      pendingClosureRequestedAt: null,
+      pendingClosureRequestedById: null,
+    },
+  });
+}
+
 async function closePlanAsContinuidad(planId: string, notes: string): Promise<void> {
   const plan = await prisma.improvementPlan.update({
     where: { id: planId },
