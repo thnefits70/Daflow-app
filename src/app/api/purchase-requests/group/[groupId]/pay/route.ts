@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canPayMerchandisePurchases } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
-import { findDuplicatePaymentProofUse, formatPurchaseRequestCode } from "@/lib/purchases";
+import { checkPaymentProofSet, extraPaymentProofsSchema } from "@/lib/purchases";
 import { shippingDueWithMerchandise } from "@/lib/purchaseShipping";
 
 // Confirmado 2026-08-06: si el crédito disponible con el proveedor cubre
@@ -21,6 +21,9 @@ const schema = z.object({
   // Confirmado 2026-09-23: quien paga confirma a propósito que revisó una
   // cuenta cambiada después de aprobar (ver bankAccountChangedAfterApprovalAt).
   confirmAccountChange: z.boolean().optional(),
+  // Confirmado 2026-10-06, caso SC-159: comprobantes de más cuando se
+  // transfirió de menos y se completó con otra transferencia.
+  extraProofs: extraPaymentProofsSchema,
 });
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ groupId: string }> }) {
@@ -95,13 +98,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     return NextResponse.json({ error: "Falta el comprobante de lo que se transfirió." }, { status: 400 });
   }
 
-  const dup = await findDuplicatePaymentProofUse(parsed.data.paymentProofReceiptNumber, groupId);
-  if (dup) {
-    return NextResponse.json(
-      { error: `Ese comprobante ya se usó en otra solicitud (${dup.requestNumber ? formatPurchaseRequestCode(dup.requestNumber) : "otra operación"}) — no se puede reutilizar.` },
-      { status: 409 }
-    );
-  }
+  const extraProofs = parsed.data.paymentProofUrl ? parsed.data.extraProofs ?? [] : [];
+  const proofSetError = await checkPaymentProofSet(
+    [parsed.data.paymentProofReceiptNumber, ...extraProofs.map((p) => p.receiptNumber)],
+    groupId
+  );
+  if (proofSetError) return NextResponse.json({ error: proofSetError }, { status: 409 });
+  const extraUrls = extraProofs.map((p) => p.url);
+  const extraReceiptNumbers = extraProofs.map((p) => p.receiptNumber?.trim()).filter((n): n is string => !!n);
 
   const isAdmin = session.user.role === "admin";
   const paidAt = new Date();
@@ -113,12 +117,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
         paidAt,
         paymentProofUrl: parsed.data.paymentProofUrl ?? null,
         paymentProofReceiptNumber: parsed.data.paymentProofReceiptNumber?.trim() || null,
+        paymentProofExtraUrls: extraUrls,
+        paymentProofExtraReceiptNumbers: extraReceiptNumbers,
         paidById: isAdmin ? null : session.user.id,
         ...(shippingWithMerchandise > 0
           ? {
               shippingPaidAt: paidAt,
               shippingPaymentProofUrl: parsed.data.paymentProofUrl ?? null,
               shippingPaymentProofReceiptNumber: parsed.data.paymentProofReceiptNumber?.trim() || null,
+              shippingPaymentProofExtraUrls: extraUrls,
+              shippingPaymentProofExtraReceiptNumbers: extraReceiptNumbers,
               shippingPaidById: isAdmin ? null : session.user.id,
             }
           : {}),

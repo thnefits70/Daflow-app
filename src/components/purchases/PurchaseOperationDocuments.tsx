@@ -13,6 +13,8 @@ export type OperationDocRow = {
   purchaseOrderUrl: string | null;
   paymentProofUrl: string | null;
   shippingPaymentProofUrl: string | null;
+  paymentProofExtraUrls?: string[];
+  shippingPaymentProofExtraUrls?: string[];
   invoiceDocUrl: string | null;
   requestedBy: { name: string } | null;
   paidBy: { name: string } | null;
@@ -126,12 +128,20 @@ export function PurchaseOperationDocuments({ rows }: { rows: OperationDocRow[] }
         />
         <DocRow
           icon={<Receipt size={16} />}
-          label="Comprobante de pago — mercadería"
+          label={r0.paymentProofExtraUrls?.length ? "Comprobante de pago — mercadería (1)" : "Comprobante de pago — mercadería"}
           url={r0.paymentProofUrl}
           meta={r0.paidBy ? `Pagado por ${actorName(r0.paidBy.name)}` : undefined}
         />
+        {(r0.paymentProofExtraUrls ?? []).map((url, i) => (
+          <DocRow key={url} icon={<Receipt size={16} />} label={`Comprobante de pago — mercadería (${i + 2})`} url={url} meta="Completa el mismo pago" />
+        ))}
         {r0.shippingPaymentProofUrl && (
-          <DocRow icon={<Truck size={16} />} label="Comprobante de pago — flete" url={r0.shippingPaymentProofUrl} />
+          <>
+            <DocRow icon={<Truck size={16} />} label={r0.shippingPaymentProofExtraUrls?.length ? "Comprobante de pago — flete (1)" : "Comprobante de pago — flete"} url={r0.shippingPaymentProofUrl} />
+            {(r0.shippingPaymentProofExtraUrls ?? []).map((url, i) => (
+              <DocRow key={url} icon={<Truck size={16} />} label={`Comprobante de pago — flete (${i + 2})`} url={url} meta="Completa el mismo pago" />
+            ))}
+          </>
         )}
         <DocRow
           icon={<FileText size={16} />}

@@ -147,10 +147,40 @@ export async function findDuplicatePaymentProofUse(
   return prisma.purchaseRequest.findFirst({
     where: {
       groupId: { not: excludeGroupId },
-      OR: [{ paymentProofReceiptNumber: trimmed }, { shippingPaymentProofReceiptNumber: trimmed }],
+      OR: [
+        { paymentProofReceiptNumber: trimmed },
+        { shippingPaymentProofReceiptNumber: trimmed },
+        { paymentProofExtraReceiptNumbers: { has: trimmed } },
+        { shippingPaymentProofExtraReceiptNumbers: { has: trimmed } },
+      ],
     },
     select: { requestNumber: true, groupId: true },
   });
+}
+
+export const extraPaymentProofsSchema = z
+  .array(z.object({ url: z.string().url(), receiptNumber: z.string().trim().nullable().optional() }))
+  .max(4)
+  .optional();
+
+// Confirmado 2026-10-06: varios comprobantes para un mismo pago (ver
+// PaymentProofList). Revisa que ninguno se haya usado en otra solicitud y
+// que no venga la misma transferencia dos veces para inflar la suma.
+export async function checkPaymentProofSet(
+  receiptNumbers: (string | null | undefined)[],
+  excludeGroupId: string
+): Promise<string | null> {
+  const numbers = receiptNumbers.map((n) => n?.trim()).filter((n): n is string => !!n);
+  if (new Set(numbers).size !== numbers.length) {
+    return "Subiste dos veces la misma transferencia — cada comprobante debe ser una transferencia distinta.";
+  }
+  for (const n of numbers) {
+    const dup = await findDuplicatePaymentProofUse(n, excludeGroupId);
+    if (dup) {
+      return `Ese comprobante ya se usó en otra solicitud (${dup.requestNumber ? formatPurchaseRequestCode(dup.requestNumber) : "otra operación"}) — no se puede reutilizar.`;
+    }
+  }
+  return null;
 }
 
 // Confirmado 2026-07-30: el costo por unidad que se compara contra el

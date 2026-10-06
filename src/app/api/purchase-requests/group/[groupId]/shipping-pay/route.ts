@@ -4,11 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canActOnPurchaseInvoices } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
-import { findDuplicatePaymentProofUse, formatPurchaseRequestCode } from "@/lib/purchases";
+import { checkPaymentProofSet, extraPaymentProofsSchema } from "@/lib/purchases";
 
 const schema = z.object({
   proofUrl: z.string().url().nullable().optional(),
   proofReceiptNumber: z.string().trim().nullable().optional(),
+  // Confirmado 2026-10-06: igual que al pagar la mercadería (ver pay/route.ts).
+  extraProofs: extraPaymentProofsSchema,
 });
 
 // Confirmado 2026-08-03: registrar el pago del flete cuando quedó pendiente
@@ -36,13 +38,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     return NextResponse.json({ error: "La cuenta del transportista es nueva y el admin todavía no la verificó." }, { status: 409 });
   }
 
-  const dup = await findDuplicatePaymentProofUse(parsed.data.proofReceiptNumber, groupId);
-  if (dup) {
-    return NextResponse.json(
-      { error: `Ese comprobante ya se usó en otra solicitud (${dup.requestNumber ? formatPurchaseRequestCode(dup.requestNumber) : "otra operación"}) — no se puede reutilizar.` },
-      { status: 409 }
-    );
-  }
+  const extraProofs = parsed.data.proofUrl ? parsed.data.extraProofs ?? [] : [];
+  const proofSetError = await checkPaymentProofSet(
+    [parsed.data.proofReceiptNumber, ...extraProofs.map((p) => p.receiptNumber)],
+    groupId
+  );
+  if (proofSetError) return NextResponse.json({ error: proofSetError }, { status: 409 });
 
   const isAdmin = session.user.role === "admin";
   const paidAt = new Date();
@@ -52,6 +53,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
       shippingPaidAt: paidAt,
       shippingPaymentProofUrl: parsed.data.proofUrl || null,
       shippingPaymentProofReceiptNumber: parsed.data.proofReceiptNumber?.trim() || null,
+      shippingPaymentProofExtraUrls: extraProofs.map((p) => p.url),
+      shippingPaymentProofExtraReceiptNumbers: extraProofs.map((p) => p.receiptNumber?.trim()).filter((n): n is string => !!n),
       shippingPaidById: isAdmin ? null : session.user.id,
     },
   });

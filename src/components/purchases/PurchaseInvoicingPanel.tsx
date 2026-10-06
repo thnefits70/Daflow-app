@@ -10,6 +10,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { actorName } from "@/lib/actorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
+import { PaymentProofList, proofsMatch, proofsPayload, type ProofEntry } from "./PaymentProofList";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { PriceTrendChart, PriceHistoryBreakdownList } from "./PriceTrendChart";
 import type { SupplierPriceHistory, SupplierPricePoint } from "@/lib/purchases";
@@ -87,6 +88,8 @@ type Row = {
   purchaseOrderUrl: string | null;
   paymentProofUrl: string | null;
   shippingPaymentProofUrl: string | null;
+  paymentProofExtraUrls?: string[];
+  shippingPaymentProofExtraUrls?: string[];
   receipt: {
     photoUrls: string[];
     receivedQuantity: number;
@@ -116,6 +119,8 @@ function toDocRow(r: Row): OperationDocRow {
     purchaseOrderUrl: r.purchaseOrderUrl,
     paymentProofUrl: r.paymentProofUrl,
     shippingPaymentProofUrl: r.shippingPaymentProofUrl,
+    paymentProofExtraUrls: r.paymentProofExtraUrls,
+    shippingPaymentProofExtraUrls: r.shippingPaymentProofExtraUrls,
     invoiceDocUrl: r.invoiceDocUrl,
     requestedBy: r.requestedBy,
     paidBy: r.paidBy,
@@ -281,10 +286,7 @@ export function PurchaseInvoicingPanel({
   // Confirmado 2026-09-23, revisión anti-fraude: quien paga marca a propósito
   // que revisó una cuenta cambiada después de aprobar.
   const [accountChangeConfirmed, setAccountChangeConfirmed] = useState(false);
-  const [proofUrl, setProofUrl] = useState<string | null>(null);
-  const [uploadingProof, setUploadingProof] = useState(false);
-  const [proofVerifying, setProofVerifying] = useState(false);
-  const [proofVerifyResult, setProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean; receiptNumber: string | null } | null>(null);
+  const [proofs, setProofs] = useState<ProofEntry[]>([]);
   const [availableCredits, setAvailableCredits] = useState<{ id: string; amount: number; reason: string; proofUrl: string | null }[]>([]);
   const [selectedCreditIds, setSelectedCreditIds] = useState<string[]>([]);
   // Confirmado 2026-08-12: crédito que ya quedó reservado para esta solicitud
@@ -307,8 +309,6 @@ export function PurchaseInvoicingPanel({
   const [urgentReports, setUrgentReports] = useState<UrgentReportSummary[]>([]);
   const [flagOpenGroupId, setFlagOpenGroupId] = useState<string | null>(null);
   const [flagNote, setFlagNote] = useState("");
-  const { onPaste: onPasteProof, onMouseEnter: onPasteProofHoverIn, onMouseLeave: onPasteProofHoverOut } = usePasteFile((file) => uploadProof(file));
-  const proofFileInputRef = useRef<HTMLInputElement>(null);
   // El grupo de la factura que se está pasando el mouse encima ahora mismo
   // — un solo listener de paste "armado" por hover, compartido entre todas
   // las tarjetas de la lista, en vez de un hook por cada una.
@@ -334,12 +334,7 @@ export function PurchaseInvoicingPanel({
   const [replacingDoc, setReplacingDoc] = useState<string | null>(null);
 
   const [payingShippingGroup, setPayingShippingGroup] = useState<string | null>(null);
-  const [shippingProofUrl, setShippingProofUrl] = useState<string | null>(null);
-  const [uploadingShippingProof, setUploadingShippingProof] = useState(false);
-  const [shippingProofVerifying, setShippingProofVerifying] = useState(false);
-  const [shippingProofVerifyResult, setShippingProofVerifyResult] = useState<{ readAmount: number | null; matches: boolean; receiptNumber: string | null } | null>(null);
-  const { onPaste: onPasteShippingProof, onMouseEnter: onPasteShippingProofHoverIn, onMouseLeave: onPasteShippingProofHoverOut } = usePasteFile((file) => uploadShippingProof(file));
-  const shippingProofFileInputRef = useRef<HTMLInputElement>(null);
+  const [shippingProofs, setShippingProofs] = useState<ProofEntry[]>([]);
 
   // Confirmado 2026-07-31: por defecto se asume que SÍ hay factura (pide
   // completa/parcial + documento opcional) — "No hay factura" es la
@@ -515,8 +510,7 @@ export function PurchaseInvoicingPanel({
   // solicitud desde que se pidió, para restarlo del neto sin volver a elegirlo.
   async function openPay(groupId: string, supplierId: string) {
     setPayingGroup(groupId);
-    setProofUrl(null);
-    setProofVerifyResult(null);
+    setProofs([]);
     setSelectedCreditIds([]);
     setReservedCredits([]);
     setErr("");
@@ -528,7 +522,6 @@ export function PurchaseInvoicingPanel({
 
   function toggleCredit(id: string) {
     setSelectedCreditIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
-    setProofVerifyResult(null);
   }
 
   // Confirmado 2026-08-04: la misma verificación por IA del comprobante que
@@ -536,60 +529,33 @@ export function PurchaseInvoicingPanel({
   // desde qué pantalla se suba el comprobante (mercadería o flete), siempre
   // se compara contra lo que de verdad correspondía pagar antes de dejarlo
   // avanzar. Si se aplicó crédito, se compara contra el NETO, no el total.
-  async function verifyProof(groupId: string, url: string) {
-    setProofVerifying(true);
-    setProofVerifyResult(null);
-    const expectedAmount = netAmountFor(groupId);
-    const res = await fetch("/api/purchase-requests/verify-payment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ proofUrl: url, expectedAmount }),
-    });
-    setProofVerifying(false);
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setErr(data?.error ?? "No se pudo verificar el comprobante.");
-      return;
-    }
-    setProofVerifyResult(data);
-  }
-
-  async function verifyShippingProof(groupId: string, url: string) {
-    setShippingProofVerifying(true);
-    setShippingProofVerifyResult(null);
-    const expectedAmount = groupShippingTotal(currentGroupRows(groupId));
-    const res = await fetch("/api/purchase-requests/verify-payment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ proofUrl: url, expectedAmount }),
-    });
-    setShippingProofVerifying(false);
-    const data = await res.json().catch(() => null);
-    if (!res.ok) {
-      setErr(data?.error ?? "No se pudo verificar el comprobante del flete.");
-      return;
-    }
-    setShippingProofVerifyResult(data);
-  }
-
+  // Desde 2026-10-06 pueden ser varios comprobantes: cuenta la suma (ver
+  // PaymentProofList).
   async function pay(groupId: string) {
     const netAmount = netAmountFor(groupId);
     if (netAmount > 0) {
-      if (!proofUrl) {
+      if (proofs.length === 0) {
         setErr("Sube el comprobante de pago.");
         return;
       }
-      if (!proofVerifyResult?.matches) {
-        setErr("El comprobante todavía no está verificado — el monto debe coincidir con lo que corresponde pagar.");
+      if (!proofsMatch(proofs, netAmount)) {
+        setErr("Los comprobantes todavía no cuadran — la suma debe coincidir con lo que corresponde pagar.");
         return;
       }
     }
+    const payload = proofsPayload(proofs);
     setBusyGroup(groupId);
     setErr("");
     const res = await fetch(`/api/purchase-requests/group/${groupId}/pay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paymentProofUrl: proofUrl ?? undefined, paymentProofReceiptNumber: proofVerifyResult?.receiptNumber ?? null, appliedCreditIds: selectedCreditIds, confirmAccountChange: accountChangeConfirmed }),
+      body: JSON.stringify({
+        paymentProofUrl: payload.first?.url ?? undefined,
+        paymentProofReceiptNumber: payload.first?.receiptNumber ?? null,
+        extraProofs: payload.extra,
+        appliedCreditIds: selectedCreditIds,
+        confirmAccountChange: accountChangeConfirmed,
+      }),
     });
     setBusyGroup(null);
     const data = await res.json().catch(() => null);
@@ -598,8 +564,7 @@ export function PurchaseInvoicingPanel({
       return;
     }
     setPayingGroup(null);
-    setProofUrl(null);
-    setProofVerifyResult(null);
+    setProofs([]);
     setSelectedCreditIds([]);
     setReservedCredits([]);
     setAccountChangeConfirmed(false);
@@ -627,47 +592,18 @@ export function PurchaseInvoicingPanel({
     });
   }
 
-  async function uploadProof(file: File) {
-    if (!payingGroup) return;
-    setErr("");
-    setUploadingProof(true);
-    const compressed = await compressImage(file);
-    const uploaded = await uploadFile(compressed, "purchase-payments");
-    setUploadingProof(false);
-    if (!uploaded.ok) {
-      setErr(uploaded.error);
-      return;
-    }
-    setProofUrl(uploaded.url);
-    verifyProof(payingGroup, uploaded.url);
-  }
-
-  async function uploadShippingProof(file: File) {
-    if (!payingShippingGroup) return;
-    setErr("");
-    setUploadingShippingProof(true);
-    const compressed = await compressImage(file);
-    const uploaded = await uploadFile(compressed, "purchase-payments");
-    setUploadingShippingProof(false);
-    if (!uploaded.ok) {
-      setErr(uploaded.error);
-      return;
-    }
-    setShippingProofUrl(uploaded.url);
-    verifyShippingProof(payingShippingGroup, uploaded.url);
-  }
-
   async function payShipping(groupId: string) {
-    if (shippingProofUrl && !shippingProofVerifyResult?.matches) {
-      setErr("El comprobante del flete todavía no está verificado — el monto debe coincidir con lo que corresponde pagar.");
+    if (shippingProofs.length > 0 && !proofsMatch(shippingProofs, groupShippingTotal(currentGroupRows(groupId)))) {
+      setErr("Los comprobantes del flete todavía no cuadran — la suma debe coincidir con lo que corresponde pagar.");
       return;
     }
+    const payload = proofsPayload(shippingProofs);
     setBusyGroup(groupId);
     setErr("");
     const res = await fetch(`/api/purchase-requests/group/${groupId}/shipping-pay`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ proofUrl: shippingProofUrl, proofReceiptNumber: shippingProofVerifyResult?.receiptNumber ?? null }),
+      body: JSON.stringify({ proofUrl: payload.first?.url ?? null, proofReceiptNumber: payload.first?.receiptNumber ?? null, extraProofs: payload.extra }),
     });
     setBusyGroup(null);
     const data = await res.json().catch(() => null);
@@ -676,8 +612,7 @@ export function PurchaseInvoicingPanel({
       return;
     }
     setPayingShippingGroup(null);
-    setShippingProofUrl(null);
-    setShippingProofVerifyResult(null);
+    setShippingProofs([]);
     load();
   }
 
@@ -1059,48 +994,8 @@ export function PurchaseInvoicingPanel({
                       )}
                       {netAmountFor(groupId) === 0 ? (
                         <div className="flex items-center gap-2 text-[12px] text-teal mb-2"><CheckCircle2 size={13} /> El crédito cubre el total — no hace falta transferir nada.</div>
-                      ) : proofUrl ? (
-                        <div className="flex items-center gap-2 text-[12px] mb-2">
-                          {proofVerifying ? (
-                            <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" />
-                          ) : proofVerifyResult?.matches ? (
-                            <CheckCircle2 size={13} className="text-teal" />
-                          ) : proofVerifyResult ? (
-                            <Lock size={13} className="text-red" />
-                          ) : null}
-                          <span className={proofVerifying ? "text-steel" : proofVerifyResult?.matches ? "text-teal" : proofVerifyResult ? "text-red" : "text-steel"}>
-                            {proofVerifying
-                              ? "Verificando con IA…"
-                              : proofVerifyResult?.matches
-                              ? `Verificado — coincide (${proofVerifyResult.readAmount?.toFixed(2)})`
-                              : proofVerifyResult && proofVerifyResult.readAmount !== null
-                              ? `No coincide — dice $${proofVerifyResult.readAmount.toFixed(2)}, revisa antes de continuar`
-                              : proofVerifyResult
-                              ? "No se pudo leer el monto — sube una imagen más clara"
-                              : "Comprobante subido"}
-                          </span>
-                          <button type="button" className="text-steel ml-1 cursor-pointer" onClick={() => { setProofUrl(null); setProofVerifyResult(null); }}>Cambiar</button>
-                        </div>
                       ) : (
-                        <div className="mb-2">
-                          <div
-                            tabIndex={0}
-                            onPaste={onPasteProof}
-                            onMouseEnter={onPasteProofHoverIn}
-                            onMouseLeave={onPasteProofHoverOut}
-                            className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
-                          >
-                            {uploadingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Pega la foto aquí (Ctrl+V)
-                            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => proofFileInputRef.current?.click()}>
-                              o selecciona un archivo
-                            </button>
-                            <input ref={proofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
-                          </div>
-                          <label className="flex items-center gap-1.5 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-teal w-fit">
-                            ¿Es un PDF? Subir documento
-                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadProof(e.target.files[0])} />
-                          </label>
-                        </div>
+                        <PaymentProofList proofs={proofs} setProofs={setProofs} expectedAmount={netAmountFor(groupId)} onError={setErr} />
                       )}
                       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                       <div className="flex items-center gap-2">
@@ -1110,9 +1005,7 @@ export function PurchaseInvoicingPanel({
                             payLocked ||
                             busyGroup === groupId ||
                             (netAmountFor(groupId) > 0 &&
-                              (!proofUrl ||
-                                proofVerifying ||
-                                !proofVerifyResult?.matches ||
+                              (!proofsMatch(proofs, netAmountFor(groupId)) ||
                                 (!!g[0].bankAccount && !g[0].bankAccount.verifiedAt) ||
                                 (!!g[0].bankAccountChangedAfterApprovalAt && !accountChangeConfirmed)))
                           }
@@ -1122,7 +1015,7 @@ export function PurchaseInvoicingPanel({
                         >
                           Confirmar pago
                         </button>
-                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setPayingGroup(null); setProofUrl(null); setProofVerifyResult(null); setSelectedCreditIds([]); }}>Cancelar</button>
+                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setPayingGroup(null); setProofs([]); setSelectedCreditIds([]); }}>Cancelar</button>
                       </div>
                     </div>
                   ) : (
@@ -1226,67 +1119,25 @@ export function PurchaseInvoicingPanel({
                   {payingShippingGroup === groupId ? (
                     <div>
                       <div className="text-[11px] text-steel mb-2">Paso 2 de 2: si tienes el comprobante de la transferencia que ya hiciste, súbelo (opcional) y confirma abajo para cerrar esta solicitud.</div>
-                      {shippingProofUrl ? (
-                        <div className="flex items-center gap-2 text-[12px] mb-2">
-                          {shippingProofVerifying ? (
-                            <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" />
-                          ) : shippingProofVerifyResult?.matches ? (
-                            <CheckCircle2 size={13} className="text-teal" />
-                          ) : shippingProofVerifyResult ? (
-                            <Lock size={13} className="text-red" />
-                          ) : null}
-                          <span className={shippingProofVerifying ? "text-steel" : shippingProofVerifyResult?.matches ? "text-teal" : shippingProofVerifyResult ? "text-red" : "text-steel"}>
-                            {shippingProofVerifying
-                              ? "Verificando con IA…"
-                              : shippingProofVerifyResult?.matches
-                              ? `Verificado — coincide (${shippingProofVerifyResult.readAmount?.toFixed(2)})`
-                              : shippingProofVerifyResult && shippingProofVerifyResult.readAmount !== null
-                              ? `No coincide — dice $${shippingProofVerifyResult.readAmount.toFixed(2)}, revisa antes de continuar`
-                              : shippingProofVerifyResult
-                              ? "No se pudo leer el monto — sube una imagen más clara"
-                              : "Comprobante subido"}
-                          </span>
-                          <button type="button" className="text-steel ml-1 cursor-pointer" onClick={() => { setShippingProofUrl(null); setShippingProofVerifyResult(null); }}>Cambiar</button>
-                        </div>
-                      ) : (
-                        <div className="mb-2">
-                          <div
-                            tabIndex={0}
-                            onPaste={onPasteShippingProof}
-                            onMouseEnter={onPasteShippingProofHoverIn}
-                            onMouseLeave={onPasteShippingProofHoverOut}
-                            className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-2 text-[12px] text-steel cursor-pointer hover:border-teal focus:border-teal focus:outline-none w-fit"
-                          >
-                            {uploadingShippingProof ? <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> : <Upload size={13} />} Pega la foto aquí (opcional, Ctrl+V)
-                            <button type="button" className="text-[10.5px] underline decoration-dotted opacity-80 hover:opacity-100 cursor-pointer" onClick={() => shippingProofFileInputRef.current?.click()}>
-                              o selecciona un archivo
-                            </button>
-                            <input ref={shippingProofFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
-                          </div>
-                          <label className="flex items-center gap-1.5 mt-1 text-[10.5px] text-steel cursor-pointer hover:text-teal w-fit">
-                            ¿Es un PDF? Subir documento
-                            <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadShippingProof(e.target.files[0])} />
-                          </label>
-                        </div>
-                      )}
+                      <PaymentProofList proofs={shippingProofs} setProofs={setShippingProofs} expectedAmount={groupShippingTotal(g)} optional onError={setErr} />
                       {err && <div className="text-red text-[12px] mb-2">{err}</div>}
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          disabled={isAdmin || busyGroup === groupId || shippingProofVerifying || (!!shippingProofUrl && !shippingProofVerifyResult?.matches)}
+                          disabled={isAdmin || busyGroup === groupId || (shippingProofs.length > 0 && !proofsMatch(shippingProofs, groupShippingTotal(g)))}
                           title={isAdmin ? ADMIN_LOCK_TITLE : undefined}
                           className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
                           onClick={() => payShipping(groupId)}
                         >
                           Confirmar pago del flete
                         </button>
-                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setPayingShippingGroup(null); setShippingProofUrl(null); setShippingProofVerifyResult(null); }}>Cancelar</button>
+                        <button type="button" className="text-steel text-[12.5px] cursor-pointer" onClick={() => { setPayingShippingGroup(null); setShippingProofs([]); }}>Cancelar</button>
                       </div>
                     </div>
                   ) : (
                     <>
                       <div className="text-[11px] text-steel mb-1.5">Paso 1 de 2: transfiere el monto a la cuenta de arriba. Después haz clic aquí para subir el comprobante (opcional) y cerrar la solicitud.</div>
-                      <button type="button" disabled={isAdmin} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => { setPayingShippingGroup(groupId); setShippingProofUrl(null); setShippingProofVerifyResult(null); setErr(""); }}>
+                      <button type="button" disabled={isAdmin} title={isAdmin ? ADMIN_LOCK_TITLE : undefined} className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed" onClick={() => { setPayingShippingGroup(groupId); setShippingProofs([]); setErr(""); }}>
                         💳 Subir comprobante
                       </button>
                     </>

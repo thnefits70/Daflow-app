@@ -55,6 +55,8 @@ type Row = {
   purchaseOrderUrl: string | null;
   paymentProofUrl: string | null;
   shippingPaymentProofUrl: string | null;
+  paymentProofExtraUrls?: string[];
+  shippingPaymentProofExtraUrls?: string[];
   invoiceDocUrl: string | null;
   receipt: {
     photoUrls: string[];
@@ -215,6 +217,8 @@ function toDocRow(r: Row): OperationDocRow {
     purchaseOrderUrl: r.purchaseOrderUrl,
     paymentProofUrl: r.paymentProofUrl,
     shippingPaymentProofUrl: r.shippingPaymentProofUrl,
+    paymentProofExtraUrls: r.paymentProofExtraUrls,
+    shippingPaymentProofExtraUrls: r.shippingPaymentProofExtraUrls,
     invoiceDocUrl: r.invoiceDocUrl,
     requestedBy: r.requestedBy,
     paidBy: r.paidBy,
