@@ -4,7 +4,12 @@ import { auth } from "@/auth";
 import { canActOnMerchandiseOutflow, canCaptureMerchandiseOutflow, dbUserId } from "@/lib/guards";
 import { recordCount } from "@/lib/stockCount";
 
-const schema = z.object({ catalogItemId: z.string().min(1), quantity: z.number().int().min(0) });
+// variants (2026-10-06): conteo por color/talla; el total es la suma.
+const schema = z.object({
+  catalogItemId: z.string().min(1),
+  quantity: z.number().int().min(0),
+  variants: z.array(z.object({ name: z.string().max(60), qty: z.number().int().min(0) })).max(40).nullish(),
+});
 
 // Registra (o corrige) cuánto hay de un producto — a ciegas.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -14,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Escribe una cantidad entera, 0 o mayor." }, { status: 400 });
   const { id } = await params;
-  const r = await recordCount({ countId: id, catalogItemId: parsed.data.catalogItemId, quantity: parsed.data.quantity, userId: dbUserId(session.user.id), isLead });
+  const r = await recordCount({ countId: id, catalogItemId: parsed.data.catalogItemId, quantity: parsed.data.quantity, variants: parsed.data.variants, userId: dbUserId(session.user.id), isLead });
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 409 });
   return NextResponse.json({ ok: true });
 }

@@ -1,7 +1,9 @@
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStock } from "@/lib/stockKardex";
 import { WAREHOUSE_AREAS } from "@/lib/warehouseAreas";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
+import { variantSuggestions } from "@/lib/variantSales";
 import { COUNT_HOURS_TEXT, MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, openAssignmentFor, recentMovement, windowStatus } from "@/lib/stockCountAssignments";
 
 // Conteo físico de inventario — pedido del usuario 2026-10-02.
@@ -12,7 +14,29 @@ import { COUNT_HOURS_TEXT, MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, o
 // El equipo cuenta A CIEGAS (nunca ve el número del sistema), Daniel revisa
 // y envía, el admin aprueba las diferencias en una sola lista.
 
-export type CountableProduct = { id: string; name: string; justCode: string | null; photo: string | null; area: string | null };
+// variantNames: colores/tallas sugeridos para contar por separado (vacío =
+// se cuenta con un solo número, salvo que quien cuenta diga que tiene).
+export type CountableProduct = { id: string; name: string; justCode: string | null; photo: string | null; area: string | null; variantNames: string[] };
+export type VariantCount = { name: string; qty: number };
+
+// Conteo por color/talla (pedido del usuario 2026-10-06): limpia los nombres
+// y no deja repetir el mismo color dos veces.
+function cleanVariantCounts(raw: VariantCount[]): { ok: true; list: VariantCount[] } | { ok: false; error: string } {
+  const list: VariantCount[] = [];
+  for (const v of raw) {
+    const name = v.name.replace(/\s+/g, " ").trim();
+    if (!name) return { ok: false, error: "Falta el nombre de un color/talla." };
+    if (!Number.isInteger(v.qty) || v.qty < 0) return { ok: false, error: `Escribe una cantidad entera, 0 o mayor, para «${name}».` };
+    if (list.some((x) => x.name.toLowerCase() === name.toLowerCase())) return { ok: false, error: `«${name}» está dos veces: súmalo en una sola.` };
+    list.push({ name, qty: v.qty });
+  }
+  // Lista vacía = no había ninguno (total 0).
+  return { ok: true, list };
+}
+
+export function parseVariantCounts(json: unknown): VariantCount[] | null {
+  return Array.isArray(json) ? (json as VariantCount[]) : null;
+}
 
 // Lunes (YYYY-MM-DD, Ecuador) de la semana de `day`.
 export function mondayOf(day: string): string {
@@ -58,9 +82,9 @@ async function products(area: string | null): Promise<CountableProduct[]> {
   });
   // Del que menos se vende al que más (el usuario lo cambió el 2026-10-05,
   // primero se pidió al revés).
-  const moved = await recentMovement(items.map((i) => i.id));
+  const [moved, suggested] = await Promise.all([recentMovement(items.map((i) => i.id)), variantSuggestions(items.map((i) => i.id))]);
   return items
-    .map((i) => ({ p: { id: i.id, name: i.name, justCode: i.justCode, photo: i.photos[0] ?? null, area: i.warehouseArea }, moved: moved.get(i.id) ?? 0 }))
+    .map((i) => ({ p: { id: i.id, name: i.name, justCode: i.justCode, photo: i.photos[0] ?? null, area: i.warehouseArea, variantNames: suggested.get(i.id) ?? [] }, moved: moved.get(i.id) ?? 0 }))
     .sort((a, b) => a.moved - b.moved || a.p.name.localeCompare(b.p.name))
     .map((x) => x.p);
 }
@@ -91,7 +115,7 @@ export type CountView = {
   status: "COUNTING" | "SUBMITTED" | "APPROVED";
   area: string | null;
   weekStart: string | null;
-  products: (CountableProduct & { countedQty: number | null; countedByName: string | null; countedAt: string | null; recount: boolean })[];
+  products: (CountableProduct & { countedQty: number | null; variantCounts: VariantCount[] | null; countedByName: string | null; countedAt: string | null; recount: boolean })[];
 };
 
 // Vista para quien cuenta / Daniel: NUNCA incluye lo que dice el sistema.
@@ -111,14 +135,22 @@ export async function getCountView(countId: string): Promise<CountView | null> {
     weekStart: count.weekStart,
     products: list.map((p) => {
       const l = byItem.get(p.id);
-      return { ...p, countedQty: l?.countedQty ?? null, countedByName: l?.countedById ? (nameOf.get(l.countedById) ?? null) : null, countedAt: l?.countedAt.toISOString() ?? null, recount: l?.decision === RECOUNT };
+      return { ...p, countedQty: l?.countedQty ?? null, variantCounts: parseVariantCounts(l?.variantCounts), countedByName: l?.countedById ? (nameOf.get(l.countedById) ?? null) : null, countedAt: l?.countedAt.toISOString() ?? null, recount: l?.decision === RECOUNT };
     }),
   };
 }
 
 // Quien no es Daniel solo cuenta lo de su área asignada, después de pulsar
 // "Empezar" (pedido del usuario 2026-10-05). Daniel puede corregir cualquiera.
-export async function recordCount(params: { countId: string; catalogItemId: string; quantity: number; userId: string | null; isLead: boolean }): Promise<{ ok: true } | { ok: false; error: string }> {
+// Con `variants` se cuenta por color/talla y el total es la suma.
+export async function recordCount(params: { countId: string; catalogItemId: string; quantity: number; variants?: VariantCount[] | null; userId: string | null; isLead: boolean }): Promise<{ ok: true } | { ok: false; error: string }> {
+  let variantCounts: VariantCount[] | null = null;
+  if (params.variants) {
+    const cleaned = cleanVariantCounts(params.variants);
+    if (!cleaned.ok) return cleaned;
+    variantCounts = cleaned.list;
+    params = { ...params, quantity: variantCounts.reduce((s, v) => s + v.qty, 0) };
+  }
   if (!Number.isInteger(params.quantity) || params.quantity < 0) return { ok: false, error: "Escribe una cantidad entera, 0 o mayor." };
   const count = await prisma.stockCount.findUnique({ where: { id: params.countId }, select: { status: true, kind: true, area: true } });
   if (!count) return { ok: false, error: "Conteo no encontrado." };
@@ -151,10 +183,11 @@ export async function recordCount(params: { countId: string; catalogItemId: stri
   // Una corrección no cambia el tiempo que ya se midió.
   const firstTime = !existing || isRecount;
   const expectedQty = await expectedNow(params.catalogItemId);
+  const variantJson = variantCounts ?? Prisma.DbNull;
   await prisma.stockCountLine.upsert({
     where: { countId_catalogItemId: { countId: params.countId, catalogItemId: params.catalogItemId } },
-    update: { countedQty: params.quantity, countedById: params.userId, countedAt: now, expectedQty, ...(isRecount ? { decision: null, decidedAt: null } : {}), ...(firstTime ? { durationSec } : {}) },
-    create: { countId: params.countId, catalogItemId: params.catalogItemId, countedQty: params.quantity, countedById: params.userId, expectedQty, durationSec },
+    update: { countedQty: params.quantity, variantCounts: variantJson, countedById: params.userId, countedAt: now, expectedQty, ...(isRecount ? { decision: null, decidedAt: null } : {}), ...(firstTime ? { durationSec } : {}) },
+    create: { countId: params.countId, catalogItemId: params.catalogItemId, countedQty: params.quantity, variantCounts: variantJson, countedById: params.userId, expectedQty, durationSec },
   });
   return { ok: true };
 }
@@ -174,7 +207,7 @@ export async function submitCount(countId: string, userId: string | null): Promi
   return { ok: true, differences };
 }
 
-export type DifferenceRow = { lineId: string; catalogItemId: string; name: string; justCode: string | null; area: string | null; expectedQty: number; countedQty: number; diff: number; countedByName: string | null };
+export type DifferenceRow = { lineId: string; catalogItemId: string; name: string; justCode: string | null; area: string | null; expectedQty: number; countedQty: number; diff: number; variantCounts: VariantCount[] | null; countedByName: string | null };
 
 // Para el admin: solo las diferencias (aquí sí se muestra el sistema).
 export async function getDifferences(countId: string): Promise<DifferenceRow[]> {
@@ -195,6 +228,7 @@ export async function getDifferences(countId: string): Promise<DifferenceRow[]> 
     expectedQty: l.expectedQty,
     countedQty: l.countedQty,
     diff: l.countedQty - l.expectedQty,
+    variantCounts: parseVariantCounts(l.variantCounts),
     countedByName: l.countedById ? (user.get(l.countedById) ?? null) : null,
   }));
 }
@@ -203,6 +237,33 @@ async function finishCount(countId: string, adminId: string | null) {
   const count = await prisma.stockCount.update({ where: { id: countId }, data: { status: "APPROVED", approvedAt: new Date(), approvedById: adminId } });
   if (count.kind === "FULL") {
     await prisma.platformSettings.update({ where: { id: "singleton" }, data: { fullStockCountCompletedAt: new Date() } });
+  }
+  await saveCountedVariants(countId);
+}
+
+// Lo contado por color/talla queda como la lista oficial de variantes del
+// producto, con su cantidad (2026-10-06). Lo que el admin dejó "como está"
+// (REJECTED) no cuenta. Un color que ya estaba y ahora no apareció queda en 0.
+async function saveCountedVariants(countId: string) {
+  const lines = await prisma.stockCountLine.findMany({
+    where: { countId, OR: [{ decision: null }, { decision: "APPROVED" }], NOT: { variantCounts: { equals: Prisma.DbNull } } },
+    select: { catalogItemId: true, variantCounts: true },
+  });
+  const now = new Date();
+  for (const l of lines) {
+    const counted = parseVariantCounts(l.variantCounts) ?? [];
+    const existing = await prisma.productVariant.findMany({ where: { catalogItemId: l.catalogItemId }, select: { id: true, name: true } });
+    await prisma.$transaction([
+      ...counted.map((v) => {
+        const same = existing.find((e) => e.name.toLowerCase() === v.name.toLowerCase());
+        return same
+          ? prisma.productVariant.update({ where: { id: same.id }, data: { countedQty: v.qty, countedAt: now } })
+          : prisma.productVariant.create({ data: { catalogItemId: l.catalogItemId, name: v.name, countedQty: v.qty, countedAt: now } });
+      }),
+      ...existing
+        .filter((e) => !counted.some((v) => v.name.toLowerCase() === e.name.toLowerCase()))
+        .map((e) => prisma.productVariant.update({ where: { id: e.id }, data: { countedQty: 0, countedAt: now } })),
+    ]);
   }
 }
 

@@ -90,7 +90,12 @@ export function StockCountReview({ onApproved }: { onApproved?: () => void }) {
                           }
                         />
                       </td>
-                      <td className="py-1 pr-2">{d.name} <span className="text-steel font-mono text-[11px]">{d.justCode ?? ""}</span></td>
+                      <td className="py-1 pr-2">
+                        {d.name} <span className="text-steel font-mono text-[11px]">{d.justCode ?? ""}</span>
+                        {d.variantCounts && d.variantCounts.length > 0 && (
+                          <div className="text-steel text-[11px]">{d.variantCounts.map((v) => `${v.name} ${v.qty}`).join(" · ")}</div>
+                        )}
+                      </td>
                       <td className="py-1 pr-2">{d.area ?? "—"}</td>
                       <td className="py-1 pr-2 text-right font-mono">{d.expectedQty}</td>
                       <td className="py-1 pr-2 text-right font-mono">{d.countedQty}</td>

@@ -132,3 +132,32 @@ export async function getVariantSales(opts: { days: number; catalogItemIds?: str
   products.sort((a, b) => b.variantUnits - a.variantUnits);
   return { since: since.toISOString(), products };
 }
+
+// Nombres de color/talla sugeridos para contar cada producto (conteo por
+// variante, 2026-10-06): primero los que ya quedaron de un conteo aprobado,
+// luego los que salieron en las guías (de más a menos vendido). Solo
+// nombres, nunca cantidades: el conteo es a ciegas.
+export async function variantSuggestions(catalogItemIds: string[]): Promise<Map<string, string[]>> {
+  if (catalogItemIds.length === 0) return new Map();
+  const [official, notes] = await Promise.all([
+    prisma.productVariant.findMany({ where: { catalogItemId: { in: catalogItemIds } }, orderBy: [{ countedQty: { sort: "desc", nulls: "last" } }, { name: "asc" }], select: { catalogItemId: true, name: true } }),
+    prisma.fulfillmentRequestVariantNote.groupBy({ by: ["catalogItemId", "label"], where: { catalogItemId: { in: catalogItemIds } }, _sum: { quantity: true } }),
+  ]);
+  const fromGuides = new Map<string, Map<string, number>>();
+  for (const n of notes) {
+    const label = canonicalVariantLabel(n.label);
+    if (!label) continue;
+    let m = fromGuides.get(n.catalogItemId);
+    if (!m) fromGuides.set(n.catalogItemId, (m = new Map()));
+    m.set(label, (m.get(label) ?? 0) + (n._sum.quantity ?? 0));
+  }
+  const out = new Map<string, string[]>();
+  const add = (id: string, name: string) => {
+    const list = out.get(id) ?? [];
+    if (!list.some((x) => x.toLowerCase() === name.toLowerCase())) list.push(name);
+    out.set(id, list);
+  };
+  for (const v of official) add(v.catalogItemId, v.name);
+  for (const [id, m] of fromGuides) for (const [label] of [...m].sort((a, b) => b[1] - a[1])) add(id, label);
+  return out;
+}

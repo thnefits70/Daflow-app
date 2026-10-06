@@ -35,6 +35,76 @@ function useNow(active: boolean): number {
   return now;
 }
 
+type VariantDraft = { name: string; qty: string; added: boolean };
+
+function variantSummary(v: { name: string; qty: number }[]): string {
+  return v.map((x) => `${x.name} ${x.qty}`).join(" · ");
+}
+
+// Conteo por color/talla (pedido del usuario 2026-10-06): una casilla por
+// variante; el total es la suma. Los nombres sugeridos salen de las guías o
+// del último conteo — nunca se muestra cuánto dice el sistema.
+function VariantCountEditor({ rows, onChange, onSave, onSingle, saving, correcting }: {
+  rows: VariantDraft[];
+  onChange: (rows: VariantDraft[]) => void;
+  onSave: () => void;
+  onSingle: () => void;
+  saving: boolean;
+  correcting: boolean;
+}) {
+  const total = rows.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+  const typed = rows.some((r) => r.qty.trim() !== "");
+  const set = (i: number, patch: Partial<VariantDraft>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  return (
+    <div className="mt-2 ml-8 border-l-2 border-teal/40 pl-3 flex flex-col gap-1.5">
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-center gap-2">
+          {r.added ? (
+            <input
+              className="flex-1 min-w-0 rounded border border-rule bg-surface px-2 py-1.5 text-[13px]"
+              placeholder="Color o talla (ej. Rojo, XL)"
+              maxLength={60}
+              value={r.name}
+              onChange={(e) => set(i, { name: e.target.value })}
+            />
+          ) : (
+            <span className="flex-1 min-w-0 truncate text-[13px]">{r.name}</span>
+          )}
+          <input
+            type="number"
+            inputMode="numeric"
+            min={0}
+            className="w-20 rounded border border-rule bg-surface px-2 py-1.5 text-[14px] text-right"
+            placeholder="0"
+            value={r.qty}
+            onChange={(e) => set(i, { qty: e.target.value })}
+          />
+          {r.added && (
+            <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => onChange(rows.filter((_, j) => j !== i))}>
+              Quitar
+            </button>
+          )}
+        </div>
+      ))}
+      <button type="button" className="self-start text-teal text-[12px] font-semibold cursor-pointer" onClick={() => onChange([...rows, { name: "", qty: "", added: true }])}>
+        ➕ Agregar otro color/talla
+      </button>
+      <div className="flex flex-wrap items-center gap-3 mt-0.5">
+        <span className="text-[13px]">
+          Total: <b>{total}</b>
+        </span>
+        <button type="button" disabled={saving || !typed} className="rounded border border-teal bg-teal px-2.5 py-1.5 font-bold text-navy cursor-pointer disabled:opacity-40" onClick={onSave}>
+          {saving ? "…" : correcting ? "Corregir" : "Guardar"}
+        </button>
+        <button type="button" className="text-steel text-[11.5px] underline cursor-pointer" onClick={onSingle}>
+          No tiene colores ni tallas
+        </button>
+      </div>
+      <div className="text-[11px] text-steel">Si un color no está, déjalo vacío (cuenta como 0).</div>
+    </div>
+  );
+}
+
 // Conteo físico de inventario (pedido del usuario 2026-10-02). A CIEGAS:
 // aquí nunca se ve lo que dice el sistema, solo se escribe cuánto hay.
 // Desde 2026-10-05 Daniel asigna cada área a una persona con un horario; la
@@ -45,6 +115,9 @@ export function StockCountPanel() {
   const [area, setArea] = useState<string>("");
   const [q, setQ] = useState("");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  // Por producto: casillas por color/talla, o "single" si quien cuenta dijo
+  // que no tiene (sin entrada = lo que sugiera el producto).
+  const [varDrafts, setVarDrafts] = useState<Record<string, VariantDraft[] | "single">>({});
   const [saving, setSaving] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const [confirmSend, setConfirmSend] = useState(false);
@@ -98,6 +171,43 @@ export function StockCountPanel() {
     setDrafts((d) => {
       const n = { ...d };
       delete n[productId];
+      return n;
+    });
+    load();
+  }
+
+  type Product = CountView["products"][number];
+  // Casillas por color/talla de un producto, o null si se cuenta con un número.
+  function variantRows(p: Product): VariantDraft[] | null {
+    const d = varDrafts[p.id];
+    if (d === "single") return null;
+    if (d) return d;
+    // Recuento: otra persona vuelve a contar a ciegas — solo los nombres.
+    if (p.variantCounts && p.recount) {
+      const names = [...p.variantCounts.map((v) => v.name), ...p.variantNames.filter((n) => !p.variantCounts!.some((v) => v.name.toLowerCase() === n.toLowerCase()))];
+      return names.map((name) => ({ name, qty: "", added: false }));
+    }
+    // Corrección de quien ya contó: sus propios números.
+    if (p.variantCounts) return p.variantCounts.map((v) => ({ name: v.name, qty: String(v.qty), added: false }));
+    if (p.variantNames.length > 0 && (p.countedQty === null || p.recount)) return p.variantNames.map((name) => ({ name, qty: "", added: false }));
+    return null;
+  }
+
+  async function saveVariants(p: Product, rows: VariantDraft[]) {
+    if (!count) return;
+    const named = rows.filter((r) => r.name.trim() !== "" || r.qty.trim() !== "");
+    if (named.some((r) => !r.name.trim())) return setErr("Falta el nombre de un color/talla.");
+    const variants = named.map((r) => ({ name: r.name.trim(), qty: r.qty.trim() === "" ? 0 : Number(r.qty) }));
+    if (variants.some((v) => !Number.isInteger(v.qty) || v.qty < 0)) return setErr("Escribe cantidades enteras, 0 o mayores.");
+    // Lo que quedó en 0 no se guarda como color (no estaba).
+    const kept = variants.filter((v) => v.qty > 0);
+    setSaving(p.id);
+    const r = await post(`/api/stock-count/${count.id}/line`, { catalogItemId: p.id, quantity: kept.reduce((s, v) => s + v.qty, 0), variants: kept });
+    setSaving(null);
+    if (!r.ok) return;
+    setVarDrafts((d) => {
+      const n = { ...d };
+      delete n[p.id];
       return n;
     });
     load();
@@ -233,8 +343,10 @@ export function StockCountPanel() {
             {visible.map((p, i) => {
               const editable = canEdit(p);
               const done = p.countedQty !== null && !(recounting && p.recount);
+              const vRows = editable ? variantRows(p) : null;
               return (
-                <div key={p.id} className={`flex items-center gap-2 border rounded p-2 text-[12.5px] ${done ? "border-green/50 bg-green/5" : p.recount ? "border-gold/60 bg-gold/5" : "border-rule"}`}>
+                <div key={p.id} className={`border rounded p-2 text-[12.5px] ${done ? "border-green/50 bg-green/5" : p.recount ? "border-gold/60 bg-gold/5" : "border-rule"}`}>
+                <div className="flex items-center gap-2">
                   <span className="text-steel font-mono text-[11px] w-6 text-right shrink-0">{i + 1}</span>
                   {p.photo && (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -247,8 +359,18 @@ export function StockCountPanel() {
                       {p.recount && " · para recontar"}
                       {p.countedQty !== null && ` · contado ${p.countedQty}${p.countedByName && isLead ? ` por ${p.countedByName}` : ""}`}
                     </div>
+                    {p.variantCounts && p.variantCounts.length > 0 && !vRows && <div className="text-steel text-[11.5px]">{variantSummary(p.variantCounts)}</div>}
+                    {editable && !vRows && (
+                      <button
+                        type="button"
+                        className="text-teal text-[11.5px] font-semibold cursor-pointer"
+                        onClick={() => setVarDrafts((d) => ({ ...d, [p.id]: [...p.variantNames.map((name) => ({ name, qty: "", added: false })), ...(p.variantNames.length === 0 ? [{ name: "", qty: "", added: true }] : [])] }))}
+                      >
+                        Este producto tiene colores o tallas
+                      </button>
+                    )}
                   </div>
-                  {editable && (
+                  {editable && !vRows && (
                     <>
                       <input
                         type="number"
@@ -266,6 +388,17 @@ export function StockCountPanel() {
                     </>
                   )}
                   {done && <CheckCircle2 size={15} className="text-green shrink-0" />}
+                </div>
+                {vRows && (
+                  <VariantCountEditor
+                    rows={vRows}
+                    onChange={(rows) => setVarDrafts((d) => ({ ...d, [p.id]: rows }))}
+                    onSave={() => saveVariants(p, vRows)}
+                    onSingle={() => setVarDrafts((d) => ({ ...d, [p.id]: "single" }))}
+                    saving={saving === p.id}
+                    correcting={p.countedQty !== null && !p.recount}
+                  />
+                )}
                 </div>
               );
             })}

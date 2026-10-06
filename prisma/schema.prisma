@@ -2073,6 +2073,7 @@ model PurchaseCatalogItem {
   rocketCodeMappings             RocketCodeMapping[]
   fulfillmentRequestItems        FulfillmentRequestItem[]
   fulfillmentRequestVariantNotes FulfillmentRequestVariantNote[]
+  productVariants                ProductVariant[]
   // Confirmado 2026-09-23: reportes de Compras de que este producto ya no
   // se consigue con ningún proveedor (ver SupplierStockoutReport).
   supplierStockoutReports        SupplierStockoutReport[]
@@ -7678,9 +7679,30 @@ model StockCountLine {
   // misma persona; null si hubo una pausa larga). Base del tiempo estimado
   // de los próximos conteos.
   durationSec   Int?
+  // Conteo por color/talla (pedido del usuario 2026-10-06): [{ name, qty }].
+  // null = se contó con un solo número. countedQty siempre es la suma.
+  variantCounts Json?
 
   @@unique([countId, catalogItemId])
   @@index([countId])
+}
+
+// Variantes reales (color/talla) de cada producto, tal como las encontró el
+// equipo de Inventario en el conteo físico (pedido del usuario 2026-10-06).
+// Se crean/actualizan cuando el admin aprueba un conteo. Todavía NO es stock
+// por variante: el Kardex sigue con un solo número por producto (etapa 3).
+model ProductVariant {
+  id            String              @id @default(cuid())
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  name          String
+  // Cantidad del último conteo aprobado.
+  countedQty    Int?
+  countedAt     DateTime?
+  createdAt     DateTime            @default(now())
+
+  @@unique([catalogItemId, name])
+  @@index([catalogItemId])
 }
 
 // Pedido del usuario 2026-10-05: Daniel asigna cada área a UNA persona del
