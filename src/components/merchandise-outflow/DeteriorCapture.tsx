@@ -423,7 +423,7 @@ function AddDeteriorItemForm({ batchId, onAdded, onCancel }: { batchId: string; 
             <button type="button" className="shrink-0 text-[11px] font-semibold text-blue cursor-pointer" onClick={() => setSelected(null)}>Cambiar</button>
           </div>
         ) : (
-          <ProductMatchPicker referencePhotoUrl={null} onConfirm={(r: ProductMatchResult) => setSelected(r)} />
+          <ProductMatchPicker referencePhotoUrl={null} searchUrl="/api/merchandise-outflow/catalog-search" onConfirm={(r: ProductMatchResult) => setSelected(r)} />
         )}
       </div>
 
