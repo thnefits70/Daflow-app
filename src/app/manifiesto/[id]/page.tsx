@@ -61,7 +61,9 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
   const groupTitle = (carrier: string) => {
     const b = lot.blocks.find((x) => x.carrier === carrier);
     const n = [...new Set(lines.map((l) => lineBlock(l.byCarrier)))].indexOf(carrier) + 1;
-    return `${n}° · Lleva ${carrierLabel(carrier)}${b?.assigneeName ? ` · Saca: ${b.assigneeName}` : ""}`;
+    // 2026-10-07: también quién hizo la asignación (Daniel o Allan).
+    const by = b?.assigneeName && b.assignedByName ? ` (asignado por ${b.assignedByName})` : "";
+    return `${n}° · Lleva ${carrierLabel(carrier)}${b?.assigneeName ? ` · Saca: ${b.assigneeName}${by}` : ""}`;
   };
   const totals = lot.carriers.map((c) => lines.reduce((s, l) => s + (l.byCarrier[c] ?? 0), 0));
   const units = lines.reduce((s, l) => s + l.quantity, 0);
