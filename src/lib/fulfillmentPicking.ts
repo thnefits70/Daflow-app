@@ -374,7 +374,8 @@ export async function listInventoryTeam(): Promise<{ id: string; name: string }[
 }
 
 // Daniel asigna (o quita, con assigneeId null) un bloque del corte. A quien
-// le toca le llega un aviso con cuántos productos y unidades son.
+// le toca le llega un aviso con cuántos productos y unidades son. Pedido de
+// Daniel 2026-10-07: también cuando uno se asigna a sí mismo, de recordatorio.
 export async function assignBlock(params: { lotId: string; carrier: string; assigneeId: string | null; userId: string | null }): Promise<Result> {
   const lot = await getCompiledLot(params.lotId);
   if (!lot) return { ok: false, error: "No encontrado." };
@@ -395,7 +396,7 @@ export async function assignBlock(params: { lotId: string; carrier: string; assi
     create: { lotId: params.lotId, carrier: params.carrier, assigneeId: params.assigneeId, assignedById: params.userId },
     update: { assigneeId: params.assigneeId, assignedById: params.userId, assignedAt: new Date() },
   });
-  if (prev !== params.assigneeId && params.assigneeId !== params.userId) {
+  if (prev !== params.assigneeId) {
     const items = lot.picking.filter((p) => p.block === params.carrier);
     const units = items.reduce((s, p) => s + p.needed, 0);
     await notifyOwner(params.assigneeId, {
