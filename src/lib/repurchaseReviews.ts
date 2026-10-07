@@ -580,6 +580,9 @@ async function itemsNeedingRepurchaseReview(ids: string[], groupId?: string) {
 // recompra (o no le toca); si no, la RC esperando a Bryan o la ya aprobada.
 // Mismas reglas que checkRepurchaseApprovals, que igual se impone al enviar.
 export type RepurchaseLineStatus = {
+  // Compra caliente (stock ≤ HOT_MAX): desde 2026-10-07 se pide directo en
+  // Solicitar con la declaración "Sí, ya lo hice" y la aprueba Bryan con la SC.
+  hot: boolean;
   pending: { code: string } | null;
   approved: { code: string; supplierId: string; supplierName: string; unitCost: number; approvedQuantity: number | null; expiresAt: string | null; selfConfirmed: boolean } | null;
 };
@@ -588,11 +591,12 @@ export async function getRepurchaseLineStatus(catalogItemId: string, requesterId
   const [needing] = await itemsNeedingRepurchaseReview([catalogItemId], groupId);
   if (!needing) return null;
   const now = new Date();
-  const [approved, pending] = await Promise.all([
+  const [approved, pending, stock] = await Promise.all([
     prisma.repurchaseReview.findFirst({
       where: {
         catalogItemId,
         requestedById: requesterId,
+        reviewedAt: { not: null },
         OR: [{ usedGroupId: null, status: "APPROVED", approvalExpiresAt: { gt: now } }, ...(groupId ? [{ usedGroupId: groupId }] : [])],
       },
       orderBy: { reviewedAt: "desc" },
@@ -602,8 +606,10 @@ export async function getRepurchaseLineStatus(catalogItemId: string, requesterId
       where: { catalogItemId, requestedById: requesterId, status: "PENDING_APPROVAL" },
       select: { code: true },
     }),
+    latestStock(catalogItemId),
   ]);
   return {
+    hot: stock <= HOT_MAX,
     pending: pending ? { code: formatRepurchaseCode(pending.code) } : null,
     approved: approved
       ? {
@@ -624,15 +630,21 @@ export async function getRepurchaseLineStatus(catalogItemId: string, requesterId
 // producto nuevo que Bryan dejó "Listo para comprar" en Análisis de Mercado
 // y que todavía no se compró nunca ya tiene su aprobación por ese camino.
 // groupId: al reenviar, la RC que ya usó esta misma compra sigue valiendo.
+// hotDeclared (pedido de Jariel 2026-10-07): quien compra respondió "Sí, ya
+// lo hice" a "¿Ya hiciste el análisis del precio frente a la competencia?".
+// Una recompra CALIENTE sin RC pasa así: no se analiza en la calculadora,
+// la solicitud va directo a Bryan, que la aprueba como cualquier compra.
+// Queda registrada como RC "declarada" (ver markRepurchaseReviewsUsed).
 export async function checkRepurchaseApprovals(params: {
   lines: LineForCheck[];
   supplierId: string;
   requesterId: string;
   groupId?: string;
-}): Promise<{ ok: true; reviewIds: string[] } | { ok: false; error: string }> {
+  hotDeclared?: boolean;
+}): Promise<{ ok: true; reviewIds: string[]; declared: DeclaredHotRepurchase[] } | { ok: false; error: string }> {
   const ids = [...new Set(params.lines.map((l) => l.catalogItemId))];
   const needing = await itemsNeedingRepurchaseReview(ids, params.groupId);
-  if (needing.length === 0) return { ok: true, reviewIds: [] };
+  if (needing.length === 0) return { ok: true, reviewIds: [], declared: [] };
 
   const now = new Date();
   const reviews = await prisma.repurchaseReview.findMany({
@@ -640,6 +652,9 @@ export async function checkRepurchaseApprovals(params: {
       catalogItemId: { in: needing.map((n) => n.id) },
       requestedById: params.requesterId,
       status: { in: ["APPROVED", "USED"] },
+      // Las declaradas (sin reviewedAt) no atan precio ni cantidad: al
+      // corregir y reenviar se vuelven a declarar con lo de ese momento.
+      reviewedAt: { not: null },
       OR: [{ usedGroupId: null, status: "APPROVED", approvalExpiresAt: { gt: now } }, ...(params.groupId ? [{ usedGroupId: params.groupId }] : [])],
     },
     orderBy: { reviewedAt: "desc" },
@@ -647,8 +662,19 @@ export async function checkRepurchaseApprovals(params: {
   });
 
   const reviewIds: string[] = [];
+  const declaredIds: string[] = [];
   for (const item of needing) {
     const rc = reviews.find((r) => r.catalogItemId === item.id);
+    if (!rc && (await latestStock(item.id)) <= HOT_MAX) {
+      if (params.hotDeclared) {
+        declaredIds.push(item.id);
+        continue;
+      }
+      return {
+        ok: false,
+        error: `"${item.name}" es una recompra caliente: al final de la solicitud confirma que ya hiciste el análisis del precio frente a la competencia ("Sí, ya lo hice").`,
+      };
+    }
     if (!rc) {
       const pending = await prisma.repurchaseReview.findFirst({
         where: { catalogItemId: item.id, requestedById: params.requesterId, status: "PENDING_APPROVAL" },
@@ -679,17 +705,83 @@ export async function checkRepurchaseApprovals(params: {
     }
     reviewIds.push(rc.id);
   }
-  return { ok: true, reviewIds };
+  const declared = await Promise.all(declaredIds.map((id) => prepareDeclaredHotRepurchase(id, params.lines, params.supplierId, params.requesterId)));
+  if (declared.some((d) => d === null)) return { ok: false, error: "No se pudo leer la última compra de una recompra. Intenta de nuevo." };
+  return { ok: true, reviewIds, declared: declared as DeclaredHotRepurchase[] };
+}
+
+// Lo que se guarda de una recompra caliente declarada: la misma foto que una
+// RC normal (última compra, Dropi, stock, ventas), sin precio de competencia
+// — quien compra solo declaró que ya lo revisó. Sin reviewedAt = declarada.
+export type DeclaredHotRepurchase = Omit<Prisma.RepurchaseReviewUncheckedCreateInput, "code" | "usedGroupId" | "usedAt" | "status"> & { requestedById: string };
+
+const DECLARED_HOT_NOTE = "Recompra caliente pedida desde Solicitar: quien compra declaró que ya hizo el análisis del precio frente a la competencia. Bryan la aprueba con la solicitud de compra.";
+
+async function prepareDeclaredHotRepurchase(catalogItemId: string, lines: LineForCheck[], supplierId: string, requesterId: string): Promise<DeclaredHotRepurchase | null> {
+  const analysis = await getRepurchaseAnalysis(catalogItemId, requesterId);
+  if (!analysis) return null;
+  const mine = lines.filter((l) => l.catalogItemId === catalogItemId);
+  const quantity = mine.reduce((s, l) => s + l.quantity, 0);
+  const unitCost = Math.max(...mine.map((l) => l.unitCost));
+  const calc = computeRepurchase({ unitCost, freightTotal: null, quantity, competitorPrice: null, params: analysis.params });
+  if (!calc) return null;
+  const lastCalc = analysis.last
+    ? computeRepurchase({ unitCost: analysis.last.unitCost, freightTotal: null, quantity: 1, competitorPrice: analysis.competitor?.price ?? null, params: analysis.params })
+    : null;
+  return {
+    catalogItemId,
+    supplierId,
+    unitCost,
+    freightTotal: null,
+    quantity,
+    competitorId: null,
+    competitorPrice: null,
+    noCompetitorNote: null,
+    lastUnitCost: analysis.last?.unitCost ?? null,
+    lastSupplierName: analysis.last?.supplierName ?? null,
+    lastPurchaseAt: analysis.last ? new Date(analysis.last.date) : null,
+    lastCompetitorPrice: analysis.competitor?.price ?? null,
+    lastMarginAtCompetitor: lastCalc?.marginAtCompetitor ?? null,
+    publishedDropiPrice: analysis.publishedDropiPrice,
+    newDropiPrice: calc.newDropiPrice,
+    marginAtCompetitor: null,
+    maxSupplierCost: null,
+    marginPercent: analysis.params.marginPercent,
+    verdict: calc.verdict,
+    stockAtRequest: analysis.stock,
+    soldLast30: analysis.sold,
+    daysLeft: analysis.daysLeft,
+    audience: "HOT",
+    note: DECLARED_HOT_NOTE,
+    requestedById: requesterId,
+  };
 }
 
 // Marca las RC como usadas por esta compra (dentro de la misma transacción
 // que crea las filas de la solicitud).
-export async function markRepurchaseReviewsUsed(tx: Prisma.TransactionClient, reviewIds: string[], groupId: string): Promise<void> {
-  if (reviewIds.length === 0) return;
+export async function markRepurchaseReviewsUsed(tx: Prisma.TransactionClient, reviewIds: string[], groupId: string, declared: DeclaredHotRepurchase[] = []): Promise<void> {
+  const now = new Date();
+  if (reviewIds.length > 0) {
+    await tx.repurchaseReview.updateMany({
+      where: { id: { in: reviewIds } },
+      data: { status: "USED", usedGroupId: groupId, usedAt: now },
+    });
+  }
+  // Al corregir y reenviar, la declarada anterior de esta compra se
+  // reemplaza por la de ahora.
+  await tx.repurchaseReview.deleteMany({ where: { usedGroupId: groupId, reviewedAt: null, status: "USED" } });
+  if (declared.length === 0) return;
+  // Si tenía una RC esperando a Bryan de ese producto, ya no hace falta.
   await tx.repurchaseReview.updateMany({
-    where: { id: { in: reviewIds } },
-    data: { status: "USED", usedGroupId: groupId, usedAt: new Date() },
+    where: { catalogItemId: { in: declared.map((d) => d.catalogItemId) }, requestedById: declared[0].requestedById, status: "PENDING_APPROVAL" },
+    data: { status: "CANCELLED", cancelledAt: now },
   });
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"repurchase:code"}))`;
+  const last = await tx.repurchaseReview.findFirst({ orderBy: { code: "desc" }, select: { code: true } });
+  let code = last?.code ?? 0;
+  for (const d of declared) {
+    await tx.repurchaseReview.create({ data: { ...d, code: ++code, status: "USED", usedGroupId: groupId, usedAt: now } });
+  }
 }
 
 // ---- Inicio y avisos -------------------------------------------------------------

@@ -343,6 +343,11 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // blockedByLine. No se guarda en el borrador (se vuelve a consultar).
   const [repurchaseByLine, setRepurchaseByLine] = useState<Record<number, RepurchaseLineStatus | null>>({});
   const [analyzingLine, setAnalyzingLine] = useState<number | null>(null);
+  // Pedido de Jariel 2026-10-07: la recompra CALIENTE no pasa por la
+  // calculadora (lo de la compra ya está en esta solicitud). Al final se le
+  // pregunta si ya hizo el análisis frente a la competencia y, con "Sí, ya lo
+  // hice", la solicitud se envía directo a Bryan.
+  const [hotAsk, setHotAsk] = useState(false);
 
   function fetchLineStats(idx: number, catalogItemId: string, groupId: string | null = editingGroupId) {
     fetch(`/api/purchase-catalog/${catalogItemId}${groupId ? `?groupId=${encodeURIComponent(groupId)}` : ""}`)
@@ -861,8 +866,10 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const quoteTotalMatches = readTotal !== null && (Math.abs(readTotal - total) < 0.01 || quoteMatchesWithShipping);
   const quoteVerified = isCreditoSupplier || (!!verifyResult && (codeOnlyIdxs.length > 0 ? allCodeOnlyResolved : quoteTotalMatches));
   const validLines = lines.filter((l) => l.catalogItem && Number(l.quantity) > 0 && Number(l.unitCost) > 0);
+  const isHotRepurchaseLine = (i: number) => !!repurchaseByLine[i]?.hot && !repurchaseByLine[i]!.approved;
+  const hotRepurchaseNames = emergencyOnly ? [] : lines.filter((l, i) => l.catalogItem && isHotRepurchaseLine(i)).map((l) => l.catalogItem!.name);
 
-  async function submit() {
+  async function submit(hotDeclared = false) {
     if (validLines.length === 0 || validLines.length !== lines.length || !supplier || (!isCreditoSupplier && !quoteImageUrl)) {
       setErr("Completa producto, mercadería o insumo, cantidad y costo de cada línea, el proveedor, y la cotización.");
       return;
@@ -876,7 +883,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       return;
     }
     if (!emergencyOnly) {
-      const unanalyzed = lines.filter((l, i) => l.catalogItem && repurchaseByLine[i] && !repurchaseByLine[i]!.approved);
+      const unanalyzed = lines.filter((l, i) => l.catalogItem && repurchaseByLine[i] && !repurchaseByLine[i]!.approved && !isHotRepurchaseLine(i));
       if (unanalyzed.length > 0) {
         setErr(`${unanalyzed.map((l) => l.catalogItem!.name).join(", ")}: es recompra y todavía no está confirmada ni aprobada por Bryan. Analízala en el recuadro "Es una recompra" de ese producto.`);
         return;
@@ -917,6 +924,12 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       setErr(`Hay $${skippedTotal.toFixed(2)} de crédito disponible con este proveedor y no lo estás aplicando — márcalo arriba o explica por qué no.`);
       return;
     }
+    if (hotRepurchaseNames.length > 0 && !hotDeclared) {
+      setErr("");
+      setHotAsk(true);
+      return;
+    }
+    setHotAsk(false);
     setBusy(true);
     setErr("");
     const body = {
@@ -944,6 +957,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       isEmergency: emergencyOnly,
       emergencyReason: emergencyOnly ? emergencyReason.trim() : null,
       marketProductProposalId,
+      hotRepurchaseDeclared: hotDeclared && hotRepurchaseNames.length > 0,
     };
     // Confirmado 2026-08-08: cambio de política — corregir una solicitud
     // rechazada YA NO crea una nueva (eso hacía crecer la lista con
@@ -1071,6 +1085,13 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                     Recompra <b>{a.code}</b> {a.selfConfirmed ? "confirmada por ti" : "aprobada por Bryan"}: {a.supplierName}, hasta {a.approvedQuantity ?? "—"} u. a ${a.unitCost.toFixed(2)}
                     {a.expiresAt ? ` · vale hasta el ${new Date(a.expiresAt).toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" })}` : ""}.
                     {problems.length > 0 && <div className="mt-1 font-semibold">No coincide: {problems.join("; ")}. Corrígelo o analiza una recompra nueva en Control de Compras → Recompras.</div>}
+                  </div>
+                );
+              }
+              if (rc.hot) {
+                return (
+                  <div className="bg-teal/10 border border-teal/35 rounded-md px-3 py-2 mb-2.5 text-[12.5px] text-teal">
+                    🔁 Recompra caliente: no hace falta analizarla aparte. Al final te preguntamos si ya revisaste el precio frente a la competencia y la solicitud va directo a Bryan.
                   </div>
                 );
               }
@@ -1723,9 +1744,25 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
 
       {toast && <div className="text-teal text-[12.5px] mb-3">{toast}</div>}
       {err && <div className="text-red text-[12.5px] mb-3">{err}</div>}
-      <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-4 py-2 text-[13px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={submit}>
-        {busy ? "Enviando…" : "Enviar y confirmar"}
-      </button>
+      {hotAsk && hotRepurchaseNames.length > 0 ? (
+        <div className="bg-amber/10 border border-amber/35 rounded-md px-3.5 py-3 text-[12.5px]">
+          <div className="font-bold text-amber">🔁 Esto es una recompra: {hotRepurchaseNames.join(", ")}</div>
+          <div className="text-ink mt-1">¿Ya hiciste el análisis del precio frente a la competencia?</div>
+          <div className="flex flex-wrap gap-2 mt-2.5">
+            <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-4 py-2 text-[13px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => submit(true)}>
+              {busy ? "Enviando…" : "Sí, ya lo hice — enviar a Bryan"}
+            </button>
+            <button type="button" disabled={busy} className="rounded border border-rule px-3 py-2 text-[12.5px] text-steel cursor-pointer" onClick={() => setHotAsk(false)}>
+              Todavía no
+            </button>
+          </div>
+          <div className="text-[11.5px] text-steel mt-1.5">Si todavía no, revísalo en Dropi y vuelve: tu solicitud queda guardada aquí.</div>
+        </div>
+      ) : (
+        <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-4 py-2 text-[13px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => submit()}>
+          {busy ? "Enviando…" : "Enviar y confirmar"}
+        </button>
+      )}
     </div>
   );
 }

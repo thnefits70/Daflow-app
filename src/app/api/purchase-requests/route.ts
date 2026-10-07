@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { linkReadyToBuyProposalsToGroup } from "@/lib/marketProduct";
 import { canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
-import { checkRepurchaseApprovals, markRepurchaseReviewsUsed } from "@/lib/repurchaseReviews";
+import { checkRepurchaseApprovals, markRepurchaseReviewsUsed, type DeclaredHotRepurchase } from "@/lib/repurchaseReviews";
 import { findItemsWithStockCover, isStockCoverBlockActive } from "@/lib/purchaseSuggestions";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, lockAndFindOpenPurchaseByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes, formatPurchaseRequestCode } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
@@ -479,10 +479,12 @@ export async function POST(req: NextRequest) {
   // Pedido del usuario 2026-10-06: toda recompra necesita su RC aprobada por
   // Bryan (ver repurchaseReviews.ts). El admin y la vía de emergencia no.
   let repurchaseReviewIds: string[] = [];
+  let declaredRepurchases: DeclaredHotRepurchase[] = [];
   if (!isAdmin && !isEmergencySubmission) {
-    const rc = await checkRepurchaseApprovals({ lines: d.items, supplierId: d.supplierId, requesterId: session.user.id });
+    const rc = await checkRepurchaseApprovals({ lines: d.items, supplierId: d.supplierId, requesterId: session.user.id, hotDeclared: !!d.hotRepurchaseDeclared });
     if (!rc.ok) return NextResponse.json({ error: rc.error }, { status: 400 });
     repurchaseReviewIds = rc.reviewIds;
+    declaredRepurchases = rc.declared;
   }
   // Pedido del usuario 2026-10-07: la vía de emergencia no pasa por la RC de
   // Bryan, pero igual no se compra lo que todavía alcanza (pasado el conteo
@@ -550,7 +552,7 @@ export async function POST(req: NextRequest) {
         },
       })
     ));
-    await markRepurchaseReviewsUsed(tx, repurchaseReviewIds, groupId);
+    await markRepurchaseReviewsUsed(tx, repurchaseReviewIds, groupId, declaredRepurchases);
     return null;
   }, { timeout: 20000, maxWait: 10000 });
   if (conflict) {

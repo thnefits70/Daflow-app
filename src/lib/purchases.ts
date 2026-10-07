@@ -725,6 +725,10 @@ export const purchaseSubmissionSchema = z.object({
   // propuesta que Bryan ya marcó lista para comprar. Nunca obligatorio ni
   // valida nada distinto — una solicitud normal simplemente no lo trae.
   marketProductProposalId: z.string().nullable().optional(),
+  // Pedido de Jariel 2026-10-07: "Sí, ya lo hice" al final de Solicitar —
+  // recompra caliente con el análisis de competencia hecho por quien compra
+  // (ver checkRepurchaseApprovals). Solo sirve para compras calientes.
+  hotRepurchaseDeclared: z.boolean().optional(),
 });
 
 export type PurchaseSubmissionData = z.infer<typeof purchaseSubmissionSchema>;

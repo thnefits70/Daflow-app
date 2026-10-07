@@ -5,7 +5,7 @@ import { canSubmitPurchaseRequests } from "@/lib/guards";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, purchaseRequestInclude, findOpenPurchasesByOthers, lockAndFindOpenPurchaseByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup, releaseCreditsForGroup } from "@/lib/supplierCredits";
-import { checkRepurchaseApprovals, markRepurchaseReviewsUsed } from "@/lib/repurchaseReviews";
+import { checkRepurchaseApprovals, markRepurchaseReviewsUsed, type DeclaredHotRepurchase } from "@/lib/repurchaseReviews";
 
 // Confirmado 2026-08-08: cambio de política pedido explícitamente por el
 // usuario — "Corregir y reenviar" una solicitud rechazada antes creaba una
@@ -54,10 +54,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   // Pedido del usuario 2026-10-06: misma regla de recompras que al crear; la
   // RC que ya usó esta misma compra sigue valiendo al corregirla.
   let repurchaseReviewIds: string[] = [];
+  let declaredRepurchases: DeclaredHotRepurchase[] = [];
   if (!isAdmin && !r0.isEmergency) {
-    const rc = await checkRepurchaseApprovals({ lines: d.items, supplierId: d.supplierId, requesterId: session.user.id, groupId });
+    const rc = await checkRepurchaseApprovals({ lines: d.items, supplierId: d.supplierId, requesterId: session.user.id, groupId, hotDeclared: !!d.hotRepurchaseDeclared });
     if (!rc.ok) return NextResponse.json({ error: rc.error }, { status: 400 });
     repurchaseReviewIds = rc.reviewIds;
+    declaredRepurchases = rc.declared;
   }
   // Pedido del usuario 2026-09-30: producto pequeño o normal (ver checkAndSaveFulfillmentSizes).
   const sizeError = await checkAndSaveFulfillmentSizes(d.items, session.user.role === "admin" ? null : session.user.id);
@@ -120,7 +122,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
         },
       })
     ));
-    await markRepurchaseReviewsUsed(tx, repurchaseReviewIds, groupId);
+    await markRepurchaseReviewsUsed(tx, repurchaseReviewIds, groupId, declaredRepurchases);
     return null;
   }, { timeout: 20000, maxWait: 10000 });
   if (conflict) {
