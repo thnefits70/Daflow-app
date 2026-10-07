@@ -5,6 +5,7 @@ import { Sparkles, Send, Mic, MicOff, Volume2, VolumeX, X, History, Plus, ArrowL
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useDictation } from "@/lib/useDictation";
 
 // Nancy writes in markdown (bold, tables) — render it instead of showing raw
 // **/| syntax. Minimal component overrides since this project has no
@@ -30,25 +31,6 @@ const MARKDOWN_COMPONENTS = {
 type ChatMessage = { role: "user" | "assistant"; content: string };
 type ConversationSummary = { id: string; title: string; updatedAt: string; messageCount: number };
 
-// Minimal local typing for the (non-standard, not in lib.dom.d.ts everywhere)
-// Web Speech API — avoids pulling in a dependency or touching global types.
-// Chrome/Edge support this well; Safari/Firefox support is partial, so every
-// call site feature-detects and degrades gracefully (mic button just hides).
-type SpeechRecognitionLike = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-type SpeechWindow = Window & {
-  SpeechRecognition?: new () => SpeechRecognitionLike;
-  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-};
-
 // Floating chat widget for Nancy, the finance-KPI analysis assistant —
 // scoped strictly to the data already loaded in this dashboard (see
 // src/lib/nancy.ts for the system prompt and context builder). Fixed to the
@@ -70,14 +52,14 @@ export function NancyPanel({ deptId, brand }: { deptId: string; brand: string })
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [listening, setListening] = useState(false);
   const [voiceOutOn, setVoiceOutOn] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [micSupported, setMicSupported] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const dictation = useDictation(input, setInput);
+  const { listening, supported: micSupported } = dictation;
+  const stopDictation = dictation.stop;
   const lastSpokenRef = useRef<string | null>(null);
 
   const loadConversations = async () => {
@@ -122,8 +104,6 @@ export function NancyPanel({ deptId, brand }: { deptId: string; brand: string })
   // — keeps the server-rendered markup identical to the first client render.
   useEffect(() => {
     setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-    const sw = window as SpeechWindow;
-    setMicSupported(!!(sw.SpeechRecognition || sw.webkitSpeechRecognition));
     setSpeechSupported("speechSynthesis" in window);
   }, []);
 
@@ -144,35 +124,15 @@ export function NancyPanel({ deptId, brand }: { deptId: string; brand: string })
     window.speechSynthesis.speak(utterance);
   }, [messages, loading, voiceOutOn]);
 
-  function toggleListening() {
-    const sw = window as SpeechWindow;
-    const Ctor = sw.SpeechRecognition || sw.webkitSpeechRecognition;
-    if (!Ctor) return;
-
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-
-    const recognition = new Ctor();
-    recognition.lang = "es-EC";
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.onresult = (event) => {
-      let transcript = "";
-      for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
-      setInput(transcript);
-    };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
-    recognitionRef.current = recognition;
-    setListening(true);
-    recognition.start();
-  }
+  // Al cerrar el chat o volver a la lista se apaga el micrófono.
+  useEffect(() => {
+    if (!open || view !== "chat") stopDictation();
+  }, [open, view, stopDictation]);
 
   async function send() {
     const text = input.trim();
     if (!text || loading) return;
+    stopDictation();
     setError(null);
     const nextMessages: ChatMessage[] = [...messages, { role: "user", content: text }];
     setMessages([...nextMessages, { role: "assistant", content: "" }]);
@@ -385,7 +345,7 @@ export function NancyPanel({ deptId, brand }: { deptId: string; brand: string })
                 className="flex-1 rounded border border-rule bg-cloud px-3 py-2 text-[12.5px] min-w-0"
                 placeholder={listening ? "Escuchando..." : "Escribe o dicta tu pregunta..."}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => dictation.onManualEdit(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -401,7 +361,7 @@ export function NancyPanel({ deptId, brand }: { deptId: string; brand: string })
                   className={`px-2.5 py-2 rounded-md border shrink-0 cursor-pointer ${
                     listening ? "bg-red/20 border-red text-red" : "border-rule text-steel hover:text-ink"
                   } ${listening && !reducedMotion ? "animate-pulse" : ""}`}
-                  onClick={toggleListening}
+                  onClick={dictation.toggle}
                   disabled={loading}
                 >
                   {listening ? <MicOff size={15} /> : <Mic size={15} />}

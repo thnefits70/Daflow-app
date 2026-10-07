@@ -3,27 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ClipboardList, MessageCircleQuestion, Send, X, Mic, MicOff } from "lucide-react";
+import { useDictation } from "@/lib/useDictation";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
-
-// Minimal local typing for the (non-standard, not in lib.dom.d.ts everywhere)
-// Web Speech API — same pattern as NancyPanel.tsx. Chrome/Edge support this
-// well; Safari/Firefox support is partial, so the mic button just hides when
-// unsupported instead of erroring.
-type SpeechRecognitionLike = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-type SpeechWindow = Window & {
-  SpeechRecognition?: new () => SpeechRecognitionLike;
-  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-};
 
 // Widget flotante del asistente de check-in semanal — reemplaza la reunión
 // 1:1 admin-líder (ver src/lib/weeklyCheckin.ts). A diferencia de Nancy (que
@@ -68,15 +50,15 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [listening, setListening] = useState(false);
-  const [micSupported, setMicSupported] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [side, setSide] = useState<"left" | "right">("left");
   const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
   const dragStartRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const dictation = useDictation(input, setInput);
+  const { listening, supported: micSupported } = dictation;
+  const stopDictation = dictation.stop;
 
   // Accesos directos (ej. la tarjeta de Inicio, "?openMary=1") deben abrir
   // el chat en un solo clic, sin que la persona tenga que buscar el botón
@@ -91,11 +73,9 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
 
   // "Assume default, flip after mount" — same pattern used in NancyPanel and
   // WeeklyTrendChart — keeps the server-rendered markup identical to the
-  // first client render (matchMedia/SpeechRecognition don't exist on server).
+  // first client render (matchMedia doesn't exist on server).
   useEffect(() => {
     setReducedMotion(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-    const sw = window as SpeechWindow;
-    setMicSupported(!!(sw.SpeechRecognition || sw.webkitSpeechRecognition));
     try {
       if (localStorage.getItem(SIDE_STORAGE_KEY) === "right") setSide("right");
     } catch {
@@ -140,31 +120,10 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
     setDrag(null);
   }
 
-  function toggleListening() {
-    const sw = window as SpeechWindow;
-    const Ctor = sw.SpeechRecognition || sw.webkitSpeechRecognition;
-    if (!Ctor) return;
-
-    if (listening) {
-      recognitionRef.current?.stop();
-      return;
-    }
-
-    const recognition = new Ctor();
-    recognition.lang = "es-EC";
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.onresult = (event) => {
-      let transcript = "";
-      for (let i = 0; i < event.results.length; i++) transcript += event.results[i][0].transcript;
-      setInput(transcript);
-    };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
-    recognitionRef.current = recognition;
-    setListening(true);
-    recognition.start();
-  }
+  // Al cerrar el chat se apaga el micrófono (el botón flotante sigue montado).
+  useEffect(() => {
+    if (!open && !embedded) stopDictation();
+  }, [open, embedded, stopDictation]);
 
   useEffect(() => {
     if ((!open && !embedded) || loadedOnce) return;
@@ -204,6 +163,7 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
   async function send() {
     const text = input.trim();
     if (!text || loading) return;
+    stopDictation();
     setError(null);
     // Burbujas vacías (respuesta de Mary que llegó en blanco) no se reenvían.
     const nextMessages: ChatMessage[] = [...messages.filter((m) => m.content.trim()), { role: "user" as const, content: text }].slice(isHelp ? -30 : -40);
@@ -287,7 +247,7 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
             className="flex-1 rounded border border-rule bg-cloud px-3 py-2.5 text-[13.5px] min-w-0"
             placeholder={listening ? "Escuchando..." : isHelp ? "Pregúntale a Mary..." : "Escribe o dicta tu respuesta..."}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => dictation.onManualEdit(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -303,7 +263,7 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
               className={`px-2.5 py-2 rounded-md border shrink-0 cursor-pointer ${
                 listening ? "bg-red/20 border-red text-red" : "border-rule text-steel hover:text-ink"
               } ${listening && !reducedMotion ? "animate-pulse" : ""}`}
-              onClick={toggleListening}
+              onClick={dictation.toggle}
               disabled={loading}
             >
               {listening ? <MicOff size={15} /> : <Mic size={15} />}
