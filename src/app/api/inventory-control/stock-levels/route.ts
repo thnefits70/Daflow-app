@@ -33,7 +33,7 @@ import {
 export async function GET() {
   if (!(await canViewStockLevels())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  const [rows, pendingAdjustments, unconfirmedDispatch] = await Promise.all([
+  const [rows, pendingAdjustments, unconfirmedDispatch, countLines] = await Promise.all([
     getAllCurrentStock(),
     // Confirmado 2026-09-22, pedido explícito del usuario: para que la fila
     // muestre "pendiente de aprobación" en vez del botón normal cuando
@@ -42,7 +42,18 @@ export async function GET() {
     // Pedido del usuario 2026-10-01: avisar que el stock todavía no descuenta
     // los cortes que Daniel no ha confirmado.
     getUnconfirmedDispatchSummary(),
+    // PROVISIONAL (pedido de Daniel 2026-10-07, mientras dura el conteo
+    // físico): franja verde en los productos ya recontados.
+    prisma.stockCountLine.findMany({ select: { catalogItemId: true, countedQty: true, expectedQty: true, decision: true } }),
   ]);
+  // "Recontado" = el número del sistema ya quedó igual a lo contado: coincidió
+  // al contar, el admin aprobó la diferencia, o decidió dejarlo como está.
+  // No cuenta lo que espera aprobación del admin ni lo mandado a recontar.
+  const recountedIds = new Set(
+    countLines
+      .filter((l) => l.decision === "APPROVED" || l.decision === "REJECTED" || (l.decision === null && l.countedQty === l.expectedQty))
+      .map((l) => l.catalogItemId),
+  );
   const pendingAdjustmentByItem = new Map(pendingAdjustments.map((a) => [a.catalogItemId, a.requestedQuantity]));
   // Cambiado 2026-09-30, pedido del usuario: el costo para los precios sale
   // de lo que queda de verdad en bodega (ver sellingCost.ts), no del
@@ -68,10 +79,12 @@ export async function GET() {
     // que "Precio proveedor" sale sin flete y "Puesto en bodega" con flete.
     const base = costBasisByItemId.get(r.catalogItemId) ?? null;
     const pendingAdjustmentQuantity = pendingAdjustmentByItem.get(r.catalogItemId) ?? null;
-    if (!base) return { ...r, pendingAdjustmentQuantity };
+    const recounted = recountedIds.has(r.catalogItemId);
+    if (!base) return { ...r, pendingAdjustmentQuantity, recounted };
     return {
       ...r,
       pendingAdjustmentQuantity,
+      recounted,
       costSource: base.costSource,
       providerPrice: base.batchCost,
       bodegaPrice: bodegaUnitCost(base.batchCost, base.freightCost, base.batchUnits),
