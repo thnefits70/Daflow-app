@@ -367,6 +367,9 @@ function rowBreakdownByCarrier(row: GuidesApplyRow): Map<string, { label: string
 
 // Pedido del usuario 2026-09-28 (temporal): ID provisional de ALF.
 export const isProvisionalAlfName = (name: string) => /-\s*ALF\s*$/i.test(name.trim());
+// Al leer las guías del corte (2026-10-07): "ALF" como palabra en cualquier
+// parte del nombre ("X - ALF", "X -ALF X2"), no solo al final.
+const isAlfProductName = (name: string) => /(^|[\s\-(])ALF(?=$|[\s\-)])/i.test(name.trim());
 
 function rowBreakdown(row: Pick<GuidesApplyRow, "variants" | "quantity" | "labelUnits">): { label: string; quantity: number }[] {
   const variants = row.variants.filter((v) => v.label.trim() && v.quantity > 0);
@@ -827,7 +830,7 @@ export async function getCompiledLot(lotId: string) {
           requestedBy: { select: { name: true } },
           items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true, warehouseArea: true, bodega: true } } } },
           variantNotes: { select: { catalogItemId: true, carrier: true, label: true, quantity: true } },
-          guides: { select: { guideNumber: true, carrier: true, codes: true } },
+          guides: { select: { guideNumber: true, carrier: true, codes: true, labelProducts: true } },
           provisionalLines: true,
           discontinuedSales: { select: { code: true, name: true, quantity: true, guideNumbers: true, carriers: true } },
         },
@@ -945,6 +948,32 @@ export async function getCompiledLot(lotId: string) {
       line.byCarrier[carrier] = (line.byCarrier[carrier] ?? 0) + p.quantity;
       if (p.variants) line.variants.push(p.variants);
     }
+  }
+
+  // Pedido de Daniel 2026-10-07: los productos de ALF salían en las guías
+  // pero no en DAFLOW. Se leen de cada guía del corte (labelProducts, lo que
+  // ya se guarda del PDF al subirlo) — solo lectura. Un código que ya está
+  // vinculado a INVESTOCK (sale en la lista normal) no se repite aquí. Si las
+  // guías todavía no se leyeron, queda lo que se marcó al subir el PDF.
+  const linkedCodes = new Set([...lines.values()].map((l) => l.justCode).filter((c): c is string => !!c));
+  const alfFromGuides = new Map<string, ProvisionalLotLine>();
+  for (const b of lot.batches) {
+    for (const g of b.guides) {
+      for (const p of (g.labelProducts ?? []) as { code: string | null; name: string; qty: number }[]) {
+        if (!isAlfProductName(p.name) || !(p.qty > 0) || (p.code && linkedCodes.has(p.code))) continue;
+        const key = p.code ?? `nombre:${p.name.trim().toUpperCase()}`;
+        let line = alfFromGuides.get(key);
+        if (!line) alfFromGuides.set(key, (line = { code: p.code ?? "", name: p.name.trim(), quantity: 0, byCarrier: {}, variants: [] }));
+        carriers.add(g.carrier);
+        line.quantity += p.qty;
+        line.byCarrier[g.carrier] = (line.byCarrier[g.carrier] ?? 0) + p.qty;
+      }
+    }
+  }
+  for (const [code, line] of provisionalMap) {
+    const fromGuides = alfFromGuides.get(code);
+    if (fromGuides) fromGuides.variants = line.variants;
+    else alfFromGuides.set(code, line);
   }
 
   const lineList: LotLine[] = [...lines.values()].map(({ variantMap, ...l }) => {
@@ -1082,7 +1111,7 @@ export async function getCompiledLot(lotId: string) {
       fileCount: b.fileUrls.length,
     })),
     lines: lineList.sort((a, b) => b.quantity - a.quantity),
-    provisional: [...provisionalMap.values()].sort((a, b) => b.quantity - a.quantity),
+    provisional: [...alfFromGuides.values()].sort((a, b) => b.quantity - a.quantity),
     // Productos dados de baja que igual se vendieron (2026-09-30): esas guías no salen.
     discontinued: lot.batches.flatMap((b) => b.discontinuedSales),
     warranty,

@@ -225,7 +225,7 @@ export default async function ManifestPrintPage({ params }: { params: Promise<{ 
               </thead>
               <tbody>
                 {lot.provisional.map((p) => (
-                  <tr key={p.code} className="border-b border-gray-300 align-top" style={{ breakInside: "avoid" }}>
+                  <tr key={p.code || p.name} className="border-b border-gray-300 align-top" style={{ breakInside: "avoid" }}>
                     <td className="py-1.5 pr-2 font-mono font-bold">{p.code}</td>
                     <td className="py-1.5 pr-2">
                       <div className="font-semibold">{p.name}</div>

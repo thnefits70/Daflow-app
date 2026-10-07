@@ -583,11 +583,11 @@ function ProvisionalBox({ lines }: { lines: ProvisionalLotLine[] }) {
   return (
     <div className="text-[11.5px] bg-gold/10 border border-gold/40 rounded-md p-2.5 mb-3">
       <div className="font-semibold mb-0.5" style={{ color: "var(--color-gold)" }}>
-        Productos con ID provisional ({lines.length}) — no están en INVESTOCK
+        Productos ALF ({lines.length}) — leídos de las guías, no están en INVESTOCK
       </div>
       <div className="text-[10.5px] text-steel mb-1.5">Sácalos mirando esta lista: no se escanean ni se descuentan del stock.</div>
       {lines.map((l) => (
-        <div key={l.code} className="flex items-start gap-2 py-1 border-t border-gold/20">
+        <div key={l.code || l.name} className="flex items-start gap-2 py-1 border-t border-gold/20">
           <span className="font-mono text-[10.5px] font-bold shrink-0">{l.code}</span>
           <div className="flex-1 min-w-0">
             <div>{l.name}</div>

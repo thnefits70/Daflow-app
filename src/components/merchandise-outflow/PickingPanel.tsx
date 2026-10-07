@@ -395,6 +395,7 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
     );
   }
 
+  const alf = lot.provisional ?? [];
   const done = lot.picking.filter((p) => p.confirmedAt).length;
   const picked = lot.picking.filter((p) => p.picked !== null).length;
 
@@ -720,6 +721,34 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
             );
           })}
       </div>
+
+      {/* Pedido de Daniel 2026-10-07: los productos de ALF (no están en
+          INVESTOCK) al final del corte, leídos de las guías — solo lectura. */}
+      {alf.length > 0 && (
+        <div className="mt-3 rounded-md bg-gold/10 border border-gold/40 px-3 py-2">
+          <div className="text-[11.5px] font-bold uppercase tracking-wider" style={{ color: "var(--color-gold)" }}>
+            Productos ALF · {alf.length} productos · {alf.reduce((s, l) => s + l.quantity, 0)} u
+          </div>
+          <div className="text-[10.5px] text-steel mb-1">Leídos de las guías. Solo para mirar: no se escanean ni se descuentan del stock.</div>
+          {alf.map((l) => (
+            <div key={l.code || l.name} className="flex items-start gap-2 py-1.5 border-t border-gold/20 text-[12px]">
+              {l.code && <span className="font-mono text-[11px] font-bold shrink-0 mt-px">{l.code}</span>}
+              <div className="flex-1 min-w-0">
+                <div className="break-words leading-snug">{l.name}</div>
+                <div className="text-[10.5px] text-steel">
+                  {sortCarriers(Object.keys(l.byCarrier))
+                    .map((c) => `${carrierLabel(c)} ${l.byCarrier[c]}`)
+                    .join(" · ")}
+                  {l.variants.length > 0 ? ` · ${l.variants.join(" · ")}` : ""}
+                </div>
+              </div>
+              <span className="font-mono text-[11.5px] whitespace-nowrap">
+                cantidad <b>{l.quantity}</b>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {pieces.length > 0 && (
         <div className="mt-3">
