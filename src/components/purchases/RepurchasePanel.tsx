@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { PurchaseSupplierPicker } from "@/components/purchases/PurchaseSupplierPicker";
 import { computeRepurchase, repurchaseVerdictText, REPURCHASE_VERDICT_LABELS, type RepurchaseCalc, type RepurchaseVerdict } from "@/lib/repurchasePricing";
 
 // Recompras (pedido del usuario 2026-10-06). Toda recompra — calientes de
@@ -249,33 +250,15 @@ function ItemSearch({ onPick }: { onPick: (i: ItemOption) => void }) {
   );
 }
 
-// Buscar un proveedor al que nunca se le compró este producto.
+// Buscar un proveedor al que nunca se le compró este producto. Pedido del
+// usuario 2026-10-07: si no está registrado, se registra aquí mismo (mismo
+// formulario que Solicitar) y queda en la lista de Proveedores — es la misma
+// tabla, nunca un registro aparte.
 function OtherSupplierSearch({ onPick }: { onPick: (s: { id: string; name: string }) => void }) {
-  const [q, setQ] = useState("");
-  const [results, setResults] = useState<{ id: string; name: string }[]>([]);
-  useEffect(() => {
-    if (q.trim().length < 2) return;
-    const t = setTimeout(() => {
-      fetch(`/api/purchase-suppliers?type=SUPPLIER&q=${encodeURIComponent(q.trim())}`)
-        .then((r) => (r.ok ? r.json() : []))
-        .then((list: { id: string; name: string }[]) => setResults(list.slice(0, 8).map((s) => ({ id: s.id, name: s.name }))))
-        .catch(() => setResults([]));
-    }, 250);
-    return () => clearTimeout(t);
-  }, [q]);
   return (
     <div className="mt-2">
-      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar otro proveedor ya registrado" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]" />
-      {q.trim().length >= 2 && results.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-1.5">
-          {results.map((s) => (
-            <button key={s.id} type="button" onClick={() => onPick(s)} className="rounded-full border border-rule px-2.5 py-1 text-[11.5px] text-steel hover:text-ink hover:border-teal cursor-pointer">
-              {s.name}
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="text-[11px] text-steel mt-1">Si el proveedor no está registrado, regístralo primero en Control de Compras → Solicitar.</div>
+      <PurchaseSupplierPicker type="SUPPLIER" value={null} onChange={(s) => s && onPick({ id: s.id, name: s.name })} label="Buscar otro proveedor o registrar uno nuevo" />
+      <div className="text-[11px] text-steel mt-1">Si no está registrado, pulsa &quot;Registrar proveedor nuevo&quot;: queda guardado también en Proveedores.</div>
     </div>
   );
 }
