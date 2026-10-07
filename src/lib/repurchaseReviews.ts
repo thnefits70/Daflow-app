@@ -2,10 +2,10 @@ import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { notifyOwner } from "@/lib/notifications";
 import { getMarketingLeadId } from "@/lib/guards";
-import { formatPurchaseRequestCode, getCatalogItemSupplierComparison, openPurchaseWhere } from "@/lib/purchases";
+import { findOpenPurchasesByOthers, formatPurchaseRequestCode, getCatalogItemSupplierComparison, otherOpenPurchaseMessage } from "@/lib/purchases";
 import { currentDropiPrices } from "@/lib/dropiPriceChanges";
 import { resolveDropiParamsForCatalogItems } from "@/lib/marketProduct";
-import { getSalesWindow, getSoldUnitsByItem, HOT_MAX, suggestedQuantity, urgentDaysForSupplier } from "@/lib/purchaseSuggestions";
+import { COLD_MAX, COVER_DAYS_AFTER_ARRIVAL, getSalesWindow, getSoldUnitsByItem, HOT_MAX, isStockCoverBlockActive, stockCoverMessage, stockStillCovers, suggestedQuantity, urgentDaysForSupplier } from "@/lib/purchaseSuggestions";
 import { computeRepurchase, formatRepurchaseCode, REPURCHASE_VERDICT_LABELS, type RepurchasePriceParams, type RepurchaseVerdict } from "@/lib/repurchasePricing";
 
 // Pedido del usuario 2026-10-06: recompras con aprobación de Bryan Ríos
@@ -73,6 +73,9 @@ export type RepurchaseAnalysis = {
   audience: "HOT" | "COLD";
   // Lo que podría frenar el envío (se avisa antes de llenar nada).
   blocker: string | null;
+  // Todavía hay stock (2026-10-07): durante el conteo físico solo aviso;
+  // después, para enviarla igual hace falta explicar el motivo a Bryan.
+  stockCover: { message: string; needsReason: boolean } | null;
   // RC anteriores del producto (las más nuevas primero).
   history: RepurchaseRow[];
 };
@@ -157,6 +160,9 @@ export async function getRepurchaseAnalysis(catalogItemId: string, userId: strin
     suggestedQty: suggestedQuantity(perDay, urgentDays, stock),
     audience: stock <= HOT_MAX ? "HOT" : "COLD",
     blocker,
+    stockCover: stockStillCovers(stock, perDay, urgentDays)
+      ? { message: stockCoverMessage(item.name, stock, daysLeft), needsReason: isStockCoverBlockActive() }
+      : null,
     history,
   };
 }
@@ -180,16 +186,9 @@ async function findRepurchaseBlocker(catalogItemId: string, userId: string | nul
     return `${who} la recompra ${formatRepurchaseCode(open.code)} de este producto ${what}. No hace falta enviar otra.`;
   }
   // Igual que en Compras (2026-09-29): solo quien ya tiene la compra abierta
-  // puede pedir más de ese producto.
-  const openPurchase = await prisma.purchaseRequest.findFirst({
-    where: { ...openPurchaseWhere(), catalogItemId, ...(userId ? { NOT: { requestedById: userId } } : {}) },
-    select: { requestNumber: true, requestedBy: { select: { name: true } } },
-  });
-  if (openPurchase) {
-    const code = openPurchase.requestNumber ? formatPurchaseRequestCode(openPurchase.requestNumber) : "abierta";
-    return `${openPurchase.requestedBy?.name ?? "Otra persona"} ya tiene una compra en camino de este producto (${code}). No se compra lo mismo dos veces.`;
-  }
-  return null;
+  // (o la hizo en los últimos 3 días, 2026-10-07) puede pedir más de ese producto.
+  const [other] = await findOpenPurchasesByOthers([catalogItemId], userId);
+  return other ? otherOpenPurchaseMessage(other) : null;
 }
 
 // ---- Listas ------------------------------------------------------------------
@@ -241,6 +240,8 @@ export type RepurchaseRow = {
   usedAt: string | null;
   // Bryan no respondió todavía después de NO_RESPONSE_HOURS.
   waitingTooLong: boolean;
+  // Al enviarla todavía había stock (2026-10-07): Bryan lo ve resaltado.
+  stockStillCovered: boolean;
 };
 
 const rowSelect = {
@@ -249,7 +250,7 @@ const rowSelect = {
   catalogItemId: true,
   catalogItem: { select: { name: true, justCode: true, photos: true } },
   supplierId: true,
-  supplier: { select: { name: true } },
+  supplier: { select: { name: true, paymentMode: true } },
   unitCost: true,
   freightTotal: true,
   quantity: true,
@@ -345,6 +346,7 @@ async function toRows(records: RowRecord[]): Promise<RepurchaseRow[]> {
       usedPurchaseCode: r.usedGroupId ? codeByGroup.get(r.usedGroupId) ?? null : null,
       usedAt: r.usedAt?.toISOString() ?? null,
       waitingTooLong: state === "PENDING_APPROVAL" && now.getTime() - r.requestedAt.getTime() >= NO_RESPONSE_HOURS * 60 * 60 * 1000,
+      stockStillCovered: r.stockAtRequest > COLD_MAX && (r.daysLeft === null || r.daysLeft >= urgentDaysForSupplier(r.supplier.paymentMode) + COVER_DAYS_AFTER_ARRIVAL),
     };
   });
 }
@@ -383,6 +385,9 @@ export async function createRepurchaseReview(input: CreateRepurchaseInput, userI
   const analysis = await getRepurchaseAnalysis(input.catalogItemId, userId);
   if (!analysis) return { ok: false, status: 404, error: "Este producto no es una recompra (nunca estuvo en bodega o es un suministro)." };
   if (analysis.blocker) return { ok: false, status: 409, error: analysis.blocker };
+  if (analysis.stockCover?.needsReason && (input.note?.trim().length ?? 0) < 10) {
+    return { ok: false, status: 400, error: `${analysis.stockCover.message} Si de verdad hace falta (ej. temporada), explica el motivo en la nota para Bryan.` };
+  }
 
   const supplier = await prisma.supplier.findUnique({ where: { id: input.supplierId }, select: { id: true, name: true, type: true } });
   if (!supplier || supplier.type !== "SUPPLIER") return { ok: false, status: 400, error: "Elige el proveedor al que le vas a comprar." };

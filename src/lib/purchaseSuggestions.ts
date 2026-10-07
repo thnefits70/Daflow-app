@@ -179,6 +179,56 @@ export function suggestedQuantity(perDay: number, urgentDays: number, stock: num
   return needed > 0 ? needed : null;
 }
 
+// Pedido del usuario 2026-10-07 (luces navideñas SC-149/SC-162): si todavía
+// hay stock, no se vuelve a comprar. "Alcanza" = no saldría en Qué comprar
+// (más de COLD_MAX) y cubre lo que se vende mientras llega + 1 mes (no hay
+// cantidad sugerida). Un producto sin ventas con más de COLD_MAX también
+// alcanza. Durante el conteo físico el stock no es confiable: solo se avisa;
+// después se bloquea (para comprar igual, motivo y aprobación de Bryan).
+export function stockStillCovers(stock: number, perDay: number, urgentDays: number): boolean {
+  return stock > COLD_MAX && suggestedQuantity(perDay, urgentDays, stock) === null;
+}
+export function isStockCoverBlockActive(now = new Date()): boolean {
+  return !isPhysicalCountPause(now);
+}
+export function stockCoverMessage(itemName: string, stock: number, daysLeft: number | null): string {
+  const lasts = daysLeft === null ? "y casi no se vende" : `y alcanzan para ${Math.floor(daysLeft)} días`;
+  return `Todavía hay stock de "${itemName}": quedan ${stock} u. ${lasts}. No hace falta comprarlo todavía.`;
+}
+
+// Mismo cálculo que la lista, para los productos de una solicitud de compra.
+export async function findItemsWithStockCover(catalogItemIds: string[]): Promise<{ catalogItemId: string; message: string }[]> {
+  const ids = [...new Set(catalogItemIds)];
+  if (ids.length === 0) return [];
+  const { windowStart, windowDays } = await getSalesWindow();
+  const [balances, sold, lastPurchases, items] = await Promise.all([
+    prisma.stockKardexEntry.findMany({
+      where: { catalogItemId: { in: ids } },
+      distinct: ["catalogItemId"],
+      orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
+      select: { catalogItemId: true, balanceAfter: true },
+    }),
+    getSoldUnitsByItem(windowStart, ids),
+    prisma.purchaseRequest.findMany({
+      where: { catalogItemId: { in: ids }, status: { not: "REJECTED" } },
+      distinct: ["catalogItemId"],
+      orderBy: [{ catalogItemId: "asc" }, { createdAt: "desc" }],
+      select: { catalogItemId: true, supplier: { select: { paymentMode: true } } },
+    }),
+    prisma.purchaseCatalogItem.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+  ]);
+  const name = new Map(items.map((i) => [i.id, i.name]));
+  const mode = new Map(lastPurchases.map((p) => [p.catalogItemId, p.supplier.paymentMode]));
+  const out: { catalogItemId: string; message: string }[] = [];
+  for (const b of balances) {
+    const perDay = (sold.get(b.catalogItemId) ?? 0) / windowDays;
+    if (!stockStillCovers(b.balanceAfter, perDay, urgentDaysForSupplier(mode.get(b.catalogItemId)))) continue;
+    const daysLeft = perDay > 0 ? b.balanceAfter / perDay : null;
+    out.push({ catalogItemId: b.catalogItemId, message: stockCoverMessage(name.get(b.catalogItemId) ?? "este producto", b.balanceAfter, daysLeft) });
+  }
+  return out;
+}
+
 export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   const now = new Date();
   const { windowStart, windowDays } = await getSalesWindow(now);

@@ -27,6 +27,7 @@ type Analysis = {
   suggestedQty: number | null;
   audience: "HOT" | "COLD";
   blocker: string | null;
+  stockCover: { message: string; needsReason: boolean } | null;
   history: Row[];
 };
 type State = "PENDING_APPROVAL" | "APPROVED" | "EXPIRED" | "REJECTED" | "USED" | "CANCELLED";
@@ -74,6 +75,7 @@ type Row = {
   usedPurchaseCode: string | null;
   usedAt: string | null;
   waitingTooLong: boolean;
+  stockStillCovered: boolean;
 };
 type Data = { pending: Row[]; history: Row[]; canRequest: boolean; canDecide: boolean; canViewAll: boolean; userId: string };
 
@@ -330,6 +332,7 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
   if (chargesFreight && !(Number(freight) > 0)) missing.push("el flete total");
   if (!noCompetitor && !(Number(competitorPrice) > 0)) missing.push("el precio de hoy de la competencia");
   if (noCompetitor && noCompetitorNote.trim().length < 5) missing.push("por qué no hay competencia");
+  if (a?.stockCover?.needsReason && note.trim().length < 10) missing.push("el motivo para comprar aunque todavía hay stock");
 
   function send() {
     if (!supplier) return;
@@ -432,6 +435,14 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
         <div className="bg-red/10 border border-red/40 rounded-md px-3 py-2.5 text-[12.5px] text-red">{a.blocker}</div>
       ) : (
         <>
+          {a.stockCover && (
+            <div className={`rounded-md px-3 py-2.5 mb-3 text-[12.5px] border ${a.stockCover.needsReason ? "bg-red/10 border-red/40 text-red" : "bg-amber/10 border-amber/40 text-amber"}`}>
+              ⚠️ {a.stockCover.message}{" "}
+              {a.stockCover.needsReason
+                ? "Si de verdad hace falta (ej. temporada), explica el motivo en la nota para Bryan: sin eso no se puede enviar."
+                : "Mientras dura el conteo físico solo es un aviso: revisa bien antes de comprar."}
+            </div>
+          )}
           {/* Paso 2: lo de hoy */}
           <div className="bg-surface border border-rule rounded-md p-3 mb-3">
             <div className="text-[13px] font-bold text-ink mb-0.5">Paso 2 · Lo de hoy</div>
@@ -496,7 +507,7 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
               <textarea value={noCompetitorNote} onChange={(e) => setNoCompetitorNote(e.target.value)} rows={2} maxLength={500} placeholder="¿Dónde buscaste y por qué no aparece? (obligatorio)" className="mt-1 w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]" />
             )}
 
-            <label className="block text-[12px] font-semibold text-steel mt-3 mb-1">Nota para Bryan (opcional)</label>
+            <label className="block text-[12px] font-semibold text-steel mt-3 mb-1">Nota para Bryan {a.stockCover?.needsReason ? "(obligatoria: por qué comprar si todavía hay stock)" : "(opcional)"}</label>
             <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} maxLength={1000} placeholder="Ej.: el proveedor sube el precio la próxima semana" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]" />
           </div>
 
@@ -633,6 +644,7 @@ function RowCard({ r, data, onChanged }: { r: Row; data: Data; onChanged: () => 
           <div className="text-[12px] text-steel">
             Envió {r.requestedByName ?? "—"} el {fmtDateTime(r.requestedAt)} · al enviar quedaban {r.stockAtRequest}, se vendieron {r.soldLast30} en 30 días ({daysLeftText(r.daysLeft)})
           </div>
+          {r.stockStillCovered && <div className="text-[12px] text-amber font-semibold mt-0.5">⚠️ Al enviarla todavía había stock suficiente: revisa el motivo en la nota.</div>}
           {r.waitingTooLong && (
             <div className="text-[12px] text-red font-semibold mt-0.5">
               {mine ? "Bryan todavía no responde: habla con él en persona para que la confirme o la rechace." : "Lleva más de 12 horas esperando tu decisión."}

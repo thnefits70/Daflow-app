@@ -75,19 +75,31 @@ export async function getOpenPurchaseCodesByCatalogItem(catalogItemIds: string[]
   return out;
 }
 
-export type OtherOpenPurchase ={ catalogItemId: string; itemName: string; code: string; quantity: number; requesterName: string; statusText: string; createdAt: string };
+export type OtherOpenPurchase ={ catalogItemId: string; itemName: string; code: string; quantity: number; requesterName: string; statusText: string; createdAt: string; recent: boolean };
+
+// Pedido del usuario 2026-10-07 (luces navideñas: Jariel recibió SC-149 y
+// una hora después Nairoby pidió SC-162): el freno también vale aunque la
+// compra de la otra persona ya haya llegado, estos días desde que la pidió
+// o desde que entró a bodega.
+export const RECENT_PURCHASE_BLOCK_DAYS = 3;
 
 // Confirmado 2026-09-29, pedido del usuario: evitar que Jariel y Nairoby
 // compren el mismo producto sin saber que el otro ya lo está comprando.
-// Mientras haya una compra abierta de un producto, solo quien la pidió puede
-// pedir más de ese producto; cualquier otra persona queda frenada y ve quién
-// lo está comprando. El admin no se frena.
+// Mientras haya una compra abierta de un producto (o una de los últimos
+// RECENT_PURCHASE_BLOCK_DAYS días), solo quien la pidió puede pedir más de
+// ese producto; cualquier otra persona queda frenada y ve quién lo está
+// comprando. El admin no se frena.
 export async function findOpenPurchasesByOthers(catalogItemIds: string[], requesterId: string | null, db: Prisma.TransactionClient = prisma): Promise<OtherOpenPurchase[]> {
   if (catalogItemIds.length === 0) return [];
+  const since = new Date(Date.now() - RECENT_PURCHASE_BLOCK_DAYS * 24 * 60 * 60 * 1000);
+  const recentWhere: Prisma.PurchaseRequestWhereInput = {
+    status: { not: "REJECTED" },
+    OR: [{ createdAt: { gte: since } }, { receipt: { approvedAt: { gte: since } } }],
+  };
   const rows = await db.purchaseRequest.findMany({
     where: {
       catalogItemId: { in: catalogItemIds },
-      AND: [openPurchaseWhere(), ...(requesterId ? [{ OR: [{ requestedById: null }, { requestedById: { not: requesterId } }] }] : [])],
+      AND: [{ OR: [openPurchaseWhere(), recentWhere] }, ...(requesterId ? [{ OR: [{ requestedById: null }, { requestedById: { not: requesterId } }] }] : [])],
     },
     orderBy: { createdAt: "desc" },
     select: {
@@ -98,17 +110,26 @@ export async function findOpenPurchasesByOthers(catalogItemIds: string[], reques
       createdAt: true,
       catalogItem: { select: { name: true } },
       requestedBy: { select: { name: true } },
+      receipt: { select: { approvedAt: true, stockKardexEntry: { select: { id: true } } } },
     },
   });
-  return rows.map((r) => ({
-    catalogItemId: r.catalogItemId,
-    itemName: r.catalogItem.name,
-    code: r.requestNumber ? formatPurchaseRequestCode(r.requestNumber) : "sin código",
-    quantity: r.quantity,
-    requesterName: r.requestedBy?.name ?? "el admin",
-    statusText: OPEN_STATUS_TEXT[r.status] ?? "abierta",
-    createdAt: r.createdAt.toISOString(),
-  }));
+  // Misma regla que openPurchaseWhere(): sigue abierta hasta entrar al Kardex.
+  const isOpen = (r: (typeof rows)[number]) =>
+    (OPEN_PURCHASE_STATUSES as readonly string[]).includes(r.status) ||
+    (r.status === "RECEIVED" && !!r.receipt?.approvedAt && r.receipt.approvedAt >= KARDEX_PURCHASES_START && !r.receipt.stockKardexEntry);
+  // Primero las que siguen en camino.
+  return rows
+    .map((r) => ({
+      catalogItemId: r.catalogItemId,
+      itemName: r.catalogItem.name,
+      code: r.requestNumber ? formatPurchaseRequestCode(r.requestNumber) : "sin código",
+      quantity: r.quantity,
+      requesterName: r.requestedBy?.name ?? "el admin",
+      statusText: isOpen(r) ? OPEN_STATUS_TEXT[r.status] ?? "abierta" : "ya llegó y está en stock",
+      createdAt: r.createdAt.toISOString(),
+      recent: !isOpen(r),
+    }))
+    .sort((a, b) => Number(a.recent) - Number(b.recent));
 }
 
 // Pedido del usuario 2026-10-05: cerrar del todo el caso de dos personas
@@ -129,6 +150,9 @@ export async function lockAndFindOpenPurchaseByOthers(tx: Prisma.TransactionClie
 
 export function otherOpenPurchaseMessage(p: OtherOpenPurchase): string {
   const day = new Date(p.createdAt).toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" });
+  if (p.recent) {
+    return `${p.requesterName} ya compró "${p.itemName}" hace poco: ${p.code}, ${p.quantity} u., pedida el ${day} (${p.statusText}). Nadie más puede comprarlo hasta ${RECENT_PURCHASE_BLOCK_DAYS} días después de esa compra. Si hace falta más, habla con ${p.requesterName}.`;
+  }
   return `${p.requesterName} ya está comprando "${p.itemName}": ${p.code}, ${p.quantity} u., pedida el ${day} (${p.statusText}). Solo ${p.requesterName} puede pedir más de este producto mientras esa compra siga abierta. Si hace falta más, habla con esa persona.`;
 }
 

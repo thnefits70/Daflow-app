@@ -7,6 +7,7 @@ import { auth } from "@/auth";
 import { linkReadyToBuyProposalsToGroup } from "@/lib/marketProduct";
 import { canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
 import { checkRepurchaseApprovals, markRepurchaseReviewsUsed } from "@/lib/repurchaseReviews";
+import { findItemsWithStockCover, isStockCoverBlockActive } from "@/lib/purchaseSuggestions";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, lockAndFindOpenPurchaseByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes, formatPurchaseRequestCode } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup, releaseCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
@@ -470,6 +471,13 @@ export async function POST(req: NextRequest) {
     const rc = await checkRepurchaseApprovals({ lines: d.items, supplierId: d.supplierId, requesterId: session.user.id });
     if (!rc.ok) return NextResponse.json({ error: rc.error }, { status: 400 });
     repurchaseReviewIds = rc.reviewIds;
+  }
+  // Pedido del usuario 2026-10-07: la vía de emergencia no pasa por la RC de
+  // Bryan, pero igual no se compra lo que todavía alcanza (pasado el conteo
+  // físico; antes el stock no es confiable).
+  if (!isAdmin && isEmergencySubmission && isStockCoverBlockActive()) {
+    const [covered] = await findItemsWithStockCover(d.items.map((it) => it.catalogItemId));
+    if (covered) return NextResponse.json({ error: covered.message }, { status: 409 });
   }
   // Pedido del usuario 2026-09-30: producto pequeño o normal (ver checkAndSaveFulfillmentSizes).
   const sizeError = await checkAndSaveFulfillmentSizes(d.items, session.user.role === "admin" ? null : session.user.id);
