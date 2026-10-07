@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { canUsePurchaseRequestForm } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 
 const createSchema = z.object({
@@ -18,9 +18,11 @@ const createSchema = z.object({
 // agregar una cuenta bancaria nueva a un proveedor ya existente (ej. el
 // proveedor cambió de banco, o pide que se le pague en una cuenta distinta)
 // — nunca se edita ni se reemplaza una cuenta ya registrada, solo se suma.
+// 2026-10-07, aprobado por el usuario: también la vía de emergencia (Bryan)
+// — la cuenta queda por verificar y esa solicitud solo la paga el admin.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canSubmitPurchaseRequests()) || !session) {
+  if (!(await canUsePurchaseRequestForm()) || !session) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
