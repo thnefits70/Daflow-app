@@ -181,6 +181,7 @@ export function DeptWorkspaceTabs({
   merchandiseReentryPendingCount = 0,
   canCaptureMerchandiseOutflow = false,
   canActOnMerchandiseOutflow = false,
+  canActOnDeterioro = false,
   canViewMerchandiseOutflow = false,
   supplierExchangeMineCount = 0,
   canConfirmFinanceWriteOff = false,
@@ -373,6 +374,8 @@ export function DeptWorkspaceTabs({
   // admin en modo lectura).
   canCaptureMerchandiseOutflow?: boolean;
   canActOnMerchandiseOutflow?: boolean;
+  // Daniel + Allan (pedido 2026-10-07): solo el flujo de mal estado.
+  canActOnDeterioro?: boolean;
   canViewMerchandiseOutflow?: boolean;
   // Confirmado 2026-08-27, pedido explícito del usuario: cuántos productos
   // de "Cambio con proveedor" tiene ESTE usuario (no Daniel/admin) pendientes
@@ -727,9 +730,10 @@ export function DeptWorkspaceTabs({
         <MerchandiseOutflowPanel
           canCapture={canCaptureMerchandiseOutflow}
           canAct={canActOnMerchandiseOutflow}
+          canActDeterioro={canActOnDeterioro}
           canView={canViewMerchandiseOutflow}
           canManageJustCatalog={canManageJustCatalog}
-          canViewSupplierExchangeResolution={isAdmin || canActOnMerchandiseOutflow}
+          canViewSupplierExchangeResolution={isAdmin || canActOnDeterioro}
           supplierExchangeMineCount={supplierExchangeMineCount}
           canConfirmFinanceWriteOff={canConfirmFinanceWriteOff}
           financeWriteOffPendingCount={financeWriteOffPendingCount}

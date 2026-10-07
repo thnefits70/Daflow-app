@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
+import { canCaptureMerchandiseOutflow, canActOnDeterioro, canActOnMerchandiseOutflow } from "@/lib/guards";
 import { notifyInventoryLeadDeteriorReported, notifySupplierExchangeGestors } from "@/lib/merchandiseOutflow";
 import { recordKardexEntry } from "@/lib/stockKardex";
 import { notifyPossibleDoubleRegistration } from "@/lib/reentrySupplierClaim";
@@ -23,7 +23,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   const batch = await prisma.merchandiseOutflowBatch.findUnique({ where: { id }, include: { items: { select: { id: true, catalogItemId: true, quantity: true, sourceDeteriorItemId: true } } } });
   if (!batch) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  const authorized = batch.reason === "CAMBIO_PROVEEDOR" || batch.reason === "DESPACHO" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
+  const authorized = batch.reason === "CAMBIO_PROVEEDOR" ? await canActOnDeterioro() : batch.reason === "DESPACHO" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
   if (!authorized) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.createdById !== session.user.id) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.submittedAt) return NextResponse.json({ error: "Este lote ya fue enviado." }, { status: 409 });

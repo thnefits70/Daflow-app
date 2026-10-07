@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
+import { canCaptureMerchandiseOutflow, canActOnDeterioro, canActOnMerchandiseOutflow } from "@/lib/guards";
 import { nextMerchandiseOutflowNumber, formatMerchandiseOutflowCode } from "@/lib/merchandiseOutflow";
 
 const ITEM_INCLUDE = {
@@ -25,7 +25,8 @@ function parseReason(value: string | null): Reason | null {
 // que antes — solo se le agregó el proveedor de entrada, no cambió quién
 // puede reportar.
 async function canUseDraftReason(reason: Reason): Promise<boolean> {
-  if (reason === "CAMBIO_PROVEEDOR" || reason === "DESPACHO") return canActOnMerchandiseOutflow();
+  if (reason === "CAMBIO_PROVEEDOR") return canActOnDeterioro();
+  if (reason === "DESPACHO") return canActOnMerchandiseOutflow();
   return canCaptureMerchandiseOutflow();
 }
 

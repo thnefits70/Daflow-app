@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canActOnMerchandiseOutflow, canCaptureMerchandiseOutflow } from "@/lib/guards";
+import { canActOnDeterioro, canCaptureMerchandiseOutflow } from "@/lib/guards";
 
 const MAX_PHOTOS = 20;
 // DETERIORO: antes (2026-09-21) era "una sola foto" por reporte. Cambiado
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const batch = await prisma.merchandiseOutflowBatch.findUnique({ where: { id }, select: { createdById: true, submittedAt: true, reason: true } });
   if (!batch) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (batch.reason !== "CAMBIO_PROVEEDOR" && batch.reason !== "DETERIORO") return NextResponse.json({ error: "Este motivo no usa este paso." }, { status: 400 });
-  const authorized = batch.reason === "CAMBIO_PROVEEDOR" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
+  const authorized = batch.reason === "CAMBIO_PROVEEDOR" ? await canActOnDeterioro() : await canCaptureMerchandiseOutflow();
   if (!authorized) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.createdById !== session.user.id) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.submittedAt) return NextResponse.json({ error: "Este lote ya fue enviado." }, { status: 409 });

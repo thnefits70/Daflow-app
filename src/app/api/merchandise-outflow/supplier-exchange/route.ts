@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canActOnMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, getMarketingLeadId } from "@/lib/guards";
+import { canActOnDeterioro, canConfirmSupplierExchangeFinanceWriteOff, getMarketingLeadId } from "@/lib/guards";
 
 const ITEM_INCLUDE = {
   catalogItem: { select: { name: true, photos: true, justCode: true } },
@@ -19,7 +19,7 @@ const ITEM_INCLUDE = {
 export async function GET() {
   const session = await auth();
   const isAdmin = session?.user.role === "admin";
-  if (!session || !(isAdmin || (await canActOnMerchandiseOutflow()) || (await canConfirmSupplierExchangeFinanceWriteOff())))
+  if (!session || !(isAdmin || (await canActOnDeterioro()) || (await canConfirmSupplierExchangeFinanceWriteOff())))
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const [items, marketingLeadId] = await Promise.all([

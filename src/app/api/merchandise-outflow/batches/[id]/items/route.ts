@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow } from "@/lib/guards";
+import { canCaptureMerchandiseOutflow, canActOnDeterioro, canActOnMerchandiseOutflow } from "@/lib/guards";
 import { findMostRecentSupplierPurchase } from "@/lib/merchandiseOutflow";
 
 const schema = z.object({
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const batch = await prisma.merchandiseOutflowBatch.findUnique({ where: { id } });
   if (!batch) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  const authorized = batch.reason === "CAMBIO_PROVEEDOR" || batch.reason === "DESPACHO" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
+  const authorized = batch.reason === "CAMBIO_PROVEEDOR" ? await canActOnDeterioro() : batch.reason === "DESPACHO" ? await canActOnMerchandiseOutflow() : await canCaptureMerchandiseOutflow();
   if (!authorized) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.createdById !== session.user.id) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (batch.submittedAt) return NextResponse.json({ error: "Este lote ya fue enviado." }, { status: 409 });

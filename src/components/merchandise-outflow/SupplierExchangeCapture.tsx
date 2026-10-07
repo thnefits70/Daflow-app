@@ -49,7 +49,7 @@ function money(n: number) {
 // última compra REAL a ese mismo proveedor (ver findMostRecentSupplierPurchase
 // en merchandiseOutflow.ts) para dejar estimado el crédito reclamable si el
 // proveedor no cambia el producto.
-export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
+export function SupplierExchangeCapture({ onSent, hideMoney = false }: { onSent?: () => void; hideMoney?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [batch, setBatch] = useState<BatchDTO | null>(null);
   const [error, setError] = useState("");
@@ -322,7 +322,7 @@ export function SupplierExchangeCapture({ onSent }: { onSent?: () => void }) {
                     {item.resolution ? "el proveedor ya aceptó." : "va para revisión del proveedor; Jariel registra su respuesta."}
                   </div>
                 )}
-                {item.sourceDeteriorItem ? null : item.expectedCreditAmount !== null ? (
+                {item.sourceDeteriorItem || hideMoney ? null : item.expectedCreditAmount !== null ? (
                   <div className="text-[11px] text-steel mt-1">
                     Costo pagado: <span className="font-semibold text-ink">{money(item.unitCostAtExchange!)}/un.</span> · crédito estimado si no hay cambio:{" "}
                     <span className="font-semibold text-blue">{money(item.expectedCreditAmount)}</span>

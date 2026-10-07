@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canActOnMerchandiseOutflow } from "@/lib/guards";
+import { canActOnDeterioro } from "@/lib/guards";
 import { nextMerchandiseOutflowNumber, formatMerchandiseOutflowCode } from "@/lib/merchandiseOutflow";
 
 // Confirmado 2026-09-23, pedido de Daniel: "Armar paquete de cambio" desde
@@ -16,7 +16,7 @@ import { nextMerchandiseOutflowNumber, formatMerchandiseOutflowCode } from "@/li
 // queda libre para volver a empacarse.
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session || !(await canActOnMerchandiseOutflow())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!session || !(await canActOnDeterioro())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const source = await prisma.merchandiseOutflowItem.findUnique({

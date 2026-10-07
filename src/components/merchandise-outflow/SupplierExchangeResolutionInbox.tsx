@@ -194,9 +194,9 @@ function searchHaystack(item: ItemDTO): string {
     .toLowerCase();
 }
 
-function closedSummary(item: ItemDTO): { text: string; className: string } {
+function closedSummary(item: ItemDTO, hideMoney: boolean): { text: string; className: string } {
   if (item.resolution === "REPLACED") return { text: "Reemplazo recibido", className: "text-green" };
-  if (item.resolution === "CREDIT_ISSUED") return { text: `Crédito de ${item.credit ? money(item.credit.amount) : "—"}`, className: "text-blue" };
+  if (item.resolution === "CREDIT_ISSUED") return { text: hideMoney ? "Crédito confirmado" : `Crédito de ${item.credit ? money(item.credit.amount) : "—"}`, className: "text-blue" };
   return { text: "Rechazado — ya dado de baja", className: "text-red" };
 }
 
@@ -220,11 +220,14 @@ export function SupplierExchangeResolutionInbox({
   canConfirmFinanceWriteOff = false,
   canReviewAsAdmin = false,
   canConfirmReplacementArrival = false,
+  hideMoney = false,
 }: {
   canConfirmFinanceWriteOff?: boolean;
   canReviewAsAdmin?: boolean;
-  // Confirmado 2026-09-24: Daniel (canActOnMerchandiseOutflow).
+  // Confirmado 2026-09-24: Daniel; desde 2026-10-07 también Allan (canActOnDeterioro).
   canConfirmReplacementArrival?: boolean;
+  // Allan es colaborador de Inventario: sin montos (solo Daniel/admin/Finanzas).
+  hideMoney?: boolean;
 }) {
   const [items, setItems] = useState<ItemDTO[] | null>(null);
   const [creditTotals, setCreditTotals] = useState<CreditTotal[]>([]);
@@ -360,9 +363,9 @@ export function SupplierExchangeResolutionInbox({
       return (
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-blue">
-            <DollarSign size={12} /> Crédito de {item.credit ? money(item.credit.amount) : "—"} — gestionado por {item.resolvedBy?.name ?? "—"}{item.resolvedAt ? ` · ${formatDateTime(item.resolvedAt)}` : ""}
+            <DollarSign size={12} /> Crédito{hideMoney ? "" : ` de ${item.credit ? money(item.credit.amount) : "—"}`} — gestionado por {item.resolvedBy?.name ?? "—"}{item.resolvedAt ? ` · ${formatDateTime(item.resolvedAt)}` : ""}
           </div>
-          {item.credit && !item.fromDeterioro && item.expectedCreditAmount !== null && item.credit.amount !== item.expectedCreditAmount && (
+          {!hideMoney && item.credit && !item.fromDeterioro && item.expectedCreditAmount !== null && item.credit.amount !== item.expectedCreditAmount && (
             <div className="flex items-center gap-1.5 text-[10.5px] font-semibold text-gold" style={{ color: "var(--color-gold)" }}>
               <AlertTriangle size={11} /> Distinto a lo pagado ({money(item.expectedCreditAmount)}) — revisar
             </div>
@@ -455,7 +458,7 @@ export function SupplierExchangeResolutionInbox({
 
   return (
     <div className="flex flex-col gap-4 max-w-lg">
-      {creditTotals.length > 0 && (
+      {!hideMoney && creditTotals.length > 0 && (
         <div className="flex flex-col gap-1.5">
           {creditTotals.map((t) => (
             <div key={t.supplierId} className="flex items-center gap-2 bg-blue/10 border border-blue/30 rounded-md px-3 py-2">
@@ -507,7 +510,7 @@ export function SupplierExchangeResolutionInbox({
                         <ExpandableName text={itemName(item)} />
                       </div>
                       <div className="text-[11px] text-steel">{item.quantity} un.</div>
-                      {item.expectedCreditAmount !== null ? (
+                      {hideMoney ? null : item.expectedCreditAmount !== null ? (
                         <div className="text-[10.5px] text-steel mt-0.5">
                           Pagado: <span className="font-semibold text-ink">{money(item.unitCostAtExchange!)}/un.</span> · crédito estimado: <span className="font-semibold text-blue">{money(item.expectedCreditAmount)}</span>
                         </div>
@@ -562,7 +565,7 @@ export function SupplierExchangeResolutionInbox({
             <div className="flex flex-col gap-1.5">
               {filteredClosed.map((item) => {
                 const isOpen = expanded.has(item.id);
-                const summary = closedSummary(item);
+                const summary = closedSummary(item, hideMoney);
                 return (
                   <div key={item.id}>
                     <button

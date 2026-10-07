@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canActOnMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff } from "@/lib/guards";
+import { canActOnDeterioro, canConfirmSupplierExchangeFinanceWriteOff } from "@/lib/guards";
 import { resolveOutflowItemGestorId } from "@/lib/merchandiseOutflow";
 import { PrintButton } from "@/app/rol-del-mes/[id]/PrintButton";
 
@@ -48,7 +48,7 @@ export default async function CambioProveedorGuiaPage({ params }: { params: Prom
   // Confirmado 2026-09-24, pedido de Nairoby: también la puede volver a
   // abrir/imprimir desde "Gestionados" (Estado de resolución), donde ella ya
   // ve estas devoluciones con su permiso de Finanzas.
-  const canView = session.user.role === "admin" || (await canActOnMerchandiseOutflow()) || isGestor || (await canConfirmSupplierExchangeFinanceWriteOff());
+  const canView = session.user.role === "admin" || (await canActOnDeterioro()) || isGestor || (await canConfirmSupplierExchangeFinanceWriteOff());
   if (!canView) redirect("/area/workspace");
 
   // Confirmado 2026-09-24, pedido de Daniel: la guía que se imprime y va con

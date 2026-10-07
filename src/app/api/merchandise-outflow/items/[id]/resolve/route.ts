@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canActOnMerchandiseOutflow } from "@/lib/guards";
+import { canActOnDeterioro } from "@/lib/guards";
 import { notifyMarketingLeadOutflowEscalated, outflowItemDisplayName } from "@/lib/merchandiseOutflow";
 
 const schema = z.object({
@@ -17,7 +17,7 @@ const schema = z.object({
 // cambio de proveedor se conecta en una fase posterior.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!(await canActOnMerchandiseOutflow()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canActOnDeterioro()) || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const body = await req.json().catch(() => null);

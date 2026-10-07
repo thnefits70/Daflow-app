@@ -17,6 +17,7 @@ type Tab = "deterioro" | "seguimiento" | "proveedor" | "guias" | "solicitud" | "
 export function MerchandiseOutflowPanel({
   canCapture,
   canAct = false,
+  canActDeterioro = false,
   canView = false,
   canViewSupplierExchangeResolution = false,
   supplierExchangeMineCount = 0,
@@ -33,6 +34,10 @@ export function MerchandiseOutflowPanel({
 }: {
   canCapture: boolean;
   canAct?: boolean;
+  // Daniel + Allan (pedido 2026-10-07): todo el flujo de mal estado —
+  // decidir, armar el paquete de devolución y confirmar el reemplazo.
+  // Lo demás que gatea canAct (guías canceladas) sigue siendo solo de Daniel.
+  canActDeterioro?: boolean;
   // Fix confirmado 2026-08-26 (reportado por el usuario: "se le cae" a
   // Bryan) — "Historial" es de TODOS los motivos
   // de Egresos, no solo de lo que Bryan puede ver por su acceso a Guías
@@ -146,7 +151,7 @@ export function MerchandiseOutflowPanel({
   // Confirmado 2026-09-24, pedido de Nairoby: ella recibe avisos cuando un
   // reclamo al proveedor se traba — necesita ver Seguimiento y esta pestaña
   // siempre (solo lectura), no solo cuando tiene una baja financiera.
-  const canSeeProveedorTab = canAct || canViewSupplierExchangeResolution || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canConfirmFinanceWriteOff;
+  const canSeeProveedorTab = canActDeterioro || canViewSupplierExchangeResolution || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canConfirmFinanceWriteOff;
   const canSeeSeguimientoTab = canCapture || canView || canConfirmFinanceWriteOff;
 
   const tabs: { id: Tab; label: string }[] = [
@@ -193,13 +198,13 @@ export function MerchandiseOutflowPanel({
       {tab === "deterioro" && canCapture && (
         <>
           <TabGuide storageKey="merchoutflow-deterioro">
-            {canAct
+            {canActDeterioro
               ? "Elige el proveedor y agrega uno o varios productos encontrados dañados en bodega (no una devolución) con una sola foto compartida. Abajo ves los reportes pendientes de tu resolución: solucionado ahí mismo (no deja rastro), dar de baja, o escalar a Compras si es mercadería recién llegada."
               : "Elige el proveedor y agrega uno o varios productos encontrados dañados en bodega (no una devolución) con una sola foto compartida. Daniel decide qué hacer con cada producto reportado."}
           </TabGuide>
           <div className="flex flex-col gap-6">
-            <DeteriorCapture allowUpload={canAct} onReported={() => setDeteriorRefreshKey((k) => k + 1)} />
-            <DeteriorResolutionInbox key={deteriorRefreshKey} canAct={canAct} />
+            <DeteriorCapture allowUpload={canActDeterioro} onReported={() => setDeteriorRefreshKey((k) => k + 1)} />
+            <DeteriorResolutionInbox key={deteriorRefreshKey} canAct={canActDeterioro} />
           </div>
         </>
       )}
@@ -208,13 +213,13 @@ export function MerchandiseOutflowPanel({
           <TabGuide storageKey="merchoutflow-seguimiento">
             Todo lo que se reportó como deterioro y en qué va cada producto: la decisión de Daniel y, si se escaló a Compras, qué proveedor confirmó Jariel y qué respondió el proveedor (cambio, crédito o rechazo). Solo lectura — toca un producto para ver su recorrido completo. Si el proveedor aceptó (cambio o saldo a favor), toca &quot;Armar paquete de devolución&quot; y el producto pasa solo a &quot;Mercadería devuelta al proveedor&quot; — ahí solo tomas la foto de la lista y lo dejas listo.
           </TabGuide>
-          <DeteriorTraceList canAct={canAct} onGoToExchange={() => setTab("proveedor")} canAdminDelete={isAdmin} hideMoney={!canAct && !isAdmin && !canConfirmFinanceWriteOff} />
+          <DeteriorTraceList canAct={canActDeterioro} onGoToExchange={() => setTab("proveedor")} canAdminDelete={isAdmin} hideMoney={!canAct && !isAdmin && !canConfirmFinanceWriteOff} />
         </>
       )}
       {tab === "proveedor" && canSeeProveedorTab && (
         <>
           <TabGuide storageKey="merchoutflow-proveedor">
-            {canAct ? (
+            {canActDeterioro ? (
               <>Elige el proveedor y agrega todos los productos que le vas a devolver en un mismo paquete — cada uno se cruza solo contra la última compra a ese proveedor para estimar el crédito reclamable. Toma foto de la lista física como evidencia y deja lista la solicitud: se descuenta de INVESTOCK en ese momento y te da un código para imprimir la guía y pegarla en el paquete. Quien resuelve cada producto (cambio o crédito) es quien solicitó esa compra originalmente, no tú — abajo ves el estado en modo lectura.</>
             ) : canViewSupplierExchangeResolution ? (
               <>Vista de solo lectura de la mercadería que Daniel le devuelve al proveedor. Cada producto lo resuelve (cambio o crédito o rechazo) quien solicitó esa compra originalmente, no Daniel — esa persona gestiona desde acá abajo, en su propia sección.</>
@@ -225,7 +230,7 @@ export function MerchandiseOutflowPanel({
             )}
           </TabGuide>
           <div className="flex flex-col gap-6">
-            {canAct && <SupplierExchangeCapture onSent={() => setProveedorRefreshKey((k) => k + 1)} />}
+            {canActDeterioro && <SupplierExchangeCapture hideMoney={!canAct && !isAdmin} onSent={() => setProveedorRefreshKey((k) => k + 1)} />}
             <div>
               <div className="font-display font-bold text-[14px] mb-2.5">Mis solicitudes de gestión pendiente</div>
               <SupplierExchangeMyResolutions />
@@ -233,7 +238,7 @@ export function MerchandiseOutflowPanel({
             {(canViewSupplierExchangeResolution || canConfirmFinanceWriteOff) && (
               <div>
                 <div className="font-display font-bold text-[14px] mb-2.5">Estado de resolución</div>
-                <SupplierExchangeResolutionInbox key={proveedorRefreshKey} canConfirmFinanceWriteOff={canConfirmFinanceWriteOff} canReviewAsAdmin={isAdmin} canConfirmReplacementArrival={canAct} />
+                <SupplierExchangeResolutionInbox key={proveedorRefreshKey} canConfirmFinanceWriteOff={canConfirmFinanceWriteOff} canReviewAsAdmin={isAdmin} canConfirmReplacementArrival={canActDeterioro} hideMoney={canActDeterioro && !canAct && !isAdmin && !canConfirmFinanceWriteOff} />
               </div>
             )}
           </div>

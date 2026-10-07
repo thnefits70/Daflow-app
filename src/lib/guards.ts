@@ -1066,6 +1066,22 @@ export async function canActOnMerchandiseOutflow() {
   return !!user.isLeader && user.leadsDept?.code === "INV";
 }
 
+// Pedido del usuario 2026-10-07: Allan también puede hacer todo lo que hace
+// Daniel con la mercadería en mal estado (decidir solucionado / baja /
+// escalar, subir foto desde galería, armar el paquete de devolución al
+// proveedor y confirmar que llegó el reemplazo). Solo ese flujo — despacho,
+// conteo, guías canceladas y ventas externas siguen siendo de Daniel
+// (canActOnMerchandiseOutflow). Los avisos e Inicio siguen yendo a Daniel.
+const DETERIORO_ACTOR_USERNAMES = new Set(["allan2026"]);
+
+export async function canActOnDeterioro() {
+  const session = await auth();
+  if (!session) return false;
+  if (await canActOnMerchandiseOutflow()) return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { username: true } });
+  return !!user && DETERIORO_ACTOR_USERNAMES.has(user.username);
+}
+
 export async function canViewMerchandiseOutflow() {
   const session = await auth();
   if (!session) return false;
