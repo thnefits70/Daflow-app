@@ -5,7 +5,7 @@ import { WAREHOUSE_AREAS } from "@/lib/warehouseAreas";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
 import { variantSuggestions } from "@/lib/variantSales";
 import { applyCountToVariants } from "@/lib/variantStock";
-import { COUNT_HOURS_TEXT, MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, openAssignmentFor, recentMovement, windowStatus } from "@/lib/stockCountAssignments";
+import { COUNT_HOURS_TEXT, MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, closeShift, openAssignmentFor, recentMovement, windowStatus } from "@/lib/stockCountAssignments";
 
 // Conteo físico de inventario — pedido del usuario 2026-10-02.
 // - FULL: conteo general de toda la bodega (una vez). Cuando el admin lo
@@ -201,7 +201,10 @@ export async function submitCount(countId: string, userId: string | null): Promi
   if (count.lines.length === 0) return { ok: false, error: "Todavía no se contó nada." };
   const differences = count.lines.filter((l) => l.countedQty !== l.expectedQty).length;
   await prisma.stockCount.update({ where: { id: countId }, data: { status: "SUBMITTED", submittedAt: new Date(), submittedById: userId } });
-  // Lo que quedó sin terminar ya no le sale a nadie en su Inicio.
+  // Lo que quedó sin terminar ya no le sale a nadie en su Inicio; quien
+  // estaba a mitad de turno queda con su turno registrado.
+  const now = new Date();
+  for (const open of await prisma.stockCountAssignment.findMany({ where: { countId, finishedAt: null, startedAt: { not: null } } })) await closeShift(open, now);
   await prisma.stockCountAssignment.updateMany({ where: { countId, finishedAt: null }, data: { finishedAt: new Date() } });
   // Sin diferencias no hay nada que aprobar: queda aprobado solo.
   if (differences === 0) await finishCount(countId, null);

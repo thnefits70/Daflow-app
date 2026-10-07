@@ -2929,7 +2929,7 @@ function myCountItem(mine: AssignmentView): PendingItem {
   return {
     type: "conteo_inventario",
     icon: "📋",
-    label: mine.startedAt ? `${what}: sigue contando` : `Te toca: ${what} — pulsa «Empezar» cuando termines el corte`,
+    label: mine.startedAt ? `${what}: sigue contando` : mine.shifts.length > 0 ? `${what}: te faltan ${mine.total - mine.done} — pulsa «Seguir contando» en el próximo horario` : `Te toca: ${what} — pulsa «Empezar» cuando termines el corte`,
     meta: `Contados ${mine.done} de ${mine.total} · meta antes de las ${hourEc(mine.deadline)}${mine.late ? " · atrasado" : ""}`,
     overdue: mine.late,
     href: "/area/conteo-inventario",

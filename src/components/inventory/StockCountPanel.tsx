@@ -228,7 +228,13 @@ export function StockCountPanel() {
     setBusy(true);
     const r = await post(`/api/stock-count/assignment/${a.id}`, { action });
     setBusy(false);
-    if (r.ok && action === "finish") setMsg(`¡Listo! Terminaste ${a.area === "RECOUNT" ? "el recuento" : a.label}. Ya le avisamos a Daniel.`);
+    if (r.ok && action === "finish") {
+      const counted = Number(r.json?.counted ?? 0);
+      const took = minutes(Number(r.json?.sec ?? 0));
+      setMsg(r.json?.complete
+        ? `¡Listo! Terminaste ${a.area === "RECOUNT" ? "el recuento" : a.label}: en este turno contaste ${counted} producto(s) en ${took}. Ya le avisamos a Daniel.`
+        : `Turno finalizado: contaste ${counted} producto(s) en ${took}. Quedó registrado y Daniel ya lo sabe. Lo que falta lo sigues en el próximo horario con «Empezar conteo».`);
+    }
     load();
   }
 
@@ -440,6 +446,7 @@ export function StockCountPanel() {
 
 // Tarjeta de la persona asignada: empezar, cronómetro, meta y terminar.
 function MyAssignment({ a, now, board, busy, onAction }: { a: AssignmentView; now: number; board: AssignmentBoard | null; busy: boolean; onAction: (action: "start" | "finish") => void }) {
+  const [confirmFinish, setConfirmFinish] = useState(false);
   const what = a.area === "RECOUNT" ? `Recontar ${a.total} producto(s)` : `Contar ${a.label}`;
   const elapsed = a.startedAt ? now - new Date(a.startedAt).getTime() : 0;
   const overEstimate = a.estimateSec !== null && elapsed > a.estimateSec * 1000;
@@ -455,9 +462,16 @@ function MyAssignment({ a, now, board, busy, onAction }: { a: AssignmentView; no
         {a.estimateSec !== null && <> · Tiempo estimado: <b>{minutes(a.estimateSec)}</b></>}
       </div>
       {w && !w.inWindow && <div className="text-[12.5px] text-gold font-semibold mt-1">El conteo está cerrado ahora.{w.nextStart ? ` Se habilita a las ${hour(w.nextStart)}` : ""}; lo que ya contaste no se pierde.</div>}
+      {a.shifts.length > 0 && (
+        <div className="text-[12px] text-steel mt-1">
+          {a.shifts.map((x, i) => (
+            <div key={i}>Turno {i + 1}: {x.counted} producto(s) en {minutes((new Date(x.endedAt).getTime() - new Date(x.startedAt).getTime()) / 1000)}</div>
+          ))}
+        </div>
+      )}
       {!a.startedAt ? (
         <button type="button" disabled={busy || !w?.inWindow} className="mt-2 rounded border border-teal bg-teal px-3.5 py-2 font-bold text-navy cursor-pointer disabled:opacity-50" onClick={() => onAction("start")}>
-          Empezar conteo
+          {a.shifts.length > 0 ? `Seguir contando (faltan ${a.total - a.done})` : "Empezar conteo"}
         </button>
       ) : (
         <div className="flex flex-wrap items-center gap-3 mt-2">
@@ -468,11 +482,40 @@ function MyAssignment({ a, now, board, busy, onAction }: { a: AssignmentView; no
             Contados <b className="text-ink">{a.done}</b> de {a.total}
             {(overEstimate || pastDeadline) && <b className="text-red"> · vas atrasado</b>}
           </span>
-          <button type="button" disabled={busy || a.done < a.total} className="rounded border border-green bg-green px-3 py-1.5 font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => onAction("finish")}>
-            {a.done < a.total ? `Faltan ${a.total - a.done}` : `Terminé ${a.area === "RECOUNT" ? "el recuento" : a.label}`}
-          </button>
+          {!confirmFinish && (
+            <button type="button" disabled={busy} className="rounded border border-green bg-green px-3 py-1.5 font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => (a.done < a.total ? setConfirmFinish(true) : onAction("finish"))}>
+              {a.done < a.total ? "Finalizar" : `Terminé ${a.area === "RECOUNT" ? "el recuento" : a.label}`}
+            </button>
+          )}
         </div>
       )}
+      {a.startedAt && confirmFinish && (
+        <div className="bg-cloud border border-gold/50 rounded p-2.5 mt-2 text-[12.5px]">
+          <b>¿Finalizar por ahora?</b> Llevas {a.done} de {a.total}. Queda registrado tu tiempo y lo que contaste; los {a.total - a.done} que faltan los sigues en el próximo horario.
+          <div className="flex gap-2 mt-2">
+            <button type="button" disabled={busy} className="rounded border border-gold bg-gold px-3 py-1.5 font-bold text-navy cursor-pointer" onClick={() => { setConfirmFinish(false); onAction("finish"); }}>Sí, finalizar</button>
+            <button type="button" className="text-steel cursor-pointer" onClick={() => setConfirmFinish(false)}>Seguir contando</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function day(iso: string): string {
+  return new Date(iso).toLocaleDateString("es-EC", { weekday: "short", day: "numeric", month: "numeric", timeZone: "America/Guayaquil" });
+}
+
+// Cada "Finalizar": quién, cuándo, cuántos productos y en cuánto tiempo.
+function ShiftList({ a }: { a: AssignmentView }) {
+  if (a.shifts.length === 0) return null;
+  return (
+    <div className="basis-full text-[11.5px] text-steel">
+      {a.shifts.map((x, i) => (
+        <div key={i}>
+          • <b className="text-ink">{x.userName}</b> · {day(x.startedAt)} {hour(x.startedAt)}–{hour(x.endedAt)} · <b className="text-ink">{x.counted}</b> producto(s) en {minutes((new Date(x.endedAt).getTime() - new Date(x.startedAt).getTime()) / 1000)}
+        </div>
+      ))}
     </div>
   );
 }
@@ -551,14 +594,15 @@ function AssignBoard({ count, board, busy, setBusy, post, reload }: {
                 <div className="flex-1 flex flex-wrap items-center gap-2">
                   <span className="font-semibold">{a.assigneeName}</span>
                   {a.finishedAt ? (
-                    <span className="text-green">✓ terminó{a.startedAt ? ` en ${minutes((new Date(a.finishedAt).getTime() - new Date(a.startedAt).getTime()) / 1000)}` : ""}</span>
+                    <span className="text-green">✓ terminó{a.shiftsSec > 0 ? ` en ${minutes(a.shiftsSec)}${a.shifts.length > 1 ? ` (${a.shifts.length} turnos)` : ""}` : a.startedAt ? ` en ${minutes((new Date(a.finishedAt).getTime() - new Date(a.startedAt).getTime()) / 1000)}` : ""}</span>
                   ) : (
                     <>
-                      <span className="text-steel">{a.startedAt ? `contando desde las ${hour(a.startedAt)} · ${a.done}/${a.total}` : "todavía no empieza"} · meta {hour(a.deadline)}</span>
+                      <span className="text-steel">{a.startedAt ? `contando desde las ${hour(a.startedAt)} · ${a.done}/${a.total}` : a.shifts.length > 0 ? `en pausa · ${a.done}/${a.total}` : "todavía no empieza"} · meta {hour(a.deadline)}</span>
                       {a.late && <b className="text-red">⏰ atrasado</b>}
                       <button type="button" className="text-teal text-[12px] underline cursor-pointer" onClick={() => setEditing(area)}>Cambiar persona u horario</button>
                     </>
                   )}
+                  <ShiftList a={a} />
                 </div>
               ) : (
                 picker(area)
@@ -573,6 +617,7 @@ function AssignBoard({ count, board, busy, setBusy, post, reload }: {
           {board.recounts.map((a) => (
             <div key={a.id} className="text-[12.5px] text-steel mb-1">
               {a.assigneeName}: {a.total} producto(s) · {a.finishedAt ? "✓ terminó" : `${a.done}/${a.total} · meta ${hour(a.deadline)}${a.late ? " · ⏰ atrasado" : ""}`}
+              <ShiftList a={a} />
             </div>
           ))}
           {board.unassignedRecount > 0 && (

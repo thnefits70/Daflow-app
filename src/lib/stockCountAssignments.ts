@@ -186,6 +186,8 @@ export async function assignArea(params: { countId: string; area: string; assign
   }
   const previousAssignee = existing?.assigneeId ?? null;
   if (existing) {
+    // Si otra persona estaba a mitad de turno, lo que alcanzó a contar queda registrado.
+    if (previousAssignee !== person.id && existing.startedAt) await closeShift(existing, new Date());
     await prisma.stockCountAssignment.update({ where: { id: existing.id }, data: { assigneeId: person.id, assignedById: params.byId, assignedAt: new Date(), dueAt: new Date(window.end), lateNotifiedAt: null, ...(previousAssignee !== person.id ? { startedAt: null, lastActivityAt: null } : {}) } });
   } else {
     await prisma.stockCountAssignment.create({ data: { countId: count.id, area: params.area, catalogItemIds, assigneeId: person.id, assignedById: params.byId, dueAt: new Date(window.end) } });
@@ -215,21 +217,52 @@ export async function assignmentProgress(a: { countId: string; area: string; cat
   return { done, total: ids.length, ids };
 }
 
-function minutesBetween(from: Date | null, to: Date): number {
-  return from ? Math.max(1, Math.round((to.getTime() - from.getTime()) / 60_000)) : 0;
+// Cierra el turno de quien está contando: cuántos productos contó (de su
+// área, desde que pulsó Empezar) y cuánto tardó.
+export async function closeShift(a: { id: string; countId: string; area: string; catalogItemIds: string[]; assigneeId: string; startedAt: Date | null }, now: Date): Promise<{ counted: number; sec: number } | null> {
+  if (!a.startedAt) return null;
+  const ids = await assignmentProductIds(a);
+  const counted = await prisma.stockCountLine.count({ where: { countId: a.countId, catalogItemId: { in: ids }, countedById: a.assigneeId, countedAt: { gte: a.startedAt, lte: now } } });
+  await prisma.stockCountShift.create({ data: { assignmentId: a.id, userId: a.assigneeId, startedAt: a.startedAt, endedAt: now, counted } });
+  return { counted, sec: Math.round((now.getTime() - a.startedAt.getTime()) / 1000) };
 }
 
-export async function finishAssignment(id: string, userId: string, closeIfSettled: (countId: string) => Promise<void>): Promise<Result> {
+function durationText(sec: number): string {
+  const m = Math.max(1, Math.round(sec / 60));
+  return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+}
+
+// "Finalizar" (pedido de Daniel 2026-10-07): se puede pulsar aunque falten
+// productos. Queda el turno registrado; si contó todo, el área se termina; si
+// no, sigue a su nombre y en el próximo horario pulsa "Empezar" otra vez.
+export async function finishAssignment(id: string, userId: string, closeIfSettled: (countId: string) => Promise<void>): Promise<Result<{ counted: number; sec: number; complete: boolean }>> {
   const a = await prisma.stockCountAssignment.findUnique({ where: { id } });
   if (!a || a.assigneeId !== userId) return { ok: false, error: "Este conteo no está asignado a ti." };
-  if (a.finishedAt) return { ok: true };
-  const p = await assignmentProgress(a);
-  if (p.done < p.total) return { ok: false, error: `Te faltan ${p.total - p.done} producto(s) por contar. Si alguno no está, escribe 0.` };
+  if (a.finishedAt) return { ok: true, counted: 0, sec: 0, complete: true };
+  if (!a.startedAt) return { ok: false, error: "Todavía no empezaste este turno." };
+  // Que dos toques seguidos no registren el turno dos veces.
+  const claimed = await prisma.stockCountAssignment.updateMany({ where: { id, startedAt: a.startedAt, finishedAt: null }, data: { startedAt: null, lastActivityAt: null } });
+  if (claimed.count === 0) return { ok: true, counted: 0, sec: 0, complete: false };
   const now = new Date();
-  await prisma.stockCountAssignment.update({ where: { id }, data: { finishedAt: now } });
+  const shift = (await closeShift(a, now))!;
+  const p = await assignmentProgress(a);
+  const complete = p.done >= p.total;
+  // Al terminar el área se deja el inicio del último turno (como antes).
+  if (complete) await prisma.stockCountAssignment.update({ where: { id }, data: { finishedAt: now, startedAt: a.startedAt } });
   const who = (await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }))?.name ?? "Alguien";
-  const mins = minutesBetween(a.startedAt, now);
   const danielId = await getInventoryLeadId();
+  if (!complete) {
+    if (danielId) {
+      await notifyOwner(danielId, {
+        title: "⏸️ Turno de conteo finalizado",
+        body: `${who} contó ${shift.counted} producto(s) de ${countAreaLabel(a.area)} en ${durationText(shift.sec)}. Lleva ${p.done} de ${p.total}; sigue en el próximo horario.`,
+        url: "/area/conteo-inventario",
+      }).catch(() => null);
+    }
+    return { ok: true, ...shift, complete };
+  }
+  const shifts = await prisma.stockCountShift.findMany({ where: { assignmentId: id }, select: { startedAt: true, endedAt: true } });
+  const totalSec = shifts.reduce((s, x) => s + (x.endedAt.getTime() - x.startedAt.getTime()) / 1000, 0);
   if (a.area === RECOUNT) {
     await notifyOwner("admin", { title: "📋 Recuento terminado", body: `${who} volvió a contar ${p.total} producto(s). Revisa la lista de diferencias en Stock Actual.`, url: await adminStockHref() }).catch(() => null);
     await closeIfSettled(a.countId);
@@ -237,11 +270,11 @@ export async function finishAssignment(id: string, userId: string, closeIfSettle
     const left = await areasWithoutAssignment(a.countId);
     await notifyOwner(danielId, {
       title: "✅ Área contada",
-      body: `${who} terminó ${countAreaLabel(a.area)} (${p.total} productos) en ${mins} min.${left.length ? ` Asigna la siguiente: faltan ${left.map(countAreaLabel).join(", ")}.` : " Ya no quedan áreas por asignar."}`,
+      body: `${who} terminó ${countAreaLabel(a.area)} (${p.total} productos) en ${durationText(totalSec)}${shifts.length > 1 ? ` (${shifts.length} turnos)` : ""}.${left.length ? ` Asigna la siguiente: faltan ${left.map(countAreaLabel).join(", ")}.` : " Ya no quedan áreas por asignar."}`,
       url: "/area/conteo-inventario",
     }).catch(() => null);
   }
-  return { ok: true };
+  return { ok: true, ...shift, complete };
 }
 
 async function adminStockHref(): Promise<string> {
@@ -311,10 +344,17 @@ export type AssignmentView = {
   finishedAt: string | null;
   estimateSec: number | null;
   late: boolean;
+  // Turnos ya finalizados (el abierto no, ese es startedAt).
+  shifts: { userName: string; startedAt: string; endedAt: string; counted: number }[];
+  shiftsSec: number;
 };
 
 async function toView(a: Awaited<ReturnType<typeof prisma.stockCountAssignment.findFirstOrThrow>>, names: Map<string, string>): Promise<AssignmentView> {
-  const [p, estimateSec] = await Promise.all([assignmentProgress(a), assignmentProductIds(a).then((ids) => estimateSeconds(ids, a.countId))]);
+  const [p, estimateSec, shifts] = await Promise.all([
+    assignmentProgress(a),
+    assignmentProductIds(a).then((ids) => estimateSeconds(ids, a.countId)),
+    prisma.stockCountShift.findMany({ where: { assignmentId: a.id }, orderBy: { startedAt: "asc" } }),
+  ]);
   const deadline = deadlineOf(a, estimateSec);
   return {
     id: a.id,
@@ -332,6 +372,8 @@ async function toView(a: Awaited<ReturnType<typeof prisma.stockCountAssignment.f
     finishedAt: a.finishedAt?.toISOString() ?? null,
     estimateSec,
     late: !a.finishedAt && deadline < new Date(),
+    shifts: shifts.map((x) => ({ userName: names.get(x.userId) ?? "—", startedAt: x.startedAt.toISOString(), endedAt: x.endedAt.toISOString(), counted: x.counted })),
+    shiftsSec: Math.round(shifts.reduce((s, x) => s + (x.endedAt.getTime() - x.startedAt.getTime()) / 1000, 0)),
   };
 }
 

@@ -7886,7 +7886,24 @@ model StockCountAssignment {
   lastActivityAt DateTime?
   finishedAt     DateTime?
   lateNotifiedAt DateTime?
+  shifts         StockCountShift[]
 
   @@index([countId])
   @@index([assigneeId])
+}
+
+// Turnos de conteo (pedido de Daniel 2026-10-07): cada vez que la persona
+// pulsa "Finalizar" queda quién contó, cuándo empezó y terminó, y cuántos
+// productos contó en ese turno. Si faltan productos, el área sigue a su
+// nombre y el siguiente "Empezar" abre otro turno.
+model StockCountShift {
+  id           String               @id @default(cuid())
+  assignmentId String
+  assignment   StockCountAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  userId       String
+  startedAt    DateTime
+  endedAt      DateTime
+  counted      Int
+
+  @@index([assignmentId])
 }
