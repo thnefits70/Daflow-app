@@ -562,6 +562,63 @@ export async function cancelRepurchaseReview(id: string, userId: string): Promis
 
 type LineForCheck = { catalogItemId: string; quantity: number; unitCost: number };
 
+async function itemsNeedingRepurchaseReview(ids: string[], groupId?: string) {
+  return prisma.purchaseCatalogItem.findMany({
+    where: {
+      id: { in: ids },
+      ...REPURCHASE_ITEM_WHERE,
+      // Primera compra de un producto que Bryan ya aprobó en Análisis de Mercado.
+      NOT: { marketProductProposal: { readyToBuyAt: { not: null }, purchaseRequests: { none: groupId ? { groupId: { not: groupId } } : {} } } },
+    },
+    select: { id: true, name: true },
+  });
+}
+
+// Pedido de Jariel 2026-10-07: la recompra se analiza dentro de Solicitar,
+// apenas se elige el producto, en vez de salir a Control de Compras →
+// Recompras. Esto le dice al formulario en qué punto está: null = no es
+// recompra (o no le toca); si no, la RC esperando a Bryan o la ya aprobada.
+// Mismas reglas que checkRepurchaseApprovals, que igual se impone al enviar.
+export type RepurchaseLineStatus = {
+  pending: { code: string } | null;
+  approved: { code: string; supplierId: string; supplierName: string; unitCost: number; approvedQuantity: number | null; expiresAt: string | null; selfConfirmed: boolean } | null;
+};
+
+export async function getRepurchaseLineStatus(catalogItemId: string, requesterId: string, groupId?: string): Promise<RepurchaseLineStatus | null> {
+  const [needing] = await itemsNeedingRepurchaseReview([catalogItemId], groupId);
+  if (!needing) return null;
+  const now = new Date();
+  const [approved, pending] = await Promise.all([
+    prisma.repurchaseReview.findFirst({
+      where: {
+        catalogItemId,
+        requestedById: requesterId,
+        OR: [{ usedGroupId: null, status: "APPROVED", approvalExpiresAt: { gt: now } }, ...(groupId ? [{ usedGroupId: groupId }] : [])],
+      },
+      orderBy: { reviewedAt: "desc" },
+      select: { code: true, supplierId: true, unitCost: true, approvedQuantity: true, approvalExpiresAt: true, reviewedById: true, supplier: { select: { name: true } } },
+    }),
+    prisma.repurchaseReview.findFirst({
+      where: { catalogItemId, requestedById: requesterId, status: "PENDING_APPROVAL" },
+      select: { code: true },
+    }),
+  ]);
+  return {
+    pending: pending ? { code: formatRepurchaseCode(pending.code) } : null,
+    approved: approved
+      ? {
+          code: formatRepurchaseCode(approved.code),
+          supplierId: approved.supplierId,
+          supplierName: approved.supplier.name,
+          unitCost: approved.unitCost,
+          approvedQuantity: approved.approvedQuantity,
+          expiresAt: approved.approvalExpiresAt?.toISOString() ?? null,
+          selfConfirmed: approved.reviewedById === requesterId,
+        }
+      : null,
+  };
+}
+
 // Se llama al crear y al reenviar una solicitud de compra. El admin y la vía
 // de emergencia (cuando Jariel y Nairoby no están) no pasan por acá. Un
 // producto nuevo que Bryan dejó "Listo para comprar" en Análisis de Mercado
@@ -574,15 +631,7 @@ export async function checkRepurchaseApprovals(params: {
   groupId?: string;
 }): Promise<{ ok: true; reviewIds: string[] } | { ok: false; error: string }> {
   const ids = [...new Set(params.lines.map((l) => l.catalogItemId))];
-  const needing = await prisma.purchaseCatalogItem.findMany({
-    where: {
-      id: { in: ids },
-      ...REPURCHASE_ITEM_WHERE,
-      // Primera compra de un producto que Bryan ya aprobó en Análisis de Mercado.
-      NOT: { marketProductProposal: { readyToBuyAt: { not: null }, purchaseRequests: { none: params.groupId ? { groupId: { not: params.groupId } } : {} } } },
-    },
-    select: { id: true, name: true },
-  });
+  const needing = await itemsNeedingRepurchaseReview(ids, params.groupId);
   if (needing.length === 0) return { ok: true, reviewIds: [] };
 
   const now = new Date();
@@ -609,7 +658,7 @@ export async function checkRepurchaseApprovals(params: {
         ok: false,
         error: pending
           ? `"${item.name}" es una recompra y su ${formatRepurchaseCode(pending.code)} todavía espera la aprobación de Bryan. Si no responde, habla con él en persona para que la confirme o la rechace.`
-          : `"${item.name}" es una recompra: antes de pedirla, analízala en Control de Compras → Recompras. Si es compra caliente, el precio no subió más de 5% y queda más barata que la competencia, la confirmas tú mismo ahí; si no, va a Bryan.`,
+          : `"${item.name}" es una recompra: antes de pedirla, analízala con el botón "Analizar recompra aquí" de ese producto (o en Control de Compras → Recompras). Si es compra caliente, el precio no subió más de 5% y queda más barata que la competencia, la confirmas tú mismo; si no, va a Bryan.`,
       };
     }
     const code = formatRepurchaseCode(rc.code);

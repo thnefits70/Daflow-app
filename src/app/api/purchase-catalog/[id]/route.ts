@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
 import { findOpenPurchasesByOthers, getCatalogItemPriceStats, otherOpenPurchaseMessage, getCatalogItemsNeedingFulfillmentSize } from "@/lib/purchases";
+import { getRepurchaseLineStatus } from "@/lib/repurchaseReviews";
 
 const OWN_DELETE_WINDOW_MS = 2 * 60 * 60 * 1000;
 
@@ -48,7 +49,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   return NextResponse.json(updated);
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
@@ -57,10 +58,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const session = await auth();
   const isAdmin = session?.user.role === "admin";
-  const [stats, others] = await Promise.all([
+  const groupId = req.nextUrl.searchParams.get("groupId") || undefined;
+  const [stats, others, repurchase] = await Promise.all([
     getCatalogItemPriceStats(id),
     // Aviso apenas se elige el producto (2026-09-29): otra persona ya lo está comprando.
     isAdmin || !session ? Promise.resolve([]) : findOpenPurchasesByOthers([id], session.user.id),
+    // Recompra: se analiza ahí mismo en Solicitar (pedido de Jariel 2026-10-07). El admin no pasa por RC.
+    isAdmin || !session ? Promise.resolve(null) : getRepurchaseLineStatus(id, session.user.id, groupId),
   ]);
   const blockedBy = others.length > 0 ? otherOpenPurchaseMessage(others[0]) : null;
   const needsFulfillmentSize = (await getCatalogItemsNeedingFulfillmentSize([id])).has(id);
@@ -71,7 +75,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const fulfillmentSize = item.fulfillmentSize && item.bodega !== "MKT_SUMINISTROS"
     ? { value: item.fulfillmentSize as "SMALL" | "NORMAL", setAt: item.fulfillmentSizeSetAt, setByName: setBy?.name ?? null }
     : null;
-  return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats, blockedBy, needsFulfillmentSize, fulfillmentSize });
+  return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats, blockedBy, needsFulfillmentSize, fulfillmentSize, repurchase });
 }
 
 // Confirmado 2026-08-03/06: admin puede eliminar cualquier producto/

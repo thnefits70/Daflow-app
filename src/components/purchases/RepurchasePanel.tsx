@@ -271,12 +271,27 @@ function OtherSupplierSearch({ onPick }: { onPick: (s: { id: string; name: strin
 
 // ---- Pasos 2 y 3: lo de hoy + resultado ------------------------------------------
 
-function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => void; onSent: (code: string, buyHref: string | null) => void }) {
+export type RepurchaseSent = { code: string; selfConfirmed: boolean; supplierId: string; quantity: string; unitCost: number };
+
+// preset: viene de Solicitar (pedido de Jariel 2026-10-07), donde ya se
+// eligió proveedor, cantidad y costo — se analiza ahí mismo sin salir del
+// formulario. Sin onBack no se puede cambiar de producto (es el de esa línea).
+export function RepurchaseAnalyzer({
+  itemId,
+  onBack,
+  onSent,
+  preset,
+}: {
+  itemId: string;
+  onBack?: () => void;
+  onSent: (r: RepurchaseSent) => void;
+  preset?: { supplier: { id: string; name: string } | null; unitCost: string; quantity: string };
+}) {
   const [a, setA] = useState<Analysis | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [supplier, setSupplier] = useState<{ id: string; name: string } | null>(null);
-  const [unitCost, setUnitCost] = useState("");
-  const [quantity, setQuantity] = useState("");
+  const [supplier, setSupplier] = useState<{ id: string; name: string } | null>(preset?.supplier ?? null);
+  const [unitCost, setUnitCost] = useState(preset?.unitCost ?? "");
+  const [quantity, setQuantity] = useState(preset?.quantity ?? "");
   const [chargesFreight, setChargesFreight] = useState<boolean | null>(null);
   const [freight, setFreight] = useState("");
   const [competitorId, setCompetitorId] = useState("");
@@ -301,10 +316,11 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
         }
         const an = j as Analysis;
         setA(an);
-        if (an.suggestedQty) setQuantity(String(an.suggestedQty));
+        if (an.suggestedQty && !preset?.quantity) setQuantity(String(an.suggestedQty));
         if (an.competitor?.id) setCompetitorId(an.competitor.id);
       })
       .catch(() => setLoadError("No se pudo cargar."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId]);
 
   const competitorValue = noCompetitor ? null : Number(competitorPrice) > 0 ? Number(competitorPrice) : null;
@@ -323,9 +339,11 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
     return (
       <div>
         <div className="text-red text-[13px]">{loadError}</div>
-        <button type="button" onClick={onBack} className="mt-2 text-[12px] text-teal cursor-pointer">
-          ← Elegir otro producto
-        </button>
+        {onBack && (
+          <button type="button" onClick={onBack} className="mt-2 text-[12px] text-teal cursor-pointer">
+            ← Elegir otro producto
+          </button>
+        )}
       </div>
     );
   }
@@ -369,15 +387,7 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
           setConfirming(false);
           setSelfConfirming(false);
         } else {
-          const params = new URLSearchParams({
-            tab: "compras",
-            ptab: "solicitar",
-            presetCatalogItemId: itemId,
-            presetSupplierId: supplier.id,
-            presetQuantity: quantity,
-            presetUnitCost: String(Number(unitCost)),
-          });
-          onSent(j.code, j.selfConfirmed ? `${window.location.pathname}?${params.toString()}` : null);
+          onSent({ code: j.code, selfConfirmed: !!j.selfConfirmed, supplierId: supplier.id, quantity, unitCost: Number(unitCost) });
         }
       })
       .catch(() => setError("No se pudo enviar."))
@@ -399,9 +409,11 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
             </div>
           )}
         </div>
-        <button type="button" onClick={onBack} className="text-[12px] text-teal cursor-pointer shrink-0">
-          Cambiar producto
-        </button>
+        {onBack && (
+          <button type="button" onClick={onBack} className="text-[12px] text-teal cursor-pointer shrink-0">
+            Cambiar producto
+          </button>
+        )}
       </div>
 
       {/* Lo que DAFLOW ya sabe */}
@@ -885,17 +897,25 @@ export function RepurchasePanel({ initialItemId = null }: { initialItemId?: stri
               </button>
             </div>
           ) : itemId ? (
-            <Analyzer
+            <RepurchaseAnalyzer
               key={itemId}
               itemId={itemId}
               onBack={() => setItemId(null)}
-              onSent={(code, buyHref) => {
+              onSent={(sent) => {
                 // Caliente confirmada por quien compra: directo a Solicitar con todo lleno.
-                if (buyHref) {
-                  window.location.href = buyHref;
+                if (sent.selfConfirmed) {
+                  const params = new URLSearchParams({
+                    tab: "compras",
+                    ptab: "solicitar",
+                    presetCatalogItemId: itemId,
+                    presetSupplierId: sent.supplierId,
+                    presetQuantity: sent.quantity,
+                    presetUnitCost: String(sent.unitCost),
+                  });
+                  window.location.href = `${window.location.pathname}?${params.toString()}`;
                   return;
                 }
-                setSentCode(code);
+                setSentCode(sent.code);
                 load();
               }}
             />

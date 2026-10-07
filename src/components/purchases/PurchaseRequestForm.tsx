@@ -9,6 +9,8 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { PurchaseCatalogPicker, type CatalogItemDTO, type CatalogCreateDraft } from "./PurchaseCatalogPicker";
 import { PurchaseSupplierPicker, type PurchaseSupplierDTO } from "./PurchaseSupplierPicker";
 import type { SupplierPriceHistory } from "@/lib/purchases";
+import type { RepurchaseLineStatus } from "@/lib/repurchaseReviews";
+import { RepurchaseAnalyzer } from "./RepurchasePanel";
 import { formatDateTime } from "@/lib/formatDateTime";
 
 type PriceStats = { count: number; min: number | null; avg: number | null; max: number | null; last3Avg: number | null };
@@ -335,12 +337,20 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setSizeSaveErr((m) => ({ ...m, [itemId]: "" }));
   }
 
-  function fetchLineStats(idx: number, catalogItemId: string) {
-    fetch(`/api/purchase-catalog/${catalogItemId}`)
+  // Pedido de Jariel 2026-10-07: si el producto es recompra, se analiza aquí
+  // mismo (misma calculadora y mismas reglas que Control de Compras →
+  // Recompras) en vez de salir del formulario. Por posición de línea, como
+  // blockedByLine. No se guarda en el borrador (se vuelve a consultar).
+  const [repurchaseByLine, setRepurchaseByLine] = useState<Record<number, RepurchaseLineStatus | null>>({});
+  const [analyzingLine, setAnalyzingLine] = useState<number | null>(null);
+
+  function fetchLineStats(idx: number, catalogItemId: string, groupId: string | null = editingGroupId) {
+    fetch(`/api/purchase-catalog/${catalogItemId}${groupId ? `?groupId=${encodeURIComponent(groupId)}` : ""}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         updateLine(idx, { stats: data?.stats ?? null });
         setBlockedByLine((m) => ({ ...m, [idx]: data?.blockedBy ?? null }));
+        setRepurchaseByLine((m) => ({ ...m, [idx]: data?.repurchase ?? null }));
         setNeedsSizeByItem((m) => ({ ...m, [catalogItemId]: !!data?.needsFulfillmentSize }));
         setSavedSizeByItem((m) => ({ ...m, [catalogItemId]: data?.fulfillmentSize ?? null }));
       })
@@ -358,6 +368,8 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     updateLine(idx, { catalogItem: item, productQuery: "", createDraft: null, stats: null });
     setSupplierComparisons((m) => { const next = { ...m }; delete next[idx]; return next; });
     setBlockedByLine((m) => ({ ...m, [idx]: null }));
+    setRepurchaseByLine((m) => ({ ...m, [idx]: null }));
+    if (analyzingLine === idx) setAnalyzingLine(null);
     if (!item) return;
     fetchLineStats(idx, item.id);
     fetchSupplierComparison(idx, item.id);
@@ -451,18 +463,24 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setLines((ls) => [...ls, emptyLine()]);
   }
   function removeLine(idx: number) {
+    if (lines.length <= 1) return;
     setLines((ls) => (ls.length > 1 ? ls.filter((_, i) => i !== idx) : ls));
-    // supplierComparisons vive fuera de `lines` (indexado por posición) — hay
-    // que reacomodarlo igual que el filter de arriba, si no se desalinea.
-    setSupplierComparisons((m) => {
-      const next: Record<number, SupplierPriceHistory[]> = {};
+    // supplierComparisons, blockedByLine y repurchaseByLine viven fuera de
+    // `lines` (indexados por posición) — hay que reacomodarlos igual que el
+    // filter de arriba, si no se desalinean.
+    function shift<T>(m: Record<number, T>): Record<number, T> {
+      const next: Record<number, T> = {};
       Object.entries(m).forEach(([k, v]) => {
         const i = Number(k);
         if (i < idx) next[i] = v;
         else if (i > idx) next[i - 1] = v;
       });
       return next;
-    });
+    }
+    setSupplierComparisons(shift);
+    setBlockedByLine(shift);
+    setRepurchaseByLine(shift);
+    setAnalyzingLine((a) => (a === null || a === idx ? null : a > idx ? a - 1 : a));
   }
 
   // Restaura el borrador (si hay uno) una sola vez al montar, y recién
@@ -500,7 +518,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         setShippingPaymentTiming(d.shippingPaymentTiming ?? "WITH_PURCHASE");
         setEditingGroupId(d.editingGroupId ?? null);
         setResubmitAttemptHint(d.nextAttemptNumber ?? null);
-        restoredLines.forEach((l, i) => { if (l.catalogItem) { fetchLineStats(i, l.catalogItem.id); fetchSupplierComparison(i, l.catalogItem.id); } });
+        restoredLines.forEach((l, i) => { if (l.catalogItem) { fetchLineStats(i, l.catalogItem.id, d.editingGroupId ?? null); fetchSupplierComparison(i, l.catalogItem.id); } });
         setDraftRestored(draftHasContent(d));
       }
     } catch {
@@ -598,6 +616,9 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setManualCreditReason("");
     setManualCreditProofUrl(null);
     setManualCreditProofName(null);
+    setBlockedByLine({});
+    setRepurchaseByLine({});
+    setAnalyzingLine(null);
   }
 
   function discardDraft() {
@@ -854,6 +875,13 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       setErr("Verifica la cotización antes de enviar.");
       return;
     }
+    if (!emergencyOnly) {
+      const unanalyzed = lines.filter((l, i) => l.catalogItem && repurchaseByLine[i] && !repurchaseByLine[i]!.approved);
+      if (unanalyzed.length > 0) {
+        setErr(`${unanalyzed.map((l) => l.catalogItem!.name).join(", ")}: es recompra y todavía no está confirmada ni aprobada por Bryan. Analízala en el recuadro "Es una recompra" de ese producto.`);
+        return;
+      }
+    }
     if (codeOnlyIdxs.length > 0 && !allCodeOnlyResolved) {
       setErr("Confirma a qué producto corresponde cada código de la cotización antes de enviar.");
       return;
@@ -1026,6 +1054,71 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                 {blockedByLine[idx]}
               </div>
             )}
+            {line.catalogItem && !emergencyOnly && !blockedByLine[idx] && repurchaseByLine[idx] && (() => {
+              const rc = repurchaseByLine[idx]!;
+              const item = line.catalogItem;
+              if (rc.approved) {
+                const a = rc.approved;
+                const qty = Number(line.quantity) || 0;
+                const cost = effectiveLineUnitCost(line);
+                const problems: string[] = [];
+                if (supplier && supplier.id !== a.supplierId) problems.push(`se aprobó con ${a.supplierName}, no con ${supplier.name}`);
+                if (a.approvedQuantity !== null && qty > a.approvedQuantity) problems.push(`el máximo aprobado es ${a.approvedQuantity} u.`);
+                if (cost > a.unitCost + 0.005) problems.push(`se aprobó a $${a.unitCost.toFixed(2)} por unidad y aquí está a $${cost.toFixed(2)}`);
+                return (
+                  <div className={`rounded-md px-3 py-2 mb-2.5 text-[12.5px] border ${problems.length ? "bg-red/10 border-red/35 text-red" : "bg-teal/10 border-teal/35 text-teal"}`}>
+                    <CheckCircle2 size={14} className="inline mr-1.5 -mt-0.5" />
+                    Recompra <b>{a.code}</b> {a.selfConfirmed ? "confirmada por ti" : "aprobada por Bryan"}: {a.supplierName}, hasta {a.approvedQuantity ?? "—"} u. a ${a.unitCost.toFixed(2)}
+                    {a.expiresAt ? ` · vale hasta el ${new Date(a.expiresAt).toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" })}` : ""}.
+                    {problems.length > 0 && <div className="mt-1 font-semibold">No coincide: {problems.join("; ")}. Corrígelo o analiza una recompra nueva en Control de Compras → Recompras.</div>}
+                  </div>
+                );
+              }
+              if (rc.pending) {
+                return (
+                  <div className="bg-amber/10 border border-amber/35 rounded-md px-3 py-2 mb-2.5 text-[12.5px] text-amber">
+                    <Clock size={14} className="inline mr-1.5 -mt-0.5" />
+                    Recompra <b>{rc.pending.code}</b> enviada a Bryan: esperando su aprobación. Tu solicitud queda guardada aquí; cuando la apruebe, vuelve y pulsa &quot;Enviar y confirmar&quot;. Si no responde, habla con él en persona.
+                  </div>
+                );
+              }
+              return (
+                <div className="bg-amber/10 border border-amber/35 rounded-md px-3 py-2.5 mb-2.5 text-[12.5px]">
+                  <div className="text-amber font-semibold">🔁 Es una recompra: analízala aquí antes de enviar</div>
+                  <div className="text-steel text-[12px] mt-0.5">
+                    Si es compra caliente, el precio no subió más de 5% y quedas más barato que la competencia, la confirmas tú mismo y sigues con esta solicitud. Si no, va a Bryan y la solicitud queda guardada hasta que la apruebe.
+                  </div>
+                  {analyzingLine !== idx ? (
+                    <button type="button" className="mt-2 rounded bg-teal px-3 py-1.5 text-[12px] font-bold text-white cursor-pointer" onClick={() => setAnalyzingLine(idx)}>
+                      Analizar recompra aquí
+                    </button>
+                  ) : (
+                    <div className="mt-2.5 bg-surface border border-rule rounded-md p-3 text-ink">
+                      <RepurchaseAnalyzer
+                        itemId={item.id}
+                        preset={{
+                          supplier: supplier ? { id: supplier.id, name: supplier.name } : null,
+                          unitCost: Number(line.unitCost) > 0 ? String(Number(effectiveLineUnitCost(line).toFixed(4))) : "",
+                          quantity: line.quantity,
+                        }}
+                        onSent={(sent) => {
+                          setAnalyzingLine(null);
+                          // Lo que se analizó pasa a la línea si todavía estaba vacía.
+                          updateLine(idx, {
+                            ...(line.quantity ? {} : { quantity: sent.quantity }),
+                            ...(line.unitCost ? {} : { unitCost: String(sent.unitCost), ivaIncluded: false }),
+                          });
+                          fetchLineStats(idx, item.id);
+                        }}
+                      />
+                      <button type="button" className="mt-2 text-[12px] text-steel cursor-pointer" onClick={() => setAnalyzingLine(null)}>
+                        Cerrar sin enviar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
             {line.catalogItem && needsSizeByItem[line.catalogItem.id] && (() => {
               const itemId = line.catalogItem.id;
               const chosen = sizeByItem[itemId];
