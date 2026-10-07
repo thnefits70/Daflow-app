@@ -77,12 +77,22 @@ function joinItems(items: PdfItem[]): string {
 // Urbano imprime tildes rotas: "ergonómica" sale "ergonÃ³mica" (UTF-8 leído
 // como Latin-1). Se reparan esos pares antes de comparar nombres; si un
 // pedazo no es UTF-8 válido, se deja como estaba.
+// Las MAYÚSCULAS con tilde salen leídas como Windows-1252, no Latin-1 (real
+// 2026-10-07, guía WYB185409708: "NAVIDEÑO" → "NAVIDEÃ‘O", la Ñ es C3 91 y
+// 0x91 sale "‘"). Por eso también se devuelven esos caracteres a su byte.
+const CP1252_BYTE: Record<string, number> = {
+  "€": 0x80, "‚": 0x82, "ƒ": 0x83, "„": 0x84, "…": 0x85, "†": 0x86, "‡": 0x87, "ˆ": 0x88, "‰": 0x89, "Š": 0x8a, "‹": 0x8b, "Œ": 0x8c, "Ž": 0x8e,
+  "‘": 0x91, "’": 0x92, "“": 0x93, "”": 0x94, "•": 0x95, "–": 0x96, "—": 0x97, "˜": 0x98, "™": 0x99, "š": 0x9a, "›": 0x9b, "œ": 0x9c, "ž": 0x9e, "Ÿ": 0x9f,
+};
+const BROKEN_TAIL = "\\u0080-¿€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ";
+const BROKEN_TEST_RE = new RegExp(`[Â-ô][${BROKEN_TAIL}]`);
+const BROKEN_SEQ_RE = new RegExp(`[Â-ô][${BROKEN_TAIL}]+`, "g");
 export function fixBrokenAccents(s: string): string {
-  if (!/[Â-ô][\u0080-¿]/.test(s)) return s;
+  if (!BROKEN_TEST_RE.test(s)) return s;
   const decoder = new TextDecoder("utf-8", { fatal: true });
-  return s.replace(/[Â-ô][\u0080-¿]+/g, (seq) => {
+  return s.replace(BROKEN_SEQ_RE, (seq) => {
     try {
-      return decoder.decode(Uint8Array.from(seq, (ch) => ch.charCodeAt(0)));
+      return decoder.decode(Uint8Array.from(seq, (ch) => CP1252_BYTE[ch] ?? ch.charCodeAt(0)));
     } catch {
       return seq;
     }
@@ -812,6 +822,21 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false, excludeGui
       if (!best || tie) continue;
       hits.push({ code: best.code, variant: null, qty: qtyMatch, page: um.page, line: um.line });
       readBy.set(`${best.code}|${c}`, (readBy.get(`${best.code}|${c}`) ?? 0) + qtyMatch);
+      unmatched.splice(u, 1);
+    }
+    // Pedido del usuario 2026-10-07 ("que se arregle solito y continúe"): si
+    // el nombre igual no se reconoce (texto roto, nombre distinto) pero en esa
+    // transportadora UN SOLO producto de la tabla tiene unidades sin leer que
+    // alcanzan, la etiqueta es de ese producto — la tabla lo confirma.
+    for (let u = unmatched.length - 1; u >= 0; u--) {
+      const um = unmatched[u];
+      const qtyMatch = um.qty ?? 1;
+      const c = guides.get(guideOf({ code: "", variant: null, qty: 0, page: um.page, line: um.line }) ?? "")?.carrier ?? "";
+      const open = [...summary].filter(([code, row]) => (row.byCarrier.get(c) ?? 0) - (readBy.get(`${code}|${c}`) ?? 0) >= qtyMatch);
+      if (open.length !== 1) continue;
+      const code = open[0][0];
+      hits.push({ code, variant: null, qty: qtyMatch, page: um.page, line: um.line });
+      readBy.set(`${code}|${c}`, (readBy.get(`${code}|${c}`) ?? 0) + qtyMatch);
       unmatched.splice(u, 1);
     }
   }
