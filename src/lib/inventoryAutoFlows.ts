@@ -3,6 +3,7 @@ import { recordKardexEntry } from "@/lib/stockKardex";
 import { applyReturnToVariants, detectReturnVariants } from "@/lib/variantStock";
 import { cacheGuideLabelsForBatch } from "@/lib/localWarranty";
 import { autoApproveReadyReentryItems, maybeMarkBatchClosed, notifyFinanceLeadWeeklyBatchReady } from "@/lib/merchandiseReentry";
+import { recomputeRecentAutoFillRate } from "@/lib/autoFillRate";
 
 // Confirmado 2026-09-23, pedido explícito del usuario: "de ahora en adelante
 // ya solo trabajaremos con INVESTOCK" + "todo debe quedar automatizado, el
@@ -200,4 +201,5 @@ export async function runInventoryAutoFlows(): Promise<void> {
   await autoReingresoReadyCancelledGuides().catch((err) => console.error("[runInventoryAutoFlows] guías canceladas:", err));
   await autoCloseFinishedWeeklyWriteOffBatches().catch((err) => console.error("[runInventoryAutoFlows] dañados semanales:", err));
   await autoWriteOffApprovedLateClaims().catch((err) => console.error("[runInventoryAutoFlows] reclamos posteriores:", err));
+  await recomputeRecentAutoFillRate().catch((err) => console.error("[runInventoryAutoFlows] pedidos despachados:", err));
 }

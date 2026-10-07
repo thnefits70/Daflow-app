@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getCompiledLot } from "@/lib/fulfillmentGuides";
+import { getCompiledLot, ecuadorDay } from "@/lib/fulfillmentGuides";
 
 // Confirmado 2026-09-25 con el usuario (punto por punto):
 //   1. Desde la semana 2026-W40 (lunes 28 sept) el Fill Rate de Fulfillment
@@ -11,7 +11,14 @@ import { getCompiledLot } from "@/lib/fulfillmentGuides";
 //   3. Preparadas y Generadas las escribe Yair UNA vez por semana (el total
 //      de la semana de cada una) — DAFLOW no ve cuándo el courier se lleva
 //      el paquete, y el usuario prefirió esto a que Yair suba reportes.
-//   Despachadas = guías − falta de stock − preparadas − generadas.
+//   Despachadas = guías − falta de stock − preparadas − generadas
+//                 + ventas externas entregadas al motorizado.
+//
+// Pedido del usuario 2026-10-07 (lo notó Daniel): las ventas externas
+// (VE-000X) también son pedidos despachados — desde la S40 cuenta 1 por cada
+// venta que el equipo entregó al motorizado esa semana (deliveredAt, hora de
+// Ecuador). Las garantías locales (GL) no cuentan. Ojo: este mismo número
+// alimenta las comisiones por niveles (commissionTiers.ts).
 export const AUTO_FILL_RATE_FROM_WEEK = "2026-W40";
 
 // Área dueña del KPI "Pedidos despachados / Fill Rate". Era Fulfillment
@@ -40,9 +47,10 @@ export function isAutoFillRateWeek(week: string): boolean {
 }
 
 // Lo que DAFLOW sabe solo de la semana: guías totales y falta de stock.
-export async function computeAutoCounts(week: string): Promise<{ guides: number; outOfStock: number }> {
+export async function computeAutoCounts(week: string): Promise<{ guides: number; outOfStock: number; externalSales: number }> {
+  const days = daysOfIsoWeek(week);
   const lots = await prisma.fulfillmentLot.findMany({
-    where: { day: { in: daysOfIsoWeek(week) }, status: { in: ["SENT", "CLOSED"] } },
+    where: { day: { in: days }, status: { in: ["SENT", "CLOSED"] } },
     select: { id: true },
   });
   let guides = 0;
@@ -55,12 +63,21 @@ export async function computeAutoCounts(week: string): Promise<{ guides: number;
       if (p.confirmedAt && p.confirmedQty !== null && p.confirmedQty < p.needed) outOfStock += p.needed - p.confirmedQty;
     }
   }
-  return { guides, outOfStock: Math.min(outOfStock, guides) };
+  return { guides, outOfStock: Math.min(outOfStock, guides), externalSales: await countDeliveredExternalSales(days) };
+}
+
+// Ventas externas entregadas al motorizado en esos días (hora de Ecuador).
+async function countDeliveredExternalSales(days: string[]): Promise<number> {
+  const from = new Date(`${days[0]}T00:00:00-05:00`);
+  const to = new Date(`${days[days.length - 1]}T23:59:59.999-05:00`);
+  return prisma.externalSale.count({
+    where: { kind: "SALE", deletedAt: null, deliveredAt: { gte: from, lte: to } },
+  });
 }
 
 // Despachadas y no despachadas a partir de lo automático + lo que escribió Yair.
-export function fillRateNumbers(counts: { guides: number; outOfStock: number }, prepared: number, generated: number) {
-  const value = Math.max(0, counts.guides - counts.outOfStock - prepared - generated);
+export function fillRateNumbers(counts: { guides: number; outOfStock: number; externalSales: number }, prepared: number, generated: number) {
+  const value = Math.max(0, counts.guides - counts.outOfStock - prepared - generated) + counts.externalSales;
   return { value, outOfStock: counts.outOfStock, notDispatched: counts.outOfStock + prepared + generated };
 }
 
@@ -84,4 +101,15 @@ export async function recomputeAutoFillRate(day: string): Promise<void> {
     update: { ...nums, prepared, generated },
     create: { deptId: dept.id, week, ...nums, prepared, generated },
   });
+}
+
+// Barrido diario (cron de inventario): recalcula la semana actual y la
+// anterior. Así las semanas ya guardadas toman lo que cambió la fórmula
+// (ej. ventas externas desde la S40) y nada queda desactualizado si un
+// recálculo puntual falló.
+export async function recomputeRecentAutoFillRate(): Promise<void> {
+  const today = ecuadorDay(new Date());
+  const weekAgo = ecuadorDay(new Date(Date.now() - 7 * 86400000));
+  await recomputeAutoFillRate(weekAgo);
+  await recomputeAutoFillRate(today);
 }

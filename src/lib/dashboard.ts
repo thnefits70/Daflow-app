@@ -7,7 +7,7 @@ import { computeAutoStockoutWeeks, isAutoStockoutWeek } from "@/lib/autoStockout
 import { isAutoFillRateWeek, isoWeekOf } from "@/lib/autoFillRate";
 import { brandLabel, sortBrands } from "@/lib/brandLabels";
 import { isRocketCode } from "@/lib/dropiGuidesPdf";
-import { NO_BRAND } from "@/lib/fulfillmentGuides";
+import { NO_BRAND, ecuadorDay } from "@/lib/fulfillmentGuides";
 import { getLocalWarrantyReasonCounts, getWarrantyRate, previousMonth, warrantyReasonGroup, type WarrantyReasonGroup } from "@/lib/warrantyInsights";
 
 function pct(a: number, b: number) {
@@ -167,16 +167,36 @@ export async function getWeeklyTrend(): Promise<WeeklyTrend> {
   if (records.length === 0) return null;
 
   const brandWeeks = records.map((r) => r.week).filter(isAutoFillRateWeek);
-  const byWeek = brandWeeks.length ? await guidesByBrandPerWeek(brandWeeks[0]) : new Map<string, Record<string, number>>();
+  const [byWeek, externalByWeek] = brandWeeks.length
+    ? await Promise.all([guidesByBrandPerWeek(brandWeeks[0]), externalSalesPerWeek(brandWeeks[0])])
+    : [new Map<string, Record<string, number>>(), new Map<string, number>()];
 
   return {
     deptName: dept.name,
     points: records.map((r) => {
       const counts = byWeek.get(r.week);
-      const brands = counts ? sortBrands(Object.keys(counts)).map((b) => ({ label: brandLabel(b), value: counts[b] })) : undefined;
+      let brands = counts ? sortBrands(Object.keys(counts)).map((b) => ({ label: brandLabel(b), value: counts[b] })) : undefined;
+      // Desde 2026-10-07 las ventas externas entregadas suman al total (autoFillRate.ts).
+      const external = externalByWeek.get(r.week);
+      if (external) brands = [...(brands ?? []), { label: "Ventas externas", value: external }];
       return { week: r.week, value: r.value, ...(brands?.length ? { brands } : {}) };
     }),
   };
+}
+
+// Ventas externas (no garantías) entregadas al motorizado, por semana ISO
+// según el día de Ecuador — mismo criterio que computeAutoCounts.
+async function externalSalesPerWeek(fromWeek: string): Promise<Map<string, number>> {
+  const sales = await prisma.externalSale.findMany({
+    where: { kind: "SALE", deletedAt: null, deliveredAt: { not: null } },
+    select: { deliveredAt: true },
+  });
+  const byWeek = new Map<string, number>();
+  for (const s of sales) {
+    const week = isoWeekOf(ecuadorDay(s.deliveredAt!));
+    if (week >= fromWeek) byWeek.set(week, (byWeek.get(week) ?? 0) + 1);
+  }
+  return byWeek;
 }
 
 // Pedido del usuario (2026-09-30): al pasar el mouse por una semana del

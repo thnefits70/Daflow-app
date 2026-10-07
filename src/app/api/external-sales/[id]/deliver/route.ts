@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { canAssignExternalSalePack } from "@/lib/guards";
 import { createOutflowForExternalSale, notifyFinanceLeadExternalSaleReadyToClose } from "@/lib/externalSales";
 import { notifyOwner } from "@/lib/notifications";
+import { recomputeAutoFillRate } from "@/lib/autoFillRate";
+import { ecuadorDay } from "@/lib/fulfillmentGuides";
 
 const schema = z.object({ photoUrl: z.string().min(1).optional() });
 
@@ -59,6 +61,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   await createOutflowForExternalSale({ id, kind: sale.kind, items: sale.items });
+  // Las ventas (no las garantías) suman a "Pedidos despachados" de la semana.
+  if (sale.kind === "SALE") await recomputeAutoFillRate(ecuadorDay(updated.deliveredAt!)).catch((e) => console.error("[fill rate auto]", e));
   if (sale.paymentConfirmedAt) await notifyFinanceLeadExternalSaleReadyToClose(sale.code);
   // Garantía local: el asesor coordina con el cliente y confirma el resultado.
   if (sale.kind === "WARRANTY") {
