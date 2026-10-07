@@ -54,6 +54,8 @@ export const DISCARD_VALID_DAYS = 30;
 export const DISCARD_REASONS: Record<string, string> = {
   NO_DEMAND: "No hay demanda del producto",
   NO_SALES: "El producto ya no tiene ventas",
+  // Pedido del usuario 2026-10-06: sale de la calculadora de Recompras.
+  COMPETITOR_CHEAPER: "La competencia lo tiene más barato",
   OTHER: "Otro motivo",
 };
 const WINDOW_DAYS = 30;
@@ -133,31 +135,59 @@ async function latestBalances(before?: Date): Promise<Map<string, number>> {
   return new Map(rows.map((r) => [r.catalogItemId, r.balanceAfter]));
 }
 
-export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
-  const now = new Date();
-
-  // Ventas = pedidos de Dropi que sube Yair (combos ya separados en sus
-  // productos por la receta) + ventas externas. Una garantía de solo una
-  // pieza sale del stock de repuestos, no cuenta. Los pedidos existen desde
-  // 2026-09-21, así que al principio la ventana es más corta que 30 días.
+// Ventas = pedidos de Dropi que sube Yair (combos ya separados en sus
+// productos por la receta) + ventas externas. Una garantía de solo una
+// pieza sale del stock de repuestos, no cuenta. Los pedidos existen desde
+// 2026-09-21, así que al principio la ventana es más corta que 30 días.
+// Compartido con Recompras (repurchaseReviews.ts) para que ambas pantallas
+// muestren exactamente las mismas ventas.
+export async function getSalesWindow(now = new Date()): Promise<{ windowStart: Date; windowDays: number }> {
   const firstBatch = await prisma.fulfillmentRequestBatch.findFirst({ orderBy: { requestedAt: "asc" }, select: { requestedAt: true } });
   const windowStart = new Date(Math.max(now.getTime() - WINDOW_DAYS * DAY_MS, firstBatch?.requestedAt.getTime() ?? now.getTime()));
-  const windowDays = Math.max(1, (now.getTime() - windowStart.getTime()) / DAY_MS);
+  return { windowStart, windowDays: Math.max(1, (now.getTime() - windowStart.getTime()) / DAY_MS) };
+}
 
-  const [balances, balancesBefore, balancesBeforeCold, dropiSales, externalSales, openPurchases, readyByBuyer] = await Promise.all([
-    latestBalances(),
-    latestBalances(new Date(now.getTime() - ESCALATE_DAYS * DAY_MS)),
-    latestBalances(new Date(now.getTime() - COLD_ESCALATE_DAYS * DAY_MS)),
+export async function getSoldUnitsByItem(windowStart: Date, catalogItemIds?: string[]): Promise<Map<string, number>> {
+  const only = catalogItemIds ? { catalogItemId: { in: catalogItemIds } } : {};
+  const [dropiSales, externalSales] = await Promise.all([
     prisma.fulfillmentRequestItem.groupBy({
       by: ["catalogItemId"],
-      where: { batch: { requestedAt: { gte: windowStart } }, OR: [{ warrantyMode: null }, { warrantyMode: { not: "PIECE" } }] },
+      where: { ...only, batch: { requestedAt: { gte: windowStart } }, OR: [{ warrantyMode: null }, { warrantyMode: { not: "PIECE" } }] },
       _sum: { quantity: true },
     }),
     prisma.merchandiseOutflowItem.groupBy({
       by: ["catalogItemId"],
-      where: { catalogItemId: { not: null }, batch: { reason: "VENTA_EXTERNA", createdAt: { gte: windowStart } } },
+      where: { ...(catalogItemIds ? { catalogItemId: { in: catalogItemIds } } : { catalogItemId: { not: null } }), batch: { reason: "VENTA_EXTERNA", createdAt: { gte: windowStart } } },
       _sum: { quantity: true },
     }),
+  ]);
+  const sold = new Map<string, number>();
+  for (const r of [...dropiSales, ...externalSales]) {
+    if (!r.catalogItemId) continue;
+    sold.set(r.catalogItemId, (sold.get(r.catalogItemId) ?? 0) + (r._sum.quantity ?? 0));
+  }
+  return sold;
+}
+
+// Días de anticipación del proveedor y cantidad sugerida — mismas reglas de
+// Daniel que usa la lista (ver URGENT_DAYS y COVER_DAYS_AFTER_ARRIVAL).
+export function urgentDaysForSupplier(paymentMode: string | null | undefined): number {
+  return paymentMode === "CREDITO" ? URGENT_DAYS_CREDIT_SUPPLIER : URGENT_DAYS;
+}
+export function suggestedQuantity(perDay: number, urgentDays: number, stock: number): number | null {
+  const needed = Math.ceil(perDay * (urgentDays + COVER_DAYS_AFTER_ARRIVAL) - Math.max(0, stock));
+  return needed > 0 ? needed : null;
+}
+
+export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
+  const now = new Date();
+  const { windowStart, windowDays } = await getSalesWindow(now);
+
+  const [balances, balancesBefore, balancesBeforeCold, sold, openPurchases, readyByBuyer] = await Promise.all([
+    latestBalances(),
+    latestBalances(new Date(now.getTime() - ESCALATE_DAYS * DAY_MS)),
+    latestBalances(new Date(now.getTime() - COLD_ESCALATE_DAYS * DAY_MS)),
+    getSoldUnitsByItem(windowStart),
     prisma.purchaseRequest.findMany({
       where: openPurchaseWhere(),
       select: { catalogItemId: true, requestNumber: true, quantity: true },
@@ -167,11 +197,6 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   ]);
   const readyIds = [...readyByBuyer.hot, ...readyByBuyer.cold];
 
-  const sold = new Map<string, number>();
-  for (const r of [...dropiSales, ...externalSales]) {
-    if (!r.catalogItemId) continue;
-    sold.set(r.catalogItemId, (sold.get(r.catalogItemId) ?? 0) + (r._sum.quantity ?? 0));
-  }
   const openByItem = new Map<string, { code: string | null; quantity: number }>();
   for (const p of openPurchases) {
     const cur = openByItem.get(p.catalogItemId);
@@ -229,7 +254,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
     const daysLeft = perDay > 0 ? Math.max(0, stock) / perDay : null;
     const openPurchase = openByItem.get(item.id) ?? null;
     const supplier = supplierByItem.get(item.id) ?? null;
-    const urgentDays = supplier?.paymentMode === "CREDITO" ? URGENT_DAYS_CREDIT_SUPPLIER : URGENT_DAYS;
+    const urgentDays = urgentDaysForSupplier(supplier?.paymentMode);
     const supplierOut = supplierOutByItem.get(item.id) ?? null;
     const baseStatus: SuggestionStatus = openPurchase
       ? "en_compra"
@@ -267,8 +292,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
     const escalated = status === "urgente" && before !== undefined && Math.max(0, before) / perDay <= urgentDays;
     const thisWeek = isCold && (status === "urgente" || (status === "pronto" && daysLeft !== null && daysLeft <= urgentDays + COLD_WEEK_AHEAD_DAYS));
     // Si con lo que hay ya alcanza para todo ese tiempo, todavía no se sugiere nada.
-    const needed = Math.ceil(perDay * (urgentDays + COVER_DAYS_AFTER_ARRIVAL) - Math.max(0, stock));
-    const suggestedQty = status !== "en_compra" && status !== "no_sale" && needed > 0 ? needed : null;
+    const suggestedQty = status !== "en_compra" && status !== "no_sale" ? suggestedQuantity(perDay, urgentDays, stock) : null;
     const row: SuggestionRow = {
       catalogItemId: item.id,
       name: item.name,

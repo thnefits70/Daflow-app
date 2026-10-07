@@ -29,7 +29,8 @@ type Row = {
   variants?: { label: string; units: number }[] | null;
 };
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
-type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; coldNewProducts?: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null; canUseCalculator?: boolean };
+type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; coldNewProducts?: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null; canUseCalculator?: boolean; canRepurchase?: boolean; repurchases?: Record<string, OpenRepurchase> };
+type OpenRepurchase = { code: string; state: "PENDING_APPROVAL" | "APPROVED"; byName: string | null };
 
 const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = [
   {
@@ -75,6 +76,11 @@ function stockoutUrl(catalogItemId: string) {
   return `${window.location.pathname}?tab=analisis-mercado&ptab=sinstock&reportItem=${catalogItemId}`;
 }
 
+// Recompras (2026-10-06): abre la calculadora con el producto ya elegido.
+function repurchaseUrl(catalogItemId: string) {
+  return `${window.location.pathname}?tab=compras&ptab=recompras&rcItem=${catalogItemId}`;
+}
+
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" });
 }
@@ -83,6 +89,7 @@ function fmtDate(iso: string) {
 const DISCARD_REASONS: { key: string; label: string }[] = [
   { key: "NO_DEMAND", label: "No hay demanda del producto" },
   { key: "NO_SALES", label: "El producto ya no tiene ventas" },
+  { key: "COMPETITOR_CHEAPER", label: "La competencia lo tiene más barato" },
   { key: "OTHER", label: "Otro motivo" },
 ];
 
@@ -172,7 +179,7 @@ function DiscardForm({ r, onDone, onCancel }: { r: Row; onDone: () => void; onCa
   );
 }
 
-function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged }: { r: Row; canReportStockout: boolean; canDiscard: boolean; isCold: boolean; onChanged: () => void }) {
+function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepurchase = false, repurchase = null }: { r: Row; canReportStockout: boolean; canDiscard: boolean; isCold: boolean; onChanged: () => void; canRepurchase?: boolean; repurchase?: OpenRepurchase | null }) {
   const [discarding, setDiscarding] = useState(false);
   function undo() {
     if (!r.discard || !window.confirm(`¿Volver a poner ${r.name} en la lista de compras frías?`)) return;
@@ -248,6 +255,13 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged }: { r: R
             </b>
           </div>
         )}
+        {/* Recompras (2026-10-06): si ya hay una RC abierta del producto. */}
+        {repurchase && (
+          <div className={`text-[11.5px] font-semibold mt-0.5 ${repurchase.state === "APPROVED" ? "text-teal" : "text-amber"}`}>
+            {repurchase.code} {repurchase.state === "APPROVED" ? "aprobada por Bryan — lista para pedir" : "esperando a Bryan"}
+            {repurchase.byName ? ` (${repurchase.byName})` : ""}
+          </div>
+        )}
         {r.thisWeek && <div className="text-[11.5px] text-amber font-semibold mt-0.5">Comprar o descartar esta semana</div>}
         {r.escalated && <div className="text-[11.5px] text-red font-semibold mt-0.5">Urgente hace {isCold ? 7 : 3} días o más sin comprar — ya se avisó a Daniel</div>}
         {r.discard && (
@@ -281,6 +295,11 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged }: { r: R
         )}
         {error && <div className="text-[11.5px] text-red mt-0.5">{error}</div>}
       </div>
+      {canRepurchase && !repurchase && !discarding && r.status !== "en_compra" && r.status !== "sin_proveedor" && r.status !== "preguntar_proveedor" && (
+        <a href={repurchaseUrl(r.catalogItemId)} className="shrink-0 rounded border border-teal px-2.5 py-1.5 text-[11.5px] font-semibold text-teal hover:bg-teal/10">
+          Analizar recompra
+        </a>
+      )}
       {canDiscard && isCold && !discarding && (r.status === "urgente" || r.status === "pronto") && (
         <button
           type="button"
@@ -337,6 +356,8 @@ function List({
   canDiscard = false,
   isCold = false,
   onChanged,
+  canRepurchase = false,
+  repurchases = {},
 }: {
   title: string;
   sub: string;
@@ -347,6 +368,8 @@ function List({
   canDiscard?: boolean;
   isCold?: boolean;
   onChanged: () => void;
+  canRepurchase?: boolean;
+  repurchases?: Record<string, OpenRepurchase>;
 }) {
   const [showNoSale, setShowNoSale] = useState(false);
   const [showDiscarded, setShowDiscarded] = useState(false);
@@ -389,7 +412,7 @@ function List({
               {!collapsed && (
                 <div className="bg-surface2 border border-rule rounded-md">
                   {list.map((r) => (
-                    <RowLine key={r.catalogItemId} r={r} canReportStockout={canReportStockout} canDiscard={canDiscard} isCold={isCold} onChanged={onChanged} />
+                    <RowLine key={r.catalogItemId} r={r} canReportStockout={canReportStockout} canDiscard={canDiscard} isCold={isCold} onChanged={onChanged} canRepurchase={canRepurchase} repurchase={repurchases[r.catalogItemId] ?? null} />
                   ))}
                 </div>
               )}
@@ -450,8 +473,8 @@ export function PurchaseSuggestionsPanel() {
   const onlyCold = data.audiences.includes("cold") && !data.audiences.includes("hot");
   const onlyHot = data.audiences.includes("hot") && !data.audiences.includes("cold");
   const hotFirst = !onlyCold;
-  const hot = <List key="hot" title="🔥 Compras calientes" sub="30 unidades o menos · Jariel" rows={data.hot} newProducts={data.newProducts} open={!onlyCold} canReportStockout={data.canReportStockout} onChanged={load} />;
-  const cold = <List key="cold" title="❄️ Compras frías" sub="31 a 60 unidades · Nairoby" rows={data.cold} newProducts={data.coldNewProducts} open={!onlyHot} canReportStockout={data.canReportStockout} canDiscard={data.canDiscard} isCold onChanged={load} />;
+  const hot = <List key="hot" title="🔥 Compras calientes" sub="30 unidades o menos · Jariel" rows={data.hot} newProducts={data.newProducts} open={!onlyCold} canReportStockout={data.canReportStockout} onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
+  const cold = <List key="cold" title="❄️ Compras frías" sub="31 a 60 unidades · Nairoby" rows={data.cold} newProducts={data.coldNewProducts} open={!onlyHot} canReportStockout={data.canReportStockout} canDiscard={data.canDiscard} isCold onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
 
   return (
     <div>

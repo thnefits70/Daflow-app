@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { linkReadyToBuyProposalsToGroup } from "@/lib/marketProduct";
 import { canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
+import { checkRepurchaseApprovals, markRepurchaseReviewsUsed } from "@/lib/repurchaseReviews";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, lockAndFindOpenPurchaseByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes, formatPurchaseRequestCode } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup, releaseCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
@@ -462,6 +463,14 @@ export async function POST(req: NextRequest) {
 
   const check = await checkPurchaseSubmission(d);
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
+  // Pedido del usuario 2026-10-06: toda recompra necesita su RC aprobada por
+  // Bryan (ver repurchaseReviews.ts). El admin y la vía de emergencia no.
+  let repurchaseReviewIds: string[] = [];
+  if (!isAdmin && !isEmergencySubmission) {
+    const rc = await checkRepurchaseApprovals({ lines: d.items, supplierId: d.supplierId, requesterId: session.user.id });
+    if (!rc.ok) return NextResponse.json({ error: rc.error }, { status: 400 });
+    repurchaseReviewIds = rc.reviewIds;
+  }
   // Pedido del usuario 2026-09-30: producto pequeño o normal (ver checkAndSaveFulfillmentSizes).
   const sizeError = await checkAndSaveFulfillmentSizes(d.items, session.user.role === "admin" ? null : session.user.id);
   if (sizeError) return NextResponse.json({ error: sizeError }, { status: 400 });
@@ -521,6 +530,7 @@ export async function POST(req: NextRequest) {
         },
       })
     ));
+    await markRepurchaseReviewsUsed(tx, repurchaseReviewIds, groupId);
     return null;
   }, { timeout: 20000, maxWait: 10000 });
   if (conflict) {

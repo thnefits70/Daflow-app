@@ -18,8 +18,9 @@ import { TabGuide } from "@/components/shared/TabGuide";
 import { SupplierSheetNotesPanel } from "./SupplierSheetNotesPanel";
 import { PurchasePriceCorrectionPanel } from "./PurchasePriceCorrectionPanel";
 import { PurchaseSuggestionsPanel } from "./PurchaseSuggestionsPanel";
+import { RepurchasePanel } from "./RepurchasePanel";
 
-type Tab = "que-comprar" | "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito" | "inventario" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "notas-chen" | "precio" | "auditoria";
+type Tab = "que-comprar" | "recompras" | "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito" | "inventario" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "notas-chen" | "precio" | "auditoria";
 
 // Confirmado 2026-07-30: una sola pantalla para todo el módulo — las
 // pestañas que ve cada persona dependen de lo que puede hacer (admin ve
@@ -99,6 +100,9 @@ export function PurchaseControlPanel({
     // Confirmado 2026-09-29 (idea de Daniel): compras calientes/frías según
     // lo que de verdad se vende — quien compra, Daniel y el admin.
     ...(isAdmin || canSubmit || canApproveReceiving || canReview ? [{ key: "que-comprar" as Tab, label: "Qué comprar" }] : []),
+    // Pedido del usuario 2026-10-06: toda recompra la aprueba Bryan antes de
+    // pedirla — quien compra la analiza acá, Bryan decide, el admin mira.
+    ...(isAdmin || canCreateNew || canReview ? [{ key: "recompras" as Tab, label: "Recompras" }] : []),
     ...(canCreateNew ? [{ key: "solicitar" as Tab, label: "Solicitar" }] : canSubmitEmergency ? [{ key: "solicitar" as Tab, label: "🚨 Emergencia" }] : []),
     ...(canSubmit || canViewOwnPurchases ? [{ key: "mias" as Tab, label: "Mis solicitudes" }] : []),
     ...(canReview ? [{ key: "aprobacion" as Tab, label: "Bandeja de aprobación" }] : []),
@@ -202,6 +206,16 @@ export function PurchaseControlPanel({
             a 60) son de Nairoby. Lo que tiene poco stock pero no se vende queda al final: no es prioridad por ahora.
           </TabGuide>
           <PurchaseSuggestionsPanel />
+        </>
+      )}
+      {tab === "recompras" && (
+        <>
+          <TabGuide storageKey="compras-recompras">
+            Antes de volver a comprar un producto que ya estuvo en bodega, analízalo acá: DAFLOW pone lo que pagamos la última vez, nuestro precio en Dropi y
+            lo que se vende; tú pones el precio de hoy del proveedor y de la competencia. Si conviene, lo envías a Bryan. Con su aprobación pides la compra
+            como siempre (vale 7 días, con el mismo proveedor, sin subir el precio ni la cantidad).
+          </TabGuide>
+          <RepurchasePanel />
         </>
       )}
       {tab === "solicitar" && (

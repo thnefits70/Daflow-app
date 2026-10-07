@@ -24,6 +24,7 @@ import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
 import { getOpenPurchaseCodesByCatalogItem, getPurchaseLinesLeftBehind, getPurchaseLinesOverdue, getShortReceiptsUnclaimed, LEFT_BEHIND_HREF, OVERDUE_ORDERS_HREF } from "@/lib/purchases";
 import { getLinesToConfirm, INVENTORY_RECEIVING_HREF } from "@/lib/purchaseLeftBehind";
 import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
+import { getRepurchasePendingItems } from "@/lib/repurchaseReviews";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
 import { DISCONTINUED_URL, getDiscontinuedOrderPendingCount, getDiscontinuedPendingCount } from "@/lib/dropiDiscontinued";
@@ -446,6 +447,9 @@ export type PendingTasks = { title: string; sub: string; items: PendingItem[] };
 // Catálogo de categorías notificables por push, con su etiqueta legible —
 // usado por /api/push/preferences para armar la lista de interruptores.
 export const PENDING_TYPE_CATALOG: Record<string, string> = {
+  recompras_por_aprobar: "Recompras por aprobar",
+  recompras_sin_respuesta: "Recompras sin respuesta de Bryan",
+  recompras_listas: "Recompras aprobadas por pedir",
   feedback: "Feedback semanal/mensual de departamentos",
   roles_de_pago: "Roles de pago",
   mensajes_nomina_sin_leer: "Mensajes de Nómina (tu conversación)",
@@ -4120,6 +4124,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // Confirmado 2026-09-29 (idea de Daniel): "Qué comprar" — Jariel ve sus
     // compras calientes aunque no lidere ningún departamento.
     teamItems.unshift(...(await getPurchaseSuggestionPendingItems(actor.userId)));
+    // Recompras (pedido del usuario 2026-10-06): RC aprobadas por pedir y RC
+    // que Bryan no respondió (hablar con él en persona).
+    teamItems.unshift(...(await getRepurchasePendingItems(actor.userId)));
     // Confirmado 2026-09-29 (pedido de Daniel): Producto que despierta —
     // Jariel y Heidy no lideran ningún departamento.
     teamItems.unshift(...(await getSuddenDemandPendingItems(actor.userId)));
@@ -4348,6 +4355,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   // Confirmado 2026-09-29 (idea de Daniel): compras frías a Nairoby, y a
   // Daniel los urgentes que llevan 3+ días sin comprarse.
   items.unshift(...(await getPurchaseSuggestionPendingItems(actor.userId)));
+  // Recompras (pedido del usuario 2026-10-06): Bryan, lo que espera su
+  // decisión; Nairoby, sus RC aprobadas o sin respuesta.
+  items.unshift(...(await getRepurchasePendingItems(actor.userId)));
   // Pedido del usuario 2026-10-01: los cortes contados sin confirmar van
   // siempre arriba de todo en el Inicio de Daniel.
   const countedIdx = items.findIndex((i) => i.type === "fulfillment_cortes_sin_confirmar");
@@ -4419,6 +4429,7 @@ export async function getPossiblePendingTypesForActor(
       if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
       if (me.department?.code === "INV") types.push("fulfillment_bloque_asignado");
       if (me.canManagePurchases && me.department?.code === "MKT") types.push("compras_calientes");
+      if (me.canManagePurchases) types.push("recompras_sin_respuesta", "recompras_listas");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }
 
@@ -4445,7 +4456,8 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.canManagePurchases) types.push("deterioro_compras_gestion", "compras_excedente_gestion");
     if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion", "compras_excedente_confirmar");
-    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion", "analisis_mercado_sin_compra", "ventas_externas_revisar");
+    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion", "analisis_mercado_sin_compra", "ventas_externas_revisar", "recompras_por_aprobar");
+    if (me.canManagePurchases || ["COM", "FIN"].includes(me.leadsDept.code)) types.push("recompras_sin_respuesta", "recompras_listas");
   }
 
   return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));

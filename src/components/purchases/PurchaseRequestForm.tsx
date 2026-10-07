@@ -519,6 +519,9 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     const presetCatalogItemId = params.get("presetCatalogItemId");
     const presetSupplierId = params.get("presetSupplierId");
     const presetProposalId = params.get("marketProductProposalId");
+    // Recompras (2026-10-06): cantidad y precio que aprobó Bryan en la RC.
+    const presetQuantity = params.get("presetQuantity") ?? "";
+    const presetUnitCost = params.get("presetUnitCost") ?? "";
     if (!presetCatalogItemId && !presetSupplierId) return;
     if (localStorage.getItem(DRAFT_KEY)) return;
 
@@ -528,7 +531,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         .then((r) => (r.ok ? r.json() : null))
         .then((item) => {
           if (!item) return;
-          setLines([{ ...emptyLine(), catalogItem: { id: item.id, name: item.name, photos: item.photos } }]);
+          setLines([{ ...emptyLine(), catalogItem: { id: item.id, name: item.name, photos: item.photos }, quantity: presetQuantity, unitCost: presetUnitCost }]);
           fetchLineStats(0, item.id);
           fetchSupplierComparison(0, item.id);
         });

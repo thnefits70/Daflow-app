@@ -455,6 +455,8 @@ model User {
   supplierStockoutReportsResolved                  SupplierStockoutReport[]              @relation("SupplierStockoutReportResolvedBy")
   purchaseSuggestionDiscards                       PurchaseSuggestionDiscard[]           @relation("PurchaseSuggestionDiscardBy")
   purchaseSuggestionDiscardsUndone                 PurchaseSuggestionDiscard[]           @relation("PurchaseSuggestionDiscardUndoneBy")
+  repurchaseReviewsRequested                       RepurchaseReview[]                    @relation("RepurchaseReviewRequestedBy")
+  repurchaseReviewsReviewed                        RepurchaseReview[]                    @relation("RepurchaseReviewReviewedBy")
   marketProductPriceChangesMade                    MarketProductPriceChange[]            @relation("MarketProductPriceChangeChangedBy")
   purchaseRequestsPaidBy                           PurchaseRequest[]                     @relation("PurchaseRequestPaidBy")
   purchaseRequestsInvoicedBy                       PurchaseRequest[]                     @relation("PurchaseRequestInvoicedBy")
@@ -1851,6 +1853,7 @@ model Supplier {
   marketProductPrices                    MarketProductSupplierPrice[]
   marketProductProposalsAsChosen         MarketProductProposal[]
   unfoundWinningProducts                 UnfoundWinningProduct[]
+  repurchaseReviews                      RepurchaseReview[]
 
   @@index([status])
   @@index([createdByDeptId])
@@ -2079,6 +2082,7 @@ model PurchaseCatalogItem {
   // se consigue con ningún proveedor (ver SupplierStockoutReport).
   supplierStockoutReports        SupplierStockoutReport[]
   purchaseSuggestionDiscards     PurchaseSuggestionDiscard[]
+  repurchaseReviews              RepurchaseReview[]
   // Confirmado 2026-09-23: brandeo del ID (ver NewIdBranding).
   newIdBranding                  NewIdBranding?
   // Confirmado 2026-09-29: avisos de "Producto que despierta" (ver SuddenDemandAlert).
@@ -2536,6 +2540,94 @@ model PurchaseSuggestionDiscard {
 
   @@index([catalogItemId])
   @@index([discardedAt])
+}
+
+// Pedido del usuario 2026-10-06: recompras con aprobación de Bryan Ríos
+// (líder de Análisis de Mercado). Toda recompra de un producto que ya
+// estuvo en bodega — calientes (Jariel) y frías (Nairoby) — necesita su
+// "RC" aprobada antes de pedir la compra: quien compra compara el costo de
+// hoy con la última compra y con la competencia, Bryan aprueba (puede
+// cambiar solo la cantidad) o rechaza, y la compra sigue el flujo normal.
+// La aprobación vale 7 días; la compra no puede ser de otro proveedor, a un
+// precio mayor ni por más unidades de lo aprobado.
+enum RepurchaseReviewStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  // Ya se pidió la compra con esta aprobación (usedGroupId).
+  USED
+  // Quien la envió la retiró antes de que Bryan decidiera.
+  CANCELLED
+}
+
+model RepurchaseReview {
+  id   String @id @default(cuid())
+  // RC-001, RC-002... (formatRepurchaseCode)
+  code Int    @unique
+
+  catalogItemId String
+  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Restrict)
+
+  // Proveedor y precio de HOY que consiguió quien compra.
+  supplierId   String
+  supplier     Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  unitCost     Float
+  // Flete total del lote (null = el proveedor no cobra flete aparte).
+  freightTotal Float?
+  quantity     Int
+
+  // Competencia de hoy. Sin competencia: noCompetitorNote obligatoria.
+  competitorId     String?
+  competitorPrice  Float?
+  noCompetitorNote String?
+
+  // Foto de lo que se sabía al enviar, para que Bryan y la auditoría vean
+  // exactamente lo mismo que vio quien la mandó aunque cambie después.
+  lastUnitCost           Float?
+  lastSupplierName       String?
+  lastPurchaseAt         DateTime?
+  // Competencia anotada la vez anterior y el margen que dejaba con el costo de la última compra.
+  lastCompetitorPrice    Float?
+  lastMarginAtCompetitor Float?
+  publishedDropiPrice    Float?
+  newDropiPrice          Float
+  marginAtCompetitor     Float?
+  maxSupplierCost        Float?
+  // Margen mínimo del producto con el que se hizo la cuenta (20% por defecto).
+  marginPercent          Float     @default(20)
+  // GREEN / YELLOW / RED / NO_COMPETITOR (ver repurchasePricing.ts)
+  verdict                String
+  stockAtRequest         Int
+  soldLast30             Int
+  daysLeft               Float?
+  // HOT = compras calientes (Jariel), COLD = frías (Nairoby).
+  audience               String
+  note                   String?
+
+  status RepurchaseReviewStatus @default(PENDING_APPROVAL)
+
+  requestedById String?
+  requestedBy   User?    @relation("RepurchaseReviewRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedAt   DateTime @default(now())
+
+  reviewedById      String?
+  reviewedBy        User?     @relation("RepurchaseReviewReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt        DateTime?
+  approvedQuantity  Int?
+  rejectReason      String?
+  approvalExpiresAt DateTime?
+
+  // Compra (groupId de PurchaseRequest) que usó esta aprobación — por grupo
+  // y no por fila, porque "Corregir y reenviar" vuelve a crear las filas.
+  usedGroupId String?
+  usedAt      DateTime?
+
+  cancelledAt DateTime?
+
+  @@index([catalogItemId])
+  @@index([status])
+  @@index([requestedById])
+  @@index([usedGroupId])
 }
 
 model SupplierStockoutReport {

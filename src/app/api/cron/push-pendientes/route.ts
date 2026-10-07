@@ -14,11 +14,12 @@ import { sendSupplierShippingDailyReminders } from "@/lib/supplierShippingPush";
 import { runNichoAutoBackfill } from "@/lib/nichoAi";
 import { runInventoryAutoFlows } from "@/lib/inventoryAutoFlows";
 import { getPurchaseSuggestionPushes } from "@/lib/purchaseSuggestions";
+import { getRepurchaseReminderPushes } from "@/lib/repurchaseReviews";
 import { detectSuddenDemand, SUDDEN_DEMAND_PENDING_TYPE } from "@/lib/suddenDemand";
 
 // Estos tienen su propio aviso (Qué comprar a las 8:00; Producto que despierta
 // en el momento en que se detecta), no se repiten en el resumen diario.
-const PURCHASE_SUGGESTION_TYPES = new Set(["compras_calientes", "compras_frias", "compras_urgentes_sin_atender", SUDDEN_DEMAND_PENDING_TYPE]);
+const PURCHASE_SUGGESTION_TYPES = new Set(["compras_calientes", "compras_frias", "compras_urgentes_sin_atender", SUDDEN_DEMAND_PENDING_TYPE, "recompras_por_aprobar", "recompras_sin_respuesta"]);
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
 // CRON_SECRET para que nadie más pueda llamarlo desde afuera y disparar
@@ -94,6 +95,13 @@ export async function GET(req: NextRequest) {
   // llevan 3+ días sin comprarse.
   for (const r of await getPurchaseSuggestionPushes()) {
     if ((await getDisabledTypes(r.ownerId)).has(r.type)) continue;
+    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
+    notified++;
+  }
+
+  // Recompras (pedido del usuario 2026-10-06): a Bryan lo que espera su
+  // decisión; a quien envió una RC sin respuesta, que hable con él en persona.
+  for (const r of await getRepurchaseReminderPushes()) {
     await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }
