@@ -10,6 +10,7 @@ import { checkRepurchaseApprovals, markRepurchaseReviewsUsed } from "@/lib/repur
 import { findItemsWithStockCover, isStockCoverBlockActive } from "@/lib/purchaseSuggestions";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, lockAndFindOpenPurchaseByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes, formatPurchaseRequestCode } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
+import { isFullyReportedNotArrived } from "@/lib/purchaseFullyReported";
 import { reserveCreditsForGroup, releaseCreditsForGroup, getReservedCreditsForGroup, getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
 import { reviewApprovedPurchaseGroup, shippingFromSupplierTotal } from "@/lib/purchaseAi";
 
@@ -143,14 +144,25 @@ export async function GET(req: NextRequest) {
           { status: "APPROVED", supplier: { paymentMode: "CREDITO" } },
         ],
       },
-      select: { groupId: true },
+      select: {
+        groupId: true,
+        status: true,
+        quantity: true,
+        receipt: { select: { id: true } },
+        urgentReports: {
+          select: { damagedQty: true, incompleteQty: true, differentQty: true, missingQty: true, reviewedByLeadAt: true, rejectedAt: true, isLateClaim: true },
+        },
+      },
       orderBy: { paidAt: "asc" },
     });
     // Confirmado 2026-07-31: Inventario necesita ver el grupo completo (no
     // solo lo que falta) para declarar qué productos de una misma cotización
     // ya llegaron y cuáles todavía se esperan — el grupo desaparece de esta
     // bandeja solo cuando TODAS sus filas pasan a RECEIVED.
-    const groupIds = [...new Set(pending.map((r) => r.groupId))];
+    // Pedido de Daniel 2026-10-07: o cuando lo que falta ya tiene un reporte
+    // revisado por todo lo pedido (no llegó nada) — eso lo sigue Compras en
+    // Reportes urgentes (ver purchaseFullyReported.ts).
+    const groupIds = [...new Set(pending.filter((r) => !isFullyReportedNotArrived(r)).map((r) => r.groupId))];
     if (groupIds.length === 0) return NextResponse.json([]);
     const rows = await prisma.purchaseRequest.findMany({
       where: { groupId: { in: groupIds } },

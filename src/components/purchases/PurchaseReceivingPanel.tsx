@@ -13,6 +13,7 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { isScreenPhotoNote } from "@/lib/receiptPhotoScreen";
 import { WAREHOUSE_AREAS, areaLabel, type WarehouseArea } from "@/lib/warehouseAreas";
+import { isFullyReportedNotArrived } from "@/lib/purchaseFullyReported";
 
 type ReceiptVariantRow = { name: string; qty: string; added: boolean };
 type ReceiptDraftData ={ receivedQty: string; receivedPhotoUrls: string[]; receivedVideoUrls: string[]; comment: string; minorDifferenceConfirmed: boolean };
@@ -98,6 +99,8 @@ type Row = {
     resolvedInternallyAt: string | null;
     resolvedInternallyNote: string | null;
     resolvedInternallyBy: { name: string } | null;
+    rejectedAt?: string | null;
+    isLateClaim?: boolean;
   }[];
 };
 
@@ -1582,7 +1585,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
         const groupId = g[0].groupId;
         const receivedCount = g.filter((r) => r.status === "RECEIVED").length;
         const isMulti = g.length > 1;
-        const pendingNames = g.filter((r) => r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")).map((r) => r.catalogItem.name);
+        const pendingNames = g.filter((r) => (r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")) && !isFullyReportedNotArrived(r)).map((r) => r.catalogItem.name);
         return (
           <div key={groupId} className="bg-surface border border-rule rounded-md p-4">
             {isMulti && (
@@ -1627,6 +1630,11 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     ) : r.status === "RECEIVED_PENDING_REVIEW" ? (
                       <span className="text-[10px] font-bold uppercase tracking-wide bg-teal/15 text-teal border border-teal/40 rounded-full px-2.5 py-1">
                         Pendiente de aprobación
+                      </span>
+                    ) : isFullyReportedNotArrived(r) ? (
+                      // Pedido de Daniel 2026-10-07 — ver purchaseFullyReported.ts.
+                      <span className="text-[10px] font-bold uppercase tracking-wide bg-red/15 text-red border border-red/40 rounded-full px-2.5 py-1">
+                        No llegó · lo sigue Compras
                       </span>
                     ) : (
                       <span className="text-[10px] font-bold uppercase tracking-wide bg-gold/15 border border-gold/40 rounded-full px-2.5 py-1" style={{ color: "var(--color-gold)" }}>
