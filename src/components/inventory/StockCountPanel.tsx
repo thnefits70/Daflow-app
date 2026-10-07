@@ -119,6 +119,8 @@ export function StockCountPanel() {
   // que no tiene (sin entrada = lo que sugiera el producto).
   const [varDrafts, setVarDrafts] = useState<Record<string, VariantDraft[] | "single">>({});
   const [saving, setSaving] = useState<string | null>(null);
+  // Nombres largos se cortan con "…"; al tocarlos se muestran completos.
+  const [openNames, setOpenNames] = useState<Set<string>>(new Set());
   const [err, setErr] = useState("");
   const [confirmSend, setConfirmSend] = useState(false);
   const [confirmStart, setConfirmStart] = useState(false);
@@ -353,7 +355,14 @@ export function StockCountPanel() {
                     <img loading="lazy" decoding="async" src={p.photo} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold truncate">{p.name}</div>
+                    <button
+                      type="button"
+                      className={`block w-full text-left font-semibold cursor-pointer ${openNames.has(p.id) ? "break-words" : "truncate"}`}
+                      title={p.name}
+                      onClick={() => setOpenNames((s) => { const n = new Set(s); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })}
+                    >
+                      {p.name}
+                    </button>
                     <div className="text-steel font-mono text-[11px]">
                       {p.justCode ?? "sin ID"} · {areaLabel(p.area)}
                       {p.recount && " · para recontar"}
