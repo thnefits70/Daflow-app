@@ -19,7 +19,7 @@ import {
   type SubmitWeeklyReportInput,
   type ClosePreviousReportInput,
 } from "@/lib/weeklyCheckin";
-import { MARY_HELP_RULES, buildMaryHelpMap } from "@/lib/maryHelp";
+import { MARY_HELP_RULES, MARY_IMAGE_TYPES, MARY_MAX_IMAGES, MARY_MAX_IMAGE_BASE64, buildMaryHelpMap, maryUserContent } from "@/lib/maryHelp";
 
 // Desde 2026-10-01 Mary también guía al líder dentro de DAFLOW (pedido de
 // Nairoby: preguntaba dónde estaban opciones que no encontraba). Una
@@ -35,7 +35,12 @@ ${MARY_HELP_RULES}
 // expected string to have >=1 characters" (reportado 2026-10-01, Nairoby).
 // Los vacíos se descartan abajo en vez de bloquear la conversación.
 const messageSchema = z.object({ role: z.enum(["user", "assistant"]), content: z.string() });
-const bodySchema = z.object({ messages: z.array(messageSchema).min(1).max(40) });
+const imageSchema = z.object({ mediaType: z.enum(MARY_IMAGE_TYPES), data: z.string().min(1).max(MARY_MAX_IMAGE_BASE64) });
+const bodySchema = z.object({
+  messages: z.array(messageSchema).min(1).max(40),
+  // Solo las del último mensaje; nunca se guardan (ver maryUserContent).
+  images: z.array(imageSchema).max(MARY_MAX_IMAGES).optional(),
+});
 
 const submitReportSchema = z.object({
   hasIssues: z.boolean(),
@@ -145,7 +150,7 @@ export async function POST(req: NextRequest) {
     tools: [SUBMIT_WEEKLY_REPORT_TOOL, CLOSE_PREVIOUS_REPORT_TOOL],
     messages: [
       ...priorMessages.map((m) => ({ role: m.role, content: m.content })),
-      { role: "user" as const, content: `${context}\n\n${helpMap}\n\nMENSAJE DEL LÍDER:\n${lastMessage.content}` },
+      { role: "user" as const, content: maryUserContent(`${context}\n\n${helpMap}\n\nMENSAJE DEL LÍDER:\n${lastMessage.content}`, parsed.data.images) },
     ],
   });
 

@@ -2,10 +2,29 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ClipboardList, MessageCircleQuestion, Send, X, Mic, MicOff } from "lucide-react";
+import { ClipboardList, MessageCircleQuestion, Send, X, Mic, MicOff, Paperclip } from "lucide-react";
 import { useDictation } from "@/lib/useDictation";
+import { compressImage } from "@/lib/compressImage";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
+type PendingImage = { url: string; mediaType: string; data: string };
+
+// Imágenes para Mary (pedido de Daniel 2026-10-07): se achican acá, viajan
+// solo con el mensaje en que se envían y NUNCA se guardan — en el historial
+// queda solo el texto "📷 Imagen adjunta". Mismos límites que el servidor
+// (MARY_MAX_IMAGES / MARY_MAX_IMAGE_BASE64 en maryHelp.ts).
+const MAX_IMAGES = 3;
+const MAX_IMAGE_BASE64 = 1_300_000;
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
+function readAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
 
 // Widget flotante del asistente de check-in semanal — reemplaza la reunión
 // 1:1 admin-líder (ver src/lib/weeklyCheckin.ts). A diferencia de Nancy (que
@@ -56,6 +75,8 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
   const dragStartRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [images, setImages] = useState<PendingImage[]>([]);
   const dictation = useDictation(input, setInput);
   const { listening, supported: micSupported } = dictation;
   const stopDictation = dictation.stop;
@@ -160,22 +181,58 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages]);
 
+  async function addImages(files: File[]) {
+    setError(null);
+    const room = MAX_IMAGES - images.length;
+    if (room <= 0) {
+      setError(`Máximo ${MAX_IMAGES} imágenes por mensaje.`);
+      return;
+    }
+    const added: PendingImage[] = [];
+    for (const original of files.filter((f) => f.type.startsWith("image/")).slice(0, room)) {
+      const file = await compressImage(original, 1568, 0.8);
+      if (!IMAGE_TYPES.includes(file.type)) {
+        setError("Ese tipo de imagen no se puede enviar. Usa una foto o captura (JPG o PNG).");
+        continue;
+      }
+      const url = await readAsDataUrl(file).catch(() => null);
+      const data = url?.split(",")[1] ?? "";
+      if (!url || !data) {
+        setError("No se pudo leer la imagen. Intenta con otra.");
+        continue;
+      }
+      if (data.length > MAX_IMAGE_BASE64) {
+        setError("La imagen es muy pesada. Envía una captura de pantalla en vez de la foto original.");
+        continue;
+      }
+      added.push({ url, mediaType: file.type, data });
+    }
+    if (added.length) setImages((prev) => [...prev, ...added].slice(0, MAX_IMAGES));
+  }
+
   async function send() {
     const text = input.trim();
-    if (!text || loading) return;
+    if ((!text && images.length === 0) || loading) return;
     stopDictation();
     setError(null);
+    const sentImages = images;
+    const imageNote = sentImages.length === 1 ? "📷 Imagen adjunta" : sentImages.length > 1 ? `📷 ${sentImages.length} imágenes adjuntas` : "";
+    const content = [text, imageNote].filter(Boolean).join("\n\n");
     // Burbujas vacías (respuesta de Mary que llegó en blanco) no se reenvían.
-    const nextMessages: ChatMessage[] = [...messages.filter((m) => m.content.trim()), { role: "user" as const, content: text }].slice(isHelp ? -30 : -40);
+    const nextMessages: ChatMessage[] = [...messages.filter((m) => m.content.trim()), { role: "user" as const, content }].slice(isHelp ? -30 : -40);
     setMessages([...nextMessages, { role: "assistant", content: "" }]);
     setInput("");
+    setImages([]);
     setLoading(true);
 
     try {
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({
+          messages: nextMessages,
+          images: sentImages.length ? sentImages.map((img) => ({ mediaType: img.mediaType, data: img.data })) : undefined,
+        }),
       });
       if (!res.ok || !res.body) {
         const msg = await res.text().catch(() => "");
@@ -202,6 +259,12 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al contactar al asistente.");
       setMessages((prev) => prev.slice(0, -1));
+      // Las imágenes no quedan guardadas en ningún lado: si falló, se
+      // devuelven al campo para reenviarlas sin volver a elegirlas.
+      if (sentImages.length) {
+        setImages(sentImages);
+        setInput(text);
+      }
     } finally {
       setMessages((prev) => prev.filter((m) => m.content.trim()));
       setLoading(false);
@@ -241,6 +304,38 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
       {error && <div className="px-5 text-[11.5px] text-red">{error}</div>}
 
       <div className="px-5 pt-3 pb-4 border-t border-rule shrink-0">
+        {images.length > 0 && (
+          <div className="flex gap-2 mb-2.5 flex-wrap">
+            {images.map((img, i) => (
+              <div key={i} className="relative">
+                {/* eslint-disable-next-line @next/next/no-img-element -- vista previa local (data URL), nunca se sube */}
+                <img src={img.url} alt={`Imagen ${i + 1}`} className="w-16 h-16 object-cover rounded border border-rule" />
+                <button
+                  type="button"
+                  title="Quitar imagen"
+                  aria-label="Quitar imagen"
+                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-navy text-white flex items-center justify-center cursor-pointer"
+                  onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))}
+                  disabled={loading}
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? []);
+            e.target.value = "";
+            if (files.length) addImages(files);
+          }}
+        />
         <div className="flex gap-2">
           <input
             type="text"
@@ -248,6 +343,13 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
             placeholder={listening ? "Escuchando..." : isHelp ? "Pregúntale a Mary..." : "Escribe o dicta tu respuesta..."}
             value={input}
             onChange={(e) => dictation.onManualEdit(e.target.value)}
+            onPaste={(e) => {
+              const files = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith("image/"));
+              if (files.length) {
+                e.preventDefault();
+                addImages(files);
+              }
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
@@ -256,6 +358,16 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
             }}
             disabled={loading}
           />
+          <button
+            type="button"
+            title="Adjuntar imagen"
+            aria-label="Adjuntar imagen"
+            className="px-2.5 py-2 rounded-md border border-rule text-steel hover:text-ink shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading || images.length >= MAX_IMAGES}
+          >
+            <Paperclip size={15} />
+          </button>
           {micSupported && (
             <button
               type="button"
@@ -273,7 +385,7 @@ export function WeeklyCheckinPanel({ embedded = false, mode = "checkin" }: { emb
             type="button"
             className="px-3.5 py-2 rounded-md bg-teal text-navy font-semibold text-[12.5px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shrink-0"
             onClick={send}
-            disabled={loading || !input.trim()}
+            disabled={loading || (!input.trim() && images.length === 0)}
           >
             <Send size={14} />
           </button>

@@ -320,8 +320,28 @@ export const MARY_HELP_RULES = `GUÍA DE DAFLOW: además de lo tuyo, cualquier p
 - Si pregunta por algo que NO está en su mapa, responde que esa opción no aparece en su usuario y que, si cree que debería tenerla, se lo pida a su líder o al admin. No describas cómo es esa pantalla ni qué contiene. Si nombra una pantalla que no está en su mapa, no la cambies por otra que se parezca: dile primero, claramente, que esa no aparece en su usuario.
 - Las sub-pestañas también dependen de permisos: si no ve una que mencionas, es que su usuario no la tiene.
 - No tienes acceso a datos (montos, pedidos, registros, información de otras personas). Si te pide un dato, indícale en qué pantalla de su propio usuario lo puede ver; nunca inventes cifras ni hables de otros colaboradores.
-- Si te pide hacer algo por ella (aprobar, enviar, avisar a otras áreas, cambiar un registro), explícale que tú solo la guías y dile dónde hacerlo ella misma.`;
+- Si te pide hacer algo por ella (aprobar, enviar, avisar a otras áreas, cambiar un registro), explícale que tú solo la guías y dile dónde hacerlo ella misma.
+- IMÁGENES: la persona puede adjuntar capturas o fotos. Úsalas solo para entender en qué pantalla está, qué error ve o qué quiere hacer, y guíala con lo que dice su mapa (si la pantalla de la captura no está en su mapa, aplica la misma regla de arriba).
+- Si una imagen muestra información financiera o delicada — montos de dinero, precios, costos, márgenes, sueldos, roles de pago, cuentas bancarias, KPIs financieros, contraseñas o códigos de acceso — no la leas en voz alta: no repitas, no resumas ni comentes esas cifras o datos. Dile con amabilidad que esa parte no la puedes revisar y, si aplica, ayúdala solo con cómo se usa la pantalla.
+- Si la imagen no se ve bien o no se entiende qué muestra, pídele otra o que te lo explique con palabras. Nunca inventes lo que no se ve.`;
 
 export const MARY_HELP_SYSTEM_PROMPT = `Eres Mary, la asistente de DAFLOW para Provedix (Guayaquil, Ecuador). Tu tono es femenino, profesional y cercano — cálida pero directa. Con esta persona tu único trabajo es guiarla dentro de DAFLOW: dónde encontrar cada opción y cómo usarla. Saluda por su nombre la primera vez (el contexto de cada mensaje te dice con quién hablas). Si te habla de algo que no tiene que ver con usar DAFLOW, respóndele con una frase amable y vuelve a ofrecer ayuda con el sistema. Responde siempre en español.
 
 ${MARY_HELP_RULES}`;
+
+// Imágenes adjuntas al chat de Mary (pedido de Daniel 2026-10-07). Nunca se
+// guardan: viajan solo con el mensaje en que se envían y en el historial
+// queda el texto "📷 Imagen adjunta". El límite de tamaño mantiene el envío
+// por debajo de los 4.5 MB que acepta Vercel (el navegador ya las achica).
+export const MARY_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+export const MARY_MAX_IMAGES = 3;
+export const MARY_MAX_IMAGE_BASE64 = 1_300_000;
+export type MaryImage = { mediaType: (typeof MARY_IMAGE_TYPES)[number]; data: string };
+
+export function maryUserContent(text: string, images: MaryImage[] | undefined) {
+  if (!images?.length) return text;
+  return [
+    ...images.map((img) => ({ type: "image" as const, source: { type: "base64" as const, media_type: img.mediaType, data: img.data } })),
+    { type: "text" as const, text },
+  ];
+}
