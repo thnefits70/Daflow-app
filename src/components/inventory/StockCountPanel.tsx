@@ -5,6 +5,7 @@ import { CheckCircle2, ClipboardList, Clock, Search, UserCheck } from "lucide-re
 import type { CountView } from "@/lib/stockCount";
 import type { AssignmentBoard, AssignmentView } from "@/lib/stockCountAssignments";
 import { WAREHOUSE_AREAS, areaLabel } from "@/lib/warehouseAreas";
+import { CatalogCode } from "@/components/shared/CatalogCode";
 
 type Data = { count: CountView | null; fullCompleted: boolean; weeklyArea: string | null; isLead: boolean; board: AssignmentBoard | null };
 
@@ -364,7 +365,7 @@ export function StockCountPanel() {
                       {p.name}
                     </button>
                     <div className="text-steel font-mono text-[11px]">
-                      {p.justCode ?? "sin ID"} · {areaLabel(p.area)}
+                      {p.justCode ? <span className="inline-flex items-center gap-1 align-middle"><CatalogCode code={p.justCode} size="text-[11px]" /></span> : "sin ID"} · {areaLabel(p.area)}
                       {p.recount && " · para recontar"}
                       {p.countedQty !== null && ` · contado ${p.countedQty}${p.countedByName && isLead ? ` por ${p.countedByName}` : ""}`}
                     </div>
