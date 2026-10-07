@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { listInventoryTeam } from "@/lib/fulfillmentPicking";
-import { dbUserId, fulfillmentPickScope, canConfirmFulfillmentLot, canPrintFulfillmentManifest, canSubmitFulfillmentRequest, canViewFulfillmentRequests } from "@/lib/guards";
+import { dbUserId, fulfillmentPickScope, canAssignFulfillmentBlocks, canConfirmFulfillmentLot, canPrintFulfillmentManifest, canSubmitFulfillmentRequest, canViewFulfillmentRequests } from "@/lib/guards";
 import { getCompiledLot } from "@/lib/fulfillmentGuides";
 import { prisma } from "@/lib/prisma";
 
@@ -15,6 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const session = await auth();
   const canConfirm = await canConfirmFulfillmentLot();
   const pickScope = await fulfillmentPickScope();
+  const canAssign = await canAssignFulfillmentBlocks();
   return NextResponse.json({
     ...lot,
     viewer: {
@@ -22,9 +23,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       pickScope,
       canPick: pickScope !== null,
       canConfirm,
+      canAssign,
       userId: session ? dbUserId(session.user.id) : null,
-      // Para que Daniel elija a quién asignarle cada bloque.
-      team: canConfirm ? await listInventoryTeam() : undefined,
+      // Para que Daniel (o Allan) elija a quién asignarle cada bloque.
+      team: canAssign ? await listInventoryTeam() : undefined,
     },
   });
 }

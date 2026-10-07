@@ -41,7 +41,7 @@ export type LotPickLine = ItemView & {
   variantOptions?: string[];
   variantPicked?: { name: string; qty: number }[] | null;
 };
-export type LotBlock = { carrier: string; assigneeId: string | null; assigneeName: string | null; assignedAt: string | null };
+export type LotBlock = { carrier: string; assigneeId: string | null; assigneeName: string | null; assignedByName?: string | null; assignedAt: string | null };
 // ID provisional de ALF (temporal, 2026-09-28): no está en INVESTOCK.
 export type ProvisionalLotLine = { code: string; name: string; quantity: number; byCarrier: Record<string, number>; variants: string[] };
 export type LotShortage = ItemView & { needed: number; stock: number; pendingReturns: { label: string; qty: number }[]; realShortage: number };
@@ -80,7 +80,7 @@ export type CompiledLot = {
   picking: LotPickLine[];
   blocks: LotBlock[];
   // team: solo le llega a Daniel (para asignar bloques).
-  viewer?: { canPrint: boolean; canPick: boolean; pickScope?: "ALL" | "ASSIGNED" | null; canConfirm: boolean; userId: string | null; team?: { id: string; name: string }[] };
+  viewer?: { canPrint: boolean; canPick: boolean; pickScope?: "ALL" | "ASSIGNED" | null; canConfirm: boolean; canAssign?: boolean; userId: string | null; team?: { id: string; name: string }[] };
 };
 export type LotListItem = { id: string; day: string; corte: number; status: LotStatus; createdAt: string; backfill?: boolean; sentAt: string | null; uploads: number; guides: number; unassignedBlocks: number; unscanned: number };
 

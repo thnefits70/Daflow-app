@@ -837,7 +837,7 @@ export async function getCompiledLot(lotId: string) {
     },
   });
   if (!lot) return null;
-  const personIds = [lot.sentById, lot.printedById, ...lot.picks.flatMap((p) => [p.pickedById, p.confirmedById]), ...lot.blocks.map((b) => b.assigneeId)].filter((x): x is string => !!x);
+  const personIds = [lot.sentById, lot.printedById, ...lot.picks.flatMap((p) => [p.pickedById, p.confirmedById]), ...lot.blocks.flatMap((b) => [b.assigneeId, b.assignedById])].filter((x): x is string => !!x);
   const people = await prisma.user.findMany({ where: { id: { in: [...new Set(personIds)] } }, select: { id: true, name: true } });
   const nameOf = (id: string | null) => (id ? people.find((p) => p.id === id)?.name ?? "—" : null);
 
@@ -1008,7 +1008,7 @@ export async function getCompiledLot(lotId: string) {
   // tiene asignado (si Daniel ya lo asignó).
   const blocks = sortCarriers([...new Set(picking.map((p) => p.block))]).map((carrier) => {
     const a = lot.blocks.find((b) => b.carrier === carrier);
-    return { carrier, assigneeId: a?.assigneeId ?? null, assigneeName: a ? nameOf(a.assigneeId) : null, assignedAt: a?.assignedAt ?? null };
+    return { carrier, assigneeId: a?.assigneeId ?? null, assigneeName: a ? nameOf(a.assigneeId) : null, assignedByName: nameOf(a?.assignedById ?? null), assignedAt: a?.assignedAt ?? null };
   });
   // Manifiesto atrasado: si a un producto se le hizo un conteo físico DESPUÉS
   // del día del manifiesto (y antes de confirmarlo), ese conteo ya vio la

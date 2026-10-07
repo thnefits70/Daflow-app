@@ -1148,6 +1148,18 @@ export async function canConfirmFulfillmentLot() {
   return !!user?.isLeader && user.leadsDept?.code === "INV";
 }
 
+// Pedido de Daniel 2026-10-07: Allan también asigna quién saca cada bloque
+// del corte (confirmar el corte sigue siendo solo de Daniel).
+const FULFILLMENT_BLOCK_ASSIGNER_USERNAMES = new Set(["allan2026"]);
+
+export async function canAssignFulfillmentBlocks() {
+  const session = await auth();
+  if (!session || session.user.role === "admin") return false;
+  if (await canConfirmFulfillmentLot()) return true;
+  const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { username: true, isActive: true } });
+  return !!user?.isActive && FULFILLMENT_BLOCK_ASSIGNER_USERNAMES.has(user.username);
+}
+
 // Confirmado 2026-09-23 (plan de cortes acordado con el usuario): imprimir
 // el Manifiesto DAFLOW de un corte es de Daniel (líder de Inventario) — el
 // admin también puede, como respaldo.
