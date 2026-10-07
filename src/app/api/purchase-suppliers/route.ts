@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { canUsePurchaseRequestForm } from "@/lib/guards";
 
 // Confirmado 2026-07-30: Control de Compras lee/escribe la MISMA tabla
 // Supplier que la sección de Proveedores (nunca dos registros del mismo
@@ -10,7 +10,7 @@ import { canSubmitPurchaseRequests } from "@/lib/guards";
 // de Proveedores (getSupplierAccess), porque Bryan/Compras hoy no tiene
 // permiso para crear ahí y sí lo necesita aquí para poder solicitar.
 export async function GET(req: NextRequest) {
-  if (!(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canUsePurchaseRequestForm())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const type = req.nextUrl.searchParams.get("type") === "CARRIER" ? "CARRIER" : "SUPPLIER";
   const q = req.nextUrl.searchParams.get("q")?.trim();
@@ -62,7 +62,7 @@ const createSchema = z.object({
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!(await canSubmitPurchaseRequests()) || !session) {
+  if (!(await canUsePurchaseRequestForm()) || !session) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 

@@ -7,6 +7,7 @@ import {
   canManagePayroll,
   canManageNomina,
   canSubmitPurchaseRequests,
+  canUsePurchaseRequestForm,
   canConfirmPurchaseReceiving,
   canRegisterPurchaseInvoices,
   canActOnPurchaseApproval,
@@ -111,7 +112,9 @@ export async function POST(req: NextRequest) {
     allowed = await canManageNomina();
   }
   if (!allowed && session?.user.role === "employee" && PURCHASE_MODULE_FOLDERS.includes(folder)) {
-    allowed = (await canSubmitPurchaseRequests()) || (await canConfirmPurchaseReceiving()) || (await canRegisterPurchaseInvoices());
+    // 2026-10-07: también la vía de emergencia (Bryan) — antes no podía subir
+    // las fotos del producto nuevo ni la cotización.
+    allowed = (await canUsePurchaseRequestForm()) || (await canConfirmPurchaseReceiving()) || (await canRegisterPurchaseInvoices());
   }
   // Confirmado 2026-09-29: captura del acuerdo de precio con el proveedor —
   // la pide Jariel (compra) o Bryan (aprueba compras, sin canSubmit).

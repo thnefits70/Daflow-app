@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { canUsePurchaseRequestForm } from "@/lib/guards";
 import { checkCatalogNameSimilarity } from "@/lib/purchaseAi";
 import { pushOwnerId } from "@/lib/pushOwner";
 
@@ -13,7 +13,7 @@ const schema = z.object({ name: z.string().trim().min(1) });
 // aparte, directo en el POST de creación.
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!(await canSubmitPurchaseRequests()) || !session) {
+  if (!(await canUsePurchaseRequestForm()) || !session) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 

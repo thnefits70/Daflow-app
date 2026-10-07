@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { canSubmitPurchaseRequests, canUsePurchaseRequestForm } from "@/lib/guards";
 
 const patchSchema = z.object({
   email: z.string().trim().email().optional().or(z.literal("")),
@@ -11,7 +11,7 @@ const patchSchema = z.object({
 // solicitud cuando Jariel viene desde "Listo para comprar" (Análisis de
 // Mercado) — mismo shape que ya devuelve GET /api/purchase-suppliers (lista).
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canUsePurchaseRequestForm())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const supplier = await prisma.supplier.findUnique({

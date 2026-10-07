@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canSubmitPurchaseRequests, canRegisterPurchaseInvoices, canApprovePurchaseRequests } from "@/lib/guards";
+import { canRegisterPurchaseInvoices, canApprovePurchaseRequests, canUsePurchaseRequestForm } from "@/lib/guards";
 import { getAvailableCreditsForSupplier, getReservedCreditsForGroup, getAppliedCreditsForGroup } from "@/lib/supplierCredits";
 
 // Confirmado 2026-08-06: quien solicita ve el crédito disponible al elegir
@@ -12,7 +12,7 @@ import { getAvailableCreditsForSupplier, getReservedCreditsForGroup, getAppliedC
 // que el solicitante ya aplicó, y el monto no cuadra con lo que se pidió.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (
-    !(await canSubmitPurchaseRequests()) &&
+    !(await canUsePurchaseRequestForm()) &&
     !(await canRegisterPurchaseInvoices()) &&
     !(await canApprovePurchaseRequests())
   ) {

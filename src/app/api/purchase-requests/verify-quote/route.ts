@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { canUsePurchaseRequestForm } from "@/lib/guards";
 import { readPurchaseQuote } from "@/lib/purchaseAi";
 import { pushOwnerId } from "@/lib/pushOwner";
 
@@ -21,7 +21,7 @@ const schema = z.object({
 // llamar a la IA.
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!(await canSubmitPurchaseRequests()) || !session) {
+  if (!(await canUsePurchaseRequestForm()) || !session) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 

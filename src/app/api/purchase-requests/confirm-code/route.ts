@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { canUsePurchaseRequestForm } from "@/lib/guards";
 
 const schema = z.object({ catalogItemId: z.string().min(1), code: z.string().trim().min(1) });
 
@@ -16,7 +16,7 @@ const schema = z.object({ catalogItemId: z.string().min(1), code: z.string().tri
 // suggestedCatalogItem en verify-quote/route.ts) y no hace falta volver a
 // confirmar ni pedir ningún documento extra.
 export async function POST(req: NextRequest) {
-  if (!(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canUsePurchaseRequestForm())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const body = await req.json().catch(() => null);
   const parsed = schema.safeParse(body);

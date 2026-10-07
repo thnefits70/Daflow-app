@@ -677,6 +677,16 @@ export async function canSubmitEmergencyPurchaseRequest() {
   return !!user.purchasingNewRequestsBlocked;
 }
 
+// Confirmado 2026-10-07: bug real reportado con Bryan — la pestaña
+// "🚨 Emergencia" le abre el formulario de compra, pero todo lo que ese
+// formulario consulta (catálogo, proveedores, fotos, cotización, crear
+// producto nuevo) exigía canSubmitPurchaseRequests, que él ya no tiene, y
+// le respondía "No autorizado". Solo para las rutas que usa el formulario;
+// editar/borrar productos o proveedores sigue con su permiso de siempre.
+export async function canUsePurchaseRequestForm() {
+  return (await canSubmitPurchaseRequests()) || (await canSubmitEmergencyPurchaseRequest());
+}
+
 // Confirmado 2026-09-02: pedido explícito del usuario — paso nuevo de
 // aprobación con un clic delegado a alguien que no es admin (hoy Bryan, que
 // deja de solicitar y pasa a aprobar lo que solicite Jariel). Admin sigue

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { canSubmitPurchaseRequests, canUsePurchaseRequestForm } from "@/lib/guards";
 import { findOpenPurchasesByOthers, getCatalogItemPriceStats, otherOpenPurchaseMessage, getCatalogItemsNeedingFulfillmentSize } from "@/lib/purchases";
 import { getRepurchaseLineStatus } from "@/lib/repurchaseReviews";
 
@@ -50,7 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  if (!(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canUsePurchaseRequestForm())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;
   const item = await prisma.purchaseCatalogItem.findUnique({ where: { id } });

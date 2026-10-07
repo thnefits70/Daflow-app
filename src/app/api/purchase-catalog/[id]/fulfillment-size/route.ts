@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canSubmitPurchaseRequests } from "@/lib/guards";
+import { canUsePurchaseRequestForm } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { resolveCostBasisForCatalogItems, computeMarketProductSalePrice, DROPI_MARGIN_DEFAULT } from "@/lib/marketProduct";
 
@@ -15,7 +15,7 @@ const schema = z.object({ fulfillmentSize: z.enum(["SMALL", "NORMAL"]) });
 // (el primer marcado va con la compra, ver checkAndSaveFulfillmentSizes).
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session || !(await canSubmitPurchaseRequests())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!session || !(await canUsePurchaseRequestForm())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Elige pequeño o normal." }, { status: 400 });

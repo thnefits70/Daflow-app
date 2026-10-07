@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canActOnPurchaseInvoices, canSubmitPurchaseRequests } from "@/lib/guards";
+import { canActOnPurchaseInvoices, canUsePurchaseRequestForm } from "@/lib/guards";
 
 const schema = z.object({ givesInvoice: z.boolean() });
 
@@ -13,7 +13,7 @@ const schema = z.object({ givesInvoice: z.boolean() });
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
-  const allowed = session.user.role === "admin" || (await canActOnPurchaseInvoices()) || (await canSubmitPurchaseRequests());
+  const allowed = session.user.role === "admin" || (await canActOnPurchaseInvoices()) || (await canUsePurchaseRequestForm());
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const { id } = await params;

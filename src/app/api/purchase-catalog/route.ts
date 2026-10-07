@@ -3,7 +3,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-import { canSubmitPurchaseRequests, canManageJustCatalog } from "@/lib/guards";
+import { canManageJustCatalog, canUsePurchaseRequestForm } from "@/lib/guards";
 import { getCatalogItemPriceStats } from "@/lib/purchases";
 import { actorName } from "@/lib/actorName";
 import { suggestNichoIfMissing } from "@/lib/nichoAi";
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   // este catálogo, y quien la ve (Daniel, líder de Inventario vía
   // canManageJustCatalog) no necesariamente puede solicitar compras — sin
   // este OR, la pantalla le cargaba vacía pese a tener acceso a la sección.
-  if (!session || !((await canSubmitPurchaseRequests()) || (await canManageJustCatalog()))) {
+  if (!session || !((await canUsePurchaseRequestForm()) || (await canManageJustCatalog()))) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
@@ -128,7 +128,7 @@ async function nextFreeSupplyCode(name: string): Promise<string> {
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!(await canSubmitPurchaseRequests()) || !session) {
+  if (!(await canUsePurchaseRequestForm()) || !session) {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
 
