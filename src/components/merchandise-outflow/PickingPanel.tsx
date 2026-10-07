@@ -165,9 +165,21 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
       .filter((b) => !showOnlyMine || myBlocks.includes(b.carrier))
       .flatMap((b) => lot.picking.filter((p) => p.block === b.carrier && !filteredIds.has(p.catalogItemId))),
   ];
+  // Pedido del equipo vía Daniel 2026-10-07: al pegar el ID en "Ir a un
+  // producto" se registra ahí mismo lo que sacaron (igual que "¿No lee?
+  // Escribe el ID" de arriba), sin tener que bajar hasta el producto.
+  function registerFromJump(p: LotPickLine) {
+    setJumpOpen(false);
+    setJumpQuery("");
+    setAutoScan(false);
+    openCode(p.justCode ?? p.catalogItemId);
+  }
+  const canRegister = (p: LotPickLine) => canPick && !p.confirmedAt && (!onlyAssigned || myBlocks.includes(p.block));
   const jq = jumpQuery.trim().toLowerCase();
   const jumpRows = jq ? shownRows.filter((p) => p.name.toLowerCase().includes(jq) || (p.justCode ?? "").includes(jq)) : shownRows;
   const nextPending = shownRows.find((p) => !isTaken(p));
+  // El ID pegado (o la única coincidencia) se puede registrar con un toque.
+  const jumpExact = jq ? (jumpRows.find((p) => p.justCode === jq || p.catalogItemId === jq) ?? (jumpRows.length === 1 ? jumpRows[0] : undefined)) : undefined;
 
   function openCode(raw: string) {
     const code = raw.trim();
@@ -803,17 +815,29 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                 className="flex-1 bg-transparent text-[13px] outline-none min-w-0"
                 value={jumpQuery}
                 onChange={(e) => setJumpQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && jumpExact && canRegister(jumpExact)) registerFromJump(jumpExact);
+                }}
               />
             </div>
+            {jumpExact && canRegister(jumpExact) && (
+              <button
+                type="button"
+                className="mb-2 flex items-center gap-1.5 rounded border border-teal bg-teal px-3 py-2 text-[12.5px] font-bold text-navy cursor-pointer text-left"
+                onClick={() => registerFromJump(jumpExact)}
+              >
+                <ScanLine size={14} className="shrink-0" /> Registrar cuántos sacaste: {jumpExact.name}
+              </button>
+            )}
             <div className="overflow-y-auto flex flex-col gap-1">
               {jumpRows.length === 0 && <div className="text-[12px] text-steel px-1 py-2">No hay productos con ese nombre o ID.</div>}
               {jumpRows.map((p) => {
                 const st = rowState(p);
                 return (
+                  <div key={p.catalogItemId} className={`flex items-center gap-1 rounded-md pr-2 ${ROW_STYLE[st]}`}>
                   <button
-                    key={p.catalogItemId}
                     type="button"
-                    className={`flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-[12px] cursor-pointer ${ROW_STYLE[st]}`}
+                    className="flex-1 min-w-0 flex items-center gap-2 px-2.5 py-2 text-left text-[12px] cursor-pointer"
                     onClick={() => jumpTo(p.catalogItemId)}
                   >
                     <Thumb url={p.photos[0]} small />
@@ -829,6 +853,17 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                       <span className="text-[10.5px] font-semibold text-amber shrink-0">falta</span>
                     )}
                   </button>
+                  {canRegister(p) && (
+                    <button
+                      type="button"
+                      aria-label={`Registrar cuántos sacaste de ${p.name}`}
+                      className="shrink-0 rounded border border-teal px-2 py-1 text-[11px] font-bold text-teal cursor-pointer hover:bg-teal hover:text-navy"
+                      onClick={() => registerFromJump(p)}
+                    >
+                      {p.picked !== null ? "Cambiar" : "Registrar"}
+                    </button>
+                  )}
+                  </div>
                 );
               })}
             </div>
