@@ -32,6 +32,9 @@ const createSchema = z.object({
   competitorPrice: z.number().positive().nullable(),
   noCompetitorNote: z.string().trim().max(500).nullable(),
   note: z.string().trim().max(1000).nullable(),
+  // 2026-10-07: recompra caliente que confirma quien compra (ver hotSelfConfirmBlock).
+  selfConfirm: z.boolean().optional(),
+  checkedCompetitorToday: z.boolean().optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -41,5 +44,5 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
   const result = await createRepurchaseReview(parsed.data, access.userId, access.name);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
-  return NextResponse.json({ ok: true, code: result.code }, { status: 201 });
+  return NextResponse.json({ ok: true, code: result.code, selfConfirmed: result.selfConfirmed }, { status: 201 });
 }

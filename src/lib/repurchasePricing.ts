@@ -78,6 +78,32 @@ export function repurchaseVerdictText(calc: RepurchaseCalc, competitorPrice: num
   return `La competencia lo vende a ${m(competitorPrice!)}: a ese precio perderíamos plata con el costo de hoy.${calc.maxSupplierCost !== null ? ` Solo serviría si el proveedor lo deja en ${m(calc.maxSupplierCost)} o menos.` : ""}`;
 }
 
+// Pedido del usuario 2026-10-07 (opción 2, a pedido de Jariel): una recompra
+// CALIENTE no espera a Bryan si el costo no subió más de este % frente a la
+// última compra y queda más barata que la competencia con el margen completo.
+// Quien compra la confirma él mismo con doble confirmación. Si no cumple, va a Bryan.
+export const HOT_SELF_MAX_INCREASE_PERCENT = 5;
+
+// null = puede confirmarla él mismo; si no, el motivo por el que va a Bryan.
+// Se usa igual en el navegador y en el servidor (que siempre recalcula).
+export function hotSelfConfirmBlock(p: {
+  audience: "HOT" | "COLD";
+  lastBodegaCost: number | null;
+  calc: RepurchaseCalc;
+  competitorId: string | null;
+}): string | null {
+  if (p.audience !== "HOT") return "es compra fría: la aprueba Bryan.";
+  if (p.lastBodegaCost === null) return "no hay una compra anterior en DAFLOW para comparar el precio.";
+  const limit = p.lastBodegaCost * (1 + HOT_SELF_MAX_INCREASE_PERCENT / 100);
+  if (p.calc.bodegaCost > limit + 0.005) {
+    const up = ((p.calc.bodegaCost / p.lastBodegaCost - 1) * 100).toFixed(1);
+    return `el costo subió ${up}% frente a la última compra (más de ${HOT_SELF_MAX_INCREASE_PERCENT}%).`;
+  }
+  if (p.calc.verdict !== "GREEN") return "con este precio no quedamos más baratos que la competencia dejando el margen mínimo.";
+  if (!p.competitorId?.trim()) return "falta el ID del producto de la competencia que revisaste.";
+  return null;
+}
+
 export function formatRepurchaseCode(code: number): string {
   return `RC-${String(code).padStart(3, "0")}`;
 }

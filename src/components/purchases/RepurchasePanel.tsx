@@ -3,12 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { PurchaseSupplierPicker } from "@/components/purchases/PurchaseSupplierPicker";
-import { computeRepurchase, repurchaseVerdictText, REPURCHASE_VERDICT_LABELS, type RepurchaseCalc, type RepurchaseVerdict } from "@/lib/repurchasePricing";
+import { computeRepurchase, HOT_SELF_MAX_INCREASE_PERCENT, hotSelfConfirmBlock, repurchaseVerdictText, REPURCHASE_VERDICT_LABELS, type RepurchaseCalc, type RepurchaseVerdict } from "@/lib/repurchasePricing";
 
 // Recompras (pedido del usuario 2026-10-06). Toda recompra — calientes de
 // Jariel y frías de Nairoby — se analiza acá y la aprueba Bryan Ríos antes de
 // pedir la compra. Pantalla guiada en 3 pasos: elegir el producto, poner lo
 // de hoy (proveedor y competencia) y ver el resultado antes de enviar.
+// 2026-10-07 (opción 2, a pedido de Jariel): una recompra caliente que no
+// subió más de 5% y queda más barata que la competencia la confirma quien
+// compra él mismo, con doble confirmación, y pasa directo a Solicitar.
 
 type ItemOption = { id: string; name: string; justCode: string | null; photo: string | null };
 type Params = { insuranceRatePercent: number; fulfillmentCost: number; marginPercent: number };
@@ -76,6 +79,7 @@ type Row = {
   usedAt: string | null;
   waitingTooLong: boolean;
   stockStillCovered: boolean;
+  selfConfirmed: boolean;
 };
 type Data = { pending: Row[]; history: Row[]; canRequest: boolean; canDecide: boolean; canViewAll: boolean; userId: string };
 
@@ -267,7 +271,7 @@ function OtherSupplierSearch({ onPick }: { onPick: (s: { id: string; name: strin
 
 // ---- Pasos 2 y 3: lo de hoy + resultado ------------------------------------------
 
-function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => void; onSent: (code: string) => void }) {
+function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => void; onSent: (code: string, buyHref: string | null) => void }) {
   const [a, setA] = useState<Analysis | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [supplier, setSupplier] = useState<{ id: string; name: string } | null>(null);
@@ -281,6 +285,9 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
   const [noCompetitorNote, setNoCompetitorNote] = useState("");
   const [note, setNote] = useState("");
   const [confirming, setConfirming] = useState(false);
+  // Doble confirmación de la compra caliente: 1) revisé hoy la competencia, 2) confirmación final.
+  const [checkedToday, setCheckedToday] = useState(false);
+  const [selfConfirming, setSelfConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -334,7 +341,7 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
   if (noCompetitor && noCompetitorNote.trim().length < 5) missing.push("por qué no hay competencia");
   if (a?.stockCover?.needsReason && note.trim().length < 10) missing.push("el motivo para comprar aunque todavía hay stock");
 
-  function send() {
+  function send(selfConfirm = false) {
     if (!supplier) return;
     setBusy(true);
     setError(null);
@@ -351,6 +358,8 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
         competitorPrice: noCompetitor ? null : Number(competitorPrice),
         noCompetitorNote: noCompetitor ? noCompetitorNote.trim() : null,
         note: note.trim() || null,
+        selfConfirm,
+        checkedCompetitorToday: selfConfirm ? checkedToday : undefined,
       }),
     })
       .then((r) => r.json().then((j) => ({ ok: r.ok, j })))
@@ -358,13 +367,26 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
         if (!ok) {
           setError(j.error ?? "No se pudo enviar.");
           setConfirming(false);
-        } else onSent(j.code);
+          setSelfConfirming(false);
+        } else {
+          const params = new URLSearchParams({
+            tab: "compras",
+            ptab: "solicitar",
+            presetCatalogItemId: itemId,
+            presetSupplierId: supplier.id,
+            presetQuantity: quantity,
+            presetUnitCost: String(Number(unitCost)),
+          });
+          onSent(j.code, j.selfConfirmed ? `${window.location.pathname}?${params.toString()}` : null);
+        }
       })
       .catch(() => setError("No se pudo enviar."))
       .finally(() => setBusy(false));
   }
 
   const knownSuppliers = a.suppliers.slice(0, 4);
+  const selfBlock = calc ? hotSelfConfirmBlock({ audience: a.audience, lastBodegaCost: a.last?.unitCost ?? null, calc, competitorId: noCompetitor ? null : competitorId }) : null;
+  const canSelfConfirm = a.audience === "HOT" && !!calc && missing.length === 0 && selfBlock === null;
   return (
     <div>
       <div className="flex items-center gap-3 mb-3">
@@ -543,8 +565,55 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
               <div className="text-[12.5px] text-steel">Pon el precio de hoy y la cantidad para ver la cuenta.</div>
             )}
 
-            {missing.length > 0 && <div className="text-[12px] text-amber mt-2.5">Para enviar a Bryan falta: {missing.join(", ")}.</div>}
+            {missing.length > 0 && <div className="text-[12px] text-amber mt-2.5">Falta: {missing.join(", ")}.</div>}
             {error && <div className="text-[12.5px] text-red mt-2">{error}</div>}
+
+            {canSelfConfirm && calc && (
+              <div className="mt-2.5 bg-teal/10 border border-teal/40 rounded-md p-2.5">
+                <div className="text-[12.5px] font-bold text-teal">🔥 Compra caliente: puedes confirmarla tú mismo, sin esperar a Bryan</div>
+                <div className="text-[11.5px] text-steel mt-0.5">
+                  El costo no subió más de {HOT_SELF_MAX_INCREASE_PERCENT}% y quedamos más baratos que la competencia con el margen completo.
+                </div>
+                {!selfConfirming ? (
+                  <>
+                    <label className="mt-2 flex items-start gap-2 text-[12.5px] text-ink cursor-pointer">
+                      <input type="checkbox" className="mt-0.5" checked={checkedToday} onChange={(e) => setCheckedToday(e.target.checked)} />
+                      <span>
+                        Revisé <b>hoy</b> en Dropi el precio de la competencia (ID {competitorId.trim()}, {money(competitorValue)}) y el del proveedor.
+                      </span>
+                    </label>
+                    <button
+                      type="button"
+                      disabled={!checkedToday || busy}
+                      onClick={() => setSelfConfirming(true)}
+                      className="mt-2 rounded bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white cursor-pointer disabled:opacity-50"
+                    >
+                      Confirmar yo mismo
+                    </button>
+                  </>
+                ) : (
+                  <div className="mt-2">
+                    <div className="text-[12.5px] text-ink">
+                      Confirmación final: vas a comprar <b>{quantity} u.</b> de {a.item.name} a <b>{money(Number(unitCost))}</b> con {supplier?.name}. Nuestro precio Dropi
+                      quedaría en <b>{money(calc.newDropiPrice)}</b>, debajo de la competencia (<b>{money(competitorValue)}</b>). ¿Confirmas que este precio nos deja buena
+                      rentabilidad?
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      <button type="button" disabled={busy} onClick={() => send(true)} className="rounded bg-teal px-3 py-1.5 text-[12px] font-bold text-white cursor-pointer disabled:opacity-50">
+                        {busy ? "Guardando…" : "Sí, confirmo y pido la compra"}
+                      </button>
+                      <button type="button" disabled={busy} onClick={() => setSelfConfirming(false)} className="rounded border border-rule px-3 py-1.5 text-[12px] text-steel cursor-pointer">
+                        Volver
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {a.audience === "HOT" && calc && missing.length === 0 && selfBlock !== null && (
+              <div className="mt-2.5 text-[12px] text-amber">🔥 Es compra caliente, pero va a Bryan porque {selfBlock}</div>
+            )}
+
             {!confirming ? (
               <button
                 type="button"
@@ -552,7 +621,7 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
                 onClick={() => setConfirming(true)}
                 className="mt-2.5 rounded bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white cursor-pointer disabled:opacity-50"
               >
-                Enviar a Bryan
+                {canSelfConfirm ? "O enviarla a Bryan" : "Enviar a Bryan"}
               </button>
             ) : (
               <div className="mt-2.5 bg-teal/10 border border-teal/40 rounded-md p-2.5">
@@ -560,7 +629,7 @@ function Analyzer({ itemId, onBack, onSent }: { itemId: string; onBack: () => vo
                   ¿Enviar a Bryan la recompra de <b>{quantity} u.</b> de {a.item.name} a <b>{money(Number(unitCost))}</b> con {supplier?.name}? Hasta que la apruebe no se puede pedir la compra.
                 </div>
                 <div className="flex gap-1.5 mt-2">
-                  <button type="button" disabled={busy} onClick={send} className="rounded bg-teal px-3 py-1.5 text-[12px] font-bold text-white cursor-pointer disabled:opacity-50">
+                  <button type="button" disabled={busy} onClick={() => send()} className="rounded bg-teal px-3 py-1.5 text-[12px] font-bold text-white cursor-pointer disabled:opacity-50">
                     {busy ? "Enviando…" : "Sí, enviar"}
                   </button>
                   <button type="button" disabled={busy} onClick={() => setConfirming(false)} className="rounded border border-rule px-3 py-1.5 text-[12px] text-steel cursor-pointer">
@@ -684,7 +753,7 @@ function RowCard({ r, data, onChanged }: { r: Row; data: Data; onChanged: () => 
       {r.state === "APPROVED" && (
         <div className="mt-2.5">
           <div className="text-[12.5px] text-teal">
-            Aprobada por {r.reviewedByName ?? "Bryan"} el {fmtDate(r.reviewedAt)} · vale hasta el {fmtDate(r.approvalExpiresAt)}
+            {r.selfConfirmed ? "Confirmada por" : "Aprobada por"} {r.reviewedByName ?? "Bryan"} el {fmtDate(r.reviewedAt)} · vale hasta el {fmtDate(r.approvalExpiresAt)}
           </div>
           {mine && (
             <>
@@ -697,6 +766,9 @@ function RowCard({ r, data, onChanged }: { r: Row; data: Data; onChanged: () => 
             </>
           )}
         </div>
+      )}
+      {r.selfConfirmed && r.state !== "APPROVED" && (
+        <div className="text-[12px] text-steel mt-2">🔥 Compra caliente confirmada por {r.reviewedByName ?? "quien compra"} (doble confirmación), sin pasar por Bryan.</div>
       )}
       {r.state === "EXPIRED" && <div className="text-[12.5px] text-steel mt-2">La aprobación venció el {fmtDate(r.approvalExpiresAt)} sin pedir la compra. Si todavía hace falta, analízala otra vez: los precios cambian.</div>}
       {r.state === "USED" && (
@@ -795,7 +867,8 @@ export function RepurchasePanel({ initialItemId = null }: { initialItemId?: stri
         <div className="bg-surface2 border border-rule rounded-md p-3.5 mb-5">
           <div className="text-[14px] font-bold text-ink mb-0.5">🔁 Analizar una recompra</div>
           <div className="text-[12px] text-steel mb-3">
-            Toda recompra necesita la aprobación de Bryan antes de pedir la compra. Así no compramos algo que la competencia vende más barato.
+            Las recompras frías las aprueba Bryan antes de pedir la compra. Una caliente la confirmas tú mismo si el costo no subió más de {HOT_SELF_MAX_INCREASE_PERCENT}% y
+            quedamos más baratos que la competencia; si no, también va a Bryan.
           </div>
           {sentCode ? (
             <div className="bg-teal/10 border border-teal/40 rounded-md px-3 py-2.5 text-[12.5px] text-ink">
@@ -816,7 +889,12 @@ export function RepurchasePanel({ initialItemId = null }: { initialItemId?: stri
               key={itemId}
               itemId={itemId}
               onBack={() => setItemId(null)}
-              onSent={(code) => {
+              onSent={(code, buyHref) => {
+                // Caliente confirmada por quien compra: directo a Solicitar con todo lleno.
+                if (buyHref) {
+                  window.location.href = buyHref;
+                  return;
+                }
                 setSentCode(code);
                 load();
               }}

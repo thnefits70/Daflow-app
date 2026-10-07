@@ -6,7 +6,7 @@ import { findOpenPurchasesByOthers, formatPurchaseRequestCode, getCatalogItemSup
 import { currentDropiPrices } from "@/lib/dropiPriceChanges";
 import { resolveDropiParamsForCatalogItems } from "@/lib/marketProduct";
 import { COLD_MAX, COVER_DAYS_AFTER_ARRIVAL, getSalesWindow, getSoldUnitsByItem, HOT_MAX, isStockCoverBlockActive, stockCoverMessage, stockStillCovers, suggestedQuantity, urgentDaysForSupplier } from "@/lib/purchaseSuggestions";
-import { computeRepurchase, formatRepurchaseCode, REPURCHASE_VERDICT_LABELS, type RepurchasePriceParams, type RepurchaseVerdict } from "@/lib/repurchasePricing";
+import { computeRepurchase, formatRepurchaseCode, hotSelfConfirmBlock, REPURCHASE_VERDICT_LABELS, type RepurchasePriceParams, type RepurchaseVerdict } from "@/lib/repurchasePricing";
 
 // Pedido del usuario 2026-10-06: recompras con aprobación de Bryan Ríos
 // (líder de Análisis de Mercado). Toda recompra — compras calientes (Jariel)
@@ -18,6 +18,10 @@ import { computeRepurchase, formatRepurchaseCode, REPURCHASE_VERDICT_LABELS, typ
 // la compra sigue el flujo de siempre (aprobación, pago, recepción, Kardex,
 // percha). Ver checkRepurchaseApprovals (se impone en el servidor al crear
 // o reenviar una solicitud de compra).
+// 2026-10-07 (opción 2, a pedido de Jariel): una recompra caliente cuyo costo
+// no subió más de 5% y queda más barata que la competencia la confirma quien
+// compra él mismo, con doble confirmación (ver hotSelfConfirmBlock). Queda
+// como RC aprobada por él mismo (reviewedById = requestedById).
 
 export const APPROVAL_VALID_DAYS = 7;
 // Desde cuándo "Bryan no responde": recordatorio a quien la envió.
@@ -240,6 +244,8 @@ export type RepurchaseRow = {
   usedAt: string | null;
   // Bryan no respondió todavía después de NO_RESPONSE_HOURS.
   waitingTooLong: boolean;
+  // Compra caliente que confirmó quien compra, sin esperar a Bryan.
+  selfConfirmed: boolean;
   // Al enviarla todavía había stock (2026-10-07): Bryan lo ve resaltado.
   stockStillCovered: boolean;
 };
@@ -278,6 +284,7 @@ const rowSelect = {
   requestedById: true,
   requestedBy: { select: { name: true } },
   requestedAt: true,
+  reviewedById: true,
   reviewedBy: { select: { name: true } },
   reviewedAt: true,
   rejectReason: true,
@@ -345,6 +352,7 @@ async function toRows(records: RowRecord[]): Promise<RepurchaseRow[]> {
       approvalExpiresAt: r.approvalExpiresAt?.toISOString() ?? null,
       usedPurchaseCode: r.usedGroupId ? codeByGroup.get(r.usedGroupId) ?? null : null,
       usedAt: r.usedAt?.toISOString() ?? null,
+      selfConfirmed: !!r.reviewedById && r.reviewedById === r.requestedById,
       waitingTooLong: state === "PENDING_APPROVAL" && now.getTime() - r.requestedAt.getTime() >= NO_RESPONSE_HOURS * 60 * 60 * 1000,
       stockStillCovered: r.stockAtRequest > COLD_MAX && (r.daysLeft === null || r.daysLeft >= urgentDaysForSupplier(r.supplier.paymentMode) + COVER_DAYS_AFTER_ARRIVAL),
     };
@@ -377,11 +385,14 @@ export type CreateRepurchaseInput = {
   competitorPrice: number | null;
   noCompetitorNote: string | null;
   note: string | null;
+  // Recompra caliente que quien compra confirma él mismo (doble confirmación).
+  selfConfirm?: boolean;
+  checkedCompetitorToday?: boolean;
 };
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string; status: number };
 
-export async function createRepurchaseReview(input: CreateRepurchaseInput, userId: string, actorName: string): Promise<Result<{ code: string }>> {
+export async function createRepurchaseReview(input: CreateRepurchaseInput, userId: string, actorName: string): Promise<Result<{ code: string; selfConfirmed: boolean }>> {
   const analysis = await getRepurchaseAnalysis(input.catalogItemId, userId);
   if (!analysis) return { ok: false, status: 404, error: "Este producto no es una recompra (nunca estuvo en bodega o es un suministro)." };
   if (analysis.blocker) return { ok: false, status: 409, error: analysis.blocker };
@@ -409,6 +420,14 @@ export async function createRepurchaseReview(input: CreateRepurchaseInput, userI
   const lastCalc = analysis.last
     ? computeRepurchase({ unitCost: analysis.last.unitCost, freightTotal: null, quantity: 1, competitorPrice: analysis.competitor?.price ?? null, params: analysis.params })
     : null;
+
+  const selfConfirm = !!input.selfConfirm;
+  if (selfConfirm) {
+    const block = hotSelfConfirmBlock({ audience: analysis.audience, lastBodegaCost: analysis.last?.unitCost ?? null, calc, competitorId: input.competitorId });
+    if (block) return { ok: false, status: 400, error: `No puedes confirmarla tú mismo: ${block} Envíala a Bryan.` };
+    if (!input.checkedCompetitorToday) return { ok: false, status: 400, error: "Confirma que revisaste hoy el precio de la competencia." };
+  }
+  const now = new Date();
 
   const created = await prisma.$transaction(async (tx) => {
     // Candado por producto: dos personas mandando la misma recompra a la vez.
@@ -447,6 +466,15 @@ export async function createRepurchaseReview(input: CreateRepurchaseInput, userI
         audience: analysis.audience,
         note: input.note?.trim() || null,
         requestedById: userId,
+        ...(selfConfirm
+          ? {
+              status: "APPROVED" as const,
+              reviewedById: userId,
+              reviewedAt: now,
+              approvedQuantity: input.quantity,
+              approvalExpiresAt: new Date(now.getTime() + APPROVAL_VALID_DAYS * DAY_MS),
+            }
+          : {}),
       },
       select: { code: true },
     });
@@ -454,6 +482,7 @@ export async function createRepurchaseReview(input: CreateRepurchaseInput, userI
   if (!created) return { ok: false, status: 409, error: "Alguien acaba de enviar una recompra de este producto. Recarga la pantalla." };
 
   const code = formatRepurchaseCode(created.code);
+  if (selfConfirm) return { ok: true, code, selfConfirmed: true };
   const bryanId = await getMarketingLeadId();
   if (bryanId) {
     await notifyOwner(bryanId, {
@@ -462,7 +491,7 @@ export async function createRepurchaseReview(input: CreateRepurchaseInput, userI
       url: REPURCHASE_HREF,
     }).catch(() => null);
   }
-  return { ok: true, code };
+  return { ok: true, code, selfConfirmed: false };
 }
 
 // ---- Decisión de Bryan -----------------------------------------------------------
@@ -580,23 +609,23 @@ export async function checkRepurchaseApprovals(params: {
         ok: false,
         error: pending
           ? `"${item.name}" es una recompra y su ${formatRepurchaseCode(pending.code)} todavía espera la aprobación de Bryan. Si no responde, habla con él en persona para que la confirme o la rechace.`
-          : `"${item.name}" es una recompra: antes de pedirla, analízala en Control de Compras → Recompras y envíala a Bryan. Toda recompra necesita su aprobación para no comprar algo que la competencia vende más barato.`,
+          : `"${item.name}" es una recompra: antes de pedirla, analízala en Control de Compras → Recompras. Si es compra caliente, el precio no subió más de 5% y queda más barata que la competencia, la confirmas tú mismo ahí; si no, va a Bryan.`,
       };
     }
     const code = formatRepurchaseCode(rc.code);
     if (rc.supplierId !== params.supplierId) {
-      return { ok: false, error: `Bryan aprobó ${code} (${item.name}) con el proveedor ${rc.supplier.name}. Para comprarle a otro proveedor, envía una recompra nueva con ese proveedor.` };
+      return { ok: false, error: `${code} (${item.name}) se aprobó con el proveedor ${rc.supplier.name}. Para comprarle a otro proveedor, envía una recompra nueva con ese proveedor.` };
     }
     const lines = params.lines.filter((l) => l.catalogItemId === item.id);
     const qty = lines.reduce((s, l) => s + l.quantity, 0);
     if (rc.approvedQuantity !== null && qty > rc.approvedQuantity) {
-      return { ok: false, error: `Bryan aprobó ${rc.approvedQuantity} u. de ${item.name} (${code}) y estás pidiendo ${qty}. Pide como máximo lo aprobado, o envía una recompra nueva.` };
+      return { ok: false, error: `Se aprobaron ${rc.approvedQuantity} u. de ${item.name} (${code}) y estás pidiendo ${qty}. Pide como máximo lo aprobado, o envía una recompra nueva.` };
     }
     const over = lines.find((l) => l.unitCost > rc.unitCost + 0.005);
     if (over) {
       return {
         ok: false,
-        error: `Bryan aprobó ${item.name} (${code}) a $${rc.unitCost.toFixed(2)} y ahora el precio es $${over.unitCost.toFixed(2)}. Con un precio más alto la cuenta contra la competencia cambia: envía una recompra nueva con el precio de hoy.`,
+        error: `${item.name} (${code}) se aprobó a $${rc.unitCost.toFixed(2)} y ahora el precio es $${over.unitCost.toFixed(2)}. Con un precio más alto la cuenta contra la competencia cambia: envía una recompra nueva con el precio de hoy.`,
       };
     }
     reviewIds.push(rc.id);
