@@ -53,6 +53,17 @@ export async function getNewIdRealPhotosWatcherIds(): Promise<string[]> {
 // IDs nuevos desde esa fecha y para lo que todavía no ha llegado a bodega.
 export const REAL_PHOTOS_SINCE = "2026-09-28T05:00:00.000Z";
 
+// Pedido del usuario 2026-10-07 (caso CAR-SUM-017 Cargador de etiqueta TSC):
+// los Suministros (marca MKT_SUMINISTROS) son para uso interno, no se venden
+// ni se publican en Dropi — no pasan por brandeo, imágenes reales ni
+// Mercadería recibida, y nadie de Análisis de Mercado recibe aviso por ellos.
+export const NOT_SUPPLY = { OR: [{ bodega: null }, { bodega: { not: "MKT_SUMINISTROS" as const } }] };
+
+export async function isSupplyCatalogItem(catalogItemId: string): Promise<boolean> {
+  const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: catalogItemId }, select: { bodega: true } });
+  return item?.bodega === "MKT_SUMINISTROS";
+}
+
 export const BRAND_STEPS = ["dropiImages", "dropiInfo", "driveVideo"] as const;
 export type BrandStep = (typeof BRAND_STEPS)[number];
 type Mark = { at: string; by: string | null };
@@ -98,7 +109,7 @@ const ARRIVED = ["RECEIVED_PENDING_REVIEW", "RECEIVED"] as const;
 export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; realPhotos: NewIdEntry[]; done: NewIdEntry[] }> {
   const [arrivals, proposals, rows] = await Promise.all([
     prisma.purchaseRequest.findMany({
-      where: { status: { in: [...ARRIVED] } },
+      where: { status: { in: [...ARRIVED] }, catalogItem: NOT_SUPPLY },
       select: {
         catalogItemId: true,
         catalogItem: { select: { id: true, name: true, photos: true, justCode: true } },
@@ -107,7 +118,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
       },
     }),
     prisma.marketProductProposal.findMany({
-      where: { status: "APPROVED" },
+      where: { status: "APPROVED", OR: [{ catalogItemId: null }, { catalogItem: NOT_SUPPLY }] },
       select: {
         id: true,
         productName: true,

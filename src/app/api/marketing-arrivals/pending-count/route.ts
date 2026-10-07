@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canConfirmMarketingAdvisor } from "@/lib/guards";
-import { canBrandNewIds, getNewIdBrandingBoard } from "@/lib/newIdBranding";
+import { canBrandNewIds, getNewIdBrandingBoard, NOT_SUPPLY } from "@/lib/newIdBranding";
 
 // Confirmado 2026-08-08: sondeado cada cierto tiempo por
 // MarketingArrivalAlert.tsx para el aviso + sonido DENTRO de la pantalla
@@ -20,7 +20,7 @@ export async function GET() {
   if (!isDesigner && !isAdvisor) return NextResponse.json({ pendingIds: [], newIdIds: [] });
 
   const [advisorRows, board] = await Promise.all([
-    isAdvisor ? prisma.purchaseReceiptFollowUp.findMany({ where: { advisorConfirmedAt: null }, select: { requestId: true } }) : [],
+    isAdvisor ? prisma.purchaseReceiptFollowUp.findMany({ where: { advisorConfirmedAt: null, request: { catalogItem: NOT_SUPPLY } }, select: { requestId: true } }) : [],
     isDesigner ? getNewIdBrandingBoard() : null,
   ]);
 

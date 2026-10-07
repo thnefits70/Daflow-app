@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
+import { NOT_SUPPLY } from "@/lib/newIdBranding";
 import { resolveCostBasisForCatalogItems, computeMarketProductSalePrice, DROPI_MARGIN_DEFAULT } from "@/lib/marketProduct";
 
 // Confirmado 2026-08-08: "Mercadería recibida" — pedido explícito del
@@ -37,7 +38,8 @@ function landedUnitCost(r: { unitCost: number; quantity: number; shippingInclude
 
 export async function getMarketingArrivals() {
   const rows = await prisma.purchaseRequest.findMany({
-    where: { status: { in: ["RECEIVED_PENDING_REVIEW", "RECEIVED"] } },
+    // Los Suministros no se venden ni van a Dropi (ver NOT_SUPPLY).
+    where: { status: { in: ["RECEIVED_PENDING_REVIEW", "RECEIVED"] }, catalogItem: NOT_SUPPLY },
     orderBy: { receipt: { confirmedAt: "desc" } },
     include: arrivalInclude,
   });

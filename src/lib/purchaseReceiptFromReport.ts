@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getInventoryLeadId } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { getMarketingArrivalActorIds, getMarketingArrivalDispatchViewerIds } from "@/lib/marketingArrivals";
-import { isCatalogItemBranded, catalogItemNeedsRealPhotos, getNewIdBrandingActorIds } from "@/lib/newIdBranding";
+import { isCatalogItemBranded, catalogItemNeedsRealPhotos, getNewIdBrandingActorIds, isSupplyCatalogItem } from "@/lib/newIdBranding";
 import { notifyInventoryLinesToConfirm } from "@/lib/purchaseLeftBehind";
 
 // Avisos que salen apenas bodega deja registrada una recepción (antes vivían
@@ -24,6 +24,10 @@ export async function notifyReceiptRegistered(params: { catalogItemId: string; i
       url: "/area/workspace?tab=compras&ptab=inventario",
     });
   }
+
+  // Pedido del usuario 2026-10-07: un Suministro no se vende — sin avisos
+  // de brandeo ni de "Llegó mercadería" (solo el de aprobación de Daniel).
+  if (await isSupplyCatalogItem(params.catalogItemId)) return;
 
   // Confirmado 2026-09-16: aviso a Análisis de Mercado y despacho, movido acá
   // desde approve-receipt/route.ts — sale apenas bodega registra.
