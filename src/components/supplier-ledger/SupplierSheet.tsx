@@ -399,6 +399,19 @@ export function SupplierSheet({ token, email, canWrite, side }: { token: string;
     el?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [sel]);
 
+  // Pedido 2026-10-07: al entrar (o cambiar de pestaña) la hoja baja sola al
+  // último pedido, para no tener que bajar a mano cada vez. Va después del
+  // efecto de la selección para que este no la vuelva a subir.
+  const positionedTab = useRef<string | null>(null);
+  useEffect(() => {
+    if (!tab || positionedTab.current === tab.id) return;
+    positionedTab.current = tab.id;
+    const orderRows = Object.keys(tab.rowKeys).map(Number);
+    const last = orderRows.length ? Math.max(...orderRows) : usedRows - 1;
+    if (last <= 0) return;
+    gridRef.current?.querySelector<HTMLElement>(`[data-cell="${last}:0"]`)?.scrollIntoView({ block: "center" });
+  }, [tab, usedRows]);
+
   const hasGrid = !!tabs;
   useEffect(() => {
     const el = gridRef.current;
