@@ -97,7 +97,9 @@ export async function getRepurchaseAnalysis(catalogItemId: string, userId: strin
   const [comparison, paramsById, dropiNow, soldMap, stock, proposal, lastRcWithCompetitor, lastPurchase, blocker, history] = await Promise.all([
     getCatalogItemSupplierComparison(catalogItemId),
     resolveDropiParamsForCatalogItems([catalogItemId]),
-    currentDropiPrices([catalogItemId]),
+    // Recalcular el precio de Dropi es lo más lento (~2 s): solo si la
+    // asesora B2B todavía no confirmó uno.
+    item.dropiPriceRef != null ? Promise.resolve(new Map<string, number>()) : currentDropiPrices([catalogItemId]),
     getSoldUnitsByItem(windowStart, [catalogItemId]),
     latestStock(catalogItemId),
     prisma.marketProductProposal.findFirst({

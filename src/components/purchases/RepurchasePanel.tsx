@@ -765,10 +765,12 @@ function RowCard({ r, data, onChanged }: { r: Row; data: Data; onChanged: () => 
   );
 }
 
-export function RepurchasePanel() {
+// initialItemId: viene del botón "Analizar recompra" de Qué comprar (cambio
+// de pestaña sin recargar la página) o de ?rcItem= en el enlace.
+export function RepurchasePanel({ initialItemId = null }: { initialItemId?: string | null }) {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [itemId, setItemId] = useState<string | null>(() => (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("rcItem")));
+  const [itemId, setItemId] = useState<string | null>(() => initialItemId ?? (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("rcItem")));
   const [sentCode, setSentCode] = useState<string | null>(null);
   const [showAllHistory, setShowAllHistory] = useState(false);
 
@@ -784,15 +786,17 @@ export function RepurchasePanel() {
   useEffect(load, []);
 
   if (error) return <div className="text-red text-[13px]">{error}</div>;
-  if (!data) return <div className="text-steel text-[13px]">Cargando…</div>;
+  // Con un producto ya elegido, el análisis arranca de una vez, sin esperar
+  // a que cargue la lista de recompras de abajo.
+  if (!data && !itemId) return <div className="text-steel text-[13px]">Cargando…</div>;
 
-  const ready = data.history.filter((r) => r.state === "APPROVED" && r.requestedById === data.userId);
-  const rest = data.history.filter((r) => !(r.state === "APPROVED" && r.requestedById === data.userId));
+  const ready = data ? data.history.filter((r) => r.state === "APPROVED" && r.requestedById === data.userId) : [];
+  const rest = data ? data.history.filter((r) => !(r.state === "APPROVED" && r.requestedById === data.userId)) : [];
   const shownRest = showAllHistory ? rest : rest.slice(0, 8);
 
   return (
     <div>
-      {data.canRequest && (
+      {(data ? data.canRequest : !!itemId) && (
         <div className="bg-surface2 border border-rule rounded-md p-3.5 mb-5">
           <div className="text-[14px] font-bold text-ink mb-0.5">🔁 Analizar una recompra</div>
           <div className="text-[12px] text-steel mb-3">
@@ -831,6 +835,10 @@ export function RepurchasePanel() {
         </div>
       )}
 
+      {!data ? (
+        <div className="text-steel text-[13px]">Cargando recompras…</div>
+      ) : (
+        <>
       {ready.length > 0 && (
         <div className="mb-5">
           <div className="text-[14px] font-bold text-teal mb-2">🛒 Aprobadas — pide la compra ({ready.length})</div>
@@ -877,6 +885,8 @@ export function RepurchasePanel() {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

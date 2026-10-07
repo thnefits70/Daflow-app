@@ -165,6 +165,8 @@ export function PurchaseControlPanel({
   // Sube cada vez que Jariel resuelve algo en deterioro, para que el
   // historial de abajo se recargue y muestre lo recién gestionado.
   const [deteriorRefreshKey, setDeteriorRefreshKey] = useState(0);
+  // "Analizar recompra" en Qué comprar: producto que se abre en Recompras.
+  const [repurchaseItemId, setRepurchaseItemId] = useState<string | null>(null);
   const [focusGroupId] = useState<string | null>(() =>
     typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("group")
   );
@@ -205,7 +207,17 @@ export function PurchaseControlPanel({
             Lo que conviene comprar, ordenado por los días que le quedan a cada producto. Compras calientes (30 o menos) son de Jariel; compras frías (31
             a 60) son de Nairoby. Lo que tiene poco stock pero no se vende queda al final: no es prioridad por ahora.
           </TabGuide>
-          <PurchaseSuggestionsPanel />
+          <PurchaseSuggestionsPanel
+            onAnalyzeRepurchase={
+              tabs.some((t) => t.key === "recompras")
+                ? (id) => {
+                    setRepurchaseItemId(id);
+                    setTab("recompras");
+                    window.scrollTo({ top: 0 });
+                  }
+                : undefined
+            }
+          />
         </>
       )}
       {tab === "recompras" && (
@@ -215,7 +227,7 @@ export function PurchaseControlPanel({
             lo que se vende; tú pones el precio de hoy del proveedor y de la competencia. Si conviene, lo envías a Bryan. Con su aprobación pides la compra
             como siempre (vale 7 días, con el mismo proveedor, sin subir el precio ni la cantidad).
           </TabGuide>
-          <RepurchasePanel />
+          <RepurchasePanel key={repurchaseItemId ?? "none"} initialItemId={repurchaseItemId} />
         </>
       )}
       {tab === "solicitar" && (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { PriceCalculator } from "@/components/marketanalysis/PriceCalculator";
 import { splitByVariant } from "@/lib/variantMix";
@@ -77,6 +77,10 @@ function stockoutUrl(catalogItemId: string) {
 }
 
 // Recompras (2026-10-06): abre la calculadora con el producto ya elegido.
+// Dentro de Control de Compras abre la pestaña Recompras sin recargar la
+// página (recargar "Mi área de trabajo" demoraba varios segundos).
+const OpenRepurchaseContext = createContext<((catalogItemId: string) => void) | null>(null);
+
 function repurchaseUrl(catalogItemId: string) {
   return `${window.location.pathname}?tab=compras&ptab=recompras&rcItem=${catalogItemId}`;
 }
@@ -181,6 +185,7 @@ function DiscardForm({ r, onDone, onCancel }: { r: Row; onDone: () => void; onCa
 
 function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepurchase = false, repurchase = null }: { r: Row; canReportStockout: boolean; canDiscard: boolean; isCold: boolean; onChanged: () => void; canRepurchase?: boolean; repurchase?: OpenRepurchase | null }) {
   const [discarding, setDiscarding] = useState(false);
+  const openRepurchase = useContext(OpenRepurchaseContext);
   function undo() {
     if (!r.discard || !window.confirm(`¿Volver a poner ${r.name} en la lista de compras frías?`)) return;
     fetch(`/api/purchase-suggestions/discard/${r.discard.id}/undo`, { method: "POST" }).then(() => onChanged());
@@ -296,7 +301,14 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
         {error && <div className="text-[11.5px] text-red mt-0.5">{error}</div>}
       </div>
       {canRepurchase && !repurchase && !discarding && r.status !== "en_compra" && r.status !== "sin_proveedor" && r.status !== "preguntar_proveedor" && (
-        <a href={repurchaseUrl(r.catalogItemId)} className="shrink-0 rounded border border-teal px-2.5 py-1.5 text-[11.5px] font-semibold text-teal hover:bg-teal/10">
+        <a
+          href={repurchaseUrl(r.catalogItemId)}
+          onClick={(e) => {
+            if (!openRepurchase) return;
+            e.preventDefault();
+            openRepurchase(r.catalogItemId);
+          }}
+          className="shrink-0 rounded border border-teal px-2.5 py-1.5 text-[11.5px] font-semibold text-teal hover:bg-teal/10">
           Analizar recompra
         </a>
       )}
@@ -450,7 +462,7 @@ function List({
 // "Qué comprar" (confirmado 2026-09-29, idea de Daniel): compras calientes
 // (Jariel) y frías (Nairoby), ordenadas por los días que le quedan a cada
 // producto según lo que de verdad se vende.
-export function PurchaseSuggestionsPanel() {
+export function PurchaseSuggestionsPanel({ onAnalyzeRepurchase }: { onAnalyzeRepurchase?: (catalogItemId: string) => void } = {}) {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -477,6 +489,7 @@ export function PurchaseSuggestionsPanel() {
   const cold = <List key="cold" title="❄️ Compras frías" sub="31 a 60 unidades · Nairoby" rows={data.cold} newProducts={data.coldNewProducts} open={!onlyHot} canReportStockout={data.canReportStockout} canDiscard={data.canDiscard} isCold onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
 
   return (
+    <OpenRepurchaseContext.Provider value={onAnalyzeRepurchase ?? null}>
     <div>
       {/* Pedido del usuario 2026-10-02: conteo físico del 5 al 8 de octubre. */}
       {data.countPausedUntil && (
@@ -494,5 +507,6 @@ export function PurchaseSuggestionsPanel() {
       {data.canUseCalculator && <PriceCalculator />}
       {hotFirst ? [hot, cold] : [cold, hot]}
     </div>
+    </OpenRepurchaseContext.Provider>
   );
 }
