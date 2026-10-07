@@ -28,6 +28,7 @@ import { getRepurchasePendingItems } from "@/lib/repurchaseReviews";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
 import { DISCONTINUED_URL, getDiscontinuedOrderPendingCount, getDiscontinuedPendingCount } from "@/lib/dropiDiscontinued";
+import { SUPPLIER_STOCKOUT_INFO_DAYS } from "@/lib/supplierStockout";
 import { formerLeaderIdsFor, isSummaryComplete } from "@/lib/formerLeaders";
 import { getUnlinkedShanghaiCount } from "@/lib/storeTracking";
 import { getCountedUnconfirmedLots, overdueCountedLots } from "@/lib/fulfillmentPicking";
@@ -1952,6 +1953,27 @@ async function getSupplierStockoutPendingItem(href: string): Promise<PendingItem
     icon: "🚫",
     label: "Producto sin stock de proveedor pendiente de resolver",
     meta: `${count} producto${count === 1 ? "" : "s"}`,
+    overdue: false,
+    href,
+  };
+}
+
+// Pedido del usuario 2026-10-07 (Yair): aviso informativo para el equipo de
+// MKT que no resuelve — productos reportados en los últimos días, para dejar
+// de ofrecerlos en sus tiendas. Se va solo al pasar SUPPLIER_STOCKOUT_INFO_DAYS.
+async function getSupplierStockoutInfoPendingItem(href: string): Promise<PendingItem | null> {
+  const since = new Date(Date.now() - SUPPLIER_STOCKOUT_INFO_DAYS * 24 * 60 * 60 * 1000);
+  const rows = await prisma.supplierStockoutReport.findMany({
+    where: { reportedAt: { gte: since } },
+    select: { catalogItem: { select: { name: true } } },
+    orderBy: { reportedAt: "desc" },
+  });
+  if (rows.length === 0) return null;
+  return {
+    type: "supplier_stockout_aviso",
+    icon: "🚫",
+    label: "Producto sin stock de proveedor — ya no lo ofrezcas",
+    meta: rows.length === 1 ? rows[0].catalogItem.name : `${rows.length} productos`,
     overdue: false,
     href,
   };
@@ -4056,6 +4078,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (discontinuedItem) teamItems.unshift(discontinuedItem);
       const supplierStockoutItem = await getSupplierStockoutPendingItem("/area/workspace?tab=analisis-mercado&ptab=sinstock");
       if (supplierStockoutItem) teamItems.push(supplierStockoutItem);
+    } else if (me.department?.code === "MKT") {
+      const supplierStockoutInfoItem = await getSupplierStockoutInfoPendingItem("/area/workspace?tab=analisis-mercado&ptab=sinstock");
+      if (supplierStockoutInfoItem) teamItems.push(supplierStockoutInfoItem);
     }
     if (me.canPublishMarketProduct) {
       const missingIdItem = await getCatalogMissingDropiIdPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
