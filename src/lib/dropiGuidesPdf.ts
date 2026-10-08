@@ -274,6 +274,19 @@ function summaryGuideAt(lines: PdfLine[], i: number): string | null {
   }
   return null;
 }
+// Fila de la tabla resumen. Real 2026-10-08 (Gintracom, 120741 «COMBO
+// PROTECTOR LIMPIADOR DE PARABRISAS»): un nombre largo invade la columna de
+// la cantidad y el texto sale pegado («PARABRISAS1») — sin espacio la fila no
+// se leía, el producto faltaba en el total y su etiqueta quedaba "sin
+// producto". La cantidad siempre es el último pedazo de texto del renglón y
+// viene sola, así que se separa por posición aunque se encime con el nombre.
+function summaryRowOf(l: PdfLine): RegExpMatchArray | null {
+  const s = l.text.match(SUMMARY_RE);
+  if (s || !/\(ID:/.test(l.text) || l.items.length < 2) return s;
+  const last = l.items[l.items.length - 1];
+  if (!/^\s*\d+\s*$/.test(last.str)) return null;
+  return `${joinItems(l.items.slice(0, -1))}  ${last.str.trim()}`.match(SUMMARY_RE);
+}
 const CARRIER_RE = /TRANSPORTADORA:\s*([A-Z0-9 ]+?)\s*$/i;
 const DATE_RE = /FECHA MANIFIESTO \(DD\/MM\/YYYY\):\s*(\d{2})-(\d{2})-(\d{4})/;
 // Greedy a propósito: "(103511)CUATRO ALMOHADAS X4 X1" → la cantidad es el
@@ -537,7 +550,7 @@ export async function parseGuidesPdf(bytes: Uint8Array, opts: ParseOpts = {}): P
 
 // Igual que parseGuidesPdf, con las páginas ya extraídas.
 export function parseGuidesPages(pages: PdfLine[][], { warrantyFile = false, excludeGuides }: ParseOpts = {}): ParsedGuidesPdf & { source: "DROPI" | "ROCKET" } {
-  const hasDropiSummary = pages.some((lines) => lines.some((l) => SUMMARY_RE.test(l.text)));
+  const hasDropiSummary = pages.some((lines) => lines.some((l) => summaryRowOf(l) !== null));
   // RKT…: un PDF con solo etiquetas de Gintracom de Rocket no trae "ROC." ni
   // "ROCKET" en ningún lado (caso real 2026-09-26: etiquetas_1790429953).
   const looksRocket = pages.some((lines) => lines.some((l) => /ROCKET ECOMFULLFILMENT|\bROC\.[a-z]|\bRKT\d{6,}\b/i.test(l.text)));
@@ -617,6 +630,9 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false, excludeGui
   const conRecaudo: string[] = [];
   // code → transportadora → unidades (tal como la tabla resumen, garantías incluidas)
   const summary = new Map<string, { name: string; byCarrier: Map<string, number> }>();
+  // Filas de la tabla con forma de producto que aun así no se leyeron: su
+  // cantidad NO entra al total, así que se avisa aparte (ver warnings).
+  const unreadSummaryRows: string[] = [];
 
   // Primera pasada: resumen + guías (las etiquetas sin ID se identifican
   // contra los nombres del resumen, así que tiene que existir completo antes).
@@ -633,7 +649,8 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false, excludeGui
         const split = !GUIDE_RE.test(l.text) && /RECAUDO/i.test(l.text) && lines.slice(Math.max(0, i - 2), i).some((x) => GUIDE_HEADER_RE.test(x.text) && /CON\s*$/i.test(x.text));
         if (/CON\s+RECAUDO/i.test(l.text) || split) conRecaudo.push(g);
       }
-      const s = l.text.match(SUMMARY_RE);
+      const s = summaryRowOf(l);
+      if (!s && /\(ID:\s*\d+\)\s*-\s*\(SKU:/.test(l.text)) unreadSummaryRows.push(l.text.trim());
       if (s) {
         let row = summary.get(s[1]);
         if (!row) summary.set(s[1], (row = { name: s[2].trim(), byCarrier: new Map() }));
@@ -1040,6 +1057,11 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false, excludeGui
     const list = emptyGuides.map(([n, g]) => `${n}${g.carrier ? ` (${g.carrier.charAt(0)}${g.carrier.slice(1).toLowerCase()})` : ""}`);
     warnings.push(
       `No pude leer el producto de ${emptyGuides.length === 1 ? "la guía" : `${emptyGuides.length} guías`} ${list.slice(0, 10).join(", ")}${list.length > 10 ? ` y ${list.length - 10} más` : ""}. Por qué: la etiqueta viene con otro formato o el texto está pegado/cortado. Qué hacer: ANTES de guardar, avisa al administrador y pásale este PDF para que ajuste la lectura y no se repita. Solo si el administrador no está disponible, guarda igual: los totales están bien (salen de la tabla), pero ${emptyGuides.length === 1 ? "esa guía sale" : "esas guías salen"} en "Sin marca" en el corte.`
+    );
+  }
+  if (unreadSummaryRows.length > 0) {
+    warnings.push(
+      `No pude leer ${unreadSummaryRows.length === 1 ? "una fila" : `${unreadSummaryRows.length} filas`} de la tabla de productos: ${unreadSummaryRows.slice(0, 3).map((t) => `«${t}»`).join(", ")}. Por qué: la cantidad viene en un formato que no reconozco. Qué hacer: NO guardes — ese producto falta en los totales del corte. Avisa al administrador y pásale este PDF.`
     );
   }
   const noCarrier = [...guides.entries()].filter(([, v]) => !v.carrier || v.carrier === "SIN TRANSPORTADORA").map(([n]) => n);
