@@ -13,7 +13,14 @@ type HistoryRow = {
   // Confirmado 2026-09-30: true = CHEN nunca apretó "Ya lo enviamos" pero
   // nuestra bodega ya lo recibió; confirmedAt es la fecha de recepción.
   receivedWithoutConfirm?: boolean;
+  // Confirmado 2026-10-08: ya llegó a bodega (con o sin confirmación de
+  // CHEN). Si CHEN sí confirmó, la etiqueta sale en verde más claro.
+  receivedAtWarehouse?: boolean;
 };
+
+function receivedBadgeClass(r: HistoryRow) {
+  return r.receivedWithoutConfirm ? "bg-emerald-50 text-emerald-700" : "bg-lime-50 text-lime-700";
+}
 
 type Props = {
   rows: HistoryRow[];
@@ -160,8 +167,8 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
                 <p className="mt-0.5 text-xs text-neutral-500">
                   {SHORT_DATETIME_FMT.format(new Date(r.confirmedAt))}
                   {r.requestedByName ? ` · ${r.requestedByName}` : ""}
-                  {r.receivedWithoutConfirm ? " · Recibido en bodega TBS" : ""}
                 </p>
+                {r.receivedAtWarehouse && <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs ${receivedBadgeClass(r)}`}>Recibido en bodega TBS</span>}
               </div>
               {r.photoUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -187,7 +194,7 @@ export function SupplierShipmentHistoryTable({ rows }: Props) {
                 <tr key={r.id}>
                   <td className={`${td} text-neutral-600`}>
                     {DATETIME_FMT.format(new Date(r.confirmedAt))}
-                    {r.receivedWithoutConfirm && <span className="ml-2 rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">Recibido en bodega TBS</span>}
+                    {r.receivedAtWarehouse && <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${receivedBadgeClass(r)}`}>Recibido en bodega TBS</span>}
                   </td>
                   <td className="px-3 py-2">
                     {r.productImageUrl ? (

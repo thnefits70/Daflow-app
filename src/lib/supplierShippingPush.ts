@@ -66,10 +66,14 @@ export function supplierShipmentHistoryRow(r: {
   requestedAt: Date;
   receipt: { confirmedAt: Date } | null;
   urgentReports: { reportedAt: Date }[];
+  status: string;
 }) {
-  if (r.supplierShippingConfirmedAt) return { confirmedAt: r.supplierShippingConfirmedAt.toISOString(), receivedWithoutConfirm: false };
+  // Confirmado 2026-10-08, pedido del usuario: si CHEN sí confirmó y además
+  // ya llegó a bodega, también sale "Recibido en bodega TBS" (verde más claro).
+  const receivedAtWarehouse = !!r.receipt || r.urgentReports.length > 0 || r.status === "RECEIVED_PENDING_REVIEW" || r.status === "RECEIVED";
+  if (r.supplierShippingConfirmedAt) return { confirmedAt: r.supplierShippingConfirmedAt.toISOString(), receivedWithoutConfirm: false, receivedAtWarehouse };
   const receivedAt = r.receipt?.confirmedAt ?? r.urgentReports[0]?.reportedAt ?? r.requestedAt;
-  return { confirmedAt: receivedAt.toISOString(), receivedWithoutConfirm: true };
+  return { confirmedAt: receivedAt.toISOString(), receivedWithoutConfirm: true, receivedAtWarehouse: true };
 }
 
 export async function countSupplierPendingShipments(supplierId: string) {
