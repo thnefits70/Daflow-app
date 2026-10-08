@@ -8,6 +8,7 @@ import { canActOnPurchaseApproval } from "@/lib/guards";
 import { reviewApprovedPurchaseGroup, shippingFromSupplierTotal } from "@/lib/purchaseAi";
 import { notifySupplierShippingTeamOfNewOrders } from "@/lib/supplierShippingPush";
 import { cancelMarketProposal } from "@/lib/marketProposalCancel";
+import { quoteTotalMatchesLines } from "@/lib/quoteMatch";
 
 // cancelProposalCatalogItemIds: pedido del usuario 2026-10-03 (AM-0018) — al
 // rechazar, Bryan marca qué productos nuevos de Análisis de Mercado "ya no
@@ -59,6 +60,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   // (Bryan) para que "Aprobada por X" en Mis solicitudes/Auditoría muestre a
   // la persona correcta. El admin (login "admin", sin fila real en User)
   // sigue guardando null, mismo patrón que paidById en pay/route.ts.
+  // Confirmado 2026-10-08 (SC-170, Zheng Wu): no se aprueba si lo escrito no
+  // cuadra con el total leído de la cotización (mismo criterio que al enviar,
+  // ver lib/quoteMatch) — solo se puede rechazar para que la corrijan.
+  if (parsed.data.action === "approve" && rows[0].supplier.paymentMode !== "CREDITO") {
+    const reserved = await getReservedCreditsForGroup(groupId);
+    const linesTotal = rows.reduce((s, r) => s + r.totalCost, 0);
+    const ok = quoteTotalMatchesLines({
+      readTotal: rows[0].quoteReadTotal,
+      linesTotal,
+      supplierShipping: shippingFromSupplierTotal(rows),
+      appliedCreditTotal: reserved.reduce((s, c) => s + c.amount, 0),
+    });
+    if (!ok) {
+      return NextResponse.json(
+        { error: `No cuadra con la cotización (dice $${rows[0].quoteReadTotal?.toFixed(2) ?? "?"}, lo escrito suma $${linesTotal.toFixed(2)}) — recházala para que la corrijan.` },
+        { status: 409 }
+      );
+    }
+  }
+
   const isAdmin = session.user.role === "admin";
   const actorId = isAdmin ? null : session.user.id;
   await prisma.purchaseRequest.updateMany({

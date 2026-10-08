@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, PurchaseRequestStatus } from "@/generated/prisma/client";
 import { getAvailableCreditsForSupplier } from "@/lib/supplierCredits";
+import { quoteTotalMatchesLines, quoteLineMatches } from "@/lib/quoteMatch";
 
 // Estados que cuentan como "compra real" para el historial de precio — no
 // las que todavía están pendientes de aprobar (no son un precio confirmado
@@ -678,6 +679,11 @@ export const purchaseLineSchema = z.object({
   // se confía en que el cliente diga "ya confirmé" sin verificarlo contra la
   // base de datos.
   quoteReferenceCode: z.string().trim().nullable().optional(),
+  // Confirmado 2026-10-08 (SC-170, Zheng Wu): el precio y la cantidad que la
+  // IA leyó en la cotización para ESE código — se escribió $80 en vez de
+  // $1.85 y pasó, porque con códigos no se comparaba nada más.
+  quoteUnitPrice: z.number().nullable().optional(),
+  quoteQuantity: z.number().nullable().optional(),
 });
 
 // Confirmado 2026-08-08: compartido entre crear una solicitud nueva
@@ -831,12 +837,40 @@ export async function checkPurchaseSubmission(d: PurchaseSubmissionData): Promis
   // cotización del proveedor nunca lo incluye.
   const supplierShipping =
     !d.shippingIncluded && !d.shippingCarrierPending && !!d.carrierId && d.carrierId === d.supplierId ? d.shippingCostTotal ?? 0 : 0;
-  const matches =
-    d.quoteReadTotal !== null &&
-    (Math.abs(d.quoteReadTotal - groupTotal) < 0.01 || (supplierShipping > 0 && Math.abs(d.quoteReadTotal - (groupTotal + supplierShipping)) < 0.01));
-  const anyLineManuallyConfirmed = d.items.some((it) => !!it.quoteReferenceCode);
-  if (!isCreditoSupplier && !matches && !anyLineManuallyConfirmed) {
-    return { ok: false, status: 400, error: "La cotización no coincide con lo escrito — verifícala de nuevo antes de enviar." };
+  // Confirmado 2026-10-08 (SC-170, Zheng Wu): antes, si alguna línea traía
+  // solo código de proveedor, el total NO se comparaba — se escribió $80 en
+  // vez de $1.85 en una línea y una solicitud de $867 llegó a pagar como
+  // $7,119. Ahora el total se exige SIEMPRE. Única holgura extra: la
+  // cotización ya trae descontado el crédito que se está aplicando (caso del
+  // 2026-08-17, el proveedor resta el crédito en su "total a transferir").
+  const appliedCreditIdSet = new Set(d.appliedCreditIds ?? []);
+  const appliedCreditTotal = appliedCreditIdSet.size
+    ? (await getAvailableCreditsForSupplier(d.supplierId)).filter((c) => appliedCreditIdSet.has(c.id)).reduce((s, c) => s + c.amount, 0)
+    : 0;
+  const matches = quoteTotalMatchesLines({ readTotal: d.quoteReadTotal, linesTotal: groupTotal, supplierShipping, appliedCreditTotal });
+  if (!isCreditoSupplier && !matches) {
+    return {
+      ok: false,
+      status: 400,
+      error:
+        d.quoteReadTotal === null
+          ? "No se pudo leer el total de la cotización — sube una imagen más clara y verifícala de nuevo."
+          : `La cotización dice $${d.quoteReadTotal.toFixed(2)} y lo escrito suma $${groupTotal.toFixed(2)} — revisa precios y cantidades antes de enviar.`,
+    };
+  }
+  if (!isCreditoSupplier) {
+    const wrong = d.items.filter((it) => it.quoteReferenceCode && !quoteLineMatches(it));
+    if (wrong.length > 0) {
+      const names = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: wrong.map((w) => w.catalogItemId) } }, select: { id: true, name: true } });
+      const nameOf = (id: string) => names.find((n) => n.id === id)?.name ?? "un producto";
+      return {
+        ok: false,
+        status: 400,
+        error: `No coincide con la cotización: ${wrong
+          .map((w) => `${nameOf(w.catalogItemId)} — la cotización dice ${w.quoteQuantity ?? "?"} × $${w.quoteUnitPrice?.toFixed(2) ?? "?"}, escribiste ${w.quantity} × $${w.unitCost.toFixed(2)}`)
+          .join("; ")}.`,
+      };
+    }
   }
   // Confirmado 2026-09-21, pedido explícito del usuario (ya no se usará
   // Just): cuando una línea trae solo un código de proveedor (sin nombre de

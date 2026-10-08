@@ -12,6 +12,7 @@ import { PriceTrendChart, PriceHistoryBreakdownList } from "./PriceTrendChart";
 import type { SupplierPriceHistory, PriceHistoryStats, SupplierPricePoint } from "@/lib/purchases";
 import { CatalogCode, CopyValueButton } from "@/components/shared/CatalogCode";
 import { shippingDueWithMerchandise, groupShippingTotal } from "@/lib/purchaseShipping";
+import { quoteTotalMatchesLines } from "@/lib/quoteMatch";
 
 // Copiada de lib/purchases.ts (no se puede importar el original: arrastra
 // prisma/pg al bundle del cliente y rompe el build — ver commit que lo
@@ -162,7 +163,7 @@ function groupRows<T extends Row>(rows: T[]) {
 // el catálogo (ver checkPurchaseSubmission, ya no depende de una orden de
 // compra de respaldo). Solo dos cosas cuentan como "novedad" real: precio
 // sobre el historial, o código sin nombre de producto.
-function buildValidationSummary(g: Row[]) {
+function buildValidationSummary(g: Row[], quoteMismatch = false) {
   const total = g.reduce((s, r) => s + r.totalCost, 0);
   // Confirmado 2026-09-07 — ya no se cita UNA justificación como si
   // representara a todo el grupo (ese era justo el origen del bug reportado:
@@ -177,13 +178,13 @@ function buildValidationSummary(g: Row[]) {
     parts.push(
       `${codeOnlyCount === g.length ? "La cotización" : `${codeOnlyCount} de ${g.length} productos de la cotización`} solo traía código de proveedor, sin nombre — ya se confirmó a qué producto corresponde y quedó guardado en el catálogo.`
     );
-  } else {
+  } else if (!quoteMismatch) {
     parts.push(`Cotización verificada por IA — el total leído coincide con los $${total.toFixed(2)} escritos.`);
   }
   if (justifiedCount > 0) {
     parts.push(`${justifiedCount} producto${justifiedCount === 1 ? "" : "s"} superó el historial de precio o cambió de proveedor — justificación abajo.`);
   }
-  const hasIssue = justifiedCount > 0;
+  const hasIssue = justifiedCount > 0 || quoteMismatch;
   if (!hasIssue) parts.push("Sin novedades — todo cuadra correctamente.");
   return { text: parts.join(" "), hasIssue };
 }
@@ -412,7 +413,11 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
         );
         setReservedCreditsByGroup(Object.fromEntries(entries));
 
-        const catalogItemIds = [...new Set(data.filter((r) => r.justification).map((r) => r.catalogItemId))];
+        // Confirmado 2026-10-08 (SC-170): el historial se carga para TODOS
+        // los productos, no solo los que traen justificación — así un precio
+        // muchas veces más alto que lo de siempre se marca en rojo aunque se
+        // haya colado sin justificar.
+        const catalogItemIds = [...new Set(data.map((r) => r.catalogItemId))];
         catalogItemIds.forEach((catalogItemId) => {
           fetch(`/api/purchase-catalog/${catalogItemId}`)
             .then((r) => (r.ok ? r.json() : null))
@@ -446,6 +451,29 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   function effectiveCanPayHere(groupId: string) {
     if (currentGroupRows(groupId)[0]?.supplier.paymentMode === "CREDITO") return false;
     return groupIsEmergency(groupId) ? isAdmin && canPayMerchandise : canPayHere;
+  }
+
+  // Confirmado 2026-10-08 (SC-170, Zheng Wu): la solicitud llegó con $7,119
+  // cuando la cotización decía $867 (un $80 escrito en vez de $1.85) y aquí
+  // no se veía nada raro. Mismo criterio que al enviar (lib/quoteMatch):
+  // si no cuadra, se avisa en rojo y no se deja aprobar — solo rechazar.
+  function quoteMismatchFor(g: Row[]): string | null {
+    if (g[0].supplier.paymentMode === "CREDITO") return null;
+    const readTotal = g[0].quoteReadTotal;
+    const linesTotal = g.reduce((s, r) => s + r.totalCost, 0);
+    const supplierShipping = g.filter((r) => !r.shippingIncluded && r.carrierId === r.supplierId).reduce((s, r) => s + (r.shippingCostTotal ?? 0), 0);
+    if (quoteTotalMatchesLines({ readTotal, linesTotal, supplierShipping, appliedCreditTotal: reservedTotalFor(g[0].groupId) })) return null;
+    return readTotal === null
+      ? `No se pudo leer el total de la cotización y lo escrito suma $${linesTotal.toFixed(2)} — revisa la cotización antes de aprobar.`
+      : `La cotización dice $${readTotal.toFixed(2)}, pero lo escrito suma $${linesTotal.toFixed(2)} — algún precio o cantidad está mal. Recházala para que la corrijan.`;
+  }
+
+  // Precio efectivo 2 veces o más sobre el promedio de sus últimas compras.
+  function priceJumpFor(r: Row): { times: number; avg: number } | null {
+    const stats = statsByCatalogItem[r.catalogItemId];
+    if (!stats || stats.last3Avg === null || stats.last3Avg <= 0) return null;
+    const times = effectiveUnitCost(r) / stats.last3Avg;
+    return times >= 2 ? { times, avg: stats.last3Avg } : null;
   }
 
   function reservedTotalFor(groupId: string) {
@@ -584,12 +612,18 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
   // queda para después en Finanzas, que hace otra persona).
   async function justApprove(groupId: string) {
     setBusyGroup(groupId);
-    await fetch(`/api/purchase-requests/group/${groupId}/review`, {
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/group/${groupId}/review`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "approve" }),
     });
     setBusyGroup(null);
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setErr(d.error ?? "No se pudo aprobar.");
+      return;
+    }
     setHistoryRows(null);
     load();
     router.refresh();
@@ -792,7 +826,8 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
         const groupId = g[0].groupId;
         const total = g.reduce((s, r) => s + r.totalCost, 0) + shippingDueWithMerchandise(g);
         const justification = g.find((r) => r.justification)?.justification ?? null;
-        const summary = buildValidationSummary(g);
+        const quoteMismatch = quoteMismatchFor(g);
+        const summary = buildValidationSummary(g, !!quoteMismatch);
         // El flete del mismo proveedor ya va sumado al total (misma transferencia).
         const canPayShippingNow = !g[0].shippingIncluded && g[0].shippingPaymentTiming === "WITH_PURCHASE" && g[0].carrierId !== g[0].supplierId;
         return (
@@ -838,6 +873,14 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                       <LineChart size={9} />
                       Historial de precio
                     </button>
+                    {(() => {
+                      const jump = priceJumpFor(r);
+                      return jump ? (
+                        <span className="shrink-0 text-[9.5px] font-bold rounded-full px-1.5 py-0.5 bg-red/20 border border-red text-red">
+                          {jump.times >= 10 ? Math.round(jump.times) : jump.times.toFixed(1)} veces su precio de siempre (${jump.avg.toFixed(2)})
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
                 ))}
                 <div className="text-[11.5px] text-steel mt-0.5">{g[0].supplier.name}</div>
@@ -889,7 +932,14 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
               </div>
             </div>
 
-            <div className={`rounded-md px-3 py-2 mb-2.5 text-[11.5px] ${summary.hasIssue ? "bg-red/25 text-red border-2 border-red font-semibold" : "bg-teal/10 text-teal border border-teal/30"}`}>
+            {quoteMismatch && (
+              <div className="rounded-md px-3 py-2 mb-2.5 text-[12px] bg-red/25 text-red border-2 border-red font-semibold flex items-start gap-1.5">
+                <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+                <span>{quoteMismatch}</span>
+              </div>
+            )}
+
+            <div className={`rounded-md px-3 py-2 mb-2.5 text-[11.5px] ${summary.hasIssue ?"bg-red/25 text-red border-2 border-red font-semibold" : "bg-teal/10 text-teal border border-teal/30"}`}>
               <div className="flex items-start gap-1.5">
                 {summary.hasIssue ? <AlertTriangle size={15} className="mt-0.5 shrink-0" /> : <CheckCircle2 size={13} className="mt-0.5 shrink-0" />}
                 <span>{summary.text}</span>
@@ -1329,8 +1379,15 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                <button type="button" disabled={busyGroup === groupId} className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => startApprove(groupId)}>
+              <div className="flex items-center gap-2 flex-wrap">
+                {err && <div className="w-full text-red text-[12px]">{err}</div>}
+                <button
+                  type="button"
+                  disabled={busyGroup === groupId || !!quoteMismatch}
+                  title={quoteMismatch ? "No cuadra con la cotización — recházala para que la corrijan" : undefined}
+                  className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={() => startApprove(groupId)}
+                >
                   Aprobar
                 </button>
                 <button type="button" disabled={busyGroup === groupId} className="rounded border border-rule px-3.5 py-1.5 text-[12.5px] font-semibold text-steel cursor-pointer" onClick={() => startReject(g)}>

@@ -309,6 +309,10 @@ export function PurchaseInvoicingPanel({
   const [urgentReports, setUrgentReports] = useState<UrgentReportSummary[]>([]);
   const [flagOpenGroupId, setFlagOpenGroupId] = useState<string | null>(null);
   const [flagNote, setFlagNote] = useState("");
+  // Confirmado 2026-10-08 (SC-170): rechazar una ya aprobada, antes de pagar.
+  const [rejectApprovedGroupId, setRejectApprovedGroupId] = useState<string | null>(null);
+  const [rejectApprovedReason, setRejectApprovedReason] = useState("");
+  const [rejectApprovedErr, setRejectApprovedErr] = useState("");
   // El grupo de la factura que se está pasando el mouse encima ahora mismo
   // — un solo listener de paste "armado" por hover, compartido entre todas
   // las tarjetas de la lista, en vez de un hook por cada una.
@@ -486,6 +490,26 @@ export function PurchaseInvoicingPanel({
     });
     setBusyGroup(null);
     setFlagOpenGroupId(null);
+    load();
+    router.refresh();
+  }
+
+  async function rejectApproved(groupId: string) {
+    setBusyGroup(groupId);
+    setRejectApprovedErr("");
+    const res = await fetch(`/api/purchase-requests/group/${groupId}/reject-approved`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rejectReason: rejectApprovedReason.trim() }),
+    });
+    setBusyGroup(null);
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      setRejectApprovedErr(d.error ?? "No se pudo rechazar.");
+      return;
+    }
+    setRejectApprovedGroupId(null);
+    setRejectApprovedReason("");
     load();
     router.refresh();
   }
@@ -910,6 +934,46 @@ export function PurchaseInvoicingPanel({
                     <div className="flex items-center gap-1.5 rounded-md px-3 py-2 mb-2.5 text-[11.5px] border border-rule text-steel-dim">
                       Revisión de IA en proceso — recarga en unos segundos.
                     </div>
+                  )}
+                  {/* Confirmado 2026-10-08 (SC-170): si algo vino mal, el admin la
+                      rechaza antes de pagar y vuelve a quien la pidió para corregir. */}
+                  {isAdmin && (
+                    rejectApprovedGroupId === groupId ? (
+                      <div className="border border-red/40 bg-red/5 rounded-md p-2.5 mb-2.5">
+                        <div className="text-[11.5px] text-ink mb-1.5">
+                          Se rechaza sin pagar y vuelve a {actorName(g[0].requestedBy?.name)} para que la corrija (mismo código {formatPurchaseRequestCode(g[0].requestNumber)}). Les llega aviso a quien la pidió y a quien la aprobó.
+                        </div>
+                        <textarea
+                          className="w-full rounded border border-rule px-2.5 py-1.5 text-[12px] mb-1.5"
+                          rows={2}
+                          placeholder="Motivo (obligatorio), ej. el precio del juego de ortografía es $1.85, no $80"
+                          value={rejectApprovedReason}
+                          onChange={(e) => setRejectApprovedReason(e.target.value)}
+                        />
+                        {rejectApprovedErr && <div className="text-red text-[11.5px] mb-1.5">{rejectApprovedErr}</div>}
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={busyGroup === groupId || !rejectApprovedReason.trim()}
+                            className="rounded border border-red bg-red px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
+                            onClick={() => rejectApproved(groupId)}
+                          >
+                            Rechazar sin pagar
+                          </button>
+                          <button type="button" className="text-steel text-[12px] cursor-pointer" onClick={() => { setRejectApprovedGroupId(null); setRejectApprovedErr(""); }}>
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="text-red text-[11.5px] font-semibold underline cursor-pointer mb-2.5"
+                        onClick={() => { setRejectApprovedGroupId(groupId); setRejectApprovedReason(""); setRejectApprovedErr(""); }}
+                      >
+                        Rechazar antes de pagar
+                      </button>
+                    )
                   )}
                   <div className="bg-cloud border border-rule rounded-md px-3 py-2.5 mb-2.5">
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-steel mb-1.5">

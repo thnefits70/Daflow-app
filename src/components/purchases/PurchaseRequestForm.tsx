@@ -12,6 +12,7 @@ import type { SupplierPriceHistory } from "@/lib/purchases";
 import type { RepurchaseLineStatus } from "@/lib/repurchaseReviews";
 import { RepurchaseAnalyzer } from "./RepurchasePanel";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { quoteTotalMatchesLines, quoteLineMatches } from "@/lib/quoteMatch";
 
 type PriceStats = { count: number; min: number | null; avg: number | null; max: number | null; last3Avg: number | null };
 type SupplierCreditDTO = { id: string; amount: number; reason: string; status: "AVAILABLE" | "RESERVED" | "APPLIED" | "REFUNDED"; createdAt: string };
@@ -861,10 +862,28 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // calcula acá con el total leído en vez de usar verifyResult.matches, así
   // cambiar el flete o la casilla se refleja al instante sin volver a leer.
   const supplierShipping = !shippingIncluded && !shippingCarrierPending && shippingBySupplier ? Number(shippingCostTotal) || 0 : 0;
-  const readTotal = verifyResult?.readTotal ?? null;
+  // Confirmado 2026-10-08 (SC-170, Zheng Wu): si la IA no leyó un total
+  // pero sí cada renglón (nota a mano con códigos), se usa la suma de esos
+  // renglones como total de la cotización.
+  const aiLinesSum =
+    aiLines.length > 0 && aiLines.every((al) => al.quantity !== null && al.unitPrice !== null)
+      ? Math.round(aiLines.reduce((s, al) => s + al.quantity! * al.unitPrice!, 0) * 100) / 100
+      : null;
+  const readTotal = verifyResult ? (verifyResult.readTotal ?? aiLinesSum) : null;
+  const appliedCreditTotal = availableCredits.filter((c) => selectedCreditIds.includes(c.id)).reduce((s, c) => s + c.amount, 0);
   const quoteMatchesWithShipping = readTotal !== null && supplierShipping > 0 && Math.abs(readTotal - (total + supplierShipping)) < 0.01;
-  const quoteTotalMatches = readTotal !== null && (Math.abs(readTotal - total) < 0.01 || quoteMatchesWithShipping);
-  const quoteVerified = isCreditoSupplier || (!!verifyResult && (codeOnlyIdxs.length > 0 ? allCodeOnlyResolved : quoteTotalMatches));
+  const quoteTotalMatches = quoteTotalMatchesLines({ readTotal, linesTotal: total, supplierShipping, appliedCreditTotal });
+  // Confirmado 2026-10-08 (SC-170): antes, con códigos de proveedor, bastaba
+  // con que cada código estuviera reconocido — el total ya no se comparaba y
+  // pasó un $80 escrito en vez de $1.85. Ahora se exigen las dos cosas, y
+  // además que el precio y la cantidad de cada línea con código sean los que
+  // la IA leyó para ese código.
+  const codeLinePriceMismatchIdxs = codeOnlyIdxs.filter((i) => {
+    const ml = matchedAiLineByForm[i]!;
+    return !quoteLineMatches({ quantity: Number(lines[i].quantity) || 0, unitCost: effectiveLineUnitCost(lines[i]), quoteUnitPrice: ml.unitPrice, quoteQuantity: ml.quantity });
+  });
+  const quoteVerified =
+    isCreditoSupplier || (!!verifyResult && quoteTotalMatches && allCodeOnlyResolved && codeLinePriceMismatchIdxs.length === 0);
   const validLines = lines.filter((l) => l.catalogItem && Number(l.quantity) > 0 && Number(l.unitCost) > 0);
   const isHotRepurchaseLine = (i: number) => !!repurchaseByLine[i]?.hot && !repurchaseByLine[i]!.approved;
   const hotRepurchaseNames = emergencyOnly ? [] : lines.filter((l, i) => l.catalogItem && isHotRepurchaseLine(i)).map((l) => l.catalogItem!.name);
@@ -888,7 +907,13 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       return;
     }
     if (!quoteVerified) {
-      setErr("Verifica la cotización antes de enviar.");
+      if (verifyResult && codeLinePriceMismatchIdxs.length > 0) {
+        setErr(`No coincide con la cotización: ${codeLinePriceMismatchIdxs.map((i) => `${lines[i].catalogItem!.name} (la cotización dice ${matchedAiLineByForm[i]!.quantity ?? "?"} × $${matchedAiLineByForm[i]!.unitPrice?.toFixed(2) ?? "?"}, escribiste ${lines[i].quantity} × $${Number(lines[i].unitCost).toFixed(2)})`).join(", ")}.`);
+      } else if (verifyResult && !quoteTotalMatches) {
+        setErr(readTotal === null ? "No se pudo leer el total de la cotización — sube una imagen más clara." : `La cotización dice $${readTotal.toFixed(2)} y lo escrito suma $${total.toFixed(2)} — revisa precios y cantidades.`);
+      } else {
+        setErr("Verifica la cotización antes de enviar.");
+      }
       return;
     }
     if (!emergencyOnly) {
@@ -949,11 +974,13 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         unitCost: effectiveLineUnitCost(l),
         justification: justificationNeededIdx.has(i) ? l.justification.trim() : null,
         quoteReferenceCode: isLineCodeOnly(i) ? matchedAiLineByForm[i]!.referenceCodeFound : null,
+        quoteUnitPrice: isLineCodeOnly(i) ? matchedAiLineByForm[i]!.unitPrice : null,
+        quoteQuantity: isLineCodeOnly(i) ? matchedAiLineByForm[i]!.quantity : null,
       })),
       supplierId: supplier.id,
       bankAccountId,
       quoteImageUrl,
-      quoteReadTotal: verifyResult?.readTotal ?? null,
+      quoteReadTotal: readTotal,
       shippingIncluded,
       shippingCarrierPending: !shippingIncluded && shippingCarrierPending,
       carrierId: shippingIncluded ? null : carrier?.id,
@@ -1501,6 +1528,11 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                               Código <b className="text-ink">&quot;{ml.referenceCodeFound}&quot;</b> → <b className="text-ink">{l.catalogItem?.name ?? `línea ${idx + 1}`}</b>
                               {ml.quantity !== null && ml.unitPrice !== null && <span className="text-steel-dim"> ({ml.quantity} × ${ml.unitPrice.toFixed(2)})</span>}
                             </div>
+                            {codeLinePriceMismatchIdxs.includes(idx) && (
+                              <div className="flex items-center gap-2 text-[12px] text-red mb-1.5">
+                                <Lock size={12} /> La cotización dice {ml.quantity ?? "?"} × ${ml.unitPrice?.toFixed(2) ?? "?"}, pero escribiste {l.quantity} × ${Number(l.unitCost).toFixed(2)} — corrige el precio o la cantidad.
+                              </div>
+                            )}
                             {recognized ? (
                               <div className="flex items-center gap-2 text-[12px] text-teal">
                                 <CheckCircle2 size={13} /> Código ya reconocido — no hace falta confirmar de nuevo.
@@ -1540,6 +1572,15 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                         );
                       })}
                     </div>
+                    {quoteTotalMatches ? (
+                      <div className="flex items-center gap-2 text-[12.5px] text-teal mt-2">
+                        <CheckCircle2 size={14} /> Total coincide — ${readTotal?.toFixed(2)}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-[12.5px] text-red mt-2">
+                        <Lock size={14} /> Total no coincide — la cotización dice ${readTotal?.toFixed(2) ?? "?"}, pero se escribió ${total.toFixed(2)}. Corrige antes de enviar.
+                      </div>
+                    )}
                   </div>
                 ) : quoteTotalMatches ? (
                   <div className="flex items-center gap-2 text-[12.5px] text-teal">
