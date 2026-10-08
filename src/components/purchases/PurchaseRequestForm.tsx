@@ -874,6 +874,15 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       setErr("Completa producto, mercadería o insumo, cantidad y costo de cada línea, el proveedor, y la cotización.");
       return;
     }
+    // Confirmado 2026-10-08 (caso Jariel): el servidor exige unidades enteras
+    // y devolvía "Invalid input: expected int, received number" sin decir qué
+    // línea — el campo dejaba escribir decimales y la verificación contra la
+    // cotización tolera ±0.5, así que todo se veía "en orden".
+    const decimalQtyLines = lines.filter((l) => !Number.isInteger(Number(l.quantity)));
+    if (decimalQtyLines.length > 0) {
+      setErr(`La cantidad debe ser en unidades enteras, sin decimales: ${decimalQtyLines.map((l) => `${l.catalogItem!.name} (escribiste ${l.quantity})`).join(", ")}.`);
+      return;
+    }
     if (emergencyOnly && !editingGroupId && !emergencyReason.trim()) {
       setErr("Escribe el motivo de la solicitud de emergencia (ej. \"Jariel no disponible\").");
       return;
@@ -1256,7 +1265,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
             <div className="grid grid-cols-3 gap-2.5 mb-2">
               <div>
                 <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Cantidad</label>
-                <input type="number" min="1" className="w-full rounded border border-rule px-2.5 py-2 text-[13px]" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} />
+                <input type="number" min="1" step="1" className={`w-full rounded border px-2.5 py-2 text-[13px] ${line.quantity && !Number.isInteger(Number(line.quantity)) ? "border-red" : "border-rule"}`} value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} />
               </div>
               <div>
                 <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">Costo/unidad</label>

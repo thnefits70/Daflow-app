@@ -657,7 +657,7 @@ export const purchaseLineSchema = z.object({
   catalogItemId: z.string().min(1),
   // Ver needsFulfillmentSize — solo se manda si el producto no estaba marcado.
   fulfillmentSize: z.enum(["SMALL", "NORMAL"]).nullable().optional(),
-  quantity: z.number().int().positive(),
+  quantity: z.number().int("La cantidad debe ser en unidades enteras, sin decimales.").positive(),
   unitCost: z.number().positive(),
   // Confirmado 2026-09-07 (bug real reportado por el usuario) — antes había
   // una sola justificación por SOLICITUD completa, y esa misma frase se
