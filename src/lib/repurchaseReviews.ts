@@ -691,11 +691,9 @@ export async function checkRepurchaseApprovals(params: {
     if (rc.supplierId !== params.supplierId) {
       return { ok: false, error: `${code} (${item.name}) se aprobó con el proveedor ${rc.supplier.name}. Para comprarle a otro proveedor, envía una recompra nueva con ese proveedor.` };
     }
+    // La cantidad es libre: se puede pedir más de lo aprobado (p. ej. para
+    // conseguir un descuento del proveedor). Solo atan proveedor y precio.
     const lines = params.lines.filter((l) => l.catalogItemId === item.id);
-    const qty = lines.reduce((s, l) => s + l.quantity, 0);
-    if (rc.approvedQuantity !== null && qty > rc.approvedQuantity) {
-      return { ok: false, error: `Se aprobaron ${rc.approvedQuantity} u. de ${item.name} (${code}) y estás pidiendo ${qty}. Pide como máximo lo aprobado, o envía una recompra nueva.` };
-    }
     const over = lines.find((l) => l.unitCost > rc.unitCost + 0.005);
     if (over) {
       return {

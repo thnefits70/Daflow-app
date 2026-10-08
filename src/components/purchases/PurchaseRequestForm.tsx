@@ -1073,16 +1073,14 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
               const item = line.catalogItem;
               if (rc.approved) {
                 const a = rc.approved;
-                const qty = Number(line.quantity) || 0;
                 const cost = effectiveLineUnitCost(line);
                 const problems: string[] = [];
                 if (supplier && supplier.id !== a.supplierId) problems.push(`se aprobó con ${a.supplierName}, no con ${supplier.name}`);
-                if (a.approvedQuantity !== null && qty > a.approvedQuantity) problems.push(`el máximo aprobado es ${a.approvedQuantity} u.`);
                 if (cost > a.unitCost + 0.005) problems.push(`se aprobó a $${a.unitCost.toFixed(2)} por unidad y aquí está a $${cost.toFixed(2)}`);
                 return (
                   <div className={`rounded-md px-3 py-2 mb-2.5 text-[12.5px] border ${problems.length ? "bg-red/10 border-red/35 text-red" : "bg-teal/10 border-teal/35 text-teal"}`}>
                     <CheckCircle2 size={14} className="inline mr-1.5 -mt-0.5" />
-                    Recompra <b>{a.code}</b> {a.selfConfirmed ? "confirmada por ti" : "aprobada por Bryan"}: {a.supplierName}, hasta {a.approvedQuantity ?? "—"} u. a ${a.unitCost.toFixed(2)}
+                    Recompra <b>{a.code}</b> {a.selfConfirmed ? "confirmada por ti" : "aprobada por Bryan"}: {a.supplierName}, {a.approvedQuantity ?? "—"} u. sugeridas (puedes pedir más) a ${a.unitCost.toFixed(2)}
                     {a.expiresAt ? ` · vale hasta el ${new Date(a.expiresAt).toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" })}` : ""}.
                     {problems.length > 0 && <div className="mt-1 font-semibold">No coincide: {problems.join("; ")}. Corrígelo o analiza una recompra nueva en Control de Compras → Recompras.</div>}
                   </div>
