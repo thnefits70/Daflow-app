@@ -6,6 +6,7 @@ import { MyPurchaseRequests } from "./MyPurchaseRequests";
 import { PurchaseApprovalInbox } from "./PurchaseApprovalInbox";
 import { PurchaseReceivingPanel } from "./PurchaseReceivingPanel";
 import { PurchaseInvoicingPanel } from "./PurchaseInvoicingPanel";
+import { LooseInvoicesSection } from "./LooseInvoicesSection";
 import { PurchasePriceExplorer } from "./PurchasePriceExplorer";
 import { PurchaseUrgentReportsPanel } from "./PurchaseUrgentReportsPanel";
 import { PurchaseAuditPanel } from "./PurchaseAuditPanel";
@@ -381,6 +382,7 @@ export function PurchaseControlPanel({
             )}
           </TabGuide>
           <PurchaseInvoicingPanel isAdmin={isAdmin} canPayMerchandise={canPayMerchandise} focusGroupId={focusGroupId} />
+          <LooseInvoicesSection isAdmin={isAdmin} />
         </>
       )}
       {tab === "auditoria" && (

@@ -457,6 +457,8 @@ model User {
   purchaseSuggestionDiscardsUndone                 PurchaseSuggestionDiscard[]           @relation("PurchaseSuggestionDiscardUndoneBy")
   repurchaseReviewsRequested                       RepurchaseReview[]                    @relation("RepurchaseReviewRequestedBy")
   repurchaseReviewsReviewed                        RepurchaseReview[]                    @relation("RepurchaseReviewReviewedBy")
+  looseInvoicesCreated                             LooseInvoice[]                        @relation("LooseInvoiceCreatedBy")
+  looseInvoicesDeleted                             LooseInvoice[]                        @relation("LooseInvoiceDeletedBy")
   marketProductPriceChangesMade                    MarketProductPriceChange[]            @relation("MarketProductPriceChangeChangedBy")
   purchaseRequestsPaidBy                           PurchaseRequest[]                     @relation("PurchaseRequestPaidBy")
   purchaseRequestsInvoicedBy                       PurchaseRequest[]                     @relation("PurchaseRequestInvoicedBy")
@@ -1854,6 +1856,7 @@ model Supplier {
   marketProductProposalsAsChosen         MarketProductProposal[]
   unfoundWinningProducts                 UnfoundWinningProduct[]
   repurchaseReviews                      RepurchaseReview[]
+  looseInvoices                          LooseInvoice[]
 
   @@index([status])
   @@index([createdByDeptId])
@@ -7906,4 +7909,40 @@ model StockCountShift {
   counted      Int
 
   @@index([assignmentId])
+}
+
+enum LooseInvoiceReason {
+  PREVIOUS_PURCHASE
+  GENERAL_SUPPORT
+  OTHER
+}
+
+// Confirmado 2026-10-07, pedido de Nairoby: facturas que el proveedor emite
+// sin corresponder a una compra puntual (ej. PAWER BANK facturado en octubre
+// pero comprado y justificado en septiembre, o facturas generales de CHEN sin
+// producto específico) que igual sirven de sustento ante el SRI. No tocan el
+// invoiceStatus de ninguna PurchaseRequest — viven aparte.
+model LooseInvoice {
+  id            String             @id @default(cuid())
+  supplierId    String
+  supplier      Supplier           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  invoiceNumber String?
+  invoiceDate   DateTime
+  amount        Float
+  docUrl        String
+  reason        LooseInvoiceReason
+  // Operación anterior a la que corresponde (groupId de PurchaseRequest) —
+  // solo para PREVIOUS_PURCHASE, opcional.
+  relatedGroupId String?
+  note          String?            @db.Text
+  createdById   String?
+  createdBy     User?              @relation("LooseInvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime           @default(now())
+  // Quitar = ocultar, con rastro de quién y cuándo.
+  deletedAt     DateTime?
+  deletedById   String?
+  deletedBy     User?              @relation("LooseInvoiceDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+
+  @@index([supplierId])
+  @@index([invoiceDate])
 }
