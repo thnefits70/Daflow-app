@@ -4,6 +4,7 @@ import { canViewStockLevels } from "@/lib/guards";
 import { getAllCurrentStock } from "@/lib/stockKardex";
 import { getUnconfirmedDispatchSummary } from "@/lib/fulfillmentPicking";
 import { getVariantStock } from "@/lib/variantStock";
+import { parseVariantCounts } from "@/lib/stockCount";
 import {
   bodegaUnitCost,
   computeBenistockPrice,
@@ -44,16 +45,22 @@ export async function GET() {
     getUnconfirmedDispatchSummary(),
     // PROVISIONAL (pedido de Daniel 2026-10-07, mientras dura el conteo
     // físico): franja verde en los productos ya recontados.
-    prisma.stockCountLine.findMany({ select: { catalogItemId: true, countedQty: true, expectedQty: true, decision: true } }),
+    prisma.stockCountLine.findMany({ select: { catalogItemId: true, countedQty: true, expectedQty: true, decision: true, variantCounts: true }, orderBy: { countedAt: "asc" } }),
   ]);
   // "Recontado" = el número del sistema ya quedó igual a lo contado: coincidió
   // al contar, el admin aprobó la diferencia, o decidió dejarlo como está.
   // No cuenta lo que espera aprobación del admin ni lo mandado a recontar.
-  const recountedIds = new Set(
-    countLines
-      .filter((l) => l.decision === "APPROVED" || l.decision === "REJECTED" || (l.decision === null && l.countedQty === l.expectedQty))
-      .map((l) => l.catalogItemId),
-  );
+  const recountedLines = countLines.filter((l) => l.decision === "APPROVED" || l.decision === "REJECTED" || (l.decision === null && l.countedQty === l.expectedQty));
+  const recountedIds = new Set(recountedLines.map((l) => l.catalogItemId));
+  // Pedido del usuario 2026-10-08: al pulsar el nombre se ven las variantes
+  // (color/talla) del último recuento de cada producto, apenas queda
+  // recontado — la lista oficial recién se arma al cerrar todo el conteo.
+  const countedVariantsByItem = new Map<string, { name: string; qty: number }[]>();
+  for (const l of recountedLines) {
+    const v = parseVariantCounts(l.variantCounts);
+    if (v && v.length > 0) countedVariantsByItem.set(l.catalogItemId, v);
+    else countedVariantsByItem.delete(l.catalogItemId);
+  }
   const pendingAdjustmentByItem = new Map(pendingAdjustments.map((a) => [a.catalogItemId, a.requestedQuantity]));
   // Cambiado 2026-09-30, pedido del usuario: el costo para los precios sale
   // de lo que queda de verdad en bodega (ver sellingCost.ts), no del
@@ -66,7 +73,7 @@ export async function GET() {
 
   const withPrices = rows.map((r) => {
     const variants = variantStock.get(r.catalogItemId) ?? null;
-    return withPrice({ ...r, variantStock: variants });
+    return withPrice({ ...r, variantStock: variants, countedVariants: countedVariantsByItem.get(r.catalogItemId) ?? null });
   });
 
   function withPrice<T extends (typeof rows)[number]>(r: T) {

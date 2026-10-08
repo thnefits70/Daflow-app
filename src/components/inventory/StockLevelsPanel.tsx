@@ -98,7 +98,33 @@ type StockRow = {
   notPurchasedYet?: boolean;
   pendingDropiId?: string | null;
   variantStock?: { variants: { id: string; name: string; stock: number }[]; unidentified: number } | null;
+  // Variantes del último recuento (2026-10-08), se ven al pulsar el nombre.
+  countedVariants?: { name: string; qty: number }[] | null;
 };
+
+// Pedido del usuario 2026-10-08: para todos, pulsar el nombre muestra el
+// nombre completo y las variantes (color/talla) que se contaron en el
+// recuento — se van sumando a medida que avanza el conteo.
+function ProductNameToggle({ name, countedVariants, hasVariantStock }: { name: string; countedVariants: { name: string; qty: number }[] | null; hasVariantStock: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="flex flex-col min-w-0">
+      <button
+        type="button"
+        title={open ? "Clic para achicar" : `${name} · Clic para ver el nombre completo${countedVariants ? " y sus variantes" : ""}`}
+        className={`text-left cursor-pointer hover:text-teal ${open ? "whitespace-normal break-words" : "truncate"}`}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {name}
+      </button>
+      {open && !hasVariantStock && (
+        <span className="text-[11px] text-steel mt-0.5">
+          {countedVariants ? `Variantes (recuento): ${countedVariants.map((v) => `${v.name} ${v.qty}`).join(" · ")}` : "Sin variantes registradas en el recuento"}
+        </span>
+      )}
+    </span>
+  );
+}
 type SortKey = "name" | "balance" | "proveedor" | "bodega" | "benistock" | "b2b" | "dropi" | "b2c1" | "b2c2";
 // Confirmado 2026-09-21, pedido explícito del usuario: además de ordenar
 // por nombre/stock, poder ordenar de mayor a menor por cualquier columna de
@@ -1287,17 +1313,24 @@ export function StockLevelsPanel({
                     >
                       <TrendingUp size={16} />
                     </button>
-                    {isAdmin || canViewPriceHistory ? (
+                    {/* 2026-10-08: el nombre ahora abre nombre + variantes
+                        para todos; el historial de precio pasa a su botón. */}
+                    {(isAdmin || canViewPriceHistory) && (
                       <button
                         type="button"
-                        title={`${r.name} · Clic para ver el historial de precio`}
-                        className="truncate text-left cursor-pointer hover:underline hover:text-teal"
+                        title="Ver el historial de precio"
+                        aria-label="Ver el historial de precio"
+                        className="shrink-0 w-7 h-7 flex items-center justify-center rounded border border-rule text-steel hover:text-teal hover:border-teal/40 cursor-pointer"
                         onClick={() => openPriceHistory(r)}
                       >
-                        {r.name}
+                        <LineChart size={15} />
                       </button>
-                    ) : (
-                      <ExpandableName text={r.name} />
+                    )}
+                    <ProductNameToggle name={r.name} countedVariants={r.countedVariants ?? null} hasVariantStock={!!r.variantStock} />
+                    {r.countedVariants && !r.variantStock && (
+                      <span className="shrink-0 text-[9.5px] font-bold uppercase text-teal" title="Tiene variantes contadas: pulsa el nombre para verlas">
+                        {r.countedVariants.length} var.
+                      </span>
                     )}
                   </span>
                   {/* Confirmado 2026-09-29, pedido de Daniel + usuario (opción A):
