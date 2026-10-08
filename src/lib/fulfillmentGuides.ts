@@ -8,7 +8,7 @@ import { lineBlock, NO_CARRIER, sortCarriers, VARIANT_CARRIER_UNKNOWN } from "@/
 import { areaRank } from "@/lib/warehouseAreas";
 import { guayaquilMonth, syncWarrantyMonth } from "@/lib/warrantyKpi";
 import { linkProductsFromGuides } from "@/lib/storeTracking";
-import { lotNoVariantUnits } from "@/lib/variantStock";
+import { lotNoVariantUnits, soldOutVariantsOf } from "@/lib/variantStock";
 
 export const NO_BRAND = "SIN_MARCA";
 
@@ -818,6 +818,10 @@ export type LotPickLine = ItemView & {
   noVariantUnits: number;
   variantOptions: string[];
   variantPicked: { name: string; qty: number }[] | null;
+  // Pedido del usuario 2026-10-08: colores/tallas ya agotados (solo
+  // productos contados por variante) y cuáles de las guías caen en ellos.
+  soldOutVariants: string[];
+  soldOutLabels: string[];
 };
 
 export async function getCompiledLot(lotId: string) {
@@ -1023,6 +1027,8 @@ export async function getCompiledLot(lotId: string) {
       noVariantUnits: 0,
       variantOptions: [],
       variantPicked: Array.isArray(p?.variantCounts) ? (p.variantCounts as { name: string; qty: number }[]) : null,
+      soldOutVariants: [],
+      soldOutLabels: [],
     };
   });
   const noVariant = await lotNoVariantUnits(lot.id, picking).catch(() => new Map<string, { units: number; options: string[] }>());
@@ -1031,6 +1037,20 @@ export async function getCompiledLot(lotId: string) {
     if (nv) {
       p.noVariantUnits = nv.units;
       p.variantOptions = nv.options;
+    }
+  }
+  // Corte cerrado: sus ventas ya bajaron el stock por variante, así que ahí
+  // "agotado" confundiría (lo dejó en cero este mismo corte).
+  if (lot.status !== "CLOSED") {
+    const soldOut = await soldOutVariantsOf(
+      picking.map((p) => ({ catalogItemId: p.catalogItemId, labels: (lineList.find((l) => l.catalogItemId === p.catalogItemId)?.variants ?? []).map((v) => v.label) })),
+    ).catch(() => new Map<string, { names: string[]; labels: string[] }>());
+    for (const p of picking) {
+      const so = soldOut.get(p.catalogItemId);
+      if (so) {
+        p.soldOutVariants = so.names;
+        p.soldOutLabels = so.labels;
+      }
     }
   }
   // Un bloque por transportadora que manda en algún producto, con quién lo

@@ -40,6 +40,9 @@ export type LotPickLine = ItemView & {
   noVariantUnits?: number;
   variantOptions?: string[];
   variantPicked?: { name: string; qty: number }[] | null;
+  // Colores/tallas agotados (2026-10-08): solo productos contados por variante.
+  soldOutVariants?: string[];
+  soldOutLabels?: string[];
 };
 export type LotBlock = { carrier: string; assigneeId: string | null; assigneeName: string | null; assignedByName?: string | null; assignedAt: string | null };
 // ID provisional de ALF (temporal, 2026-09-28): no está en INVESTOCK.

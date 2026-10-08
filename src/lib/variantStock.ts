@@ -333,3 +333,27 @@ export async function lotNoVariantUnits(lotId: string, lines: { catalogItemId: s
   }
   return out;
 }
+
+// ---- Variantes agotadas en el corte (pedido del usuario 2026-10-08) ----
+// Solo productos ya contados por variante (con lista oficial): los colores/
+// tallas con stock 0 o menos, y cuáles de los que piden las guías del corte
+// caen en uno de ellos. Sin cifras: el equipo solo ve el nombre en rojo.
+export async function soldOutVariantsOf(lines: { catalogItemId: string; labels: string[] }[]): Promise<Map<string, { names: string[]; labels: string[] }>> {
+  const out = new Map<string, { names: string[]; labels: string[] }>();
+  const stock = await getVariantStock(lines.map((l) => l.catalogItemId));
+  if (stock.size === 0) return out;
+  const resolve = await getVariantResolver([...stock.keys()]);
+  for (const l of lines) {
+    const s = stock.get(l.catalogItemId);
+    if (!s) continue;
+    const names = s.variants.filter((v) => v.stock <= 0).map((v) => v.name);
+    if (names.length === 0) continue;
+    const lower = new Set(names.map((n) => n.toLowerCase()));
+    const labels = l.labels.filter((label) => {
+      const name = resolve(l.catalogItemId, label);
+      return !!name && lower.has(name.toLowerCase());
+    });
+    out.set(l.catalogItemId, { names: names.sort((a, b) => a.localeCompare(b)), labels });
+  }
+  return out;
+}

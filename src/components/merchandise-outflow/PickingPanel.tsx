@@ -134,14 +134,31 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
     if (unknown > 0) parts.push(`${unknown} sin dato de transportadora`);
     return parts.join(" · ");
   };
+  // Pedido del usuario 2026-10-08: en productos ya contados por variante,
+  // los colores/tallas agotados salen con franja roja (sin cifras de stock).
+  const pickOf = (id: string) => lot.picking.find((p) => p.catalogItemId === id);
+  const soldOutNames = (id: string) => pickOf(id)?.soldOutVariants ?? [];
+  const isSoldOutLabel = (id: string, label: string) => (pickOf(id)?.soldOutLabels ?? []).includes(label);
+  const isSoldOutName = (id: string, name: string) => soldOutNames(id).some((n) => n.toLowerCase() === name.toLowerCase());
+  const soldOutStripe = (id: string) =>
+    soldOutNames(id).length > 0 && (
+      <div className="mt-1.5 border-l-4 border-l-red bg-red/10 rounded-r-md px-2 py-1 text-[11.5px] text-red font-semibold">
+        Agotado: {soldOutNames(id).join(" · ")}
+      </div>
+    );
   const variantChips = (id: string) => (
     <div className="flex flex-col gap-1">
       {variantsOf(id).map((v) => (
-        <div key={v.label} className="text-[11.5px] bg-teal/10 border border-teal/30 rounded-lg px-2 py-0.5 self-start">
+        <div
+          key={v.label}
+          className={`text-[11.5px] rounded-lg px-2 py-0.5 self-start ${isSoldOutLabel(id, v.label) ? "bg-red/10 border border-red/40 border-l-4 border-l-red" : "bg-teal/10 border border-teal/30"}`}
+        >
           {v.label} <b className="font-mono">{v.quantity}</b>
+          {isSoldOutLabel(id, v.label) && <span className="ml-1.5 text-[10.5px] font-bold text-red">AGOTADO</span>}
           {variantCarriers(id, v) && <div className="text-[11px] text-steel">{variantCarriers(id, v)}</div>}
         </div>
       ))}
+      {soldOutStripe(id)}
     </div>
   );
   const pieces = lot.warranty.filter((w) => w.mode === "PIECE");
@@ -317,10 +334,12 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                       </div>
                     ))}
                   </div>
-                  {variantsOf(p.catalogItemId).length > 0 && (
+                  {variantsOf(p.catalogItemId).length > 0 ? (
                     <div className="mt-2">
                       {variantChips(p.catalogItemId)}
                     </div>
+                  ) : (
+                    soldOutStripe(p.catalogItemId)
                   )}
                   <div className="text-[11px] text-steel mt-1.5">
                     {areaLabel(p.area)} · se saca completo en el bloque {carrierLabel(p.block)}
@@ -330,7 +349,19 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
               )}
               {variantsOf(p.catalogItemId).length > 0 && (
                 <div className="text-[11px] text-teal mt-0.5">
-                  {variantsOf(p.catalogItemId).map((v) => `${v.label} ${v.quantity}`).join(" · ")}
+                  {variantsOf(p.catalogItemId).map((v, i) => (
+                    <Fragment key={v.label}>
+                      {i > 0 && " · "}
+                      <span className={isSoldOutLabel(p.catalogItemId, v.label) ? "text-red font-semibold" : ""}>
+                        {v.label} {v.quantity}
+                      </span>
+                    </Fragment>
+                  ))}
+                </div>
+              )}
+              {soldOutNames(p.catalogItemId).length > 0 && !openRows.has(p.catalogItemId) && (
+                <div className="mt-1 border-l-4 border-l-red bg-red/10 rounded-r px-2 py-0.5 text-[11px] text-red font-semibold">
+                  Agotado: {soldOutNames(p.catalogItemId).join(" · ")}
                 </div>
               )}
               {/* Pedido de Daniel 2026-09-29 (opción B): el producto se sigue
@@ -510,10 +541,12 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                   .map((c) => `${carrierLabel(c)} ${byCarrierOf(current.catalogItemId)[c]}`)
                   .join(" · ")}
               </div>
-              {variantsOf(current.catalogItemId).length > 0 && (
+              {variantsOf(current.catalogItemId).length > 0 ? (
                 <div className="mb-2">
                   {variantChips(current.catalogItemId)}
                 </div>
+              ) : (
+                soldOutNames(current.catalogItemId).length > 0 && <div className="mb-2">{soldOutStripe(current.catalogItemId)}</div>
               )}
               {myBlocks.length > 0 && !myBlocks.includes(current.block) && (
                 <div className="text-[11.5px] text-amber mb-1.5 flex items-start gap-1">
@@ -562,8 +595,11 @@ export function PickingPanel({ lot, onChanged }: { lot: CompiledLot; onChanged: 
                     {pickVariantsNeeded} {pickVariantsNeeded === 1 ? "salió" : "salieron"} sin color/talla en la guía: ¿de cuál sacaste?
                   </div>
                   {(current.variantOptions ?? []).map((name) => (
-                    <div key={name} className="flex items-center gap-2 mb-1.5">
-                      <span className="flex-1 min-w-0 truncate text-[12.5px]">{name}</span>
+                    <div key={name} className={`flex items-center gap-2 mb-1.5 ${isSoldOutName(current.catalogItemId, name) ? "border-l-4 border-l-red bg-red/10 rounded-r pl-1.5" : ""}`}>
+                      <span className={`flex-1 min-w-0 truncate text-[12.5px] ${isSoldOutName(current.catalogItemId, name) ? "text-red font-semibold" : ""}`}>
+                        {name}
+                        {isSoldOutName(current.catalogItemId, name) && <span className="ml-1.5 text-[10.5px] font-bold">AGOTADO</span>}
+                      </span>
                       <input
                         type="number"
                         inputMode="numeric"
