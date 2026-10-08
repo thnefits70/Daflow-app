@@ -581,7 +581,7 @@ function AssignBoard({ count, board, busy, setBusy, post, reload }: {
     <section className="border border-rule rounded-md p-3 mb-4 max-w-4xl">
       <div className="font-display font-bold text-[14px] mb-1">Asignar áreas</div>
       <div className="text-[12px] text-steel mb-2">
-        Una persona por área, un área a la vez. El conteo solo se habilita de 8:45 a 9:45 y de 4:30 a 6:00 pm (sábado solo 8:45 a 9:45). A la persona le llega un aviso y le sale en su Inicio; cuando termine, te avisa para que asignes la siguiente.
+        Una persona por área, un área a la vez. El conteo solo se habilita de 8:45 a 9:45 y de 4:30 a 6:00 pm (sábado de 11:00 a 12:30). A la persona le llega un aviso y le sale en su Inicio; cuando termine, te avisa para que asignes la siguiente.
       </div>
       {count.status === "COUNTING" && (
         <div className="flex flex-col gap-1.5">

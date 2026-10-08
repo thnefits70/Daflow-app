@@ -36,10 +36,10 @@ const WEEKDAY_BLOCKS: [number, number, string][] = [
   [8 * 60 + 45, 9 * 60 + 45, "Mañana"],
   [16 * 60 + 30, 18 * 60, "Tarde"],
 ];
-// El sábado se sale a las 12:30: solo el horario de la mañana.
-const SATURDAY_BLOCKS: [number, number, string][] = [[8 * 60 + 45, 9 * 60 + 45, "Mañana"]];
+// Sábado: de 11:00 a 12:30 (pedido de Daniel 2026-10-08; se sale a las 12:30).
+const SATURDAY_BLOCKS: [number, number, string][] = [[11 * 60, 12 * 60 + 30, "Mañana"]];
 
-export const COUNT_HOURS_TEXT = "de 8:45 a 9:45 y de 4:30 a 6:00 pm (sábado solo 8:45 a 9:45)";
+export const COUNT_HOURS_TEXT = "de 8:45 a 9:45 y de 4:30 a 6:00 pm (sábado de 11:00 a 12:30)";
 
 export type CountWindow = { label: string; start: string; end: string };
 
