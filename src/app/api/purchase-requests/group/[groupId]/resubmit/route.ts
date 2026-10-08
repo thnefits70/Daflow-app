@@ -56,7 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   let repurchaseReviewIds: string[] = [];
   let declaredRepurchases: DeclaredHotRepurchase[] = [];
   if (!isAdmin && !r0.isEmergency) {
-    const rc = await checkRepurchaseApprovals({ lines: d.items, supplierId: d.supplierId, requesterId: session.user.id, groupId, hotDeclared: !!d.hotRepurchaseDeclared });
+    const rc = await checkRepurchaseApprovals({ lines: d.items, supplierId: d.supplierId, requesterId: session.user.id, groupId, hotDeclared: !!d.hotRepurchaseDeclared, hotNotRepurchase: !!d.hotRepurchaseNotRepurchase });
     if (!rc.ok) return NextResponse.json({ error: rc.error }, { status: 400 });
     repurchaseReviewIds = rc.reviewIds;
     declaredRepurchases = rc.declared;

@@ -481,7 +481,7 @@ export async function POST(req: NextRequest) {
   let repurchaseReviewIds: string[] = [];
   let declaredRepurchases: DeclaredHotRepurchase[] = [];
   if (!isAdmin && !isEmergencySubmission) {
-    const rc = await checkRepurchaseApprovals({ lines: d.items, supplierId: d.supplierId, requesterId: session.user.id, hotDeclared: !!d.hotRepurchaseDeclared });
+    const rc = await checkRepurchaseApprovals({ lines: d.items, supplierId: d.supplierId, requesterId: session.user.id, hotDeclared: !!d.hotRepurchaseDeclared, hotNotRepurchase: !!d.hotRepurchaseNotRepurchase });
     if (!rc.ok) return NextResponse.json({ error: rc.error }, { status: 400 });
     repurchaseReviewIds = rc.reviewIds;
     declaredRepurchases = rc.declared;

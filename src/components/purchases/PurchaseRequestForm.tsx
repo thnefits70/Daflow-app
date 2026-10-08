@@ -869,7 +869,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const isHotRepurchaseLine = (i: number) => !!repurchaseByLine[i]?.hot && !repurchaseByLine[i]!.approved;
   const hotRepurchaseNames = emergencyOnly ? [] : lines.filter((l, i) => l.catalogItem && isHotRepurchaseLine(i)).map((l) => l.catalogItem!.name);
 
-  async function submit(hotDeclared = false) {
+  async function submit(hotDeclared = false, hotNotRepurchase = false) {
     if (validLines.length === 0 || validLines.length !== lines.length || !supplier || (!isCreditoSupplier && !quoteImageUrl)) {
       setErr("Completa producto, mercadería o insumo, cantidad y costo de cada línea, el proveedor, y la cotización.");
       return;
@@ -958,6 +958,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       emergencyReason: emergencyOnly ? emergencyReason.trim() : null,
       marketProductProposalId,
       hotRepurchaseDeclared: hotDeclared && hotRepurchaseNames.length > 0,
+      hotRepurchaseNotRepurchase: hotDeclared && hotNotRepurchase && hotRepurchaseNames.length > 0,
     };
     // Confirmado 2026-08-08: cambio de política — corregir una solicitud
     // rechazada YA NO crea una nueva (eso hacía crecer la lista con
@@ -1089,7 +1090,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
               if (rc.hot) {
                 return (
                   <div className="bg-teal/10 border border-teal/35 rounded-md px-3 py-2 mb-2.5 text-[12.5px] text-teal">
-                    🔁 Recompra caliente: no hace falta analizarla aparte. Al final te preguntamos si ya revisaste el precio frente a la competencia y la solicitud va directo a Bryan.
+                    🔁 Recompra: no hace falta analizarla aparte. Al enviar te preguntamos si ya investigaste el precio frente a la competencia en Dropi.
                   </div>
                 );
               }
@@ -1744,17 +1745,19 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       {err && <div className="text-red text-[12.5px] mb-3">{err}</div>}
       {hotAsk && hotRepurchaseNames.length > 0 ? (
         <div className="bg-amber/10 border border-amber/35 rounded-md px-3.5 py-3 text-[12.5px]">
-          <div className="font-bold text-amber">🔁 Esto es una recompra: {hotRepurchaseNames.join(", ")}</div>
-          <div className="text-ink mt-1">¿Ya hiciste el análisis del precio frente a la competencia?</div>
+          <div className="font-bold text-amber">🔁 ¿Es una recompra? {hotRepurchaseNames.join(", ")}</div>
+          <div className="text-ink mt-1">¿Ya investigaste el precio frente a la competencia en Dropi?</div>
           <div className="flex flex-wrap gap-2 mt-2.5">
             <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-4 py-2 text-[13px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => submit(true)}>
-              {busy ? "Enviando…" : "Sí, ya lo hice — enviar a Bryan"}
+              {busy ? "Enviando…" : "Sí, ya lo investigué"}
+            </button>
+            <button type="button" disabled={busy} className="rounded border border-teal px-4 py-2 text-[13px] font-bold text-teal cursor-pointer disabled:opacity-60" onClick={() => submit(true, true)}>
+              No es una recompra, no necesito investigar
             </button>
             <button type="button" disabled={busy} className="rounded border border-rule px-3 py-2 text-[12.5px] text-steel cursor-pointer" onClick={() => setHotAsk(false)}>
-              Todavía no
+              Cancelar
             </button>
           </div>
-          <div className="text-[11.5px] text-steel mt-1.5">Si todavía no, revísalo en Dropi y vuelve: tu solicitud queda guardada aquí.</div>
         </div>
       ) : (
         <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-4 py-2 text-[13px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => submit()}>

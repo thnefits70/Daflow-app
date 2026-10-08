@@ -84,6 +84,16 @@ export type RepurchaseAnalysis = {
   history: RepurchaseRow[];
 };
 
+// Quien hace las compras calientes (hoy Jariel): canManagePurchases + MKT,
+// mismo criterio que la tarjeta "Compras calientes" de Inicio. Pedido
+// 2026-10-08: sus recompras en Solicitar nunca esperan una RC de Bryan,
+// aunque el producto tenga más de HOT_MAX en stock — solo responde la
+// pregunta de la competencia al enviar.
+async function isHotBuyer(userId: string): Promise<boolean> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { canManagePurchases: true, department: { select: { code: true } } } });
+  return !!u?.canManagePurchases && u.department?.code === "MKT";
+}
+
 async function latestStock(catalogItemId: string): Promise<number> {
   const last = await prisma.stockKardexEntry.findFirst({
     where: { catalogItemId },
@@ -591,7 +601,7 @@ export async function getRepurchaseLineStatus(catalogItemId: string, requesterId
   const [needing] = await itemsNeedingRepurchaseReview([catalogItemId], groupId);
   if (!needing) return null;
   const now = new Date();
-  const [approved, pending, stock] = await Promise.all([
+  const [approved, pending, stock, hotBuyer] = await Promise.all([
     prisma.repurchaseReview.findFirst({
       where: {
         catalogItemId,
@@ -607,9 +617,10 @@ export async function getRepurchaseLineStatus(catalogItemId: string, requesterId
       select: { code: true },
     }),
     latestStock(catalogItemId),
+    isHotBuyer(requesterId),
   ]);
   return {
-    hot: stock <= HOT_MAX,
+    hot: hotBuyer || stock <= HOT_MAX,
     pending: pending ? { code: formatRepurchaseCode(pending.code) } : null,
     approved: approved
       ? {
@@ -641,6 +652,7 @@ export async function checkRepurchaseApprovals(params: {
   requesterId: string;
   groupId?: string;
   hotDeclared?: boolean;
+  hotNotRepurchase?: boolean;
 }): Promise<{ ok: true; reviewIds: string[]; declared: DeclaredHotRepurchase[] } | { ok: false; error: string }> {
   const ids = [...new Set(params.lines.map((l) => l.catalogItemId))];
   const needing = await itemsNeedingRepurchaseReview(ids, params.groupId);
@@ -663,16 +675,17 @@ export async function checkRepurchaseApprovals(params: {
 
   const reviewIds: string[] = [];
   const declaredIds: string[] = [];
+  const hotBuyer = await isHotBuyer(params.requesterId);
   for (const item of needing) {
     const rc = reviews.find((r) => r.catalogItemId === item.id);
-    if (!rc && (await latestStock(item.id)) <= HOT_MAX) {
+    if (!rc && (hotBuyer || (await latestStock(item.id)) <= HOT_MAX)) {
       if (params.hotDeclared) {
         declaredIds.push(item.id);
         continue;
       }
       return {
         ok: false,
-        error: `"${item.name}" es una recompra caliente: al final de la solicitud confirma que ya hiciste el análisis del precio frente a la competencia ("Sí, ya lo hice").`,
+        error: `"${item.name}" es una recompra: al final de la solicitud responde si ya investigaste el precio frente a la competencia en Dropi.`,
       };
     }
     if (!rc) {
@@ -703,7 +716,7 @@ export async function checkRepurchaseApprovals(params: {
     }
     reviewIds.push(rc.id);
   }
-  const declared = await Promise.all(declaredIds.map((id) => prepareDeclaredHotRepurchase(id, params.lines, params.supplierId, params.requesterId)));
+  const declared = await Promise.all(declaredIds.map((id) => prepareDeclaredHotRepurchase(id, params.lines, params.supplierId, params.requesterId, !!params.hotNotRepurchase)));
   if (declared.some((d) => d === null)) return { ok: false, error: "No se pudo leer la última compra de una recompra. Intenta de nuevo." };
   return { ok: true, reviewIds, declared: declared as DeclaredHotRepurchase[] };
 }
@@ -714,8 +727,9 @@ export async function checkRepurchaseApprovals(params: {
 export type DeclaredHotRepurchase = Omit<Prisma.RepurchaseReviewUncheckedCreateInput, "code" | "usedGroupId" | "usedAt" | "status"> & { requestedById: string };
 
 const DECLARED_HOT_NOTE = "Recompra caliente pedida desde Solicitar: quien compra declaró que ya hizo el análisis del precio frente a la competencia. Bryan la aprueba con la solicitud de compra.";
+const DECLARED_NOT_REPURCHASE_NOTE = "Pedida desde Solicitar: quien compra respondió \"No es una recompra, no necesito investigar\" a la pregunta del precio frente a la competencia. Bryan la aprueba con la solicitud de compra.";
 
-async function prepareDeclaredHotRepurchase(catalogItemId: string, lines: LineForCheck[], supplierId: string, requesterId: string): Promise<DeclaredHotRepurchase | null> {
+async function prepareDeclaredHotRepurchase(catalogItemId: string, lines: LineForCheck[], supplierId: string, requesterId: string, notRepurchase: boolean): Promise<DeclaredHotRepurchase | null> {
   const analysis = await getRepurchaseAnalysis(catalogItemId, requesterId);
   if (!analysis) return null;
   const mine = lines.filter((l) => l.catalogItemId === catalogItemId);
@@ -750,7 +764,7 @@ async function prepareDeclaredHotRepurchase(catalogItemId: string, lines: LineFo
     soldLast30: analysis.sold,
     daysLeft: analysis.daysLeft,
     audience: "HOT",
-    note: DECLARED_HOT_NOTE,
+    note: notRepurchase ? DECLARED_NOT_REPURCHASE_NOTE : DECLARED_HOT_NOTE,
     requestedById: requesterId,
   };
 }

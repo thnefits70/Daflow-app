@@ -729,6 +729,10 @@ export const purchaseSubmissionSchema = z.object({
   // recompra caliente con el análisis de competencia hecho por quien compra
   // (ver checkRepurchaseApprovals). Solo sirve para compras calientes.
   hotRepurchaseDeclared: z.boolean().optional(),
+  // Pedido 2026-10-08: la otra respuesta a esa misma pregunta, "No es una
+  // recompra, no necesito investigar". También deja enviar; solo cambia la
+  // nota que queda guardada en la RC declarada.
+  hotRepurchaseNotRepurchase: z.boolean().optional(),
 });
 
 export type PurchaseSubmissionData = z.infer<typeof purchaseSubmissionSchema>;
