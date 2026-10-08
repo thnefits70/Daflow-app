@@ -1043,7 +1043,14 @@ export async function getCompiledLot(lotId: string) {
   // "agotado" confundiría (lo dejó en cero este mismo corte).
   if (lot.status !== "CLOSED") {
     const soldOut = await soldOutVariantsOf(
-      picking.map((p) => ({ catalogItemId: p.catalogItemId, labels: (lineList.find((l) => l.catalogItemId === p.catalogItemId)?.variants ?? []).map((v) => v.label) })),
+      picking.map((p) => ({
+        catalogItemId: p.catalogItemId,
+        labels: [
+          ...(lineList.find((l) => l.catalogItemId === p.catalogItemId)?.variants ?? []).map((v) => v.label),
+          // Color/talla de las garantías completas o de parte del combo.
+          ...warranty.filter((w) => w.catalogItemId === p.catalogItemId && (w.mode === "COMPLETE" || w.mode === "PARTIAL") && w.piece).map((w) => w.piece!),
+        ],
+      })),
     ).catch(() => new Map<string, { names: string[]; labels: string[] }>());
     for (const p of picking) {
       const so = soldOut.get(p.catalogItemId);

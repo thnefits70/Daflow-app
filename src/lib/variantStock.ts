@@ -98,18 +98,36 @@ export async function applyLotSalesToVariants(lotId: string, dispatchedByItem: M
   const picks = await prisma.fulfillmentLotPick.findMany({ where: { lotId, catalogItemId: { in: [...withList] } }, select: { catalogItemId: true, variantCounts: true } });
   const pickedBy = new Map(picks.map((p) => [p.catalogItemId, Array.isArray(p.variantCounts) ? (p.variantCounts as VariantCount[]) : []]));
   const total = new Map<string, number>(); // variante → unidades que salen
+  // Lo que el equipo dijo que sacó: primero cubre lo normal sin color y lo
+  // que sobra cubre las garantías sin color (2026-10-08).
+  const pickLeft = new Map<string, [string, number][]>();
+  const takeFromPick = (itemId: string, need: number) => {
+    let left = need;
+    for (const entry of pickLeft.get(itemId) ?? []) {
+      const take = Math.min(entry[1], left);
+      if (take <= 0) continue;
+      total.set(entry[0], (total.get(entry[0]) ?? 0) + take);
+      entry[1] -= take;
+      left -= take;
+    }
+    return left;
+  };
   for (const itemId of withList) {
     let left = dispatchedByItem.get(itemId) ?? 0;
     const fromGuides = [...(perItem.get(itemId) ?? new Map<string, number>())].sort((a, b) => b[1] - a[1]);
-    const fromPick = (pickedBy.get(itemId) ?? [])
-      .map((c) => [official.find((o) => o.catalogItemId === itemId && o.name.toLowerCase() === c.name.toLowerCase())?.id, c.qty] as const)
-      .filter((x): x is readonly [string, number] => !!x[0]);
-    for (const [variantId, qty] of [...fromGuides, ...fromPick]) {
+    pickLeft.set(
+      itemId,
+      (pickedBy.get(itemId) ?? [])
+        .map((c) => [official.find((o) => o.catalogItemId === itemId && o.name.toLowerCase() === c.name.toLowerCase())?.id, c.qty] as [string | undefined, number])
+        .filter((x): x is [string, number] => !!x[0]),
+    );
+    for (const [variantId, qty] of fromGuides) {
       const take = Math.min(qty, left);
       if (take <= 0) continue;
       total.set(variantId, (total.get(variantId) ?? 0) + take);
       left -= take;
     }
+    takeFromPick(itemId, left);
   }
   // Garantías completas o de parte del combo (2026-10-06): el color/talla que
   // traía la etiqueta de la guía de garantía, sin pasar de lo que salió
@@ -128,6 +146,7 @@ export async function applyLotSalesToVariants(lotId: string, dispatchedByItem: M
       total.set(v!.id, (total.get(v!.id) ?? 0) + take);
       left -= take;
     }
+    takeFromPick(itemId, left);
   }
   const rows = [...total].map(([variantId, qty]) => ({ variantId, quantity: -qty, reason: "SALE", refId: lotId }));
   await prisma.productVariantMovement.createMany({ data: rows, skipDuplicates: true });
@@ -309,9 +328,16 @@ export async function detectReturnVariants(params: {
 // Cuántas unidades normales de cada producto (con lista oficial) salieron en
 // las guías del corte SIN un color/talla que se una a la lista. De esas, el
 // equipo de INVESTOCK dice qué color sacó de la percha.
+// Garantías (pedido del usuario 2026-10-08): las completas o de parte del
+// combo cuya guía no trae color/talla (ej. "Reloj Smartwatch T500 X1")
+// también se suman aquí, para que el equipo diga cuál sacó.
 export async function lotNoVariantUnits(lotId: string, lines: { catalogItemId: string; normalNeeded: number }[]): Promise<Map<string, { units: number; options: string[] }>> {
   const out = new Map<string, { units: number; options: string[] }>();
-  const ids = lines.filter((l) => l.normalNeeded > 0).map((l) => l.catalogItemId);
+  const warrantyItems = await prisma.fulfillmentRequestItem.findMany({
+    where: { batch: { lotId }, warrantyGuide: { not: null }, warrantyMode: { in: ["COMPLETE", "PARTIAL"] } },
+    select: { catalogItemId: true, quantity: true, warrantyPiece: true },
+  });
+  const ids = [...new Set([...lines.filter((l) => l.normalNeeded > 0).map((l) => l.catalogItemId), ...warrantyItems.map((w) => w.catalogItemId)])];
   if (ids.length === 0) return out;
   const official = await prisma.productVariant.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true, name: true }, orderBy: { name: "asc" } });
   if (official.length === 0) return out;
@@ -322,14 +348,15 @@ export async function lotNoVariantUnits(lotId: string, lines: { catalogItemId: s
   ]);
   for (const id of withList) {
     const options = official.filter((v) => v.catalogItemId === id).map((v) => v.name);
-    const known = notes
-      .filter((n) => n.catalogItemId === id)
-      .reduce((s, n) => {
-        const name = resolve(id, n.label);
-        return s + (name && options.some((o) => o.toLowerCase() === name.toLowerCase()) ? n.quantity : 0);
-      }, 0);
+    const isOfficial = (label: string | null) => {
+      const name = label ? resolve(id, label) : null;
+      return !!name && options.some((o) => o.toLowerCase() === name.toLowerCase());
+    };
+    const known = notes.filter((n) => n.catalogItemId === id && isOfficial(n.label)).reduce((s, n) => s + n.quantity, 0);
     const need = lines.find((l) => l.catalogItemId === id)?.normalNeeded ?? 0;
-    out.set(id, { units: Math.max(0, need - known), options });
+    const warrantyUnknown = warrantyItems.filter((w) => w.catalogItemId === id && !isOfficial(w.warrantyPiece)).reduce((s, w) => s + w.quantity, 0);
+    const units = Math.max(0, need - known) + warrantyUnknown;
+    if (units > 0 || need > 0) out.set(id, { units, options });
   }
   return out;
 }
