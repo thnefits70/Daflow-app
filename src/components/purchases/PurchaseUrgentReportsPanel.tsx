@@ -131,6 +131,10 @@ type Report = {
   // tiene stock (ver supplier-stockout/route.ts).
   supplierStockoutAt: string | null;
   supplierStockoutBy: { name: string } | null;
+  // Pedido del usuario 2026-10-10: quien compró (o el admin) cancela la
+  // compra si no llegó nada y el proveedor no la va a enviar (ver
+  // cancel-not-sent/route.ts). Lo calcula el servidor.
+  canCancelNotSent?: boolean;
 };
 
 // Confirmado 2026-09-29, pedido del usuario (antifraude): con un proveedor
@@ -266,6 +270,8 @@ export function PurchaseUrgentReportsPanel({
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const [confirmingStockoutId, setConfirmingStockoutId] = useState<string | null>(null);
+  // Doble confirmación: paso 1 explica y pide el motivo, paso 2 "¿seguro?".
+  const [cancelPurchase, setCancelPurchase] = useState<{ id: string; step: 1 | 2; note: string } | null>(null);
 
   // Guardado automático: si sale a revisar otro reclamo antes de terminar
   // de coordinar la resolución, al volver la encuentra tal como la había
@@ -363,6 +369,22 @@ export function PurchaseUrgentReportsPanel({
     if (!res.ok) { setErr(data?.error ?? "No se pudo marcar."); return; }
     setConfirmingStockoutId(null);
     load();
+  }
+
+  async function cancelNotSentPurchase(reportId: string, note: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-reports/${reportId}/cancel-not-sent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note.trim() }),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo cancelar."); return; }
+    setCancelPurchase(null);
+    load();
+    router.refresh();
   }
 
   async function confirmExcess(reportId: string) {
@@ -833,6 +855,75 @@ export function PurchaseUrgentReportsPanel({
                           🚫 El proveedor no tiene stock (no va a llegar)
                         </button>
                       )
+                    )
+                  )}
+
+                  {/* Pedido del usuario 2026-10-10 (SC-118): no llegó nada y
+                      el proveedor no la va a enviar — se cancela la compra,
+                      sin saldo a favor ni descuento. Doble confirmación. */}
+                  {r.canCancelNotSent && (
+                    cancelPurchase?.id === r.id ? (
+                      <div className="bg-inset border border-red/40 rounded-md p-3 mb-2">
+                        {cancelPurchase.step === 1 ? (
+                          <>
+                            <div className="text-[12.5px] font-bold mb-1">Cancelar compra: el proveedor no la va a enviar</div>
+                            <div className="text-[11.5px] text-steel mb-2">
+                              No llegó ninguna de las {r.request.quantity} un. La compra se cancela: no se paga nada, no queda saldo a favor con {r.request.supplier.name} y sale de su enlace. Se avisa a Marketing que no hay stock.
+                            </div>
+                            <textarea
+                              value={cancelPurchase.note}
+                              onChange={(e) => setCancelPurchase({ ...cancelPurchase, note: e.target.value })}
+                              rows={2}
+                              placeholder={`Motivo (ej. ${r.request.supplier.name} no tiene stock)`}
+                              className="w-full rounded border border-rule bg-cloud px-2 py-1.5 text-[11.5px] mb-2"
+                            />
+                            {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={cancelPurchase.note.trim().length < 3}
+                                className="rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-50"
+                                onClick={() => { setCancelPurchase({ ...cancelPurchase, step: 2 }); setErr(""); }}
+                              >
+                                Continuar
+                              </button>
+                              <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setCancelPurchase(null); setErr(""); }}>
+                                No cancelar
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-[12.5px] font-bold mb-1">¿Seguro? Esto no se puede deshacer.</div>
+                            <div className="text-[11.5px] text-steel mb-2">
+                              {r.request.requestNumber != null && <>SC-{String(r.request.requestNumber).padStart(3, "0")} · </>}
+                              {r.request.catalogItem.name} · {r.request.quantity} un. — &quot;{cancelPurchase.note.trim()}&quot;
+                            </div>
+                            {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={busy}
+                                className="rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-60"
+                                onClick={() => cancelNotSentPurchase(r.id, cancelPurchase.note)}
+                              >
+                                Sí, cancelar la compra
+                              </button>
+                              <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setCancelPurchase(null); setErr(""); }}>
+                                No cancelar
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="rounded border border-red/50 text-red px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer mb-2 ml-1.5"
+                        onClick={() => { setCancelPurchase({ id: r.id, step: 1, note: "" }); setErr(""); }}
+                      >
+                        ✖ Cancelar compra: el proveedor no la va a enviar
+                      </button>
                     )
                   )}
 

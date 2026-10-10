@@ -2344,7 +2344,8 @@ async function getPurchaseUrgentReportsUnresolvedPendingItem(
     where: {
       rejectedAt: null,
       reviewedByLeadAt: { not: null },
-      ...(opts.requestedById ? { request: { requestedById: opts.requestedById } } : {}),
+      // Compra cancelada porque el proveedor nunca la envió (2026-10-10).
+      request: { status: { not: "REJECTED" }, ...(opts.requestedById ? { requestedById: opts.requestedById } : {}) },
     },
     select: {
       damagedQty: true,

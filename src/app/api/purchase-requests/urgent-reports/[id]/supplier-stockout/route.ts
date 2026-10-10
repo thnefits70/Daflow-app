@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
-import { notifySupplierStockoutReported } from "@/lib/supplierStockout";
+import { openSupplierStockoutNotice } from "@/lib/purchaseCancelNotSent";
 
 // Confirmado 2026-09-29, pedido de Bryan (vía el usuario): Daniel solo avisa
 // que NO LLEGÓ (su "Enviar a Compras" de siempre); quien sabe y dice que el
@@ -51,19 +51,13 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const itemName = existing.request.catalogItem.name;
   // Aviso a marketing — se crea solo si no hay ya uno abierto de ese producto.
   try {
-    const reporterId = actorId ?? existing.request.requestedById;
-    const alreadyOpen = await prisma.supplierStockoutReport.findFirst({
-      where: { catalogItemId: existing.request.catalogItemId, resolvedAt: null },
-      select: { id: true },
+    await openSupplierStockoutNotice({
+      catalogItemId: existing.request.catalogItemId,
+      catalogItemName: itemName,
+      supplierName,
+      qty: existing.missingQty,
+      reporterId: actorId ?? existing.request.requestedById,
     });
-    if (reporterId && !alreadyOpen) {
-      const instructionNote = `${supplierName} no tiene stock — ${existing.missingQty} un. no van a llegar. Revisen si cerrar el ID en Dropi o bajar el stock.`;
-      const created = await prisma.supplierStockoutReport.create({
-        data: { catalogItemId: existing.request.catalogItemId, instructionNote, reportedById: reporterId },
-        include: { reportedBy: { select: { name: true } } },
-      });
-      await notifySupplierStockoutReported({ catalogItemName: itemName, instructionNote, reportedByName: created.reportedBy.name });
-    }
   } catch (err) {
     console.error("[urgent-report supplier-stockout] aviso a marketing:", err);
   }

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canApprovePurchaseRequests, canManageOutflowPurchaseGestion } from "@/lib/guards";
 import { isWithinCreditClaimWindow, creditClaimDeadline } from "@/lib/purchaseUrgent";
 import { autoWriteOffApprovedLateClaims } from "@/lib/inventoryAutoFlows";
+import { cancelNotSentBlocker } from "@/lib/purchaseCancelNotSent";
 
 // Admin, o quien tenga delegación de Compras (hoy Bryan), coordina con el
 // proveedor y elige cómo se resuelve cada reporte de Daniel — acciones
@@ -45,6 +46,10 @@ export async function GET(_req: NextRequest) {
     // rejectedAt siempre lo excluye.
     where: {
       rejectedAt: null,
+      // Pedido del usuario 2026-10-10: una compra cancelada porque el
+      // proveedor nunca la envió (cancel-not-sent) ya no tiene nada que
+      // coordinar.
+      request: { status: { not: "REJECTED" } },
       OR: [
         {
           // Confirmado 2026-09-08: pedido explícito de Daniel — un reporte
@@ -95,15 +100,38 @@ export async function GET(_req: NextRequest) {
           requestedAt: true,
           catalogItem: { select: { name: true, justCode: true } },
           supplier: { select: { id: true, name: true, paymentMode: true } },
+          requestedById: true,
+          status: true,
+          debtPaymentId: true,
+          receipt: { select: { id: true } },
+          urgentReports: {
+            select: {
+              rejectedAt: true,
+              isLateClaim: true,
+              damagedQty: true,
+              incompleteQty: true,
+              differentQty: true,
+              missingQty: true,
+              excessQty: true,
+              resolutions: { select: { status: true } },
+            },
+          },
         },
       },
     },
   });
 
-  const withDeadline = reports.map((r) => ({
+  const withDeadline = reports.map(({ request: { requestedById, status, debtPaymentId, receipt, urgentReports, ...request }, ...r }) => ({
     ...r,
-    withinCreditWindow: r.request.paidAt ? isWithinCreditClaimWindow(r.request.paidAt) : true,
-    creditClaimDeadline: r.request.paidAt ? creditClaimDeadline(r.request.paidAt).toISOString() : null,
+    request,
+    withinCreditWindow: request.paidAt ? isWithinCreditClaimWindow(request.paidAt) : true,
+    creditClaimDeadline: request.paidAt ? creditClaimDeadline(request.paidAt).toISOString() : null,
+    // Pedido del usuario 2026-10-10: "Cancelar compra" lo ve quien compró
+    // (o el admin), solo si no llegó nada (ver purchaseCancelNotSent.ts).
+    canCancelNotSent:
+      (isAdmin || session.user.id === requestedById) &&
+      !!r.reviewedByLeadAt &&
+      cancelNotSentBlocker({ status, quantity: request.quantity, paidAt: request.paidAt, debtPaymentId, receipt, urgentReports }) === null,
   }));
 
   return NextResponse.json(withDeadline);
