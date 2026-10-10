@@ -1165,7 +1165,7 @@ export function ProfileDetail({
               <Truck size={11} /> ¿Sube productos a Rocket (Análisis de Mercado)?
             </label>
             <div className="text-[11px] text-steel mb-2">
-              Cuando Bryan aprueba un producto como &quot;Solo Rocket por ahora&quot;, esta persona (hoy Yair) lo sube a Rocket como Provedix con el precio de la propuesta y escribe el ID y el SKU que le da Rocket (no cambian el ID de Dropi del producto).
+              Cuando Bryan aprueba un producto como &quot;Solo Rocket por ahora&quot;, esta persona (hoy Yair) lo sube a Rocket como Provedix con el precio de la propuesta y escribe su ID de Rocket, el número que sale en las etiquetas (no cambia el ID madre del producto).
             </div>
             <PermToggle value={p.canUploadRocketSku} busy={busy} onChange={(v) => save({ canUploadRocketSku: v })} />
           </div>

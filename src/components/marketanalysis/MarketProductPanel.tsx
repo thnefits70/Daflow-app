@@ -1445,11 +1445,11 @@ function TraceabilityView({ canDecidePurchase, canCancel, canRequestPublic }: { 
             <div className="bg-inset rounded-md p-2.5 mb-3 text-[12px] text-ink">
               <div className="font-semibold mb-0.5">Solo Rocket por ahora</div>
               <div className="text-steel">
-                {p.rocketSku
-                  ? <>En Rocket: ID <b className="text-ink">{p.rocketProductId}</b> · SKU <b className="text-ink">{p.rocketSku}</b> — {p.rocketSkuBy?.name ?? "—"}, {p.rocketSkuAt ? formatDateTime(p.rocketSkuAt) : ""}</>
+                {p.rocketProductId
+                  ? <>En Rocket: ID <b className="text-ink">{p.rocketProductId}</b>{p.rocketSku && <> · SKU <b className="text-ink">{p.rocketSku}</b></>} — {p.rocketSkuBy?.name ?? "—"}, {p.rocketSkuAt ? formatDateTime(p.rocketSkuAt) : ""}</>
                   : p.rocketSkuOverdue
                     ? <span className="text-red font-semibold">Atrasado: van más de 24 h sin subirse a Rocket.</span>
-                    : "Esperando que se suba a Rocket (ID y SKU)."}
+                    : "Esperando que se suba a Rocket y se ponga su ID."}
               </div>
               <div className="text-steel mt-0.5">
                 Dropi: {p.madePublicAt
@@ -1568,8 +1568,8 @@ function RocketUploadView() {
   }
 
   if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
-  const pending = rows.filter((p) => !p.rocketSku);
-  const done = rows.filter((p) => p.rocketSku);
+  const pending = rows.filter((p) => !p.rocketProductId);
+  const done = rows.filter((p) => p.rocketProductId);
 
   const card = (p: Proposal) => (
     <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
@@ -1581,11 +1581,11 @@ function RocketUploadView() {
           <div className="text-[13px] font-bold text-ink mt-1">Precio: {money(p.calculatedSalePrice)}</div>
         </div>
       </div>
-      {!p.rocketSku && <CopyDropiPrice price={p.calculatedSalePrice} label="Precio para Rocket" />}
+      {!p.rocketProductId && <CopyDropiPrice price={p.calculatedSalePrice} label="Precio para Rocket" />}
       {err?.id === p.id && <div className="text-red text-[12.5px] mb-2">{err.msg}</div>}
-      {p.rocketSku && editing !== p.id ? (
+      {p.rocketProductId && editing !== p.id ? (
         <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
-          <span className="text-teal font-semibold">ID {p.rocketProductId} · SKU {p.rocketSku}</span>
+          <span className="text-teal font-semibold">ID {p.rocketProductId}{p.rocketSku ? ` · SKU ${p.rocketSku}` : ""}</span>
           <span className="text-steel">— {p.rocketSkuBy?.name ?? "—"}, {p.rocketSkuAt ? formatDateTime(p.rocketSkuAt) : ""}</span>
           <button type="button" className="text-steel text-[12px] underline cursor-pointer" onClick={() => { setRocketId((s) => ({ ...s, [p.id]: p.rocketProductId ?? "" })); setSku((s) => ({ ...s, [p.id]: p.rocketSku ?? "" })); setEditing(p.id); }}>
             Corregir
@@ -1593,9 +1593,9 @@ function RocketUploadView() {
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
-          <input className="w-28 rounded border border-rule px-2.5 py-1.5 text-[13px]" inputMode="numeric" placeholder="ID (ej. 5417)" value={rocketId[p.id] ?? ""} onChange={(e) => setRocketId((s) => ({ ...s, [p.id]: e.target.value }))} />
-          <input className="flex-1 min-w-[180px] rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="SKU (ej. 2075-PRO-TENSIOMETRO-DIGITAL)" value={sku[p.id] ?? ""} onChange={(e) => setSku((s) => ({ ...s, [p.id]: e.target.value }))} />
-          <button type="button" disabled={busy === p.id || !rocketId[p.id]?.trim() || !sku[p.id]?.trim()} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => save(p.id)}>
+          <input className="w-28 rounded border border-rule px-2.5 py-1.5 text-[13px]" inputMode="numeric" placeholder="ID (ej. 15195)" value={rocketId[p.id] ?? ""} onChange={(e) => setRocketId((s) => ({ ...s, [p.id]: e.target.value }))} />
+          <input className="flex-1 min-w-[180px] rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="SKU (opcional)" value={sku[p.id] ?? ""} onChange={(e) => setSku((s) => ({ ...s, [p.id]: e.target.value }))} />
+          <button type="button" disabled={busy === p.id || !rocketId[p.id]?.trim()} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => save(p.id)}>
             Guardar
           </button>
         </div>
@@ -1605,7 +1605,7 @@ function RocketUploadView() {
 
   return (
     <div>
-      <div className="text-[12px] text-steel mb-3">Súbelos a Rocket con la cuenta de Provedix, con el precio que sale aquí, y escribe el ID y el SKU que te da Rocket. El ID es el que sale en las guías; el SKU queda como referencia. Ninguno cambia el ID de Dropi del producto.</div>
+      <div className="text-[12px] text-steel mb-3">Súbelos a Rocket con la cuenta de Provedix, con el precio que sale aquí, y escribe su ID de Rocket: el número que sale entre paréntesis en las etiquetas, ej. (15195). Con ese ID las guías de Rocket se reconocen solas. El SKU es opcional, solo de referencia. Nada de esto cambia el ID madre del producto.</div>
       {pending.length === 0 ? (
         <div className="text-steel text-[13.5px] mb-5">No hay productos por subir a Rocket.</div>
       ) : (

@@ -1426,7 +1426,7 @@ export async function getMarketProductKardexReleasePendingRows() {
 // falta subir a Rocket con su SKU.
 async function getRocketUploadPendingItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.marketProductProposal.findMany({
-    where: { status: "APPROVED", rocketOnly: true, rocketSku: null },
+    where: { status: "APPROVED", rocketOnly: true, rocketProductId: null },
     select: { productName: true, reviewedAt: true },
     orderBy: { reviewedAt: "asc" },
   });
@@ -1446,7 +1446,7 @@ async function getRocketUploadPendingItem(href: string): Promise<PendingItem | n
 const ROCKET_SKU_DEADLINE_MS = 24 * 3600_000;
 async function getRocketSkuOverduePendingItem(href: string): Promise<PendingItem | null> {
   const rows = await prisma.marketProductProposal.findMany({
-    where: { status: "APPROVED", rocketOnly: true, rocketSku: null, reviewedAt: { lt: new Date(Date.now() - ROCKET_SKU_DEADLINE_MS) } },
+    where: { status: "APPROVED", rocketOnly: true, rocketProductId: null, reviewedAt: { lt: new Date(Date.now() - ROCKET_SKU_DEADLINE_MS) } },
     select: { productName: true },
   });
   if (rows.length === 0) return null;

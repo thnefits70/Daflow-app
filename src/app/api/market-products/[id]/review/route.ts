@@ -119,7 +119,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         rocketUploaders.map((u) =>
           notifyOwner(u.id, {
             title: "Subir a Rocket como Provedix",
-            body: `${existing.productName} — precio ${existing.calculatedSalePrice.toFixed(2)}. Súbelo a Rocket y escribe su ID y SKU en DAFLOW.`,
+            body: `${existing.productName} — precio ${existing.calculatedSalePrice.toFixed(2)}. Súbelo a Rocket y escribe su ID de Rocket en DAFLOW.`,
             url: "/area/workspace?tab=analisis-mercado&ptab=rocket",
           }).catch(() => null)
         )

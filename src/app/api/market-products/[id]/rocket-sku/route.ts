@@ -7,15 +7,21 @@ import { notifyOwner } from "@/lib/notifications";
 
 // Rocket muestra dos datos por producto: el ID (números, ej. 5417 — es lo
 // que traen las guías: "(5417) Nombre x 1") y el SKU (texto, ej.
-// "2075-PRO-TENSIOMETRO-DIGITAL", solo referencia). El ID se acepta también
-// con la "R" delante, como sale en los cortes.
+// "2075-PRO-TENSIOMETRO-DIGITAL", solo referencia — opcional desde
+// 2026-10-10, pedido del usuario: las guías no lo traen). El ID se acepta
+// también con la "R" delante, como sale en los cortes.
 const schema = z.object({
   rocketProductId: z
     .string()
     .trim()
     .transform((v) => v.replace(/^r/i, ""))
     .refine((v) => /^\d{2,}$/.test(v), "El ID de Rocket son solo números (el que sale junto al SKU en Rocket)."),
-  rocketSku: z.string().trim().min(1, "Falta el SKU de Rocket.").max(120),
+  rocketSku: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .transform((v) => v || null),
 });
 
 // Aprobado por Bryan 2026-10-10: Yair sube a Rocket (cuenta Provedix) lo que
@@ -64,12 +70,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
   });
 
-  if (!existing.rocketSku) {
+  if (!existing.rocketProductId) {
     const marketingLead = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "MKT" } }, select: { id: true } });
     if (marketingLead) {
       await notifyOwner(marketingLead.id, {
         title: "Ya está en Rocket",
-        body: `${existing.productName} — ID ${rocketProductId}, SKU ${rocketSku}`,
+        body: `${existing.productName} — ID ${rocketProductId}${rocketSku ? `, SKU ${rocketSku}` : ""}`,
         url: "/area/workspace?tab=analisis-mercado&ptab=trazabilidad",
       }).catch(() => null);
     }

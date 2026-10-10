@@ -330,7 +330,7 @@ export async function GET(req: NextRequest) {
         boughtAt: r.catalogItemId ? firstBoughtAt.get(r.catalogItemId) ?? null : null,
         rejectedPurchase: rej ? { code: rej.requestNumber ? formatPurchaseRequestCode(rej.requestNumber) : null, reason: rej.rejectReason, at: rej.reviewedAt } : null,
         // Bryan pidió aviso si a las 24 h de aprobado no hay SKU de Rocket.
-        rocketSkuOverdue: r.rocketOnly && !r.rocketSku && !!r.reviewedAt && Date.now() - r.reviewedAt.getTime() > 24 * 3600_000,
+        rocketSkuOverdue: r.rocketOnly && !r.rocketProductId && !!r.reviewedAt && Date.now() - r.reviewedAt.getTime() > 24 * 3600_000,
       };
     });
     withUnits.sort((a, b) => (b.kardexPendingUnits > 0 ? 1 : 0) - (a.kardexPendingUnits > 0 ? 1 : 0) || (b.rejectedPurchase ? 1 : 0) - (a.rejectedPurchase ? 1 : 0));
