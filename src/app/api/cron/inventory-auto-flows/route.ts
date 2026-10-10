@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runInventoryAutoFlows } from "@/lib/inventoryAutoFlows";
+import { backfillGuideMarketData } from "@/lib/localWarranty";
+
+// Leer los PDF de cortes viejos toma tiempo (ver backfillGuideMarketData).
+export const maxDuration = 300;
 
 // Confirmado 2026-09-23, pedido explícito del usuario: además del barrido de
 // las 8:00 (que corre dentro de push-pendientes, antes de mandar los avisos),
@@ -13,5 +17,12 @@ export async function GET(req: NextRequest) {
   }
 
   await runInventoryAutoFlows();
-  return NextResponse.json({ ok: true });
+  // Ciudad/valor/sexo/tienda de las guías que todavía no los tienen
+  // (pedido del usuario 2026-10-10, provedix.com). Al final y con tope de
+  // tiempo, para no frenar lo de arriba.
+  const marketBatches = await backfillGuideMarketData(200_000).catch((err) => {
+    console.error("[cron inventory-auto-flows] datos de mercado:", err);
+    return 0;
+  });
+  return NextResponse.json({ ok: true, marketBatches });
 }

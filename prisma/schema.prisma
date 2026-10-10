@@ -3013,9 +3013,22 @@ model FulfillmentRequestGuide {
   // para saber de qué color es una devolución al escanear la guía. null =
   // todavía no se leyó (guías anteriores: se lee la primera vez que hace falta).
   labelVariants Json?
+  // Datos de mercado (pedido del usuario 2026-10-10, etapa 1 de provedix.com;
+  // ver src/lib/guideMarketData.ts). Del cliente final SOLO ciudad, provincia,
+  // valor cobrado y sexo deducido del nombre — su nombre, celular y dirección
+  // nunca se guardan. senderPhone = celular de la tienda (dropshipper) que
+  // vendió: nunca sale en provedix.com, es para las encuestas de Nairoby.
+  // marketReadAt null = todavía no se leyó (se llena sola, también las viejas).
+  destCity      String?
+  destProvince  String?
+  codAmount     Decimal?                @db.Decimal(10, 2)
+  buyerGender   String?
+  senderPhone   String?
+  marketReadAt  DateTime?
   createdAt     DateTime                @default(now())
 
   @@index([batchId])
+  @@index([marketReadAt])
 }
 
 // Pedido del usuario 2026-09-28 (PROVISIONAL): productos de ALF con ID

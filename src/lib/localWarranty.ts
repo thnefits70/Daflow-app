@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
 import { extractPages, normalizeName, isRocketCode, labelLineUnits, parseGuidesPages, rocketNameCode, ROCKET_NAME_PREFIX, ROCKET_PREFIX, type PdfLine, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
 import { resolveGuideLines } from "@/lib/fulfillmentGuides";
+import { genderFromName, labelMarketData, summaryMarketData, type GuideMarketData } from "@/lib/guideMarketData";
 import { significantWords } from "@/lib/justCatalog";
 import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId, getMarketingLeadId } from "@/lib/guards";
@@ -92,7 +93,7 @@ function findIdx(lines: PdfLine[], re: RegExp, from = 0): number {
 // Cada transportadora imprime la etiqueta distinto (muestras reales del
 // 2026-10-02). Si algo no se alcanza a leer, queda en null y el asesor ve el
 // texto completo de la etiqueta — nunca se inventa un dato.
-function labelClient(lines: PdfLine[], carrier: string): LabelClient {
+export function labelClient(lines: PdfLine[], carrier: string): LabelClient {
   const c = carrier.toUpperCase();
   const out: LabelClient = { name: null, address: null, phone: null, notes: null };
 
@@ -273,7 +274,7 @@ async function usedByPreviousWarranties(where: { warrantySourceGuide?: string; w
 // quedan en FulfillmentRequestGuide.labelProducts — así escanear una
 // devolución no abre el PDF entero cada vez (~5 s). Abre cada PDF del lote
 // una sola vez y llena todas sus guías que falten. Devuelve cuántas llenó.
-export async function cacheGuideLabelsForBatch(batchId: string): Promise<number> {
+export async function cacheGuideLabelsForBatch(batchId: string, opts: { quiet?: boolean } = {}): Promise<number> {
   const batch = await prisma.fulfillmentRequestBatch.findUnique({
     where: { id: batchId },
     select: {
@@ -281,14 +282,22 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
       source: true,
       // 2026-10-06: también las ya leídas a las que les falta el color/talla
       // por guía (labelVariants), para las devoluciones.
-      guides: { where: { OR: [{ labelCachedAt: null }, { labelVariants: { equals: Prisma.DbNull } }] }, select: { id: true, guideNumber: true, carrier: true, codes: true, labelCachedAt: true } },
+      // 2026-10-10: y las que todavía no tienen sus datos de mercado (ciudad,
+      // valor, sexo, tienda — ver guideMarketData.ts).
+      guides: {
+        where: { OR: [{ labelCachedAt: null }, { labelVariants: { equals: Prisma.DbNull } }, { marketReadAt: null }] },
+        select: { id: true, guideNumber: true, carrier: true, codes: true, sender: true, labelCachedAt: true, labelVariants: true },
+      },
     },
   });
   if (!batch || batch.guides.length === 0 || batch.fileUrls.length === 0) return 0;
   // Releer solo por el color (guías ya leídas) no repite la revisión del corte.
-  const firstRead = batch.guides.some((g) => !g.labelCachedAt);
+  // quiet (repaso de cortes viejos por datos de mercado): sin revisión ni aviso.
+  const firstRead = !opts.quiet && batch.guides.some((g) => !g.labelCachedAt);
   const found = new Map<string, { products: LabelProduct[]; manifestDay: string | null }>();
   const variantsByGuide = new Map<string, { code: string; variant: string | null; qty: number }[]>();
+  const summaryByGuide = new Map<string, { city: string | null; codAmount: number | null }>();
+  const marketByGuide = new Map<string, GuideMarketData>();
   // Revisión automática del corte (pedido del usuario 2026-10-03, ver corteIssues).
   const issues: string[] = [];
   const registered = new Set(// Todas las de DAFLOW: una guía re-subida en otro corte ya está registrada.
@@ -305,6 +314,7 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
       continue;
     }
     filesRead++;
+    for (const [g, v] of summaryMarketData(pages)) summaryByGuide.set(g, v);
     // Unidades por guía con la MISMA lectura del corte: así el reingreso y la
     // salida nunca cuentan distinto un paquete.
     let corte: ReturnType<typeof parseGuidesPages>["guideUnits"] = {};
@@ -336,6 +346,7 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
           ? fromCorte.map((u) => ({ code: u.code, name: u.name, qty: u.units, physical: true }))
           : labelProducts(page, g.carrier, rocket);
         found.set(g.guideNumber, { products, manifestDay });
+        marketByGuide.set(g.guideNumber, { ...labelMarketData(page, g.carrier), buyerGender: genderFromName(labelClient(page, g.carrier).name) });
       }
     }
   }
@@ -353,21 +364,34 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
   for (const g of batch.guides) {
     const f = found.get(g.guideNumber);
     const labelVariants = variantsByGuide.get(g.guideNumber.toUpperCase()) ?? [];
-    // Ya leída antes: solo le falta el color/talla por guía.
+    // Ciudad y valor: primero la relación de Dropi (igual para todas las
+    // transportadoras); la etiqueta solo si la relación no lo trae.
+    const s = summaryByGuide.get(g.guideNumber.toUpperCase());
+    const m = marketByGuide.get(g.guideNumber);
+    const market = {
+      destCity: s?.city ?? m?.city ?? null,
+      destProvince: m?.province ?? null,
+      codAmount: s?.codAmount ?? m?.codAmount ?? null,
+      buyerGender: m?.buyerGender ?? null,
+      senderPhone: m?.storePhone ?? null,
+      marketReadAt: now,
+      ...(m?.store && !g.sender ? { sender: m.store } : {}),
+    };
+    // Ya leída antes: le falta el color/talla por guía y/o los datos de mercado.
     if (g.labelCachedAt) {
-      await prisma.fulfillmentRequestGuide.update({ where: { id: g.id }, data: { labelVariants } });
+      await prisma.fulfillmentRequestGuide.update({ where: { id: g.id }, data: { ...market, ...(g.labelVariants === null ? { labelVariants } : {}) } });
       continue;
     }
     // Sin etiqueta en el PDF: se guarda vacío igual (con la fecha) para no
     // volver a abrir el PDF por esta guía; el escaneo avisa y usa los códigos.
     await prisma.fulfillmentRequestGuide.update({
       where: { id: g.id },
-      data: { labelProducts: f?.products ?? [], manifestDay: f?.manifestDay ?? null, labelCachedAt: now, labelVariants },
+      data: { labelProducts: f?.products ?? [], manifestDay: f?.manifestDay ?? null, labelCachedAt: now, labelVariants, ...market },
     });
     filled++;
   }
   const empty = batch.guides.filter((g) => !g.labelCachedAt && !(found.get(g.guideNumber)?.products.length));
-  if (empty.length) issues.push(`${empty.length} guía(s) sin ningún producto leído en su etiqueta (ej. ${empty.slice(0, 3).map((g) => g.guideNumber).join(", ")}): si regresan, no se podrán escanear.`);
+  if (!opts.quiet && empty.length) issues.push(`${empty.length} guía(s) sin ningún producto leído en su etiqueta (ej. ${empty.slice(0, 3).map((g) => g.guideNumber).join(", ")}): si regresan, no se podrán escanear.`);
   if (issues.length) {
     await prisma.fulfillmentRequestBatch.update({ where: { id: batchId }, data: { parseWarnings: { push: issues.map((i) => `Revisión automática: ${i}`) } } }).catch(() => null);
     await notifyOwner("admin", {
@@ -377,6 +401,27 @@ export async function cacheGuideLabelsForBatch(batchId: string): Promise<number>
     }).catch(() => null);
   }
   return filled;
+}
+
+// Datos de mercado de las guías ya guardadas (pedido del usuario 2026-10-10):
+// el cron diario va leyendo los cortes que faltan, de los más nuevos a los
+// más viejos, hasta agotar el tiempo — en pocos días queda toda la historia
+// desde el 23/09 (antes no se guardaban los PDF). Devuelve cuántos cortes leyó.
+export async function backfillGuideMarketData(budgetMs: number): Promise<number> {
+  const start = Date.now();
+  const batches = await prisma.fulfillmentRequestBatch.findMany({
+    where: { NOT: { fileUrls: { isEmpty: true } }, guides: { some: { marketReadAt: null } } },
+    orderBy: { requestedAt: "desc" },
+    select: { id: true },
+    take: 60,
+  });
+  let read = 0;
+  for (const b of batches) {
+    if (Date.now() - start > budgetMs) break;
+    await cacheGuideLabelsForBatch(b.id, { quiet: true }).catch((e) => console.error("[backfillGuideMarketData]", b.id, e));
+    read++;
+  }
+  return read;
 }
 
 // Revisión automática de cada corte (pedido del usuario 2026-10-03, tras
