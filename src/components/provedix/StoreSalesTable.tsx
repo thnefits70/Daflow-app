@@ -4,9 +4,12 @@
 // provedix.com. Sin dependencias de servidor.
 export type StoreSalesRow = { name: string; phone: string | null; count: number };
 
-// tel: con el número tal cual (09…, +57…): el celular de Nairoby lo marca.
-function telHref(phone: string) {
-  return `tel:${phone.replace(/[^\d+]/g, "")}`;
+// WhatsApp, no llamada (pedido del usuario 2026-10-10: la mayoría de los
+// dropshippers no contesta llamadas). wa.me pide el número con el código de
+// país y sin el 0: 0991234567 → 593991234567; +57… ya lo trae.
+function whatsappHref(phone: string) {
+  const d = phone.replace(/\D/g, "");
+  return `https://wa.me/${d.startsWith("0") ? `593${d.slice(1)}` : d}`;
 }
 
 export function StoreSalesTable({ stores }: { stores: StoreSalesRow[] }) {
@@ -27,8 +30,8 @@ export function StoreSalesTable({ stores }: { stores: StoreSalesRow[] }) {
               <td className="py-2 pr-3">{s.name}</td>
               <td className="py-2 pr-3 tabular-nums">
                 {s.phone ? (
-                  <a href={telHref(s.phone)} className="text-teal hover:underline">
-                    {s.phone}
+                  <a href={whatsappHref(s.phone)} target="_blank" rel="noopener noreferrer" className="text-teal hover:underline" title="Escribir por WhatsApp">
+                    💬 {s.phone}
                   </a>
                 ) : (
                   <span className="text-steel">—</span>
