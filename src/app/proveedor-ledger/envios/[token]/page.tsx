@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { findSupplierByPublicShippingToken, getSupplierDebtDisputedItems, getSupplierReplacementHistory, SUPPLIER_PUBLIC_LINK_START } from "@/lib/supplierDebt";
 import { SupplierReplacementHistoryTable } from "@/components/supplier-ledger/SupplierReplacementHistoryTable";
 import { SupplierDisputedItemsTable } from "@/components/supplier-ledger/SupplierDisputedItemsTable";
+import { SupplierCancelledOrdersTable } from "@/components/supplier-ledger/SupplierCancelledOrdersTable";
+import { cancelledNotSentLabel, getSupplierCancelledNotSent } from "@/lib/purchaseCancelNotSent";
 import { SupplierPendingShipmentsList } from "@/components/supplier-ledger/SupplierPendingShipmentsList";
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
 import { SupplierShippingPushToggle } from "@/components/supplier-ledger/SupplierShippingPushToggle";
@@ -94,6 +96,7 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
     getSupplierReplacementHistory(supplier.id),
   ]);
   const disputedItems = allDisputedItems.filter((i) => i.requestedAt >= since);
+  const cancelledOrders = await getSupplierCancelledNotSent(supplier.id, since);
 
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900">
@@ -140,6 +143,17 @@ export default async function SupplierShippingLedgerPage({ params }: { params: P
               falta enviar el reemplazo de lo que llegó mal.
             </p>
             <SupplierDisputedItemsTable items={disputedItems} showValue={false} token={token} />
+          </section>
+        )}
+
+        {cancelledOrders.length > 0 && (
+          <section className="mb-8">
+            <div className="mb-1 flex items-center gap-2">
+              <h2 className="text-sm font-medium text-neutral-700">Pedidos cancelados</h2>
+              <span className="rounded-full bg-neutral-200 px-2 py-0.5 text-xs font-medium tabular-nums text-neutral-700">{cancelledOrders.length}</span>
+            </div>
+            <p className="mb-3 text-xs text-neutral-500">No se enviaron porque ustedes no tenían stock. Ya no hay que enviarlos.</p>
+            <SupplierCancelledOrdersTable items={cancelledOrders} label={cancelledNotSentLabel(supplier.name)} />
           </section>
         )}
 

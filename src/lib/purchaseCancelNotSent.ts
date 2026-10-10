@@ -9,6 +9,40 @@ import { notifySupplierStockoutReported } from "@/lib/supplierStockout";
 // la compra: sin saldo a favor, sin descuento, y sale del enlace del
 // proveedor. Solo quien compró (o el admin), con doble confirmación.
 
+// Así se reconoce una compra cancelada por este camino (rejectReason).
+export const CANCEL_NOT_SENT_PREFIX = "Cancelada — el proveedor no la envió";
+
+// Pedido del usuario 2026-10-10: en el enlace y la hoja del proveedor NO
+// desaparece — queda con este estado corto.
+export function cancelledNotSentLabel(supplierName: string) {
+  return `Cancelado: ${supplierName.toUpperCase()} sin stock`;
+}
+
+export type SupplierCancelledOrder = {
+  id: string;
+  productName: string;
+  productImageUrl: string | null;
+  quantity: number;
+  requestedAt: Date;
+  cancelledAt: Date | null;
+};
+
+export async function getSupplierCancelledNotSent(supplierId: string, since: Date): Promise<SupplierCancelledOrder[]> {
+  const rows = await prisma.purchaseRequest.findMany({
+    where: { supplierId, requestedAt: { gte: since }, status: "REJECTED", rejectReason: { startsWith: CANCEL_NOT_SENT_PREFIX } },
+    select: { id: true, quantity: true, requestedAt: true, rejectionClosedAt: true, catalogItem: { select: { name: true, photos: true } } },
+    orderBy: { rejectionClosedAt: "desc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    productName: r.catalogItem.name,
+    productImageUrl: r.catalogItem.photos.at(-1) ?? null,
+    quantity: r.quantity,
+    requestedAt: r.requestedAt,
+    cancelledAt: r.rejectionClosedAt,
+  }));
+}
+
 export type CancelNotSentRequest = {
   status: string;
   quantity: number;

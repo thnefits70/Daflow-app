@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { CANCEL_NOT_SENT_PREFIX, cancelledNotSentLabel } from "@/lib/purchaseCancelNotSent";
 import { SUPPLIER_PUBLIC_LINK_START, isReportBlockingDebtPayment, supplierReviewEndsAt } from "@/lib/supplierDebt";
 
 // Confirmado 2026-09-24, pedido explícito del usuario: pestañas "Pedidos
@@ -128,6 +129,7 @@ export async function ensureAutoOrdersTabs(supplierId: string, existing: { id: s
 
 const requestInclude = {
   catalogItem: { select: { name: true, photos: true } },
+  supplier: { select: { name: true } },
   receipt: { select: { receivedQuantity: true, confirmedAt: true, approvedAt: true } },
   debtPayment: { select: { id: true, code: true, closedAt: true } },
   urgentReports: {
@@ -155,14 +157,19 @@ type RequestRow = Awaited<ReturnType<typeof loadRequests>>[number];
 
 async function loadRequests(where: { supplierId: string; requestedAt?: { gte: Date; lt: Date }; id?: string }) {
   return prisma.purchaseRequest.findMany({
-    where: { ...where, status: { notIn: ["PENDING_APPROVAL", "REJECTED"] } },
+    // Pedido del usuario 2026-10-10: una compra cancelada porque el
+    // proveedor no tenía stock se queda en la hoja con su estado corto.
+    where: {
+      ...where,
+      OR: [{ status: { notIn: ["PENDING_APPROVAL", "REJECTED"] } }, { status: "REJECTED", rejectReason: { startsWith: CANCEL_NOT_SENT_PREFIX } }],
+    },
     include: requestInclude,
     orderBy: [{ requestedAt: "asc" }, { id: "asc" }],
   });
 }
 
 // En qué etapa está un pedido — la usa también el aviso de notas de CHEN.
-export type OrderStage = "en_camino" | "reposicion" | "en_revision" | "por_pagar" | "pago_en_proceso" | "pagado";
+export type OrderStage = "cancelado" | "en_camino" | "reposicion" | "en_revision" | "por_pagar" | "pago_en_proceso" | "pagado";
 
 export type OrderSummary = {
   requestId: string;
@@ -187,6 +194,29 @@ export type OrderSummary = {
 };
 
 function summarize(r: RequestRow): OrderSummary {
+  if (r.status === "REJECTED") {
+    return {
+      requestId: r.id,
+      deptId: r.deptId,
+      requestedById: r.requestedById,
+      requestNumber: r.requestNumber,
+      productName: r.catalogItem.name,
+      photoUrl: r.catalogItem.photos.at(-1) ?? null,
+      quantity: r.quantity,
+      unitCost: r.unitCost,
+      requestedAt: r.requestedAt,
+      arrivedAt: null,
+      goodQty: 0,
+      total: 0,
+      stage: "cancelado",
+      statusText: cancelledNotSentLabel(r.supplier.name),
+      statusTone: "gray",
+      complete: "—",
+      paymentText: "No se cobra",
+      paymentTone: "gray",
+      paymentIds: [],
+    };
+  }
   const reports = r.urgentReports.filter((u) => !u.rejectedAt);
   const onArrivalReports = reports.filter((u) => !u.isLateClaim);
   const blocking = reports.filter((u) => isReportBlockingDebtPayment(u));

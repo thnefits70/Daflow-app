@@ -52,6 +52,7 @@ async function idsForRoles(roles: Role[], requesterId: string | null) {
 }
 
 function rolesForStage(stage: OrderStage): Role[] {
+  if (stage === "cancelado") return ["compras"];
   if (stage === "en_camino") return ["compras", "inventario"];
   if (stage === "reposicion" || stage === "en_revision") return ["compras", "inventario_lider"];
   return ["pagos"];
@@ -91,6 +92,7 @@ async function rolesByAi(params: { text: string; context: string; supplierId: st
 }
 
 const STAGE_LABEL: Record<OrderStage, string> = {
+  cancelado: "cancelado (el proveedor no tenía stock)",
   en_camino: "en camino",
   reposicion: "con daño/faltante por reponer",
   en_revision: "llegó, en revisión en bodega (7 días)",

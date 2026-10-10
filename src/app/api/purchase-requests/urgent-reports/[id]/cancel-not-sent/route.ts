@@ -7,15 +7,16 @@ import { notifyOwner } from "@/lib/notifications";
 import { getPurchaseApproverIds } from "@/lib/guards";
 import { formatPurchaseRequestCode } from "@/lib/purchases";
 import { getReservedCreditsForGroup, releaseCreditsForGroup } from "@/lib/supplierCredits";
-import { cancelNotSentBlocker, openSupplierStockoutNotice } from "@/lib/purchaseCancelNotSent";
+import { CANCEL_NOT_SENT_PREFIX, cancelNotSentBlocker, openSupplierStockoutNotice } from "@/lib/purchaseCancelNotSent";
 
 const schema = z.object({ note: z.string().trim().min(3, "Escribe el motivo (ej. CHEN no tiene stock).") });
 
 // Pedido del usuario 2026-10-10: cancelar una compra que el proveedor nunca
 // envió (ver purchaseCancelNotSent.ts). Lo hace quien compró — es quien
 // habla con el proveedor — o el admin. La compra queda REJECTED y cerrada
-// (rejectionClosedAt), así sale sola del enlace y la hoja del proveedor, de
-// "Pedidos por enviar", de la deuda y del seguimiento de Compras. Se separa
+// (rejectionClosedAt), así sale de "Falta enviar", de la deuda y del
+// seguimiento de Compras; en el enlace y la hoja del proveedor queda como
+// "Cancelado: CHEN sin stock" (ver cancelledNotSentLabel). Se separa
 // a un groupId propio (como reject-items) para no mezclar estados con los
 // otros productos de la misma solicitud. El reclamo queda marcado "sin
 // stock del proveedor" con quién y cuándo.
@@ -64,9 +65,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       data: {
         groupId,
         status: "REJECTED",
-        rejectReason: `Cancelada — el proveedor no la envió: ${note}`,
+        rejectReason: `${CANCEL_NOT_SENT_PREFIX}: ${note}`,
         rejectionClosedAt: now,
-        rejectionClosedNote: `Cancelada — el proveedor no la envió: ${note}`,
+        rejectionClosedNote: `${CANCEL_NOT_SENT_PREFIX}: ${note}`,
       },
     }),
     prisma.purchaseRequestUrgentReport.updateMany({

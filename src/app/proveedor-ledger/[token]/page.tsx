@@ -16,6 +16,8 @@ import { SupplierPendingShipmentsList, ProductThumb } from "@/components/supplie
 import { SupplierShipmentHistoryTable } from "@/components/supplier-ledger/SupplierShipmentHistoryTable";
 import { SupplierDisputedItemsTable } from "@/components/supplier-ledger/SupplierDisputedItemsTable";
 import { SupplierReplacementHistoryTable } from "@/components/supplier-ledger/SupplierReplacementHistoryTable";
+import { SupplierCancelledOrdersTable } from "@/components/supplier-ledger/SupplierCancelledOrdersTable";
+import { cancelledNotSentLabel, getSupplierCancelledNotSent } from "@/lib/purchaseCancelNotSent";
 import { firstName } from "@/lib/actorName";
 import { supplierPendingShipmentWhere, supplierShipmentHistoryWhere, supplierShipmentHistoryInclude, supplierShipmentHistoryRow } from "@/lib/supplierShippingPush";
 
@@ -157,6 +159,7 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
   ]);
 
   const disputedItems = allDisputedItems.filter((i) => i.requestedAt >= since);
+  const cancelledOrders = await getSupplierCancelledNotSent(supplier.id, since);
   const pendingDebtItems = allPendingDebtItems.filter((i) => i.requestedAt >= since);
   const pendingExcessItems = allPendingExcessItems.filter((i) => i.requestedAt >= since);
 
@@ -352,6 +355,14 @@ export default async function SupplierLedgerPage({ params }: { params: Promise<{
               bodega TBS lo confirme.
             </p>
             <SupplierDisputedItemsTable items={disputedItems} showValue={false} token={token} />
+          </section>
+        )}
+
+        {cancelledOrders.length > 0 && (
+          <section className="mb-8">
+            <SectionTitle count={cancelledOrders.length}>Pedidos cancelados</SectionTitle>
+            <p className="mb-3 text-xs text-neutral-500">No se enviaron porque ustedes no tenían stock. No se cobran.</p>
+            <SupplierCancelledOrdersTable items={cancelledOrders} label={cancelledNotSentLabel(supplier.name)} />
           </section>
         )}
 
