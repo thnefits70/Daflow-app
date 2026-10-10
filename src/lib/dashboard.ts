@@ -6,7 +6,7 @@ import { prevMonthStr } from "@/lib/pendingTasks";
 import { computeAutoStockoutWeeks, isAutoStockoutWeek } from "@/lib/autoStockout";
 import { isAutoFillRateWeek, isoWeekOf } from "@/lib/autoFillRate";
 import { brandLabel, sortBrands } from "@/lib/brandLabels";
-import { isRocketCode } from "@/lib/dropiGuidesPdf";
+import { guideBrandsOf } from "@/lib/guideBrands";
 import { NO_BRAND, ecuadorDay } from "@/lib/fulfillmentGuides";
 import { getLocalWarrantyReasonCounts, getWarrantyRate, previousMonth, warrantyReasonGroup, type WarrantyReasonGroup } from "@/lib/warrantyInsights";
 
@@ -217,33 +217,15 @@ async function guidesByBrandPerWeek(fromWeek: string): Promise<Map<string, Recor
     },
   });
   const inRange = batches.filter((b) => b.lot && isoWeekOf(b.lot.day) >= fromWeek);
-
-  const brandByCode = new Map<string, string>();
-  const comboCodes = [...new Set(inRange.flatMap((b) => b.items.map((i) => i.fromComboCode)).filter((c): c is string => !!c))];
-  const combos = comboCodes.length ? await prisma.dropiCombo.findMany({ where: { code: { in: comboCodes } }, select: { code: true, bodega: true } }) : [];
-  for (const c of combos) if (c.bodega) brandByCode.set(c.code, c.bodega);
-  for (const b of inRange) {
-    for (const it of b.items) {
-      if (it.fromComboCode) continue;
-      if (it.catalogItem.bodega && !brandByCode.has(it.sourceCode)) brandByCode.set(it.sourceCode, it.catalogItem.bodega);
-    }
-  }
+  const brandOf = await guideBrandsOf(inRange);
 
   const byWeek = new Map<string, Record<string, number>>();
   for (const b of inRange) {
     const week = isoWeekOf(b.lot!.day);
     const counts = byWeek.get(week) ?? {};
     byWeek.set(week, counts);
-    // Marca del PDF: la que tienen la mayoría de sus productos.
-    const tally = new Map<string, number>();
-    for (const it of b.items) {
-      const brand = brandByCode.get(it.fromComboCode ?? it.sourceCode);
-      if (brand) tally.set(brand, (tally.get(brand) ?? 0) + 1);
-    }
-    const batchBrand = [...tally.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? NO_BRAND;
     for (const g of b.guides) {
-      const rocket = b.source === "ROCKET" || /^RKT/i.test(g.guideNumber) || g.codes.some(isRocketCode);
-      const brand = rocket ? "ROCKET" : (g.codes.map((c) => brandByCode.get(c)).find(Boolean) ?? batchBrand);
+      const brand = brandOf.get(g.guideNumber) ?? NO_BRAND;
       counts[brand] = (counts[brand] ?? 0) + 1;
     }
   }

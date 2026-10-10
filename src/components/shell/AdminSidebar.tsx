@@ -28,6 +28,7 @@ import {
   Waypoints,
   TrendingUp,
   UserCog,
+  Globe,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { NotificationBell } from "@/components/shared/NotificationBell";
@@ -169,6 +170,9 @@ export function AdminSidebar({
         </Link>
         <Link href="/admin/areas" className={`${NAV_ITEM} ${pathname.startsWith("/admin/areas") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <ShieldCheck size={15} /> Áreas del negocio
+        </Link>
+        <Link href="/admin/provedix" className={`${NAV_ITEM} ${pathname.startsWith("/admin/provedix") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <Globe size={15} /> Provedix
         </Link>
 
         {specialDepartments.map((d) => (
