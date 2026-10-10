@@ -17,6 +17,7 @@ import { MaxPurchasePrice } from "@/components/marketanalysis/MaxPurchasePrice";
 import { CopyDropiPrice } from "@/components/shared/CopyDropiPrice";
 import { DropiPriceChangesQueue } from "./DropiPriceChangesQueue";
 import { computePreviewPrice, computeCompetitorComparison } from "./PriceCalculator";
+import { AdvisorComboRegister } from "./AdvisorComboRegister";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -86,7 +87,7 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-type Tab = "proponer" | "ganadores" | "sinstock" | "despiertan" | "variantes" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "rocket" | "trazabilidad";
+type Tab = "proponer" | "ganadores" | "sinstock" | "despiertan" | "variantes" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "rocket" | "registrarcombo" | "trazabilidad";
 
 export function MarketProductPanel({
   canPropose,
@@ -152,6 +153,9 @@ export function MarketProductPanel({
     // Confirmado 2026-09-23, pedido de Heidy: historial de lo que ya publicó.
     ...(canPublish ? [{ key: "mispublicados" as Tab, label: "Mis publicados" }] : []),
     ...(canUploadRocketSku ? [{ key: "rocket" as Tab, label: "Subir a Rocket" }] : []),
+    // Pedido del usuario 2026-10-10: el asesor registra cada combo que crea
+    // en Dropi o Rocket, con marca y productos, antes de venderlo.
+    ...(canPublish || canUploadRocketSku ? [{ key: "registrarcombo" as Tab, label: "Registrar combo" }] : []),
     ...(canReview ? [{ key: "trazabilidad" as Tab, label: "Trazabilidad" }] : []),
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "proponer");
@@ -211,6 +215,7 @@ export function MarketProductPanel({
       )}
       {tab === "mispublicados" && <PublishedHistoryView />}
       {tab === "rocket" && <RocketUploadView />}
+      {tab === "registrarcombo" && <AdvisorComboRegister />}
       {tab === "trazabilidad" && <TraceabilityView canDecidePurchase={canDecidePurchase} canCancel={canReview} canRequestPublic={canActOnReview} />}
     </div>
   );

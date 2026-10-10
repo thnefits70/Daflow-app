@@ -573,7 +573,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
 // "analisis_mercado_liberar_kardex" (confirmado 2026-09-28, pedido explícito
 // del usuario): mercadería ya en bodega que no aparece en INVESTOCK hasta que
 // Bryan la libere — se le pasó por semanas porque solo tenía un aviso único.
-export const MANDATORY_PUSH_TYPES = new Set(["fulfillment_cortes_sin_confirmar", "kardex_atrasado_cortes", "kardex_atrasado_recepciones", "kardex_atrasado_liberar", "colaborador_del_mes", "cambio_proveedor_rechazo", "analisis_mercado_liberar_kardex", "analisis_mercado_rocket_atrasado"]);
+export const MANDATORY_PUSH_TYPES = new Set(["fulfillment_cortes_sin_confirmar", "kardex_atrasado_cortes", "kardex_atrasado_recepciones", "kardex_atrasado_liberar", "colaborador_del_mes", "cambio_proveedor_rechazo", "analisis_mercado_liberar_kardex", "analisis_mercado_rocket_atrasado", "combos_sin_marca"]);
 
 // Each department's admin-leader feedback meeting falls on a different
 // weekday — confirmed by the user 2026-07-21: Análisis de Mercado (Bryan)

@@ -2,6 +2,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import type { Prisma } from "@/generated/prisma/client";
 import { auth } from "@/auth";
+import { canPublishMarketProduct, canUploadRocketSku } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { getB2BAdvisorTitle } from "@/lib/b2bAdvisorRole";
 import { b2bAdvisorWithArticle } from "@/lib/b2bAdvisorRoleShared";
@@ -118,6 +119,14 @@ export async function notifyCombosWithoutBrand(combos: { code: string; label: st
       }).catch(() => null)
     ),
   ]);
+}
+
+// Pedido del usuario 2026-10-10: los asesores que publican en Dropi (asesora
+// B2B) o en Rocket (hoy Yair) registran cada combo que crean, con marca y
+// productos obligatorios, ANTES de venderlo — así el corte ya lo reconoce y
+// nunca llega sin marca.
+export async function canRegisterAdvisorCombo(): Promise<boolean> {
+  return (await canPublishMarketProduct()) || (await canUploadRocketSku());
 }
 
 export const COMBO_BRAND_HREF = "/area/workspace?tab=stock-actual&filtro=combos-sin-marca";

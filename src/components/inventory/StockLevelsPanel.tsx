@@ -733,6 +733,12 @@ export function StockLevelsPanel({
   }
 
   async function updateComboMarca(comboId: string, bodega: Marca | null) {
+    // Pedido del usuario 2026-10-10: la asesora B2B confirma dos veces — una
+    // vez puesta, solo el admin la cambia.
+    if (!isAdmin) {
+      const combo = combos.find((c) => c.id === comboId);
+      if (!bodega || !window.confirm(`¿Confirmas que el combo ${combo?.code ?? ""} es de ${MARCA_LABELS[bodega]}?\n\nUna vez guardada no podrás cambiarla; si te equivocas, solo el administrador la corrige.`)) return;
+    }
     const prevCombos = combos;
     setCombos((c) => c.map((combo) => (combo.id === comboId ? { ...combo, bodega } : combo)));
     const res = await fetch(`/api/dropi-combos/${comboId}/bodega`, {

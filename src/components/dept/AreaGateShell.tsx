@@ -14,6 +14,7 @@ import { BirthdayPopup } from "@/components/birthday/BirthdayPopup";
 import { MonthlyRecognitionPopup } from "@/components/recognition/MonthlyRecognitionPopup";
 import { CeoBonusPopup } from "@/components/shared/CeoBonusPopup";
 import { SalaryAdvanceReceiptGate } from "@/components/salary-advances/SalaryAdvanceReceipt";
+import { ComboBrandGate } from "@/components/shared/ComboBrandGate";
 import { RecognitionLockGate } from "@/components/recognition/RecognitionLockGate";
 import { WeeklyCheckinPanel } from "@/components/shared/WeeklyCheckinPanel";
 import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
@@ -281,6 +282,7 @@ export function AreaGateShell({
       <MonthlyRecognitionPopup />
       <CeoBonusPopup />
       <SalaryAdvanceReceiptGate />
+      <ComboBrandGate />
     </div>
   );
 }
