@@ -1,10 +1,12 @@
 import type { ProvedixOverview } from "@/lib/provedixAdmin";
 import { brandLabel } from "@/lib/brandLabels";
 import { StoreSalesTable } from "@/components/provedix/StoreSalesTable";
+import { SnapshotPreview } from "@/components/provedix/SnapshotPreview";
+import type { ProvedixSnapshotData } from "@/lib/provedixSnapshot";
 
 const STAGES: { title: string; detail: string; done: boolean }[] = [
   { title: "1. Leer las guías", detail: "Ciudad, valor cobrado, hombre/mujer y tienda de cada guía.", done: true },
-  { title: "2. Resumen por producto", detail: "Ventas en rangos, precio más común, ciudades y combos reales, con 7 días de retraso.", done: false },
+  { title: "2. Resumen por producto", detail: "Ventas en rangos, precio más común, ciudades y combos reales, con 7 días de retraso.", done: true },
   { title: "3. Página provedix.com", detail: "Catálogo con fotos y registro con nombre y WhatsApp.", done: false },
   { title: "4. Cartera de dropshippers", detail: "Registrados, cuántas veces entran, qué buscan y visitas a la página.", done: false },
 ];
@@ -22,7 +24,7 @@ function dayLabel(iso: string) {
   return `${d}/${m}/${y}`;
 }
 
-export function ProvedixPanel({ overview }: { overview: ProvedixOverview }) {
+export function ProvedixPanel({ overview, snapshot }: { overview: ProvedixOverview; snapshot: (ProvedixSnapshotData & { generatedAt: string }) | null }) {
   const { progress, guides, byBrand, cities, gender, cod, stores, windowFrom } = overview;
   const readPct = pct(progress.read, progress.total);
   const knownGender = gender.F + gender.M;
@@ -75,8 +77,10 @@ export function ProvedixPanel({ overview }: { overview: ProvedixOverview }) {
         </div>
       </div>
 
+      <SnapshotPreview snapshot={snapshot} />
+
       <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel mb-2">
-        Vista previa · desde el {dayLabel(windowFrom)} · solo Provedix e Imp. Damián, sin garantías
+        Datos generales · desde el {dayLabel(windowFrom)} · solo Provedix e Imp. Damián, sin garantías
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">

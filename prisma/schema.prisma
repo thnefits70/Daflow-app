@@ -7989,3 +7989,14 @@ model LooseInvoice {
   @@index([supplierId])
   @@index([invoiceDate])
 }
+
+// Etapa 2 de provedix.com (pedido del usuario 2026-10-10): resumen por
+// producto que verá la página pública, calculado una vez al día con 7 días
+// de retraso (ver src/lib/provedixSnapshot.ts). Solo rangos y porcentajes —
+// ningún dato de una persona ni nombre de tienda. Se guardan 60 días.
+model ProvedixSnapshot {
+  id        String   @id @default(cuid())
+  day       String   @unique // YYYY-MM-DD (Ecuador) en que se calculó
+  data      Json
+  createdAt DateTime @default(now())
+}
