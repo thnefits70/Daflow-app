@@ -93,14 +93,21 @@ export function SnapshotPreview({ snapshot }: { snapshot: (ProvedixSnapshotData 
         pedidos van en &quot;Otras&quot;.
       </div>
       {snapshot && snapshot.products.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {snapshot.products.slice(0, 40).map((p) => (
-            <ProductCard key={p.code} p={p} />
-          ))}
-        </div>
-      )}
-      {snapshot && snapshot.products.length > 40 && (
-        <div className="text-[11.5px] text-steel mt-3">Se muestran los 40 primeros de {snapshot.products.length}.</div>
+        <details className="group">
+          <summary className="list-none [&::-webkit-details-marker]:hidden cursor-pointer select-none inline-flex items-center gap-1.5 rounded-md border border-rule px-3 py-1.5 text-[12px] font-medium hover:bg-cloud">
+            <span className="inline-block transition-transform group-open:rotate-90">▸</span>
+            <span className="group-open:hidden">Ver productos</span>
+            <span className="hidden group-open:inline">Ocultar productos</span>
+          </summary>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mt-4">
+            {snapshot.products.slice(0, 40).map((p) => (
+              <ProductCard key={p.code} p={p} />
+            ))}
+          </div>
+          {snapshot.products.length > 40 && (
+            <div className="text-[11.5px] text-steel mt-3">Se muestran los 40 primeros de {snapshot.products.length}.</div>
+          )}
+        </details>
       )}
     </div>
   );
