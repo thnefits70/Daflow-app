@@ -12,6 +12,7 @@ import { DocumentsPanel } from "@/components/documents/DocumentsPanel";
 import { ExamsPanel } from "@/components/exams/ExamsPanel";
 import { StoreFeedbackPanel } from "@/components/finance/StoreFeedbackPanel";
 import { StoreFeedbackKpiPanel } from "@/components/finance/StoreFeedbackKpiPanel";
+import { TopSellingStoresCard } from "@/components/provedix/TopSellingStoresCard";
 import type { StoreDTO, StoreFeedbackAggregate } from "@/lib/storeFeedback";
 import { FinanceKpiWorkspace } from "@/components/finance/FinanceKpiWorkspace";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
@@ -793,7 +794,10 @@ export function DeptWorkspaceTabs({
       {tab === "pagosadmin" && canManageAdminPayments && <AdminPaymentsPanel isAdmin={isAdmin} />}
       {tab === "almuerzos" && canRegisterLunchPayments && <LunchPaymentsPanel />}
       {tab === "postventa" && canManageStoreFeedback && (
-        <StoreFeedbackPanel stores={storeFeedbackStores} editable />
+        <>
+          <TopSellingStoresCard />
+          <StoreFeedbackPanel stores={storeFeedbackStores} editable />
+        </>
       )}
       {tab === "postventa" && !canManageStoreFeedback && canViewStoreFeedback && isAdmin && (
         <StoreFeedbackPanel stores={storeFeedbackStores} editable={false} />

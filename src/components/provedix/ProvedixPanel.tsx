@@ -1,5 +1,6 @@
 import type { ProvedixOverview } from "@/lib/provedixAdmin";
 import { brandLabel } from "@/lib/brandLabels";
+import { StoreSalesTable } from "@/components/provedix/StoreSalesTable";
 
 const STAGES: { title: string; detail: string; done: boolean }[] = [
   { title: "1. Leer las guías", detail: "Ciudad, valor cobrado, hombre/mujer y tienda de cada guía.", done: true },
@@ -122,30 +123,10 @@ export function ProvedixPanel({ overview }: { overview: ProvedixOverview }) {
 
         <div className="bg-surface border border-rule rounded-lg p-5">
           <div className="text-[13px] font-semibold mb-1">Tiendas que más venden nuestros productos</div>
-          <div className="text-[11px] text-steel mb-3">Nunca sale en provedix.com. Servientrega y Urbano no traen el celular.</div>
-          {stores.length === 0 && <div className="text-[12px] text-steel">Todavía no hay guías leídas.</div>}
-          {stores.length > 0 && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-[12px]">
-                <thead>
-                  <tr className="text-left text-[10.5px] uppercase tracking-wide text-steel">
-                    <th className="pb-2 pr-3 font-semibold">Tienda</th>
-                    <th className="pb-2 pr-3 font-semibold">Celular</th>
-                    <th className="pb-2 font-semibold text-right">Pedidos</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stores.map((s) => (
-                    <tr key={s.name} className="border-t border-rule">
-                      <td className="py-2 pr-3">{s.name}</td>
-                      <td className="py-2 pr-3 tabular-nums text-steel">{s.phone ?? "—"}</td>
-                      <td className="py-2 text-right tabular-nums font-semibold">{s.count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div className="text-[11px] text-steel mb-3">
+            Nunca sale en provedix.com. La ven solo tú y Nairoby (Servicio Postventa). Servientrega y Urbano no traen el celular.
+          </div>
+          <StoreSalesTable stores={stores} />
         </div>
       </div>
     </div>
