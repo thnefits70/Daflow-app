@@ -543,6 +543,9 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_aprobadas_sin_compra: "Análisis de Mercado — mis propuestas aprobadas sin compra",
   analisis_mercado_brandear: "Nuevos IDs por brandear",
   analisis_mercado_sin_id: "Productos de Compras sin ID de Dropi",
+  analisis_mercado_subir_rocket: "Subir a Rocket (Solo Rocket por ahora)",
+  analisis_mercado_rocket_atrasado: "SKU de Rocket atrasado (más de 24 h)",
+  analisis_mercado_pasar_publico: "Pasar a público en Dropi",
   seguimiento_tiendas_sin_tienda: "Seguimiento de tiendas — productos de Shanghai sin tienda",
   analisis_mercado_compra_en_camino: "Ya se está comprando — publícalo en Dropi",
   precio_dropi_cambio: "Cambió el precio mínimo de un producto publicado en Dropi",
@@ -568,7 +571,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
 // "analisis_mercado_liberar_kardex" (confirmado 2026-09-28, pedido explícito
 // del usuario): mercadería ya en bodega que no aparece en INVESTOCK hasta que
 // Bryan la libere — se le pasó por semanas porque solo tenía un aviso único.
-export const MANDATORY_PUSH_TYPES = new Set(["fulfillment_cortes_sin_confirmar", "kardex_atrasado_cortes", "kardex_atrasado_recepciones", "kardex_atrasado_liberar", "colaborador_del_mes", "cambio_proveedor_rechazo", "analisis_mercado_liberar_kardex"]);
+export const MANDATORY_PUSH_TYPES = new Set(["fulfillment_cortes_sin_confirmar", "kardex_atrasado_cortes", "kardex_atrasado_recepciones", "kardex_atrasado_liberar", "colaborador_del_mes", "cambio_proveedor_rechazo", "analisis_mercado_liberar_kardex", "analisis_mercado_rocket_atrasado"]);
 
 // Each department's admin-leader feedback meeting falls on a different
 // weekday — confirmed by the user 2026-07-21: Análisis de Mercado (Bryan)
@@ -1416,6 +1419,62 @@ export async function getMarketProductKardexReleasePendingRows() {
       return { id: r.id, since, units: receipts.reduce((s, x) => s + x.receivedQuantity, 0) };
     })
     .filter((r): r is { id: string; since: Date; units: number } => r !== null);
+}
+
+// Aprobado por Bryan 2026-10-10 — "Solo Rocket por ahora" (ver
+// MarketProductProposal.rocketOnly). Para Yair (canUploadRocketSku): lo que
+// falta subir a Rocket con su SKU.
+async function getRocketUploadPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.marketProductProposal.findMany({
+    where: { status: "APPROVED", rocketOnly: true, rocketSku: null },
+    select: { productName: true, reviewedAt: true },
+    orderBy: { reviewedAt: "asc" },
+  });
+  if (rows.length === 0) return null;
+  const overdue = rows.some((r) => r.reviewedAt && Date.now() - r.reviewedAt.getTime() > ROCKET_SKU_DEADLINE_MS);
+  return {
+    type: "analisis_mercado_subir_rocket",
+    icon: "🚀",
+    label: "Subir a Rocket como Provedix",
+    meta: rows.length === 1 ? rows[0].productName : `${rows.length} productos`,
+    overdue,
+    href,
+  };
+}
+
+// Bryan pidió que se le avise si a las 24 h de aprobado todavía no hay SKU.
+const ROCKET_SKU_DEADLINE_MS = 24 * 3600_000;
+async function getRocketSkuOverduePendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.marketProductProposal.findMany({
+    where: { status: "APPROVED", rocketOnly: true, rocketSku: null, reviewedAt: { lt: new Date(Date.now() - ROCKET_SKU_DEADLINE_MS) } },
+    select: { productName: true },
+  });
+  if (rows.length === 0) return null;
+  return {
+    type: "analisis_mercado_rocket_atrasado",
+    icon: "⏰",
+    label: "Sin SKU de Rocket después de 24 h",
+    meta: rows.length === 1 ? rows[0].productName : `${rows.length} productos`,
+    overdue: true,
+    href,
+  };
+}
+
+// Bryan pidió pasarlo a público en Dropi — la asesora B2B lo cambia y confirma.
+async function getMakePublicPendingItem(href: string): Promise<PendingItem | null> {
+  const rows = await prisma.marketProductProposal.findMany({
+    where: { status: "APPROVED", publicRequestedAt: { not: null }, madePublicAt: null, publishedAt: { not: null } },
+    select: { productName: true },
+  });
+  if (rows.length === 0) return null;
+  return {
+    type: "analisis_mercado_pasar_publico",
+    icon: "🌐",
+    label: "Pasar a público en Dropi (lo pidió Bryan)",
+    meta: rows.length === 1 ? rows[0].productName : `${rows.length} productos`,
+    overdue: false,
+    href,
+  };
 }
 
 async function getMarketProductKardexReleasePendingItem(href: string): Promise<PendingItem | null> {
@@ -2337,6 +2396,10 @@ async function getShortReceiptsUnclaimedPendingItem(href: string, requestedById?
 // Pedido del usuario 2026-10-05: `opts.label` para quien coordina con el
 // proveedor (Jariel) y `opts.requestedById` para que quien aprueba compras
 // (Bryan) vea, en seguimiento, los reclamos de las compras que él hizo.
+// Pedido del usuario 2026-10-10: dice qué producto, cuántas y hace cuántos
+// días (con un número solo se dejaba pasar) — ver purchaseClaimFollowup.ts.
+// Ya no le sale a Daniel ni a su equipo: gestionar con el proveedor no es
+// de Inventario.
 async function getPurchaseUrgentReportsUnresolvedPendingItem(
   href: string,
   opts: { label?: string; requestedById?: string } = {}
@@ -2394,10 +2457,6 @@ async function getLateClaimReviewPendingItem(href: string): Promise<PendingItem 
     href,
   };
 }
-// Pedido del usuario 2026-10-10: dice qué producto, cuántas y hace cuántos
-// días (con un número solo se dejaba pasar) — ver purchaseClaimFollowup.ts.
-// Ya no le sale a Daniel ni a su equipo: gestionar con el proveedor no es
-// de Inventario.
 
 // Confirmado 2026-08-17: pedido explícito del usuario — un enlace de un
 // clic en Inicio para que Bryan (o quien coordina con el proveedor) le dé
@@ -4010,6 +4069,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       canConfirmMarketingDesign: true,
       canResolveSupplierStockout: true,
       canPublishMarketProduct: true,
+      canUploadRocketSku: true,
       canLinkStoreProducts: true,
       canMarkComboCreatedInDropi: true,
       leadsDept: { select: { code: true, name: true, trackWeeklyMetric: true } },
@@ -4093,6 +4153,12 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (inTransitItem) teamItems.unshift(inTransitItem);
       const priceChangeItem = await getDropiPriceChangesPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
       if (priceChangeItem) teamItems.unshift(priceChangeItem);
+      const makePublicItem = await getMakePublicPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
+      if (makePublicItem) teamItems.unshift(makePublicItem);
+    }
+    if (me.canUploadRocketSku) {
+      const rocketItem = await getRocketUploadPendingItem("/area/workspace?tab=analisis-mercado&ptab=rocket");
+      if (rocketItem) teamItems.unshift(rocketItem);
     }
     if (me.canMarkComboCreatedInDropi) {
       const combosItem = await getWeeklyComboSuggestionsPendingItem();
@@ -4143,6 +4209,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       const excessConfirmItem = await getPurchaseExcessPendingItem("confirmar", "/area/workspace?tab=compras&ptab=urgentes");
       if (excessConfirmItem) teamItems.push(excessConfirmItem);
       if (!me.canManagePurchases) {
+        // 2026-10-10: quien compró también gestiona — ya no es solo seguimiento.
         const myClaimsItem = await getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes", {
           label: "Reclamo de tu compra sin gestionar con el proveedor",
           requestedById: actor.userId,
@@ -4214,7 +4281,6 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (personalPurchaseFinanceItem) items.push(personalPurchaseFinanceItem);
     if (personalPurchaseTransferCloseItem) items.push(personalPurchaseTransferCloseItem);
     if (personalPurchaseCashConfirmItem) items.push(personalPurchaseCashConfirmItem);
-        // 2026-10-10: quien compró también gestiona — ya no es solo seguimiento.
     if (merchandiseWeeklyVerificationItem) items.push(merchandiseWeeklyVerificationItem);
     const claimGapsItem = await getSupplierClaimGapsPendingItem("/area/workspace?tab=egresos&otab=seguimiento").catch(() => null);
     if (claimGapsItem) items.push(claimGapsItem);
@@ -4308,6 +4374,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (rejectedPurchaseProposalItem) items.push(rejectedPurchaseProposalItem);
     const kardexReleaseItem = await getMarketProductKardexReleasePendingItem("/area/workspace?tab=analisis-mercado&ptab=trazabilidad");
     if (kardexReleaseItem) items.unshift(kardexReleaseItem);
+    const rocketOverdueItem = await getRocketSkuOverduePendingItem("/area/workspace?tab=analisis-mercado&ptab=trazabilidad");
+    if (rocketOverdueItem) items.unshift(rocketOverdueItem);
     const externalSaleReviewItem = await getExternalSaleReviewPendingItem("/area/workspace?tab=ventas-externas&etab=revision");
     if (externalSaleReviewItem) items.push(externalSaleReviewItem);
     // Confirmado 2026-09-23, pedido de Jariel: Bryan resuelve "Sin stock de
@@ -4379,6 +4447,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     const excessConfirmItem = await getPurchaseExcessPendingItem("confirmar", "/area/workspace?tab=compras&ptab=urgentes");
     if (excessConfirmItem) items.push(excessConfirmItem);
     if (!me.canManagePurchases) {
+      // 2026-10-10: quien compró también gestiona — ya no es solo seguimiento.
       const myClaimsItem = await getPurchaseUrgentReportsUnresolvedPendingItem("/area/workspace?tab=compras&ptab=urgentes", {
         label: "Reclamo de tu compra sin gestionar con el proveedor",
         requestedById: actor.userId,
@@ -4446,13 +4515,13 @@ export async function getPossiblePendingTypesForActor(
         canBrandMarketProduct: true,
         canConfirmMarketingDesign: true,
         canPublishMarketProduct: true,
+        canUploadRocketSku: true,
         canLinkStoreProducts: true,
         canMarkComboCreatedInDropi: true,
         leadsDept: { select: { code: true, trackWeeklyMetric: true } },
         department: { select: { code: true } },
       },
     });
-      // 2026-10-10: quien compró también gestiona — ya no es solo seguimiento.
     if (!me) return [];
     if (!me.isLeader || !me.leadsDeptId || !me.leadsDept) {
       // Delegado sin liderar ningún departamento (p.ej. Jariel vía
@@ -4467,7 +4536,8 @@ export async function getPossiblePendingTypesForActor(
       // pero no su líder — mismo criterio que el resto de este bloque.
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar", "analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
-      if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio");
+      if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "analisis_mercado_pasar_publico");
+      if (me.canUploadRocketSku) types.push("analisis_mercado_subir_rocket");
       if (me.canMarkComboCreatedInDropi) types.push("combos_semana");
       if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
       if (me.department?.code === "INV") types.push("fulfillment_bloque_asignado");
@@ -4499,7 +4569,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.canManagePurchases) types.push("deterioro_compras_gestion", "compras_excedente_gestion");
     if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion", "compras_excedente_confirmar");
-    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion", "analisis_mercado_sin_compra", "ventas_externas_revisar", "recompras_por_aprobar");
+    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion", "analisis_mercado_sin_compra", "ventas_externas_revisar", "recompras_por_aprobar", "analisis_mercado_rocket_atrasado");
     if (me.canManagePurchases || ["COM", "FIN"].includes(me.leadsDept.code)) types.push("recompras_sin_respuesta", "recompras_listas");
   }
 
@@ -4520,7 +4590,7 @@ export async function getAllPendingTasksActors(): Promise<{ ownerId: string; act
   // getPendingTasksForActor) — si no se incluye acá, el cron nunca lo
   // evalúa y nunca le llega el push aunque tenga algo pendiente.
   const purchaseDelegates = await prisma.user.findMany({
-    where: { isActive: true, canManagePurchases: true, OR: [{ isLeader: false }, { leadsDeptId: null }] },
+    where: { isActive: true, OR: [{ canManagePurchases: true }, { canUploadRocketSku: true }], AND: [{ OR: [{ isLeader: false }, { leadsDeptId: null }] }] },
     select: { id: true },
   });
   return [

@@ -1570,6 +1570,16 @@ export async function canPublishMarketProduct() {
   return !!user?.canPublishMarketProduct;
 }
 
+// Aprobado por Bryan 2026-10-10: subir a Rocket (cuenta Provedix) lo que él
+// aprobó como "Solo Rocket por ahora" y escribir su SKU — exclusivo de quien
+// tiene el flag (hoy Yair), mismo patrón delegado, el admin solo ve.
+export async function canUploadRocketSku() {
+  const session = await auth();
+  if (!session || session.user.role === "admin") return false;
+  const user = await getGuardUser(session.user.id);
+  return !!user?.canUploadRocketSku;
+}
+
 // Confirmado 2026-09-09: marcar "ya brandeé" es exclusivo de quien tiene
 // este flag (hoy Robert) — mismo patrón delegado, ni siquiera admin actúa.
 export async function canBrandMarketProduct() {

@@ -327,6 +327,10 @@ model User {
   // el corte, igual que el Líder de Inventarios. Confirmar el corte (lo que
   // descuenta el Kardex) sigue siendo solo del líder.
   canUploadFulfillmentGuides   Boolean @default(false)
+  // Pedido de Bryan 2026-10-10: quien tenga el flag (hoy Yair) sube a Rocket
+  // (cuenta Provedix) los productos que Bryan aprobó como "Solo Rocket por
+  // ahora" y escribe el SKU que Rocket le da — ver MarketProductProposal.rocketOnly.
+  canUploadRocketSku           Boolean @default(false)
   // Solo informativo (mismo espíritu que Store.brand) — qué marca asesora
   // esta persona, para mostrarla junto a su nombre cuando confirma. Nunca se
   // usa para filtrar ni bloquear quién ve o puede confirmar qué llegada.
@@ -450,6 +454,9 @@ model User {
   newIdBrandingsChannelUploaded                    NewIdBranding[]                       @relation("NewIdBrandingChannelUploadedBy")
   marketProductProposalsMarkedReadyToBuy           MarketProductProposal[]               @relation("MarketProductProposalReadyToBuyBy")
   marketProductProposalsKardexReleased             MarketProductProposal[]               @relation("MarketProductProposalKardexReleasedBy")
+  marketProductProposalsRocketSku                  MarketProductProposal[]               @relation("MarketProductProposalRocketSkuBy")
+  marketProductProposalsPublicRequested            MarketProductProposal[]               @relation("MarketProductProposalPublicRequestedBy")
+  marketProductProposalsMadePublic                 MarketProductProposal[]               @relation("MarketProductProposalMadePublicBy")
   unfoundWinningProductsCreated                    UnfoundWinningProduct[]               @relation("UnfoundWinningProductCreatedBy")
   supplierStockoutReportsReported                  SupplierStockoutReport[]              @relation("SupplierStockoutReportReportedBy")
   supplierStockoutReportsResolved                  SupplierStockoutReport[]              @relation("SupplierStockoutReportResolvedBy")
@@ -2419,6 +2426,29 @@ model MarketProductProposal {
   // Decisión de Bryan al aprobar — ambos null hasta entonces.
   bodega          MarketProductBodega?
   isPublic        Boolean?
+
+  // Aprobado por Bryan 2026-10-10: excepción "Solo Rocket por ahora". El ID
+  // de Dropi igual se crea (registro de la marca) pero en privado, y quien
+  // tiene canUploadRocketSku (hoy Yair) lo sube a Rocket como Provedix con
+  // el mismo precio de la propuesta. Escribe dos datos de Rocket: el ID
+  // (números — es lo que traen las guías, se guarda como RocketCodeMapping
+  // para que los cortes lo reconozcan) y el SKU (texto, solo referencia).
+  // Ninguno reemplaza el ID madre del Kardex (justCode). Sin datos a las
+  // 24 h de aprobado, le sale a Bryan como atrasado.
+  rocketOnly      Boolean   @default(false)
+  rocketProductId String?
+  rocketSku       String?
+  rocketSkuAt   DateTime?
+  rocketSkuById String?
+  rocketSkuBy   User?     @relation("MarketProductProposalRocketSkuBy", fields: [rocketSkuById], references: [id], onDelete: SetNull)
+  // Pasar a público en Dropi: lo decide Bryan (publicRequested*), lo ejecuta
+  // la asesora B2B en Dropi y lo confirma acá (madePublic*, isPublic=true).
+  publicRequestedAt   DateTime?
+  publicRequestedById String?
+  publicRequestedBy   User?     @relation("MarketProductProposalPublicRequestedBy", fields: [publicRequestedById], references: [id], onDelete: SetNull)
+  madePublicAt        DateTime?
+  madePublicById      String?
+  madePublicBy        User?     @relation("MarketProductProposalMadePublicBy", fields: [madePublicById], references: [id], onDelete: SetNull)
 
   dropiProductId String?
   publishedById  String?

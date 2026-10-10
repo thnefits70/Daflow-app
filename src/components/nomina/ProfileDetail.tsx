@@ -61,6 +61,7 @@ type UserProfile = {
   canConfirmMarketingAdvisor: boolean;
   canAssignCancelledGuideItems: boolean;
   canUploadFulfillmentGuides: boolean;
+  canUploadRocketSku: boolean;
   isReentryResponsible: boolean;
   canMarkComboCreatedInDropi: boolean;
   canLinkStoreProducts: boolean;
@@ -1157,6 +1158,16 @@ export function ProfileDetail({
               Respaldo de Daniel: sube los PDF de guías de Dropi y envía el corte para que el equipo empiece a preparar. Confirmar el corte (lo que descuenta el Kardex) sigue siendo solo de Daniel.
             </div>
             <PermToggle value={p.canUploadFulfillmentGuides} busy={busy} onChange={(v) => save({ canUploadFulfillmentGuides: v })} />
+          </div>
+
+          <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+            <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+              <Truck size={11} /> ¿Sube productos a Rocket (Análisis de Mercado)?
+            </label>
+            <div className="text-[11px] text-steel mb-2">
+              Cuando Bryan aprueba un producto como &quot;Solo Rocket por ahora&quot;, esta persona (hoy Yair) lo sube a Rocket como Provedix con el precio de la propuesta y escribe el ID y el SKU que le da Rocket (no cambian el ID de Dropi del producto).
+            </div>
+            <PermToggle value={p.canUploadRocketSku} busy={busy} onChange={(v) => save({ canUploadRocketSku: v })} />
           </div>
 
           {isAdmin && (

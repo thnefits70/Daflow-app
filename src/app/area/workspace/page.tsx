@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { TopLine } from "@/components/ui/TopLine";
 import { DeptWorkspaceTabs } from "@/components/dept/DeptWorkspaceTabs";
-import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageSupplierDebtPayments, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canRegisterLunchPayments as checkCanRegisterLunchPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canActOnComboSuggestions as checkCanActOnComboSuggestions, canMarkComboCreatedInDropi as checkCanMarkComboCreatedInDropi, canProposeMarketProduct, canReviewMarketProduct, canActOnMarketProductReview, canPublishMarketProduct, canBrandMarketProduct, canDecideMarketProductPurchase, canViewB2BPricing, canViewB2CPricing, canReportSupplierStockout as checkCanReportSupplierStockout, canResolveSupplierStockout as checkCanResolveSupplierStockout, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustCatalog, canViewStockLevels, canViewStockPriceHistory, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canActOnDeterioro, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canManageOutflowPurchaseGestion, canSubmitCancelledGuide, canManageCancelledGuideBatches, canConfirmCancelledGuideFulfillmentRemoval, canAssignCancelledGuideItems, canSubmitFulfillmentRequest, canViewFulfillmentRequests, canDeclareExternalSales,
+import { getUnseenFeedbackCount, canManageStoreFeedback as checkCanManageStoreFeedback, canViewStoreFeedback as checkCanViewStoreFeedback, canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests as checkCanApprovePurchaseRequests, canActOnPurchaseApproval as checkCanActOnPurchaseApproval, canConfirmPurchaseReceiving, canReceivePurchasesTeam, canActOnPurchaseReceiving, canRegisterPurchaseInvoices, canPayMerchandisePurchases, canManageSupplierDebtPayments, canManageInventoryControl as checkCanManageInventoryControl, canViewInventoryKpisPanel as checkCanViewInventoryKpisPanel, canManageAdminPayments as checkCanManageAdminPayments, canRegisterLunchPayments as checkCanRegisterLunchPayments, canViewMarketingArrivals as checkCanViewMarketingArrivals, canConfirmMarketingDesign as checkCanConfirmMarketingDesign, canConfirmMarketingAdvisor as checkCanConfirmMarketingAdvisor, canSyncAtomData as checkCanSyncAtomData, canUploadLowRotationList as checkCanUploadLowRotationList, canApproveComboSuggestions as checkCanApproveComboSuggestions, canActOnComboSuggestions as checkCanActOnComboSuggestions, canMarkComboCreatedInDropi as checkCanMarkComboCreatedInDropi, canProposeMarketProduct, canReviewMarketProduct, canActOnMarketProductReview, canPublishMarketProduct, canUploadRocketSku, canBrandMarketProduct, canDecideMarketProductPurchase, canViewB2BPricing, canViewB2CPricing, canReportSupplierStockout as checkCanReportSupplierStockout, canResolveSupplierStockout as checkCanResolveSupplierStockout, canCaptureMerchandiseReentry, canApproveMerchandiseReentry, canActOnMerchandiseReentry, canCloseMerchandiseReentry, canVerifyDamageDisposal, canManageJustCatalog, canViewStockLevels, canViewStockPriceHistory, canCaptureMerchandiseOutflow, canActOnMerchandiseOutflow, canActOnDeterioro, canViewMerchandiseOutflow, canConfirmSupplierExchangeFinanceWriteOff, canManageOutflowPurchaseGestion, canSubmitCancelledGuide, canManageCancelledGuideBatches, canConfirmCancelledGuideFulfillmentRemoval, canAssignCancelledGuideItems, canSubmitFulfillmentRequest, canViewFulfillmentRequests, canDeclareExternalSales,
   canManageLocalWarranties, canReviewExternalSales, canConfirmExternalSalePayment, canInvoiceExternalSale, canAssignExternalSalePack, canPackExternalSale, canCloseExternalSale, canViewExternalSales, getSupplierAccess, canAddSupplierBankAccounts, canJustifyFillRate as checkCanJustifyFillRate, canManageImprovementPlan, canViewStoreTracking } from "@/lib/guards";
 import { canViewFinishedNewIdsOnly } from "@/lib/newIdBranding";
 import { getFinanceKpiData } from "@/lib/financeKpis";
@@ -67,6 +67,7 @@ export default async function WorkspacePage() {
     canReportSupplierStockoutFlag,
     canResolveSupplierStockoutFlag,
     canViewStoreTrackingFlag,
+    canUploadRocketSkuFlag,
   ] = await Promise.all([
     canProposeMarketProduct(),
     canReviewMarketProduct(),
@@ -79,6 +80,7 @@ export default async function WorkspacePage() {
     checkCanReportSupplierStockout(),
     checkCanResolveSupplierStockout(),
     canViewStoreTracking(),
+    canUploadRocketSku(),
   ]);
 
   // Mismo patrón sin dept.code — Control de Compras (confirmado 2026-07-30:
@@ -413,6 +415,7 @@ export default async function WorkspacePage() {
         canReviewMarketProduct={canReviewMarketProductFlag}
         canActOnMarketProductReview={canActOnMarketProductReviewFlag}
         canPublishMarketProduct={canPublishMarketProductFlag}
+        canUploadRocketSku={canUploadRocketSkuFlag}
         canBrandMarketProduct={canBrandMarketProductFlag}
         canDecideMarketProductPurchase={canDecideMarketProductPurchaseFlag}
         canViewB2BPricing={canViewB2BPricingFlag}

@@ -77,6 +77,7 @@ export type WorkspaceTabFlags = {
   canProposeMarketProduct: boolean;
   canReviewMarketProduct: boolean;
   canPublishMarketProduct: boolean;
+  canUploadRocketSku?: boolean;
   canViewB2BPricing: boolean;
   canViewB2CPricing: boolean;
   canViewStoreTracking: boolean;
@@ -119,7 +120,7 @@ export function isWorkspaceTabVisible(key: WorkspaceTabKey, f: WorkspaceTabFlags
   // tiene nada que hacer en Sugerencias de Combos.
   if (key === "combos") return f.canSyncAtomData || f.canApproveComboSuggestions;
   if (key === "analisis-mercado")
-    return f.canProposeMarketProduct || f.canReviewMarketProduct || f.canPublishMarketProduct || f.canViewB2BPricing || f.canViewB2CPricing;
+    return f.canProposeMarketProduct || f.canReviewMarketProduct || f.canPublishMarketProduct || !!f.canUploadRocketSku || f.canViewB2BPricing || f.canViewB2CPricing;
   if (key === "seguimiento-tiendas") return f.canViewStoreTracking;
   if (key === "pagosadmin") return f.canManageAdminPayments;
   if (key === "almuerzos") return f.canRegisterLunchPayments;

@@ -34,6 +34,7 @@ import {
   canProposeMarketProduct,
   canReviewMarketProduct,
   canPublishMarketProduct,
+  canUploadRocketSku,
   canViewB2BPricing,
   canViewB2CPricing,
   canViewStoreTracking,
@@ -102,6 +103,7 @@ async function getVisibleWorkspaceTabKeys(userId: string): Promise<WorkspaceTabK
     proposeMarket,
     reviewMarket,
     publishMarket,
+    uploadRocketSku,
     viewB2B,
     viewB2C,
     viewStoreTracking,
@@ -144,6 +146,7 @@ async function getVisibleWorkspaceTabKeys(userId: string): Promise<WorkspaceTabK
     canProposeMarketProduct(),
     canReviewMarketProduct(),
     canPublishMarketProduct(),
+    canUploadRocketSku(),
     canViewB2BPricing(),
     canViewB2CPricing(),
     canViewStoreTracking(),
@@ -197,6 +200,7 @@ async function getVisibleWorkspaceTabKeys(userId: string): Promise<WorkspaceTabK
     canProposeMarketProduct: proposeMarket,
     canReviewMarketProduct: reviewMarket,
     canPublishMarketProduct: publishMarket,
+    canUploadRocketSku: uploadRocketSku,
     canViewB2BPricing: viewB2B,
     canViewB2CPricing: viewB2C,
     canViewStoreTracking: viewStoreTracking,
@@ -243,7 +247,7 @@ const WORKSPACE_TAB_HELP: Record<WorkspaceTabKey, string> = {
   combos:
     "Sugerencias de Combos: cada noche el sistema arma combos solos (con nombre, precio Dropi y stock recomendado). Se eligen cuáles mandar a aprobación, el líder aprueba y elige la marca, y luego se crean en Dropi y se pega el ID con 'Creado en Dropi'.",
   "analisis-mercado":
-    "Análisis de Mercado. Sub-pestañas posibles: Proponer (datos del producto y proveedor; la calculadora saca el precio de Dropi y compara con la competencia), Ganadores no encontrados, Sin stock de proveedor, Productos que despiertan, Mis propuestas, Listo para comprar, Consulta de precios (buscar un producto o combo y ver Benistock, B2B y B2C), Aprobación, Publicar en Dropi, Mis publicados y Trazabilidad.",
+    "Análisis de Mercado. Sub-pestañas posibles: Proponer (datos del producto y proveedor; la calculadora saca el precio de Dropi y compara con la competencia), Ganadores no encontrados, Sin stock de proveedor, Productos que despiertan, Mis propuestas, Listo para comprar, Consulta de precios (buscar un producto o combo y ver Benistock, B2B y B2C), Aprobación (Bryan puede marcar 'Solo Rocket por ahora': queda privado en Dropi y se sube a Rocket), Publicar en Dropi (ahí también aparecen los productos que Bryan pidió pasar a público), Mis publicados, Subir a Rocket (quien tiene ese permiso sube a Rocket como Provedix lo aprobado como 'Solo Rocket', con el precio de la propuesta, y escribe el ID de Rocket —el que sale en las guías— y el SKU como referencia; ninguno cambia el ID madre del Kardex) y Trazabilidad (Bryan ve el ID y SKU de Rocket y el botón 'Pasar a público en Dropi').",
   "seguimiento-tiendas": "Seguimiento de tiendas: productos vinculados a cada tienda para seguir cómo se mueven.",
   "plan-mejora":
     "Plan de Mejora: planes de acompañamiento del equipo. Cada semana se registra una evaluación con '+ Registrar evaluación semanal' (se puede escribir libre y la IA arma el borrador), al cierre de etapa se usa 'Decisión de etapa', y 'Solicitar cierre del plan' cuando ya está resuelto.",

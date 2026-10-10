@@ -11,6 +11,9 @@ const schema = z.discriminatedUnion("decision", [
     decision: z.literal("APPROVED"),
     bodega: z.enum(["MKT_DAMIAN", "MKT_PROVEDIX", "MKT_SHANGHAI"]),
     isPublic: z.boolean(),
+    // Aprobado por Bryan 2026-10-10: excepción "Solo Rocket por ahora" —
+    // fuerza privado en Dropi y le deja a Yair subirlo a Rocket.
+    rocketOnly: z.boolean().optional().default(false),
   }),
   z.object({
     decision: z.literal("REJECTED"),
@@ -76,7 +79,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     where: { id },
     data:
       parsed.data.decision === "APPROVED"
-        ? { status: "APPROVED", reviewedById, reviewedAt: new Date(), bodega: parsed.data.bodega, isPublic: parsed.data.isPublic, catalogItemId }
+        ? {
+            status: "APPROVED",
+            reviewedById,
+            reviewedAt: new Date(),
+            bodega: parsed.data.bodega,
+            isPublic: parsed.data.rocketOnly ? false : parsed.data.isPublic,
+            rocketOnly: parsed.data.rocketOnly,
+            catalogItemId,
+          }
         : { status: "REJECTED", reviewedById, reviewedAt: new Date(), rejectReason: parsed.data.rejectReason },
   });
 
@@ -100,6 +111,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         body: `${existing.productName} — precio de venta $${existing.calculatedSalePrice.toFixed(2)}`,
         url: "/area/workspace",
       }).catch(() => null);
+    }
+
+    if (parsed.data.rocketOnly) {
+      const rocketUploaders = await prisma.user.findMany({ where: { canUploadRocketSku: true, isActive: true }, select: { id: true } });
+      await Promise.all(
+        rocketUploaders.map((u) =>
+          notifyOwner(u.id, {
+            title: "Subir a Rocket como Provedix",
+            body: `${existing.productName} — precio ${existing.calculatedSalePrice.toFixed(2)}. Súbelo a Rocket y escribe su ID y SKU en DAFLOW.`,
+            url: "/area/workspace?tab=analisis-mercado&ptab=rocket",
+          }).catch(() => null)
+        )
+      );
     }
   }
 

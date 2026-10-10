@@ -6,6 +6,7 @@ import {
   canProposeMarketProduct,
   canReviewMarketProduct,
   canPublishMarketProduct,
+  canUploadRocketSku,
   canViewB2BPricing,
   canViewB2CPricing,
 } from "@/lib/guards";
@@ -182,6 +183,9 @@ const includeFull = {
   brandedBy: { select: { name: true } },
   readyToBuyBy: { select: { name: true } },
   kardexReleasedBy: { select: { name: true } },
+  rocketSkuBy: { select: { name: true } },
+  publicRequestedBy: { select: { name: true } },
+  madePublicBy: { select: { name: true } },
   chosenSupplier: { select: { id: true, name: true } },
   catalogItem: { select: { id: true, name: true, photos: true, awaitingDropiId: true } },
   supplierPrices: { include: { supplier: { select: { id: true, name: true } } } },
@@ -257,6 +261,31 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(rows);
   }
 
+  // Aprobado por Bryan 2026-10-10: lo que Bryan aprobó como "Solo Rocket por
+  // ahora" — Yair lo sube a Rocket como Provedix y escribe el SKU.
+  if (view === "rocket") {
+    if (!isAdmin && !(await canUploadRocketSku())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    const rows = await prisma.marketProductProposal.findMany({
+      where: { status: "APPROVED", rocketOnly: true },
+      include: includeFull,
+      orderBy: { reviewedAt: "desc" },
+      take: 100,
+    });
+    return NextResponse.json(rows);
+  }
+
+  // Bryan pidió pasar a público un producto que ya está privado en Dropi —
+  // la asesora B2B lo cambia en Dropi y lo confirma.
+  if (view === "make-public") {
+    if (!(await canPublishMarketProduct())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+    const rows = await prisma.marketProductProposal.findMany({
+      where: { status: "APPROVED", publicRequestedAt: { not: null }, madePublicAt: null, publishedAt: { not: null } },
+      include: includeFull,
+      orderBy: { publicRequestedAt: "asc" },
+    });
+    return NextResponse.json(rows);
+  }
+
   if (view === "traceability") {
     if (!(await canReviewMarketProduct())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     const rows = await prisma.marketProductProposal.findMany({
@@ -300,6 +329,8 @@ export async function GET(req: NextRequest) {
         kardexPendingUnits: pending.get(r.id) ?? 0,
         boughtAt: r.catalogItemId ? firstBoughtAt.get(r.catalogItemId) ?? null : null,
         rejectedPurchase: rej ? { code: rej.requestNumber ? formatPurchaseRequestCode(rej.requestNumber) : null, reason: rej.rejectReason, at: rej.reviewedAt } : null,
+        // Bryan pidió aviso si a las 24 h de aprobado no hay SKU de Rocket.
+        rocketSkuOverdue: r.rocketOnly && !r.rocketSku && !!r.reviewedAt && Date.now() - r.reviewedAt.getTime() > 24 * 3600_000,
       };
     });
     withUnits.sort((a, b) => (b.kardexPendingUnits > 0 ? 1 : 0) - (a.kardexPendingUnits > 0 ? 1 : 0) || (b.rejectedPurchase ? 1 : 0) - (a.rejectedPurchase ? 1 : 0));

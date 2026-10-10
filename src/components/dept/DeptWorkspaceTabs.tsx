@@ -153,6 +153,7 @@ export function DeptWorkspaceTabs({
   canReviewMarketProduct = false,
   canActOnMarketProductReview = false,
   canPublishMarketProduct = false,
+  canUploadRocketSku = false,
   canDecideMarketProductPurchase = false,
   canViewB2BPricing = false,
   canViewB2CPricing = false,
@@ -305,6 +306,7 @@ export function DeptWorkspaceTabs({
   canReviewMarketProduct?: boolean;
   canActOnMarketProductReview?: boolean;
   canPublishMarketProduct?: boolean;
+  canUploadRocketSku?: boolean;
   canBrandMarketProduct?: boolean;
   canDecideMarketProductPurchase?: boolean;
   // Sin stock de proveedor (2026-09-23) — reportar (hoy Jariel) y resolver
@@ -512,6 +514,7 @@ export function DeptWorkspaceTabs({
       canProposeMarketProduct,
       canReviewMarketProduct,
       canPublishMarketProduct,
+      canUploadRocketSku,
       canViewB2BPricing,
       canViewB2CPricing,
       canViewStoreTracking,
@@ -811,6 +814,7 @@ export function DeptWorkspaceTabs({
         (canProposeMarketProduct ||
           canReviewMarketProduct ||
           canPublishMarketProduct ||
+          canUploadRocketSku ||
           canViewB2BPricing ||
           canViewB2CPricing ||
           canResolveSupplierStockout) && (
@@ -819,6 +823,7 @@ export function DeptWorkspaceTabs({
           canReview={canReviewMarketProduct}
           canActOnReview={canActOnMarketProductReview}
           canPublish={canPublishMarketProduct}
+          canUploadRocketSku={canUploadRocketSku}
           canDecidePurchase={canDecideMarketProductPurchase}
           canViewB2BPricing={canViewB2BPricing}
           canViewB2CPricing={canViewB2CPricing}

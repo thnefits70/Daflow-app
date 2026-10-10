@@ -48,6 +48,15 @@ type Proposal = {
   reviewedBy: { name: string } | null;
   bodega: "MKT_DAMIAN" | "MKT_PROVEDIX" | "MKT_SHANGHAI" | null;
   isPublic: boolean | null;
+  rocketOnly?: boolean;
+  rocketProductId?: string | null;
+  rocketSku?: string | null;
+  rocketSkuAt?: string | null;
+  rocketSkuBy?: { name: string } | null;
+  publicRequestedAt?: string | null;
+  madePublicAt?: string | null;
+  madePublicBy?: { name: string } | null;
+  rocketSkuOverdue?: boolean;
   dropiProductId: string | null;
   publishedAt: string | null;
   publishedBy: { name: string } | null;
@@ -77,13 +86,14 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-type Tab = "proponer" | "ganadores" | "sinstock" | "despiertan" | "variantes" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "trazabilidad";
+type Tab = "proponer" | "ganadores" | "sinstock" | "despiertan" | "variantes" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "rocket" | "trazabilidad";
 
 export function MarketProductPanel({
   canPropose,
   canReview,
   canActOnReview,
   canPublish,
+  canUploadRocketSku = false,
   canDecidePurchase,
   canViewB2BPricing,
   canViewB2CPricing,
@@ -94,6 +104,8 @@ export function MarketProductPanel({
   canReview: boolean;
   canActOnReview: boolean;
   canPublish: boolean;
+  // Aprobado por Bryan 2026-10-10: "Solo Rocket por ahora" — hoy Yair.
+  canUploadRocketSku?: boolean;
   canDecidePurchase: boolean;
   canViewB2BPricing: boolean;
   canViewB2CPricing: boolean;
@@ -139,6 +151,7 @@ export function MarketProductPanel({
     ...(canPublish ? [{ key: "publicar" as Tab, label: "Publicar en Dropi" }] : []),
     // Confirmado 2026-09-23, pedido de Heidy: historial de lo que ya publicó.
     ...(canPublish ? [{ key: "mispublicados" as Tab, label: "Mis publicados" }] : []),
+    ...(canUploadRocketSku ? [{ key: "rocket" as Tab, label: "Subir a Rocket" }] : []),
     ...(canReview ? [{ key: "trazabilidad" as Tab, label: "Trazabilidad" }] : []),
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "proponer");
@@ -191,12 +204,14 @@ export function MarketProductPanel({
       {tab === "publicar" && (
         <>
           <DropiPriceChangesQueue />
+          <MakePublicQueue />
           <CatalogMissingIdQueue />
           <PublishQueue />
         </>
       )}
       {tab === "mispublicados" && <PublishedHistoryView />}
-      {tab === "trazabilidad" && <TraceabilityView canDecidePurchase={canDecidePurchase} canCancel={canReview} />}
+      {tab === "rocket" && <RocketUploadView />}
+      {tab === "trazabilidad" && <TraceabilityView canDecidePurchase={canDecidePurchase} canCancel={canReview} canRequestPublic={canActOnReview} />}
     </div>
   );
 }
@@ -646,6 +661,7 @@ function ReviewQueue({ canAct }: { canAct: boolean }) {
   const [rows, setRows] = useState<Proposal[] | null>(null);
   const [bodega, setBodega] = useState<Record<string, string>>({});
   const [isPublic, setIsPublic] = useState<Record<string, boolean>>({});
+  const [rocketOnly, setRocketOnly] = useState<Record<string, boolean>>({});
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -661,7 +677,7 @@ function ReviewQueue({ canAct }: { canAct: boolean }) {
     setErr(""); setBusy(id);
     const res = await fetch(`/api/market-products/${id}/review`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ decision: "APPROVED", bodega: bodega[id], isPublic: isPublic[id] !== false }),
+      body: JSON.stringify({ decision: "APPROVED", bodega: bodega[id], isPublic: !rocketOnly[id] && isPublic[id] !== false, rocketOnly: !!rocketOnly[id] }),
     });
     setBusy(null);
     if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo aprobar."); return; }
@@ -725,8 +741,12 @@ function ReviewQueue({ canAct }: { canAct: boolean }) {
                   <option value="MKT_DAMIAN">Importadora Damián</option>
                   <option value="MKT_SHANGHAI">Importadora Shanghai</option>
                 </select>
-                <label className="flex items-center gap-1 text-[12px] text-steel">
-                  <input type="checkbox" checked={isPublic[p.id] !== false} onChange={(e) => setIsPublic((s) => ({ ...s, [p.id]: e.target.checked }))} /> {isPublic[p.id] !== false ? "Público" : "Privado"}
+                <label className={`flex items-center gap-1 text-[12px] text-steel ${rocketOnly[p.id] ? "opacity-50" : ""}`}>
+                  <input type="checkbox" disabled={!!rocketOnly[p.id]} checked={!rocketOnly[p.id] && isPublic[p.id] !== false} onChange={(e) => setIsPublic((s) => ({ ...s, [p.id]: e.target.checked }))} /> {!rocketOnly[p.id] && isPublic[p.id] !== false ? "Público" : "Privado"}
+                </label>
+                {/* Aprobado por Bryan 2026-10-10: excepción — privado en Dropi y Yair lo sube a Rocket. */}
+                <label className="flex items-center gap-1 text-[12px] text-steel" title="El ID de Dropi se crea en privado y Yair lo sube a Rocket como Provedix">
+                  <input type="checkbox" checked={!!rocketOnly[p.id]} onChange={(e) => setRocketOnly((s) => ({ ...s, [p.id]: e.target.checked }))} /> Solo Rocket por ahora
                 </label>
                 <button type="button" disabled={busy === p.id} className="flex items-center gap-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => approve(p.id)}>
                   <CheckCircle2 size={13} /> Aprobar
@@ -874,6 +894,11 @@ function PublishQueue() {
               {p.purchasesInTransit && p.purchasesInTransit.length > 0 && (
                 <div className="inline-block my-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase bg-red/10 border border-red/40 text-red">
                   Compra en camino ({p.purchasesInTransit.join(", ")}) — publícalo primero
+                </div>
+              )}
+              {p.rocketOnly && !p.isPublic && (
+                <div className="inline-block my-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase bg-yellow/10 border border-yellow/40 text-yellow">
+                  Solo Rocket por ahora — créalo en privado
                 </div>
               )}
               <div className="text-[12px] text-steel">Bodega: {BODEGA_LABELS[p.bodega ?? ""] ?? "—"} · {p.isPublic ? "Público" : "Privado"} · Cantidad por defecto: 100</div>
@@ -1343,7 +1368,7 @@ function ReadyToBuyQueue() {
   );
 }
 
-function TraceabilityView({ canDecidePurchase, canCancel }: { canDecidePurchase: boolean; canCancel: boolean }) {
+function TraceabilityView({ canDecidePurchase, canCancel, canRequestPublic }: { canDecidePurchase: boolean; canCancel: boolean; canRequestPublic: boolean }) {
   const [rows, setRows] = useState<Proposal[] | null>(null);
   const [chosen, setChosen] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -1396,6 +1421,17 @@ function TraceabilityView({ canDecidePurchase, canCancel }: { canDecidePurchase:
     load();
   }
 
+  // Aprobado por Bryan 2026-10-10: Bryan decide pasarlo a público en Dropi
+  // y la asesora B2B lo ejecuta (le llega aviso + pendiente).
+  async function requestPublic(id: string, productName: string) {
+    if (!confirm(`¿Pasar "${productName}" a público en Dropi? La asesora B2B recibe el aviso para hacerlo.`)) return;
+    setErr(""); setBusy(id);
+    const res = await fetch(`/api/market-products/${id}/request-public`, { method: "POST" });
+    setBusy(null);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo pedir."); return; }
+    load();
+  }
+
   if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
   if (rows.length === 0) return <div className="text-steel text-[13.5px]">No hay productos aprobados todavía.</div>;
 
@@ -1405,6 +1441,30 @@ function TraceabilityView({ canDecidePurchase, canCancel }: { canDecidePurchase:
       {rows.map((p) => (
         <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="font-semibold text-[13.5px] mb-2">{p.code} — {p.productName}</div>
+          {p.rocketOnly && (
+            <div className="bg-inset rounded-md p-2.5 mb-3 text-[12px] text-ink">
+              <div className="font-semibold mb-0.5">Solo Rocket por ahora</div>
+              <div className="text-steel">
+                {p.rocketSku
+                  ? <>En Rocket: ID <b className="text-ink">{p.rocketProductId}</b> · SKU <b className="text-ink">{p.rocketSku}</b> — {p.rocketSkuBy?.name ?? "—"}, {p.rocketSkuAt ? formatDateTime(p.rocketSkuAt) : ""}</>
+                  : p.rocketSkuOverdue
+                    ? <span className="text-red font-semibold">Atrasado: van más de 24 h sin subirse a Rocket.</span>
+                    : "Esperando que se suba a Rocket (ID y SKU)."}
+              </div>
+              <div className="text-steel mt-0.5">
+                Dropi: {p.madePublicAt
+                  ? `público desde ${formatDateTime(p.madePublicAt)}`
+                  : p.publicRequestedAt
+                    ? "pediste pasarlo a público — falta que la asesora B2B lo cambie"
+                    : "privado"}
+              </div>
+              {canRequestPublic && !p.isPublic && !p.publicRequestedAt && (
+                <button type="button" disabled={busy === p.id} className="mt-2 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => requestPublic(p.id, p.productName)}>
+                  Pasar a público en Dropi
+                </button>
+              )}
+            </div>
+          )}
           <ol className="text-[12.5px] text-steel space-y-0.5 mb-3">
             <li>1. Propuesto por {p.proposedBy?.name ?? "—"} — {formatDateTime(p.proposedAt)}</li>
             <li>2. Aprobado por {p.reviewedBy?.name ?? "—"} — {p.reviewedAt ? formatDateTime(p.reviewedAt) : "—"}</li>
@@ -1472,6 +1532,137 @@ function TraceabilityView({ canDecidePurchase, canCancel }: { canDecidePurchase:
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------------- Solo Rocket por ahora (Yair) ----------------
+// Aprobado por Bryan 2026-10-10: lo que Bryan aprobó como "Solo Rocket por
+// ahora" — se sube a Rocket como Provedix con el mismo precio de la
+// propuesta y se escriben el ID (lo que traen las guías, así los cortes de
+// Rocket lo reconocen solos) y el SKU (referencia) que da Rocket. Ninguno
+// reemplaza el ID madre del Kardex. Se pueden corregir si hubo un error.
+function RocketUploadView() {
+  const [rows, setRows] = useState<Proposal[] | null>(null);
+  const [rocketId, setRocketId] = useState<Record<string, string>>({});
+  const [sku, setSku] = useState<Record<string, string>>({});
+  const [editing, setEditing] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<{ id: string; msg: string } | null>(null);
+
+  function load() {
+    fetch("/api/market-products?view=rocket").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+  }
+  useEffect(load, []);
+
+  async function save(id: string) {
+    setErr(null); setBusy(id);
+    const res = await fetch(`/api/market-products/${id}/rocket-sku`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rocketProductId: rocketId[id] ?? "", rocketSku: sku[id] ?? "" }),
+    });
+    setBusy(null);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr({ id, msg: d.error ?? "No se pudo guardar." }); return; }
+    setEditing(null);
+    load();
+  }
+
+  if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
+  const pending = rows.filter((p) => !p.rocketSku);
+  const done = rows.filter((p) => p.rocketSku);
+
+  const card = (p: Proposal) => (
+    <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
+      <div className="flex items-start gap-3 mb-2">
+        <img loading="lazy" decoding="async" src={p.referenceImageUrl} alt="" className="w-16 h-16 rounded object-cover shrink-0" />
+        <div className="flex-1">
+          <div className="font-semibold text-[13.5px]">{p.code} — {p.productName}</div>
+          <div className="text-[12px] text-steel">Marca: {BODEGA_LABELS[p.bodega ?? ""] ?? "—"} · Aprobado {p.reviewedAt ? formatDateTime(p.reviewedAt) : "—"}</div>
+          <div className="text-[13px] font-bold text-ink mt-1">Precio: {money(p.calculatedSalePrice)}</div>
+        </div>
+      </div>
+      {!p.rocketSku && <CopyDropiPrice price={p.calculatedSalePrice} label="Precio para Rocket" />}
+      {err?.id === p.id && <div className="text-red text-[12.5px] mb-2">{err.msg}</div>}
+      {p.rocketSku && editing !== p.id ? (
+        <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
+          <span className="text-teal font-semibold">ID {p.rocketProductId} · SKU {p.rocketSku}</span>
+          <span className="text-steel">— {p.rocketSkuBy?.name ?? "—"}, {p.rocketSkuAt ? formatDateTime(p.rocketSkuAt) : ""}</span>
+          <button type="button" className="text-steel text-[12px] underline cursor-pointer" onClick={() => { setRocketId((s) => ({ ...s, [p.id]: p.rocketProductId ?? "" })); setSku((s) => ({ ...s, [p.id]: p.rocketSku ?? "" })); setEditing(p.id); }}>
+            Corregir
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <input className="w-28 rounded border border-rule px-2.5 py-1.5 text-[13px]" inputMode="numeric" placeholder="ID (ej. 5417)" value={rocketId[p.id] ?? ""} onChange={(e) => setRocketId((s) => ({ ...s, [p.id]: e.target.value }))} />
+          <input className="flex-1 min-w-[180px] rounded border border-rule px-2.5 py-1.5 text-[13px]" placeholder="SKU (ej. 2075-PRO-TENSIOMETRO-DIGITAL)" value={sku[p.id] ?? ""} onChange={(e) => setSku((s) => ({ ...s, [p.id]: e.target.value }))} />
+          <button type="button" disabled={busy === p.id || !rocketId[p.id]?.trim() || !sku[p.id]?.trim()} className="rounded border border-teal bg-teal px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => save(p.id)}>
+            Guardar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="text-[12px] text-steel mb-3">Súbelos a Rocket con la cuenta de Provedix, con el precio que sale aquí, y escribe el ID y el SKU que te da Rocket. El ID es el que sale en las guías; el SKU queda como referencia. Ninguno cambia el ID de Dropi del producto.</div>
+      {pending.length === 0 ? (
+        <div className="text-steel text-[13.5px] mb-5">No hay productos por subir a Rocket.</div>
+      ) : (
+        <div className="flex flex-col gap-3 mb-6">{pending.map(card)}</div>
+      )}
+      {done.length > 0 && (
+        <>
+          <div className="text-[13.5px] font-bold mb-2">Ya subidos</div>
+          <div className="flex flex-col gap-3">{done.map(card)}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Aprobado por Bryan 2026-10-10: Bryan pidió pasar a público un producto que
+// está privado en Dropi — la asesora B2B lo cambia en Dropi y lo confirma.
+// Si no hay ninguno, no se muestra nada.
+function MakePublicQueue() {
+  const [rows, setRows] = useState<Proposal[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState("");
+
+  function load() {
+    fetch("/api/market-products?view=make-public").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+  }
+  useEffect(load, []);
+
+  async function confirmDone(id: string) {
+    setErr(""); setBusy(id);
+    const res = await fetch(`/api/market-products/${id}/made-public`, { method: "POST" });
+    setBusy(null);
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo confirmar."); return; }
+    load();
+  }
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="mb-6">
+      <div className="text-[13.5px] font-bold mb-1">Pasar a público en Dropi</div>
+      <div className="text-[12px] text-steel mb-3">Bryan pidió que estos productos dejen de estar privados. Cámbialos a público en Dropi y confírmalo aquí.</div>
+      {err && <div className="text-red text-[12.5px] mb-2">{err}</div>}
+      <div className="flex flex-col gap-3">
+        {rows.map((p) => (
+          <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5 flex items-center gap-3">
+            <img loading="lazy" decoding="async" src={p.referenceImageUrl} alt="" className="w-12 h-12 rounded object-cover shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-[13.5px]">{p.productName}</div>
+              <div className="text-[12px] text-steel">ID Dropi {p.dropiProductId} · Pedido {p.publicRequestedAt ? formatDateTime(p.publicRequestedAt) : ""}</div>
+            </div>
+            <button type="button" disabled={busy === p.id} className="rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60" onClick={() => confirmDone(p.id)}>
+              Ya está público
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
