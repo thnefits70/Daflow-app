@@ -61,16 +61,24 @@ export type CancelNotSentRequest = {
   }[];
 };
 
+// Pedido del usuario 2026-10-10: no llegó ninguna unidad y no se pagó nada.
+// Ahí "No se paga (se descuenta en la tanda)"/crédito, "Reembolso" y
+// "Pérdida" no tienen sentido (crearían un saldo a favor falso o pagarían
+// algo que nunca llegó) — solo cabe que el proveedor la envíe otro día
+// ("Entrega de mercadería faltante") o cancelar la compra.
+export function nothingArrivedUnpaid(r: Omit<CancelNotSentRequest, "status">): boolean {
+  if (r.paidAt || r.debtPaymentId || r.receipt) return false;
+  const reports = r.urgentReports.filter((u) => !u.rejectedAt);
+  const missing = reports.filter((u) => !u.isLateClaim).reduce((s, u) => s + u.missingQty, 0);
+  return missing >= r.quantity && !reports.some((u) => u.damagedQty + u.incompleteQty + u.differentQty + u.excessQty > 0);
+}
+
 // null = se puede cancelar. Si no, el motivo (lo devuelve la API).
 export function cancelNotSentBlocker(r: CancelNotSentRequest): string | null {
   if (r.status !== "APPROVED") return "Solo se cancela una compra aprobada que todavía no se pagó ni se recibió.";
   if (r.paidAt || r.debtPaymentId) return "Esta compra ya se pagó — lo que corresponde es la devolución del dinero.";
-  if (r.receipt) return "Esta compra ya tiene una recepción en bodega — algo sí llegó.";
-  const reports = r.urgentReports.filter((u) => !u.rejectedAt);
-  const missing = reports.filter((u) => !u.isLateClaim).reduce((s, u) => s + u.missingQty, 0);
-  if (missing < r.quantity) return "Solo se cancela cuando no llegó ninguna unidad.";
-  if (reports.some((u) => u.damagedQty + u.incompleteQty + u.differentQty + u.excessQty > 0)) return "Este reclamo tiene unidades que sí llegaron.";
-  if (reports.some((u) => u.resolutions.some((res) => res.status !== "CANCELLED"))) return "Ya se registró una resolución en este reclamo — anúlala primero.";
+  if (!nothingArrivedUnpaid(r)) return "Solo se cancela cuando no llegó ninguna unidad.";
+  if (r.urgentReports.some((u) => !u.rejectedAt && u.resolutions.some((res) => res.status !== "CANCELLED"))) return "Ya se registró una resolución en este reclamo — anúlala primero.";
   return null;
 }
 

@@ -135,6 +135,9 @@ type Report = {
   // compra si no llegó nada y el proveedor no la va a enviar (ver
   // cancel-not-sent/route.ts). Lo calcula el servidor.
   canCancelNotSent?: boolean;
+  // Pedido del usuario 2026-10-10: no llegó nada y no se pagó nada — solo se
+  // ofrece "Entrega de mercadería faltante" (ver nothingArrivedUnpaid).
+  nothingArrivedUnpaid?: boolean;
 };
 
 // Confirmado 2026-09-29, pedido del usuario (antifraude): con un proveedor
@@ -407,9 +410,9 @@ export function PurchaseUrgentReportsPanel({
   // (ej. escribir 8 en vez de 80). Ahora viene puesta con el total
   // pendiente por defecto — Bryan solo la cambia si de verdad va a dividir
   // el reclamo entre varios caminos.
-  function openResolutionForm(reportId: string, remaining: number) {
+  function openResolutionForm(reportId: string, remaining: number, onlyMissingDelivery = false) {
     setOpenReportId(reportId);
-    setResType("CREDIT");
+    setResType(onlyMissingDelivery ? "MISSING_DELIVERY" : "CREDIT");
     setResQty(String(remaining));
     setResDueDate("");
     setResNote("");
@@ -989,12 +992,17 @@ export function PurchaseUrgentReportsPanel({
                   ) : openReportId === r.id ? (
                     <div className="bg-cloud rounded-md p-3">
                       <div className="flex gap-1.5 mb-2.5 flex-wrap">
-                        {(["CREDIT", "REPLACEMENT", "MISSING_DELIVERY", "REFUND", "WRITE_OFF"] as const).filter((t) => t !== "WRITE_OFF" || writeOffAllowedQty(r) !== 0).map((t) => (
+                        {(["CREDIT", "REPLACEMENT", "MISSING_DELIVERY", "REFUND", "WRITE_OFF"] as const).filter((t) => (r.nothingArrivedUnpaid ? t === "MISSING_DELIVERY" : t !== "WRITE_OFF" || writeOffAllowedQty(r) !== 0)).map((t) => (
                           <button key={t} type="button" className={`rounded border px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer ${resType === t ? "border-teal text-teal bg-teal/10" : "border-rule text-steel"}`} onClick={() => setResType(t)}>
                             {t === "CREDIT" && r.request.supplier.paymentMode === "CREDITO" ? CREDIT_SUPPLIER_CREDIT_LABEL : RESOLUTION_LABEL[t]}
                           </button>
                         ))}
                       </div>
+                      {r.nothingArrivedUnpaid && (
+                        <div className="text-[11px] text-steel mb-2.5">
+                          No llegó ninguna unidad y no se pagó nada: solo queda que el proveedor la envíe otro día.{r.canCancelNotSent ? " Si no la va a enviar, usa \"Cancelar compra\" arriba." : ""}
+                        </div>
+                      )}
                       <div className="grid grid-cols-2 gap-2.5 mb-2.5">
                         <div>
                           <label className="block mb-1 text-[10px] text-steel">Cantidad (máx. {remaining})</label>
@@ -1079,7 +1087,7 @@ export function PurchaseUrgentReportsPanel({
                       </div>
                     </div>
                   ) : (
-                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer" onClick={() => openResolutionForm(r.id, remaining)}>
+                    <button type="button" className="rounded border border-blue bg-blue px-3.5 py-1.5 text-[12px] font-semibold text-white cursor-pointer" onClick={() => openResolutionForm(r.id, remaining, !!r.nothingArrivedUnpaid)}>
                       Coordinar resolución con el proveedor
                     </button>
                   )}

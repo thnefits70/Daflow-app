@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canApprovePurchaseRequests, canManageOutflowPurchaseGestion } from "@/lib/guards";
 import { isWithinCreditClaimWindow, creditClaimDeadline } from "@/lib/purchaseUrgent";
 import { autoWriteOffApprovedLateClaims } from "@/lib/inventoryAutoFlows";
-import { cancelNotSentBlocker } from "@/lib/purchaseCancelNotSent";
+import { cancelNotSentBlocker, nothingArrivedUnpaid } from "@/lib/purchaseCancelNotSent";
 
 // Admin, o quien tenga delegación de Compras (hoy Bryan), coordina con el
 // proveedor y elige cómo se resuelve cada reporte de Daniel — acciones
@@ -128,6 +128,7 @@ export async function GET(_req: NextRequest) {
     creditClaimDeadline: request.paidAt ? creditClaimDeadline(request.paidAt).toISOString() : null,
     // Pedido del usuario 2026-10-10: "Cancelar compra" lo ve quien compró
     // (o el admin), solo si no llegó nada (ver purchaseCancelNotSent.ts).
+    nothingArrivedUnpaid: !r.isLateClaim && nothingArrivedUnpaid({ quantity: request.quantity, paidAt: request.paidAt, debtPaymentId, receipt, urgentReports }),
     canCancelNotSent:
       (isAdmin || session.user.id === requestedById) &&
       !!r.reviewedByLeadAt &&

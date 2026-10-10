@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { nothingArrivedUnpaid } from "@/lib/purchaseCancelNotSent";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { totalReportedQty, claimedQty } from "@/lib/purchaseUrgent";
@@ -51,7 +52,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     where: { id },
     include: {
       resolutions: { select: { quantity: true, status: true, type: true } },
-      request: { select: { unitCost: true, supplierId: true, catalogItem: { select: { name: true } }, supplier: { select: { name: true, paymentMode: true } } } },
+      request: {
+        select: {
+          unitCost: true,
+          supplierId: true,
+          catalogItem: { select: { name: true } },
+          supplier: { select: { name: true, paymentMode: true } },
+          quantity: true,
+          paidAt: true,
+          debtPaymentId: true,
+          receipt: { select: { id: true } },
+          urgentReports: {
+            select: {
+              rejectedAt: true,
+              isLateClaim: true,
+              damagedQty: true,
+              incompleteQty: true,
+              differentQty: true,
+              missingQty: true,
+              excessQty: true,
+              resolutions: { select: { status: true } },
+            },
+          },
+        },
+      },
     },
   });
   if (!report) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
@@ -66,6 +90,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const remaining = totalReportedQty(report) - claimedQty(report.resolutions);
   if (parsed.data.quantity > remaining) {
     return NextResponse.json({ error: `Solo quedan ${remaining} un. sin resolver en este reporte.` }, { status: 409 });
+  }
+
+  // Pedido del usuario 2026-10-10 (SC-118): si no llegó nada y no se pagó
+  // nada, solo cabe que el proveedor lo envíe otro día — o cancelar la
+  // compra (cancel-not-sent). Ver nothingArrivedUnpaid.
+  if (!report.isLateClaim && nothingArrivedUnpaid(report.request)) {
+    const isMissingDelivery = parsed.data.type === "REPLACEMENT" && parsed.data.missingDelivery === true;
+    if (!isMissingDelivery) {
+      return NextResponse.json(
+        { error: 'No llegó ninguna unidad y no se pagó nada: solo cabe "Entrega de mercadería faltante". Si el proveedor no la va a enviar, usa "Cancelar compra".' },
+        { status: 409 }
+      );
+    }
   }
 
   // Confirmado 2026-09-29, pedido del usuario (antifraude): "Pérdida" hace
