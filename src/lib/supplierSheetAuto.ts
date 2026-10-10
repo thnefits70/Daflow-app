@@ -227,7 +227,8 @@ function summarize(r: RequestRow): OrderSummary {
   const replacedQty = replacementsDone.reduce((s, res) => s + (res.replacementReceivedQty ?? res.quantity), 0);
   const excessQty = reports.filter((u) => u.excessConfirmedAt && u.excessQty > 0).reduce((s, u) => s + u.excessQty, 0);
   // Confirmado 2026-09-29, pedido de Daniel + usuario: lo que CHEN no tiene
-  // y nunca va a llegar (supplierStockoutAt, lo marca Daniel). Solo dice "no
+  // y nunca va a llegar (supplierStockoutAt, lo marca quien gestiona la
+  // compra con el proveedor — Jariel —, nunca Daniel). Solo dice "no
   // se cobran" cuando Jariel ya registró el descuento con la captura (el
   // reporte dejó de retener el pago); antes, "pendiente de acordar".
   const stockoutQty = reports.filter((u) => u.supplierStockoutAt).reduce((s, u) => s + u.missingQty, 0);

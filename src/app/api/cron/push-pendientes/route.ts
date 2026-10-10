@@ -3,6 +3,7 @@ import { getAllPendingTasksActors, getPendingTasksForActor, MANDATORY_PUSH_TYPES
 import { getDisabledTypes } from "@/lib/pushPreferences";
 import { getDuePersonalReminderPushes } from "@/lib/periodicReminders";
 import { getStalePurchaseRequestPushes } from "@/lib/purchases";
+import { getPurchaseClaimFollowupPushes } from "@/lib/purchaseClaimFollowup";
 import { getStaleSupplierCreditPushes } from "@/lib/supplierCredits";
 import { getStaleAdminPaymentPushes } from "@/lib/adminPayments";
 import { getStalePersonalPurchaseTransferPushes } from "@/lib/personalPurchases";
@@ -19,7 +20,9 @@ import { detectSuddenDemand, SUDDEN_DEMAND_PENDING_TYPE } from "@/lib/suddenDema
 
 // Estos tienen su propio aviso (Qué comprar a las 8:00; Producto que despierta
 // en el momento en que se detecta), no se repiten en el resumen diario.
-const PURCHASE_SUGGESTION_TYPES = new Set(["compras_calientes", "compras_frias", "compras_urgentes_sin_atender", SUDDEN_DEMAND_PENDING_TYPE, "recompras_por_aprobar", "recompras_sin_respuesta"]);
+const PURCHASE_SUGGESTION_TYPES = new Set(["compras_calientes", "compras_frias", "compras_urgentes_sin_atender", SUDDEN_DEMAND_PENDING_TYPE, "recompras_por_aprobar", "recompras_sin_respuesta",
+  // Reclamos al proveedor: aviso propio a quien compró (más abajo).
+  "compras_urgentes_sin_resolver", "compras_reposicion_seguimiento"]);
 
 // Disparado por Vercel Cron (ver vercel.json) una vez al día. Protegido por
 // CRON_SECRET para que nadie más pueda llamarlo desde afuera y disparar
@@ -114,6 +117,14 @@ export async function GET(req: NextRequest) {
 
   const stalePurchases = await getStalePurchaseRequestPushes();
   for (const r of stalePurchases) {
+    await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
+    notified++;
+  }
+
+  // Reclamos al proveedor (pedido del usuario 2026-10-10): a quien hizo la
+  // compra, cada día que un reclamo lleve 2+ días sin gestión o una
+  // reposición esté vencida / sin fecha y el proveedor no la haya enviado.
+  for (const r of await getPurchaseClaimFollowupPushes()) {
     await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }
