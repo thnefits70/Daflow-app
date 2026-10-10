@@ -113,6 +113,8 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
   const [uploading, setUploading] = useState(false);
   const [phase, setPhase] = useState<"idle" | "reading" | "preview" | "applying">("idle");
   const [data, setData] = useState<ParseResult | null>(null);
+  // Pedido de Daniel 2026-10-10: poder arrastrar los PDF desde las descargas.
+  const [dragging, setDragging] = useState(false);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [picking, setPicking] = useState<string | null>(null);
   const [registering, setRegistering] = useState<string | null>(null);
@@ -820,10 +822,28 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
               </div>
             </div>
           )}
-          <label className="flex flex-col items-center justify-center gap-1.5 border-[1.5px] border-dashed border-rule hover:border-teal rounded-md py-6 cursor-pointer transition-colors mb-3">
+          <label
+            className={`flex flex-col items-center justify-center gap-1.5 border-[1.5px] border-dashed rounded-md py-6 cursor-pointer transition-colors mb-3 ${
+              dragging ? "border-teal bg-teal/10" : "border-rule hover:border-teal"
+            }`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!uploading) setDragging(true);
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragging(false);
+              if (!uploading && e.dataTransfer.files.length > 0) handleFiles(e.dataTransfer.files);
+            }}
+          >
             <FileText size={20} className="text-steel" />
-            <div className="text-[13px] font-semibold">{uploading ? "Subiendo…" : "Subir PDF de guías de Dropi"}</div>
-            <div className="text-[11px] text-steel">Ej. documento-23-09-2026_1009.pdf</div>
+            <div className="text-[13px] font-semibold">
+              {uploading ? "Subiendo…" : dragging ? "Suelta aquí los PDF" : "Subir PDF de guías de Dropi"}
+            </div>
+            <div className="text-[11px] text-steel">Haz clic o arrastra aquí los PDF · Ej. documento-23-09-2026_1009.pdf</div>
             <input type="file" accept="application/pdf,.pdf" multiple className="hidden" disabled={uploading} onChange={(e) => e.target.files && handleFiles(e.target.files)} />
           </label>
           {files.length > 0 && !uploading && (
