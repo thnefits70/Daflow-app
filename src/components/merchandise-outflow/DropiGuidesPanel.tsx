@@ -30,6 +30,8 @@ type Row = {
   labelUnitsByCarrier?: Record<string, number>;
   variants: { label: string; quantity: number; byCarrier?: Record<string, number> }[];
   resolution: Resolution;
+  // Marca del manifiesto en que vino (sugerencia al registrar un combo nuevo).
+  manifestBrand?: string | null;
 };
 type WarrantyLine = { guide: string; carrier: string; code: string; name: string; quantity: number; variant: string | null };
 type ParseResult = {
@@ -111,10 +113,10 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
   // warranty: PDF de la sección Garantías de Dropi (lo marca Yair).
   const [files, setFiles] = useState<{ url: string; name: string; warranty?: boolean }[]>([]);
   const [uploading, setUploading] = useState(false);
-  const [phase, setPhase] = useState<"idle" | "reading" | "preview" | "applying">("idle");
-  const [data, setData] = useState<ParseResult | null>(null);
   // Pedido de Daniel 2026-10-10: poder arrastrar los PDF desde las descargas.
   const [dragging, setDragging] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "reading" | "preview" | "applying">("idle");
+  const [data, setData] = useState<ParseResult | null>(null);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [picking, setPicking] = useState<string | null>(null);
   const [registering, setRegistering] = useState<string | null>(null);
@@ -728,7 +730,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
                   onCancel={() => setRegistering(null)}
                 />
               ) : registering === r.code ? (
-                <RegisterComboForm initialCode={res.kind === "comboNoRecipe" ? res.comboCode : r.code} initialLabel={r.name} onRegistered={() => read(true)} onCancel={() => setRegistering(null)} />
+                <RegisterComboForm initialCode={res.kind === "comboNoRecipe" ? res.comboCode : r.code} initialLabel={r.name} suggestedBrand={r.manifestBrand ?? null} onRegistered={() => read(true)} onCancel={() => setRegistering(null)} />
               ) : (
                 <div className="flex items-center gap-x-3 gap-y-1 flex-wrap">
                   {res.kind === "unknown" && res.suggestion && res.suggestion.justCode && (

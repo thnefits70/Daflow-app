@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import type { MarketProductBodega } from "@/generated/prisma/client";
+import { aliasEditMessage, syncComboAliases } from "@/lib/comboAlias";
 import { addGuidesLine, isRocketCode, normalizeName, parseGuidesPdf, ROCKET_PREFIX, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
 import { findSimilarUnlinkedItem, significantWords } from "@/lib/justCatalog";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
@@ -53,10 +55,15 @@ export type GuideResolution =
 
 export type ResolvedGuideLine = ParsedGuidesLine & { resolution: GuideResolution };
 
-const COMBO_SELECT = { code: true, label: true, components: { select: { quantity: true, catalogItem: { select: ITEM_SELECT } } } } as const;
-type ComboLite = { code: string; label: string | null; components: { quantity: number; catalogItem: ItemLite }[] };
+const COMBO_CORE_SELECT = { code: true, label: true, components: { select: { quantity: true, catalogItem: { select: ITEM_SELECT } } } } as const;
+const COMBO_SELECT = { ...COMBO_CORE_SELECT, aliasOf: { select: COMBO_CORE_SELECT } } as const;
+type ComboCore = { code: string; label: string | null; components: { quantity: number; catalogItem: ItemLite }[] };
+type ComboLite = ComboCore & { aliasOf: ComboCore | null };
 
-function comboResolution(combo: ComboLite): GuideResolution {
+// Pedido del usuario 2026-10-10: un ID alterno de combo (el mismo combo
+// subido con otro ID) se cuenta siempre como su combo madre — ver lib/comboAlias.ts.
+function comboResolution(found: ComboLite): GuideResolution {
+  const combo = found.aliasOf ?? found;
   if (combo.components.length === 0) return { kind: "comboNoRecipe", comboCode: combo.code };
   return {
     kind: "combo",
@@ -71,7 +78,7 @@ function comboResolution(combo: ComboLite): GuideResolution {
 // combo que ya existe (confirmado 2026-09-25: Rocket usa sus propios IDs).
 export async function findComboByCode(code: string) {
   const combo = await prisma.dropiCombo.findUnique({ where: { code }, select: COMBO_SELECT });
-  return combo ? { ...comboResolution(combo), label: combo.label } : null;
+  return combo ? { ...comboResolution(combo), label: (combo.aliasOf ?? combo).label } : null;
 }
 
 // skipSuggestions (2026-10-02): quien solo necesita saber a qué producto o
@@ -399,6 +406,8 @@ type ItemRow = {
   breakdown: { label: string; quantity: number }[];
 };
 
+const APPLY_COMBO_SELECT = { id: true, code: true, components: { select: { catalogItemId: true, quantity: true, catalogItem: { select: { name: true, justCode: true } } } } } as const;
+
 export async function applyGuidesImport(input: GuidesApplyInput, userId: string | null): Promise<GuidesApplyResult> {
   const dup = await findAlreadyUploadedGuides(input.guides.map((g) => g.number));
   if (dup.length > 0) {
@@ -459,21 +468,23 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
   const [pickedItems, combos, codeOwners] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({
       where: { id: { in: [...new Set([...pickedIds, ...rocketRows.flatMap((r) => (r.decision.kind === "product" ? [r.decision.catalogItemId] : []))])] } },
-      select: { id: true, name: true, justCode: true },
+      select: { id: true, name: true, justCode: true, bodega: true },
     }),
     prisma.dropiCombo.findMany({
       where: { code: { in: comboCodes } },
-      select: { id: true, code: true, components: { select: { catalogItemId: true, quantity: true, catalogItem: { select: { name: true, justCode: true } } } } },
+      select: { ...APPLY_COMBO_SELECT, aliasOf: { select: APPLY_COMBO_SELECT } },
     }),
     prisma.purchaseCatalogItem.findMany({ where: { justCode: { in: productRows.map((r) => r.code) } }, select: { id: true, name: true, justCode: true } }),
   ]);
   const itemById = new Map(pickedItems.map((i) => [i.id, i]));
-  const comboByCode = new Map(combos.map((c) => [c.code, c]));
+  // Un ID alterno de combo (borrador guardado antes de unirlo) sale como su
+  // combo madre (pedido del usuario 2026-10-10).
+  const comboByCode = new Map(combos.map((c) => [c.code, c.aliasOf ?? c]));
   const ownerByCode = new Map(codeOwners.map((o) => [o.justCode!, o]));
 
   // Qué hay que "aprender" de esta subida.
   const assignCode: { itemId: string; code: string }[] = [];
-  const aliasCombos: { code: string; label: string; itemId: string; quantity: number }[] = [];
+  const aliasCombos: { code: string; label: string; itemId: string; quantity: number; bodega: MarketProductBodega | null }[] = [];
 
   for (const row of productRows) {
     const item = itemById.get((row.decision as { catalogItemId: string }).catalogItemId);
@@ -500,7 +511,8 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
       // uno solo — se guarda como ID alterno (combo 1:1), nunca se pisa el
       // ID madre. Si es un pack ("X3", confirmado al subir), la receta
       // lleva esa cantidad (pedido del usuario 2026-10-01).
-      aliasCombos.push({ code: row.code, label: row.name, itemId: item.id, quantity: perUnit });
+      // Pedido del usuario 2026-10-10: toma la marca de su ID madre.
+      aliasCombos.push({ code: row.code, label: row.name, itemId: item.id, quantity: perUnit, bodega: item.bodega });
     }
   }
   if (new Set(assignCode.map((a) => a.itemId)).size !== assignCode.length) {
@@ -527,8 +539,8 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
       const perUnit = d.perUnit ?? 1;
       return [{ catalogItemId: d.catalogItemId, perUnit, fromCombo: perUnit > 1 ? code : null }];
     }
-    const comboCode = d.comboCode ?? code;
-    return comboByCode.get(comboCode)!.components.map((c) => ({ catalogItemId: c.catalogItemId, perUnit: c.quantity, fromCombo: comboCode }));
+    const combo = comboByCode.get(d.comboCode ?? code)!;
+    return combo.components.map((c) => ({ catalogItemId: c.catalogItemId, perUnit: c.quantity, fromCombo: combo.code }));
   };
 
   const itemRows: ItemRow[] = [];
@@ -661,6 +673,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
           data: {
             code: a.code,
             label: a.quantity > 1 ? `${a.label} (pack de ${a.quantity})` : `${a.label} (ID alterno)`,
+            bodega: a.bodega,
             createdById: userId,
             components: { create: [{ catalogItemId: a.itemId, quantity: a.quantity }] },
           },
@@ -921,8 +934,10 @@ export async function getCompiledLot(lotId: string) {
   for (const c of lotCombos) if (c.bodega) brandByCode.set(c.code, c.bodega);
   for (const b of lot.batches) {
     for (const it of b.items) {
-      if (it.fromComboCode) continue;
-      if (it.catalogItem.bodega && !brandByCode.has(it.sourceCode)) brandByCode.set(it.sourceCode, it.catalogItem.bodega);
+      // Un ID alterno de combo (sourceCode) sale como su madre (fromComboCode)
+      // y lleva su marca — pedido del usuario 2026-10-10.
+      const brand = it.fromComboCode ? brandByCode.get(it.fromComboCode) : it.catalogItem.bodega;
+      if (brand && !brandByCode.has(it.sourceCode)) brandByCode.set(it.sourceCode, brand);
     }
   }
   const guidesByBrand: Record<string, Record<string, number>> = {};
@@ -1341,7 +1356,7 @@ export async function correctComboRecipeFromLot(params: {
 }): Promise<{ ok: true; warning?: string } | { ok: false; error: string }> {
   const lot = await prisma.fulfillmentLot.findUnique({ where: { id: params.lotId }, select: { status: true } });
   if (!lot) return { ok: false, error: "No encontrado." };
-  if (lot.status !== "DRAFT") return { ok: false, error: "Este corte ya se envió a Inventario — pídele a Daniel que corrija la receta." };
+  if (lot.status !== "DRAFT") return { ok: false, error: "Este corte ya se envió a Inventario — corrige la receta en Base de datos de productos." };
   const used = await prisma.fulfillmentRequestItem.count({ where: { fromComboCode: params.code, batch: { lotId: params.lotId } } });
   if (used === 0) return { ok: false, error: "Ese combo no está en este corte." };
   const ids = params.components.map((c) => c.catalogItemId);
@@ -1351,6 +1366,8 @@ export async function correctComboRecipeFromLot(params: {
 
   const [before] = await getComboRecipes([params.code]);
   if (!before) return { ok: false, error: "No se encontró la receta de ese combo." };
+  const alias = await prisma.dropiCombo.findUnique({ where: { id: before.id }, select: { aliasOf: { select: { code: true } } } });
+  if (alias?.aliasOf) return { ok: false, error: aliasEditMessage(params.code, alias.aliasOf.code) };
   const oldPerUnit = new Map(before.components.map((c) => [c.catalogItemId, c.quantity]));
   const newItems = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, justCode: true } });
   const itemById = new Map(newItems.map((i) => [i.id, i]));
@@ -1362,6 +1379,7 @@ export async function correctComboRecipeFromLot(params: {
   await prisma.$transaction(async (tx) => {
     await tx.dropiComboComponent.deleteMany({ where: { comboId: before.id } });
     await tx.dropiComboComponent.createMany({ data: params.components.map((c) => ({ comboId: before.id, catalogItemId: c.catalogItemId, quantity: c.quantity })) });
+    await syncComboAliases(tx, before.id);
 
     const items = await tx.fulfillmentRequestItem.findMany({
       where: { fromComboCode: params.code, batch: { lot: { status: "DRAFT" } } },

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { canSubmitFulfillmentRequest } from "@/lib/guards";
 import { addGuidesLine, extractPages, parseGuidesPages, rocketNameCode, ROCKET_NAME_PREFIX, type ParsedGuidesLine, type ParsedWarrantyLine, type PdfLine } from "@/lib/dropiGuidesPdf";
-import { learnBrandsFromManifest } from "@/lib/manifestBrand";
+import { learnBrandsFromManifest, manifestBrandFor } from "@/lib/manifestBrand";
 import { alreadyUploadedMessage, alreadyUploadedWhere, findAlreadyUploadedGuides, resolveGuideLines, type AlreadyUploadedGuide } from "@/lib/fulfillmentGuides";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 
@@ -75,7 +75,16 @@ export async function POST(req: NextRequest) {
   // Cada PDF de Dropi es el manifiesto de una marca: el sistema aprende
   // solo la marca de los IDs (combos sobre todo) que aún no la tienen —
   // ver lib/manifestBrand.ts. Nunca frena la subida si algo falla.
-  for (const codes of read.dropiCodesByFile) await learnBrandsFromManifest(codes).catch(() => null);
+  // Pedido del usuario 2026-10-10: al registrar un combo nuevo, su marca ya
+  // sale puesta con la del manifiesto en que vino — quien lo registra solo la
+  // confirma o la cambia. Si el código vino en manifiestos de marcas
+  // distintas, no se propone ninguna.
+  const brandByCode = new Map<string, string | null>();
+  for (const codes of read.dropiCodesByFile) {
+    await learnBrandsFromManifest(codes).catch(() => null);
+    const brand = await manifestBrandFor([...new Set(codes)]).catch(() => null);
+    for (const code of codes) brandByCode.set(code, brandByCode.has(code) && brandByCode.get(code) !== brand ? null : brand);
+  }
 
   // Un código que solo aparece en una garantía también necesita saber qué
   // producto es — entra a la lista con cantidad normal 0.
@@ -99,7 +108,7 @@ export async function POST(req: NextRequest) {
     manifestDate,
     carriers: [...new Set([...guides.values()].map((g) => g.carrier))].filter(Boolean),
     guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty, codes: g.codes, sender: g.sender })),
-    rows,
+    rows: rows.map((r) => ({ ...r, manifestBrand: brandByCode.get(r.code) ?? null })),
     warranty,
     unreadWarrantyGuides: unreadWarranty,
     uncertainWarrantyGuides: uncertainWarranty,

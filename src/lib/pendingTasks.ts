@@ -35,6 +35,7 @@ import { getUnlinkedShanghaiCount } from "@/lib/storeTracking";
 import { getCountedUnconfirmedLots, overdueCountedLots } from "@/lib/fulfillmentPicking";
 import { getDropiPriceChanges } from "@/lib/dropiPriceChanges";
 import { getUnmatchedGuideVariants } from "@/lib/variantSales";
+import { COMBO_BRAND_HREF } from "@/lib/comboAlias";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -494,7 +495,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   egresos_deterioro_resolucion: "Deterioro en bodega — falta tu decisión",
   lotes_caducidad_alerta: "Productos vencidos o que vencen en 6 meses o menos",
   variantes_guias_unir: "Colores/tallas de las guías por unir con la lista del conteo",
-  ids_sin_marca: "Productos o combos sin marca o sin ID de Dropi",
+  ids_sin_marca: "Productos sin marca o sin ID de Dropi",
   productos_sin_area: "Productos sin área de bodega (A…G)",
   reclamos_proveedor_atrasados: "Reclamos al proveedor trabados o pasados por alto",
   danados_doble_registro: "Producto dañado registrado dos veces (devolución + deterioro)",
@@ -550,6 +551,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_compra_en_camino: "Ya se está comprando — publícalo en Dropi",
   precio_dropi_cambio: "Cambió el precio mínimo de un producto publicado en Dropi",
   combos_semana: "Combos sugeridos de la semana por revisar",
+  combos_sin_marca: "Combos vendidos en Dropi sin marca — elegir su marca",
   fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
   fulfillment_bloque_asignado: "Bloque del corte asignado — sacar de bodega",
   compras_calientes: "Compras calientes (30 unidades o menos)",
@@ -3233,29 +3235,42 @@ async function getGuideVariantsPendingItem(href: string): Promise<PendingItem | 
 // o el combo la aprende de su manifiesto — lib/manifestBrand.ts), pero si
 // algún ID queda sin marca o un producto sin ID de Dropi, Daniel lo ve en
 // Inicio y se lo dice al admin, que es quien lo corrige. No cuenta lo que es
-// normal: productos "esperando ID de Dropi" (comprados antes de publicar) ni
-// combos solo de Rocket (código R…, no tienen marca a propósito).
+// normal: productos "esperando ID de Dropi" (comprados antes de publicar).
+// Desde 2026-10-10 los combos sin marca ya no son de Daniel: la elige la
+// asesora B2B (getCombosWithoutBrandPendingItem).
 async function getMissingBrandPendingItem(href: string): Promise<PendingItem | null> {
-  const [products, combos] = await Promise.all([
-    prisma.purchaseCatalogItem.findMany({
-      where: { OR: [{ bodega: null }, { justCode: null, awaitingDropiId: false }] },
-      select: { name: true, justCode: true },
-    }),
-    prisma.dropiCombo.findMany({ where: { bodega: null, NOT: { code: { startsWith: "R" } } }, select: { code: true } }),
-  ]);
-  if (products.length === 0 && combos.length === 0) return null;
+  const products = await prisma.purchaseCatalogItem.findMany({
+    where: { OR: [{ bodega: null }, { justCode: null, awaitingDropiId: false }] },
+    select: { name: true, justCode: true },
+  });
+  if (products.length === 0) return null;
 
-  const codes = [...products.map((p) => p.justCode ?? p.name), ...combos.map((c) => c.code)];
-  const parts: string[] = [];
-  if (products.length > 0) parts.push(products.length === 1 ? "1 producto" : `${products.length} productos`);
-  if (combos.length > 0) parts.push(combos.length === 1 ? "1 combo" : `${combos.length} combos`);
+  const codes = products.map((p) => p.justCode ?? p.name);
   return {
     type: "ids_sin_marca",
     icon: "🏷️",
     label: "IDs sin marca — avísale al admin para corregirlo",
-    meta: `${parts.join(" · ")}: ${codes.slice(0, 5).join(", ")}${codes.length > 5 ? "…" : ""}`,
+    meta: `${products.length === 1 ? "1 producto" : `${products.length} productos`}: ${codes.slice(0, 5).join(", ")}${codes.length > 5 ? "…" : ""}`,
     overdue: false,
     href,
+  };
+}
+
+// Pedido del usuario 2026-10-10: un combo que se vendió en Dropi sin marca
+// (vino en un PDF "SinMarca", o solo en Rocket) queda sin marca al
+// registrarse — la asesora B2B la elige en Stock Actual. Se quita solo
+// cuando ya no queda ninguno.
+async function getCombosWithoutBrandPendingItem(): Promise<PendingItem | null> {
+  const combos = await prisma.dropiCombo.findMany({ where: { bodega: null }, select: { code: true }, orderBy: { createdAt: "asc" } });
+  if (combos.length === 0) return null;
+  const codes = combos.map((c) => (c.code.startsWith("R") ? `Rocket ${c.code.slice(1)}` : c.code));
+  return {
+    type: "combos_sin_marca",
+    icon: "🏷️",
+    label: "Combos sin marca — elige a qué marca pertenecen",
+    meta: `${combos.length === 1 ? "1 combo" : `${combos.length} combos`}: ${codes.slice(0, 5).join(", ")}${codes.length > 5 ? "…" : ""}`,
+    overdue: false,
+    href: COMBO_BRAND_HREF,
   };
 }
 
@@ -4163,6 +4178,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (me.canMarkComboCreatedInDropi) {
       const combosItem = await getWeeklyComboSuggestionsPendingItem();
       if (combosItem) teamItems.push(combosItem);
+      const noBrandItem = await getCombosWithoutBrandPendingItem().catch(() => null);
+      if (noBrandItem) teamItems.unshift(noBrandItem);
     }
     if (me.canLinkStoreProducts) {
       const storeTrackingItem = await getStoreTrackingUnlinkedPendingItem();
@@ -4538,7 +4555,7 @@ export async function getPossiblePendingTypesForActor(
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
       if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "analisis_mercado_pasar_publico");
       if (me.canUploadRocketSku) types.push("analisis_mercado_subir_rocket");
-      if (me.canMarkComboCreatedInDropi) types.push("combos_semana");
+      if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca");
       if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
       if (me.department?.code === "INV") types.push("fulfillment_bloque_asignado");
       if (me.canManagePurchases && me.department?.code === "MKT") types.push("compras_calientes");
@@ -4549,7 +4566,7 @@ export async function getPossiblePendingTypesForActor(
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
     if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio");
-      if (me.canMarkComboCreatedInDropi) types.push("combos_semana");
+      if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca");
     if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
     if (me.leadsDept.code === "FIN") types.push("compras_frias", "analisis_mercado_listo_comprar", "analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");
     if (me.leadsDept.code === "INV") types.push("compras_urgentes_sin_atender");

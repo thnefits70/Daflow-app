@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
-import { canManageJustCatalog, canSubmitFulfillmentRequest } from "@/lib/guards";
 import { correctComboRecipeFromLot } from "@/lib/fulfillmentGuides";
 
 const schema = z.object({
@@ -9,12 +8,13 @@ const schema = z.object({
   components: z.array(z.object({ catalogItemId: z.string().min(1), quantity: z.number().int().positive() })).min(1),
 });
 
-// Pedido del usuario 2026-09-25: Yair corrige desde su corte en preparación
-// la receta de un combo que armó mal — ver correctComboRecipeFromLot.
+// Pedido del usuario 2026-09-25: corregir desde el corte en preparación la
+// receta de un combo que se armó mal — ver correctComboRecipeFromLot.
+// Desde 2026-10-10 (pedido del usuario): la receta se registra una sola vez y
+// solo el admin la corrige; Yair y Daniel le avisan.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  const allowed = (await canSubmitFulfillmentRequest()) || (await canManageJustCatalog());
-  if (!allowed || !session) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!session || session.user.role !== "admin") return NextResponse.json({ error: "Solo el administrador puede corregir la receta de un combo — avísale." }, { status: 403 });
 
   const { id } = await params;
   const parsed = schema.safeParse(await req.json().catch(() => null));

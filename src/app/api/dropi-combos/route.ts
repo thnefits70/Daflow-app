@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { componentsMissingDropiId, missingDropiIdMessage } from "@/lib/fulfillmentGuides";
 import { canManageJustCatalog, canViewStockLevels, dbUserId } from "@/lib/guards";
 import { comboCodeUsedByProduct } from "@/lib/comboBrand";
+import { aliasEditMessage, comboBrandSchema, confirmAliasResponse, findMotherComboByRecipe, notifyCombosWithoutBrand, syncComboAliases } from "@/lib/comboAlias";
 import {
   resolveCostBasisForCatalogItems,
   computeComboBenistockPrice,
@@ -41,6 +42,8 @@ export async function GET() {
       createdBy: { select: { name: true } },
       components: { include: { catalogItem: { select: CATALOG_ITEM_SELECT } } },
       rocketCodeMappings: { select: { rocketCode: true }, orderBy: { rocketCode: "asc" } },
+      aliasOf: { select: { code: true } },
+      aliases: { select: { code: true }, orderBy: { createdAt: "asc" } },
     },
   });
 
@@ -89,7 +92,8 @@ export async function GET() {
         id: c.id,
         code: c.code,
         label: c.label,
-        // La aprende la app del manifiesto en que viene (lib/manifestBrand.ts).
+        // La elige quien crea el combo (desde 2026-10-10); los viejos la
+        // aprendieron del manifiesto (lib/manifestBrand.ts).
         bodega: c.bodega,
         createdByName: c.createdBy?.name ?? null,
         createdAt: c.createdAt,
@@ -98,6 +102,10 @@ export async function GET() {
         // como referencia (Rocket no está en INVESTOCK; la receta dice qué
         // productos reales se descuentan) — ver RocketCodeMapping.
         rocketCodes: c.rocketCodeMappings.map((m) => m.rocketCode),
+        // Pedido del usuario 2026-10-10: el mismo combo con otro ID apunta al
+        // primero registrado (lib/comboAlias.ts).
+        aliasOfCode: c.aliasOf?.code ?? null,
+        aliasCodes: c.aliases.map((a) => a.code),
         ...prices,
       };
     })
@@ -105,7 +113,7 @@ export async function GET() {
 }
 
 const componentSchema = z.object({ catalogItemId: z.string().min(1), quantity: z.number().int().positive() });
-const createSchema = z.object({ code: z.string().trim().min(1), label: z.string().trim().optional(), components: z.array(componentSchema).min(1) });
+const createSchema = z.object({ code: z.string().trim().min(1), label: z.string().trim().optional(), bodega: comboBrandSchema.optional(), confirmAlias: z.boolean().optional(), components: z.array(componentSchema).min(1) });
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -121,36 +129,54 @@ export async function POST(req: NextRequest) {
   if (missingIds.length > 0) return NextResponse.json({ error: missingDropiIdMessage(missingIds) }, { status: 400 });
 
   // Confirmado 2026-08-26 (pedido explícito del usuario): si el código ya
-  // existe, se ACTUALIZA en vez de rechazar — Daniel puede darse cuenta a
-  // mitad de una lectura que un combo ya registrado tiene la receta
-  // equivocada (ver "Corregir este combo" en DocumentCaptureFlow) y esto
-  // deja corregirlo sin tener que ir a buscarlo aparte en Base de datos de
-  // productos.
-  const existing = await prisma.dropiCombo.findUnique({ where: { code: parsed.data.code } });
+  // existe, se ACTUALIZA en vez de rechazar. Desde 2026-10-10 eso es solo
+  // del admin: la receta se registra una sola vez.
+  const existing = await prisma.dropiCombo.findUnique({ where: { code: parsed.data.code }, include: { aliasOf: { select: { code: true } } } });
   if (!existing) {
     const clash = await comboCodeUsedByProduct(parsed.data.code);
     if (clash) return NextResponse.json({ error: clash }, { status: 409 });
   }
-  const combo = existing
-    ? await prisma.$transaction(async (tx) => {
-        await tx.dropiComboComponent.deleteMany({ where: { comboId: existing.id } });
-        return tx.dropiCombo.update({
-          where: { id: existing.id },
-          data: {
-            label: parsed.data.label || existing.label,
-            components: { create: parsed.data.components.map((c) => ({ catalogItemId: c.catalogItemId, quantity: c.quantity })) },
-          },
-          include: { components: { include: { catalogItem: { select: CATALOG_ITEM_SELECT } } } },
-        });
-      })
-    : await prisma.dropiCombo.create({
+  if (existing?.aliasOf) return NextResponse.json({ error: aliasEditMessage(existing.code, existing.aliasOf.code) }, { status: 400 });
+  // Pedido del usuario 2026-10-10: una receta ya registrada solo la cambia el admin.
+  if (existing && session.user.role !== "admin") {
+    return NextResponse.json({ error: `El combo ${existing.code} ya está registrado — solo el administrador puede cambiar su receta. Avísale.` }, { status: 403 });
+  }
+  if (existing) {
+    const combo = await prisma.$transaction(async (tx) => {
+      await tx.dropiComboComponent.deleteMany({ where: { comboId: existing.id } });
+      const updated = await tx.dropiCombo.update({
+        where: { id: existing.id },
         data: {
-          code: parsed.data.code,
-          label: parsed.data.label || null,
-          createdById: dbUserId(session.user.id),
+          label: parsed.data.label || existing.label,
           components: { create: parsed.data.components.map((c) => ({ catalogItemId: c.catalogItemId, quantity: c.quantity })) },
         },
         include: { components: { include: { catalogItem: { select: CATALOG_ITEM_SELECT } } } },
       });
-  return NextResponse.json(combo);
+      await syncComboAliases(tx, existing.id);
+      return updated;
+    });
+    return NextResponse.json(combo);
+  }
+
+  // Pedido del usuario 2026-10-10: si la
+  // receta ya existe con otro ID, y se confirma que es el mismo, este queda
+  // como su ID alterno (lib/comboAlias.ts).
+  const recipe = parsed.data.components.map((c) => ({ catalogItemId: c.catalogItemId, quantity: c.quantity }));
+  const mother = await findMotherComboByRecipe(recipe);
+  if (mother && !parsed.data.confirmAlias) return NextResponse.json(confirmAliasResponse(mother), { status: 409 });
+  // Daniel no sabe la marca: si falta, la elige la asesora B2B (lib/comboAlias.ts).
+  const brand = mother?.bodega ?? parsed.data.bodega ?? null;
+  const combo = await prisma.dropiCombo.create({
+    data: {
+      code: parsed.data.code,
+      label: parsed.data.label || null,
+      bodega: brand,
+      aliasOfId: mother?.id ?? null,
+      createdById: dbUserId(session.user.id),
+      components: { create: recipe },
+    },
+    include: { components: { include: { catalogItem: { select: CATALOG_ITEM_SELECT } } } },
+  });
+  if (!brand) await notifyCombosWithoutBrand([{ code: combo.code, label: combo.label }]).catch(() => null);
+  return NextResponse.json({ ...combo, aliasOfCode: mother?.code ?? null });
 }

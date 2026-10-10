@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, Copy, AlertTriangle, ChevronDown, Bell, SlidersHorizontal, Download, LineChart, TrendingUp } from "lucide-react";
 import { DailyDispatchChart, type DailyDispatchDay } from "./DailyDispatchChart";
@@ -18,6 +18,12 @@ import type { SupplierPriceHistory } from "@/lib/purchases";
 
 function fromSinAreaLink() {
   return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("filtro") === "sin-area";
+}
+
+// Pedido del usuario 2026-10-10: el pendiente "Combos sin marca" de la
+// asesora B2B llega con ?filtro=combos-sin-marca — muestra solo esos combos.
+function fromCombosSinMarcaLink() {
+  return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("filtro") === "combos-sin-marca";
 }
 
 type PendingAdjustmentRow = {
@@ -64,6 +70,9 @@ type ComboRow = {
   bodega: Marca | null;
   // IDs de Rocket del mismo combo — solo referencia, no están en INVESTOCK.
   rocketCodes?: string[];
+  // Mismo combo con otro ID: apunta al primero registrado (lib/comboAlias.ts).
+  aliasOfCode?: string | null;
+  aliasCodes?: string[];
   components: { id: string; quantity: number; catalogItem: { id: string; name: string; justCode: string | null } }[];
   providerPrice: number | null;
   bodegaPrice: number | null;
@@ -665,6 +674,23 @@ export function StockLevelsPanel({
   const [reviewingAdjustmentId, setReviewingAdjustmentId] = useState<string | null>(null);
 
   const [combos, setCombos] = useState<ComboRow[]>([]);
+  // Pedido del usuario 2026-10-10: la asesora B2B elige la marca de un combo
+  // que quedó sin marca (solo ese caso; cambiar una marca ya puesta es del admin).
+  const [combosSinMarcaOnly, setCombosSinMarcaOnly] = useState(fromCombosSinMarcaLink);
+  const [canSetMissingBrand, setCanSetMissingBrand] = useState(false);
+  useEffect(() => {
+    fetch("/api/dropi-combos/permissions")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setCanSetMissingBrand(!!d?.canSetMissingBrand))
+      .catch(() => setCanSetMissingBrand(false));
+  }, []);
+  // Llegando desde el pendiente, baja directo a la lista de combos.
+  const scrolledToCombos = useRef(false);
+  useEffect(() => {
+    if (!combosSinMarcaOnly || scrolledToCombos.current || combos.length === 0) return;
+    scrolledToCombos.current = true;
+    document.getElementById("combos-registrados")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [combosSinMarcaOnly, combos.length]);
   // Con la actualización cada 30 s, un fallo de red no debe vaciar la tabla:
   // se queda con lo último que cargó (solo queda vacía si nunca cargó).
   function loadRows() {
@@ -783,8 +809,13 @@ export function StockLevelsPanel({
     .filter((r) => !sinPrecioFilter || r.providerPrice === undefined)
     .filter((r) => !sinStockFilter || r.balance === 0)
     .filter((r) => !sinAreaFilter || r.warehouseArea == null);
-  const marcaFilteredCombosBase =
-    marcaFilter === "ROCKET" ? combos.filter(hasRocketId) : marcaFilter ? combos.filter((c) => c.bodega === marcaFilter) : combos;
+  const marcaFilteredCombosBase = combosSinMarcaOnly
+    ? combos.filter((c) => !c.bodega)
+    : marcaFilter === "ROCKET"
+      ? combos.filter(hasRocketId)
+      : marcaFilter
+        ? combos.filter((c) => c.bodega === marcaFilter)
+        : combos;
 
   const queryTrimmed = query.trim();
   const queryWords = queryTrimmed ? significantWords(queryTrimmed) : [];
@@ -1433,7 +1464,16 @@ export function StockLevelsPanel({
               }}
             />
           )}
-          <div className="flex flex-wrap items-center gap-2 mb-1">
+          {combosSinMarcaOnly && (
+            <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-gold/60 bg-gold/10 px-3 py-2 text-[12px]">
+              <span className="font-semibold">Mostrando solo los combos que se vendieron en Dropi sin marca.</span>
+              {canSetMissingBrand && <span className="text-steel">Elige su marca en la columna Marca: es la cuenta de Dropi donde se publicó.</span>}
+              <button type="button" className="ml-auto font-semibold text-teal cursor-pointer" onClick={() => setCombosSinMarcaOnly(false)}>
+                Ver todos los combos
+              </button>
+            </div>
+          )}
+          <div id="combos-registrados" className="flex flex-wrap items-center gap-2 mb-1">
             <div className="text-[13px] font-bold text-ink">Combos registrados</div>
             <div className="flex items-center gap-1.5 flex-1 min-w-[220px] max-w-[420px] rounded border border-rule px-2.5 py-1">
               <Search size={13} className="text-steel" />
@@ -1498,16 +1538,26 @@ export function StockLevelsPanel({
                             <span className="italic">· referencia</span>
                           </span>
                         ))}
+                        {/* Pedido del usuario 2026-10-10: el mismo combo con otro ID apunta al primero registrado. */}
+                        {combo.aliasOfCode && (
+                          <span className="shrink-0 rounded-full border border-gold/60 px-2 py-0.5 text-[10.5px] font-bold text-gold" title={`Mismo combo que el ${combo.aliasOfCode}, subido con otro ID. Se cuenta como el ${combo.aliasOfCode} y lleva su marca.`}>
+                            ID alterno de {combo.aliasOfCode}
+                          </span>
+                        )}
+                        {(combo.aliasCodes?.length ?? 0) > 0 && (
+                          <span className="shrink-0 rounded-full border border-rule px-2 py-0.5 text-[10.5px] text-steel" title="Este mismo combo también se subió con estos IDs; todos apuntan a este.">
+                            También: <span className="font-mono font-bold">{combo.aliasCodes!.join(", ")}</span>
+                          </span>
+                        )}
                       </span>
-                      {/* La marca del combo la aprende la app del manifiesto en que viene; solo el admin corrige. */}
-                      {isRocketOnlyCombo(combo) ? (
-                        // Pedido del usuario 2026-09-28: un combo de Rocket es referencia, no tiene marca en INVESTOCK.
-                        <span className="text-[11px] font-bold text-gold" title="Combo de Rocket: solo referencia. No tiene marca ni stock propio en INVESTOCK; se descuentan los productos reales de su receta.">
-                          Rocket
-                        </span>
-                      ) : (
-                        <MarcaSelect value={combo.bodega} onChange={(v) => updateComboMarca(combo.id, v)} readOnly={!isAdmin} />
-                      )}
+                      {/* Pedido del usuario 2026-10-10: la marca madre sale del PDF de Dropi en que vino el combo
+                          (también los solo de Rocket); si falta, la elige la asesora B2B; cambiarla es solo del admin.
+                          Un ID alterno lleva la de su madre. */}
+                      <MarcaSelect
+                        value={combo.bodega}
+                        onChange={(v) => updateComboMarca(combo.id, v)}
+                        readOnly={!!combo.aliasOfCode || !(isAdmin || (canSetMissingBrand && !combo.bodega))}
+                      />
                       {/* Un combo no está en ninguna área: cada producto que trae tiene la suya. */}
                       <span className="text-[11px] text-steel-dim">—</span>
                       {comboRef != null ? (

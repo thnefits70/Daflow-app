@@ -2769,6 +2769,16 @@ model DropiCombo {
   // Daniel o admin) que PurchaseCatalogItem.bodega.
   bodega MarketProductBodega?
 
+  // Pedido del usuario 2026-10-10: un combo tiene UNA sola marca madre. Si
+  // el mismo combo (misma receta) se sube con otro ID (otra marca de Dropi),
+  // ese ID nuevo apunta al primero que se registró en DAFLOW: guarda una
+  // copia de la receta (para que todo lo que busca por código siga
+  // funcionando) y siempre la marca del madre. Los cortes lo cuentan como el
+  // madre. Ver lib/comboAlias.ts.
+  aliasOfId String?
+  aliasOf   DropiCombo?  @relation("DropiComboAlias", fields: [aliasOfId], references: [id], onDelete: SetNull)
+  aliases   DropiCombo[] @relation("DropiComboAlias")
+
   components         DropiComboComponent[]
   comboSuggestion    ComboSuggestion?
   newIdBranding      NewIdBranding?

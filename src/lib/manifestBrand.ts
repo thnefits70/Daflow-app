@@ -32,7 +32,9 @@ export async function learnBrandsFromManifest(codes: string[]): Promise<Manifest
   if (!brand) return { brand: null, combos: [], products: [], conflicts: [] };
 
   const [combos, products] = await Promise.all([
-    prisma.dropiCombo.findMany({ where: { code: { in: unique } }, select: { id: true, code: true, label: true, bodega: true } }),
+    // Un ID alterno de combo lleva siempre la marca de su madre, aunque venga
+    // en el manifiesto de otra marca (pedido del usuario 2026-10-10).
+    prisma.dropiCombo.findMany({ where: { code: { in: unique }, aliasOfId: null }, select: { id: true, code: true, label: true, bodega: true } }),
     prisma.purchaseCatalogItem.findMany({ where: { justCode: { in: unique } }, select: { id: true, justCode: true, name: true, bodega: true } }),
   ]);
   const newCombos = combos.filter((c) => !c.bodega);

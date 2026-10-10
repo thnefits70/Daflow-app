@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, Pencil, X } from "lucide-react";
 import { ComboComponentBuilder, type ComboDraftComponent } from "@/components/merchandise-reentry/ComboComponentBuilder";
 import { CatalogCode } from "@/components/shared/CatalogCode";
@@ -39,7 +39,16 @@ function PartList({ parts, tone }: { parts: Part[]; tone?: "old" }) {
 // unidades a un producto y, si está mal, la corrige él mismo con doble
 // confirmación (antes → ahora). Solo mientras el corte está en preparación
 // — ver api/fulfillment-lots/[id]/combo-recipe.
+// Desde 2026-10-10 (pedido del usuario): la receta se registra una sola vez;
+// solo el admin la corrige aquí. Los demás ven cómo está y le avisan.
 export function LotComboRecipe({ lotId, combo, editable, onClose, onSaved }: { lotId: string; combo: LotComboRecipe; editable: boolean; onClose: () => void; onSaved: () => void }) {
+  const [isAdmin, setIsAdmin] = useState(false);
+  useEffect(() => {
+    fetch("/api/dropi-combos/permissions")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setIsAdmin(!!d?.canEdit))
+      .catch(() => setIsAdmin(false));
+  }, []);
   const [editing, setEditing] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [draft, setDraft] = useState<ComboDraftComponent[]>([]);
@@ -92,11 +101,12 @@ export function LotComboRecipe({ lotId, combo, editable, onClose, onSaved }: { l
         <>
           <div className="text-[11px] text-steel mb-1">Así está guardada — cada pedido de este combo saca:</div>
           <PartList parts={current} />
-          {editable && (
+          {editable && isAdmin && (
             <button type="button" className="mt-2.5 flex items-center gap-1.5 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer hover:border-teal" onClick={startEdit}>
               <Pencil size={12} /> Corregir receta
             </button>
           )}
+          {!isAdmin && <div className="mt-2 text-[11px] text-steel">Si esta receta está mal, avísale al administrador: solo él puede corregirla.</div>}
         </>
       )}
 

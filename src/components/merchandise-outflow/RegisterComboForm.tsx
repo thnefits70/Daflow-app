@@ -5,6 +5,8 @@ import { AlertTriangle, Clock } from "lucide-react";
 import { ComboComponentBuilder, type ComboDraftComponent } from "@/components/merchandise-reentry/ComboComponentBuilder";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
+import { ComboBrandInfo, COMBO_BRAND_LABELS } from "@/components/shared/ComboBrandInfo";
+import { ComboAliasConfirm, type AliasMother } from "@/components/shared/ComboAliasConfirm";
 
 export type RegisteredCombo = { id: string; code: string; label: string | null; componentsCount: number };
 
@@ -17,6 +19,7 @@ export function RegisterComboForm({
   initialCode,
   initialLabel = "",
   rocketCode,
+  suggestedBrand = null,
   onRegistered,
   onCancel,
 }: {
@@ -25,17 +28,24 @@ export function RegisterComboForm({
   // Combo de Rocket (pedido del usuario 2026-09-28): misma receta que uno de
   // Dropi, pero se guarda por su ID de Rocket — ver api/fulfillment-requests/rocket-combo.
   rocketCode?: string;
+  // Marca del manifiesto en que vino el combo (ya sale elegida).
+  suggestedBrand?: string | null;
   onRegistered: (combo: RegisteredCombo) => void;
   onCancel: () => void;
 }) {
   const [code, setCode] = useState(initialCode);
   const [label, setLabel] = useState(initialLabel);
+  // La marca no la elige quien registra: sale del PDF en que vino (o la elige la asesora B2B).
+  const brand = suggestedBrand && COMBO_BRAND_LABELS[suggestedBrand] ? suggestedBrand : null;
   const [components, setComponents] = useState<ComboDraftComponent[]>([]);
   const [reviewing, setReviewing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
+  // Pedido del usuario 2026-10-10: la receta es idéntica a un combo que ya
+  // existe — una persona confirma si es el mismo antes de unirlos.
+  const [aliasMother, setAliasMother] = useState<AliasMother | null>(null);
 
-  async function save() {
+  async function save(confirmAlias = false) {
     setSaving(true);
     setErr("");
     const recipe = components.map((c) => ({ catalogItemId: c.catalogItem.id, quantity: c.quantity }));
@@ -44,18 +54,38 @@ export function RegisterComboForm({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(
         rocketCode
-          ? { rocketCode, label: label.trim() || undefined, components: recipe }
-          : { code: code.trim(), label: label.trim() || undefined, components: recipe },
+          ? { rocketCode, label: label.trim() || undefined, bodega: brand ?? undefined, confirmAlias, components: recipe }
+          : { code: code.trim(), label: label.trim() || undefined, bodega: brand ?? undefined, confirmAlias, components: recipe },
       ),
     });
     const json = await res.json().catch(() => null);
     setSaving(false);
+    if (res.status === 409 && json?.needsAliasConfirm) {
+      setAliasMother(json.mother as AliasMother);
+      return;
+    }
     if (!res.ok) {
       setErr(json?.error ?? "No se pudo guardar la receta.");
+      setAliasMother(null);
       setReviewing(false);
       return;
     }
     onRegistered(json as RegisteredCombo);
+  }
+
+  if (aliasMother) {
+    return (
+      <ComboAliasConfirm
+        newCode={rocketCode ? `Rocket ${rocketCode.slice(1)}` : code.trim()}
+        mother={aliasMother}
+        busy={saving}
+        onConfirm={() => save(true)}
+        onReject={() => {
+          setAliasMother(null);
+          setReviewing(false);
+        }}
+      />
+    );
   }
 
   if (reviewing) {
@@ -65,6 +95,9 @@ export function RegisterComboForm({
         <div className="text-[11.5px] mb-2">
           {rocketCode ? "ID de Rocket" : "Código"}: <span className="font-mono font-semibold">{rocketCode ? rocketCode.slice(1) : code}</span>
           {label && <span> — {label}</span>}
+          <div>
+            <ComboBrandInfo brand={brand} />
+          </div>
         </div>
         <div className="flex flex-col gap-1.5 mb-3">
           {components.map((c) => (
@@ -87,7 +120,7 @@ export function RegisterComboForm({
         </div>
         {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
         <div className="flex gap-2">
-          <button type="button" disabled={saving} className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={save}>
+          <button type="button" disabled={saving} className="flex-1 rounded border border-teal bg-teal px-3 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60" onClick={() => save()}>
             {saving ? "Guardando…" : "Sí, guardar receta"}
           </button>
           <button type="button" className="flex-1 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer" onClick={() => setReviewing(false)}>
@@ -122,6 +155,9 @@ export function RegisterComboForm({
           <div className="text-[10px] text-steel mb-0.5">Nombre de referencia (opcional)</div>
           <input type="text" className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]" value={label} onChange={(e) => setLabel(e.target.value)} />
         </div>
+      </div>
+      <div className="mb-2">
+        <ComboBrandInfo brand={brand} />
       </div>
       <div className="text-[10px] text-steel mb-1.5">Agrega cada producto real que trae este combo y cuántas unidades:</div>
       <ComboComponentBuilder components={components} onChange={setComponents} searchUrl="/api/fulfillment-requests/catalog-search" />

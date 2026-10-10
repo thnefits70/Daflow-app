@@ -20,8 +20,10 @@ export async function guideBrandsOf(batches: BrandBatch[]): Promise<Map<string, 
   for (const c of combos) if (c.bodega) brandByCode.set(c.code, c.bodega);
   for (const b of batches) {
     for (const it of b.items) {
-      if (it.fromComboCode) continue;
-      if (it.catalogItem.bodega && !brandByCode.has(it.sourceCode)) brandByCode.set(it.sourceCode, it.catalogItem.bodega);
+      // Un ID alterno de combo (sourceCode) lleva la marca de su madre
+      // (fromComboCode) — pedido del usuario 2026-10-10.
+      const brand = it.fromComboCode ? brandByCode.get(it.fromComboCode) : it.catalogItem.bodega;
+      if (brand && !brandByCode.has(it.sourceCode)) brandByCode.set(it.sourceCode, brand);
     }
   }
 
