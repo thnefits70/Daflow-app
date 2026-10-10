@@ -51,6 +51,7 @@ export type SnapshotProduct = {
   name: string;
   brand: "MKT_PROVEDIX" | "MKT_DAMIAN";
   photo: string | null;
+  branded?: boolean; // la foto es la brandeada (la sube Robert)
   unitsRange: string; // 30 días
   soldRange: string; // $ cobrado en 30 días
   trend: "up" | "down" | "flat";
@@ -259,7 +260,7 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
   const ids = [...acc.keys()];
   const items = await prisma.purchaseCatalogItem.findMany({
     where: { id: { in: ids }, bodega: { in: ["MKT_PROVEDIX", "MKT_DAMIAN"] }, justCode: { not: null } },
-    select: { id: true, name: true, justCode: true, bodega: true, photos: true, dropiPriceRef: true },
+    select: { id: true, name: true, justCode: true, bodega: true, photos: true, brandedPhotoUrl: true, dropiPriceRef: true },
   });
   const itemById = new Map(items.map((i) => [i.id, i]));
   const comboCodes = [...new Set([...acc.values()].flatMap((a) => [...a.combos.keys()]))];
@@ -267,10 +268,11 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
   if (comboCodes.length) {
     const combos = await prisma.dropiCombo.findMany({
       where: { code: { in: comboCodes } },
-      select: { code: true, label: true, components: { select: { catalogItem: { select: { photos: true } } } } },
+      select: { code: true, label: true, brandedPhotoUrl: true, components: { select: { catalogItem: { select: { photos: true } } } } },
     });
     for (const c of combos) {
-      comboPhotos.set(c.code, c.components.map((x) => x.catalogItem.photos[0]).filter((p): p is string => !!p));
+      // Combo con foto brandeada: esa sola; si no, las fotos de sus productos.
+      comboPhotos.set(c.code, c.brandedPhotoUrl ? [c.brandedPhotoUrl] : c.components.map((x) => x.catalogItem.photos[0]).filter((p): p is string => !!p));
       if (c.label) comboNames.set(c.code, c.label);
     }
   }
@@ -304,7 +306,9 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
       code: item.justCode!,
       name: item.name,
       brand: item.bodega as SnapshotProduct["brand"],
-      photo: item.photos[0] ?? null,
+      // Siempre la foto brandeada de su marca; mientras Robert no la suba, la normal.
+      photo: item.brandedPhotoUrl ?? item.photos[0] ?? null,
+      branded: !!item.brandedPhotoUrl,
       unitsRange: unitsRange(a.units),
       // Guías viejas todavía sin valor leído: se completa con el precio
       // promedio por unidad de las que sí lo tienen.
@@ -343,5 +347,15 @@ export async function saveProvedixSnapshot(): Promise<ProvedixSnapshotData> {
 
 export async function getLatestProvedixSnapshot(): Promise<(ProvedixSnapshotData & { generatedAt: string }) | null> {
   const row = await prisma.provedixSnapshot.findFirst({ orderBy: { day: "desc" } });
-  return row ? { ...(row.data as unknown as ProvedixSnapshotData), generatedAt: row.createdAt.toISOString() } : null;
+  if (!row) return null;
+  const data = row.data as unknown as ProvedixSnapshotData;
+  // La foto brandeada que Robert sube se ve al instante, sin esperar al
+  // resumen del día siguiente.
+  const branded = await prisma.purchaseCatalogItem.findMany({
+    where: { justCode: { in: data.products.map((p) => p.code) }, brandedPhotoUrl: { not: null } },
+    select: { justCode: true, brandedPhotoUrl: true },
+  });
+  const brandedByCode = new Map(branded.map((b) => [b.justCode!, b.brandedPhotoUrl!]));
+  const products = data.products.map((p) => (brandedByCode.has(p.code) ? { ...p, photo: brandedByCode.get(p.code)!, branded: true } : p));
+  return { ...data, products, generatedAt: row.createdAt.toISOString() };
 }

@@ -2029,6 +2029,13 @@ model PurchaseCatalogItem {
   dropiPriceRefAt   DateTime?
   dropiPriceRefById String?
 
+  // Pedido del usuario 2026-10-10 (provedix.com): foto brandeada con la
+  // marca que le corresponde (Provedix / Imp. Damián). La sube Robert; la
+  // página pública la usa siempre y, mientras falte, muestra photos[0].
+  brandedPhotoUrl  String?
+  brandedPhotoAt   DateTime?
+  brandedPhotoById String?
+
   createdById String?
   createdBy   User?    @relation("PurchaseCatalogItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now())
@@ -2768,6 +2775,12 @@ model DropiCombo {
   // de sus componentes. Mismo enum y mismo permiso de edición (Stock Actual,
   // Daniel o admin) que PurchaseCatalogItem.bodega.
   bodega MarketProductBodega?
+
+  // Foto brandeada del combo para provedix.com (2026-10-10) — Robert la
+  // adjunta al marcar "Imágenes brandeadas subidas a Dropi".
+  brandedPhotoUrl  String?
+  brandedPhotoAt   DateTime?
+  brandedPhotoById String?
 
   // Pedido del usuario 2026-10-10: un combo tiene UNA sola marca madre. Si
   // el mismo combo (misma receta) se sube con otro ID (otra marca de Dropi),

@@ -6,6 +6,8 @@ import { TabGuide } from "@/components/shared/TabGuide";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { actorName } from "@/lib/actorName";
+import { uploadFile } from "@/lib/uploadFile";
+import { compressImage } from "@/lib/compressImage";
 
 type Mark = { at: string; by: string | null };
 type StepKey = "dropiImages" | "dropiInfo" | "driveVideo" | "realPhotos" | "channel";
@@ -64,15 +66,43 @@ function Origin({ e }: { e: Entry }) {
 
 // Confirmado 2026-08-08 (mismo espíritu): marcar pide "¿seguro?" antes, para
 // que nadie marque por marcar. Desmarcar no pregunta (es corregir un error).
-function StepCheck({ label, mark, canToggle, onToggle }: { label: string; mark: Mark | null; canToggle: boolean; onToggle: (done: boolean) => Promise<void> }) {
+// requirePhoto (pedido del usuario 2026-10-10): al marcar "Imágenes
+// brandeadas subidas a Dropi" se adjunta una de esas imágenes — es la que usa
+// provedix.com, así Robert lo hace una sola vez.
+function StepCheck({
+  label,
+  mark,
+  canToggle,
+  onToggle,
+  requirePhoto = false,
+}: {
+  label: string;
+  mark: Mark | null;
+  canToggle: boolean;
+  onToggle: (done: boolean, photoUrl?: string) => Promise<void>;
+  requirePhoto?: boolean;
+}) {
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [photoErr, setPhotoErr] = useState("");
 
-  async function run(done: boolean) {
+  async function run(done: boolean, photoUrl?: string) {
     setBusy(true);
-    await onToggle(done);
+    await onToggle(done, photoUrl);
     setBusy(false);
     setAsking(false);
+  }
+
+  async function withPhoto(file: File) {
+    setBusy(true);
+    setPhotoErr("");
+    const up = await uploadFile(await compressImage(file, 1200), "branded-photos");
+    if (!up.ok) {
+      setBusy(false);
+      setPhotoErr(up.error);
+      return;
+    }
+    await run(true, up.url);
   }
 
   return (
@@ -92,11 +122,36 @@ function StepCheck({ label, mark, canToggle, onToggle }: { label: string; mark: 
           — {actorName(mark.by)} · {formatDateTime(mark.at)}
         </span>
       )}
-      {asking && !mark && (
+      {asking && !mark && !requirePhoto && (
         <span className="flex items-center gap-2 bg-gold/10 border border-gold/35 rounded px-2 py-1">
           <span className="text-[11.5px]" style={{ color: "var(--color-gold)" }}>¿Seguro que ya lo hiciste?</span>
           <button type="button" disabled={busy} className="text-[11.5px] font-bold text-teal cursor-pointer disabled:opacity-60" onClick={() => run(true)}>Sí</button>
           <button type="button" className="text-[11.5px] text-steel cursor-pointer" onClick={() => setAsking(false)}>No</button>
+        </span>
+      )}
+      {asking && !mark && requirePhoto && (
+        <span className="flex flex-wrap items-center gap-2 bg-gold/10 border border-gold/35 rounded px-2 py-1">
+          <span className="text-[11.5px]" style={{ color: "var(--color-gold)" }}>
+            Adjunta una de las imágenes brandeadas (con la marca que le corresponde):
+          </span>
+          <label className={`text-[11.5px] font-bold text-teal ${busy ? "opacity-60" : "cursor-pointer"}`}>
+            {busy ? "Subiendo…" : "Elegir imagen"}
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              disabled={busy}
+              onChange={(ev) => {
+                const f = ev.target.files?.[0];
+                ev.target.value = "";
+                if (f) withPhoto(f);
+              }}
+            />
+          </label>
+          <button type="button" disabled={busy} className="text-[11.5px] text-steel cursor-pointer" onClick={() => setAsking(false)}>
+            Cancelar
+          </button>
+          {photoErr && <span className="text-[11.5px] text-red">{photoErr}</span>}
         </span>
       )}
     </div>
@@ -129,12 +184,12 @@ export function NewIdBrandingPanel() {
   }
   useEffect(load, []);
 
-  async function toggle(e: Entry, step: StepKey, done: boolean) {
+  async function toggle(e: Entry, step: StepKey, done: boolean, brandedPhotoUrl?: string) {
     setErr("");
     const res = await fetch("/api/new-id-branding/step", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ catalogItemId: e.catalogItemId, proposalId: e.proposalId, dropiComboId: e.dropiComboId, step, done }),
+      body: JSON.stringify({ catalogItemId: e.catalogItemId, proposalId: e.proposalId, dropiComboId: e.dropiComboId, step, done, brandedPhotoUrl }),
     }).catch(() => null);
     if (!res?.ok) {
       const d = await res?.json().catch(() => null);
@@ -239,7 +294,14 @@ export function NewIdBrandingPanel() {
                     Brandeo <span className="font-normal text-steel">· {doneSteps} de {BRAND_STEPS.length} pasos</span>
                   </div>
                   {BRAND_STEPS.map((s) => (
-                    <StepCheck key={s.key} label={s.label} mark={e.steps[s.key]} canToggle={data.canAct} onToggle={(done) => toggle(e, s.key, done)} />
+                    <StepCheck
+                      key={s.key}
+                      label={s.label}
+                      mark={e.steps[s.key]}
+                      canToggle={data.canAct}
+                      requirePhoto={s.key === "dropiImages"}
+                      onToggle={(done, photoUrl) => toggle(e, s.key, done, photoUrl)}
+                    />
                   ))}
                 </div>
               </>

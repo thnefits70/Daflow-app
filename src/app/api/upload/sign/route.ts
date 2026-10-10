@@ -28,6 +28,7 @@ import {
   canProposeMarketProduct,
   canManageOutflowPurchaseGestion,
 } from "@/lib/guards";
+import { canBrandNewIds } from "@/lib/newIdBranding";
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
 // Compras (cotización, orden de compra, fotos de catálogo, comprobante de
@@ -217,6 +218,10 @@ export async function POST(req: NextRequest) {
   // conoce el employeeId. Esta carpeta solo necesita estar logueado.
   if (!allowed && session?.user.role === "employee" && folder === "payroll-message-attachments") {
     allowed = true;
+  }
+  // Fotos brandeadas para provedix.com (Robert, 2026-10-10).
+  if (!allowed && session?.user.role === "employee" && folder === "branded-photos") {
+    allowed = await canBrandNewIds();
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 

@@ -12,6 +12,8 @@ const schema = z
     dropiComboId: z.string().min(1).nullable().optional(),
     step: z.enum(["dropiImages", "dropiInfo", "driveVideo", "realPhotos", "channel"]),
     done: z.boolean(),
+    // Obligatoria al marcar "Imágenes brandeadas subidas a Dropi" (2026-10-10).
+    brandedPhotoUrl: z.string().url().optional(),
   })
   .refine((d) => d.catalogItemId || d.proposalId || d.dropiComboId, { message: "Falta el producto." });
 
@@ -89,9 +91,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Primero marca las imágenes reales." }, { status: 409 });
   }
 
+  // Pedido del usuario 2026-10-10: la imagen brandeada (con su marca) es
+  // obligatoria al marcar este paso — es la que muestra provedix.com. Se
+  // guarda en el producto (o en el combo); desmarcar no la borra.
+  const brandedPhotoUrl = parsed.data.brandedPhotoUrl ?? null;
+  if (step === "dropiImages" && done) {
+    const storageBase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+    if (!brandedPhotoUrl || !storageBase || !brandedPhotoUrl.startsWith(storageBase)) {
+      return NextResponse.json({ error: "Adjunta una de las imágenes brandeadas para marcar este paso." }, { status: 400 });
+    }
+  }
+
   const [atField, byField] = STEP_FIELDS[step];
   const now = new Date();
   const userId = session.user.id;
+  if (step === "dropiImages" && done && brandedPhotoUrl) {
+    const photo = { brandedPhotoUrl, brandedPhotoAt: now, brandedPhotoById: userId };
+    if (dropiComboId) await prisma.dropiCombo.update({ where: { id: dropiComboId }, data: photo });
+    else if (catalogItemId) await prisma.purchaseCatalogItem.update({ where: { id: catalogItemId }, data: photo });
+  }
   const stepData = done ? { [atField]: now, [byField]: userId } : { [atField]: null, [byField]: null };
 
   const hadRealPhotos = !!row?.realPhotosAt;

@@ -13,6 +13,7 @@ import { ExamsPanel } from "@/components/exams/ExamsPanel";
 import { StoreFeedbackPanel } from "@/components/finance/StoreFeedbackPanel";
 import { StoreFeedbackKpiPanel } from "@/components/finance/StoreFeedbackKpiPanel";
 import { TopSellingStoresCard } from "@/components/provedix/TopSellingStoresCard";
+import { BrandedPhotosPanel } from "@/components/provedix/BrandedPhotosPanel";
 import type { StoreDTO, StoreFeedbackAggregate } from "@/lib/storeFeedback";
 import { FinanceKpiWorkspace } from "@/components/finance/FinanceKpiWorkspace";
 import type { FinanceKpiDataDTO } from "@/lib/financeKpis";
@@ -707,7 +708,13 @@ export function DeptWorkspaceTabs({
       {tab === "llegadas" && canViewMarketingArrivals && (
         <MarketingArrivalsPanel canConfirmAdvisor={canConfirmMarketingAdvisor} />
       )}
-      {tab === "nuevos-ids" && (canViewMarketingArrivals || canViewFinishedNewIds) && <NewIdBrandingPanel />}
+      {tab === "nuevos-ids" && (canViewMarketingArrivals || canViewFinishedNewIds) && (
+        <>
+          <NewIdBrandingPanel />
+          {/* Solo aparece a quien brandea (Robert) y al admin — ver /api/provedix/branded-photos. */}
+          <BrandedPhotosPanel />
+        </>
+      )}
       {tab === "inventario" && canManageInventoryControl && inventoryControlData && (
         <InventoryControlPanel
           currentPeriodDefault={inventoryControlData.currentPeriod}
