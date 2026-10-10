@@ -88,7 +88,8 @@ type ProductAcc = {
   units: number;
   unitsLast7: number;
   unitsPrev7: number;
-  sold: number;
+  sold: number; // solo de guías con valor leído
+  unitsWithCod: number;
   guides: Set<string>;
   offers: Map<string, number>; // "units|price" → pedidos (guías de solo este producto)
   prices: number[];
@@ -105,6 +106,7 @@ const newAcc = (): ProductAcc => ({
   unitsLast7: 0,
   unitsPrev7: 0,
   sold: 0,
+  unitsWithCod: 0,
   guides: new Set(),
   offers: new Map(),
   prices: [],
@@ -216,7 +218,10 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
         a.units += part.units;
         if (g.day >= last7From) a.unitsLast7 += part.units;
         else if (g.day >= prev7From) a.unitsPrev7 += part.units;
-        a.sold += share * (part.units / totalParts);
+        if (g.cod != null) {
+          a.sold += share * (part.units / totalParts);
+          a.unitsWithCod += part.units;
+        }
         if (l.combo) {
           const c = a.combos.get(l.code) ?? { units: 0, prices: new Map() };
           c.units += l.units;
@@ -301,7 +306,9 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
       brand: item.bodega as SnapshotProduct["brand"],
       photo: item.photos[0] ?? null,
       unitsRange: unitsRange(a.units),
-      soldRange: moneyRange(a.sold),
+      // Guías viejas todavía sin valor leído: se completa con el precio
+      // promedio por unidad de las que sí lo tienen.
+      soldRange: moneyRange(a.unitsWithCod > 0 ? (a.sold / a.unitsWithCod) * a.units : 0),
       trend: growth >= 1.3 ? "up" : growth <= 0.7 ? "down" : "flat",
       offers,
       priceMin: sorted.length >= 5 ? percentile(sorted, 0.1) : sorted[0] ?? null,
