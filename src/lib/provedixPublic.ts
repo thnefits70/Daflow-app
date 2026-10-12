@@ -23,8 +23,8 @@ const cachedSnapshot = unstable_cache(async () => getLatestProvedixSnapshot(), [
 // saber que provedix.com está conectada a DAFLOW). La carpeta de Supabase se
 // llama "daflow-files" y salía en la dirección de cada foto; acá se cambia a
 // /pvx/f/<carpeta>/… y next.config.ts la reenvía a Supabase por dentro. Solo
-// las dos carpetas de fotos del catálogo — nada más del almacenamiento.
-export const PVX_PHOTO_FOLDERS = ["purchase-catalog", "branded-photos"] as const;
+// las carpetas de fotos de productos — nada más del almacenamiento.
+export const PVX_PHOTO_FOLDERS = ["purchase-catalog", "branded-photos", "market-product-reference"] as const;
 const STORAGE_PREFIX = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/public/daflow-files/`;
 
 export function publicPhotoUrl(url: string | null): string | null {

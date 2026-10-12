@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -9,6 +9,7 @@ import { BrandMark } from "@/components/brand/DaflowMark";
 import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { SoundToggle } from "@/components/shared/SoundToggle";
+import { migrateLegacyPrefs } from "@/lib/legacyPrefs";
 import { NotificationBell } from "@/components/shared/NotificationBell";
 import { NavControls } from "@/components/shell/NavControls";
 
@@ -41,6 +42,8 @@ export function EmployeeSidebar({
   showMyLearningPath?: boolean;
   showPersonalPurchasesInventory?: boolean;
 }) {
+  // Pasa tema/sonido guardados con el nombre viejo (ver legacyPrefs.ts).
+  useEffect(() => migrateLegacyPrefs(), []);
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const NAV_ITEM =

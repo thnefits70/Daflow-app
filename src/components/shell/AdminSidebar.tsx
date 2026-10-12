@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { SoundToggle } from "@/components/shared/SoundToggle";
+import { migrateLegacyPrefs } from "@/lib/legacyPrefs";
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -58,6 +59,8 @@ export function AdminSidebar({
   pendingSuppliersCount?: number;
   pendingRecognitionMonth?: string | null;
 }) {
+  // Pasa tema/sonido guardados con el nombre viejo (ver legacyPrefs.ts).
+  useEffect(() => migrateLegacyPrefs(), []);
   const pathname = usePathname();
   const router = useRouter();
   const [list, setList] = useState(departments);

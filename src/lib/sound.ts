@@ -8,8 +8,9 @@
 export type SoundChoice = "off" | "tech" | "classic";
 export type SoundKind = "scan" | "success" | "error" | "notify";
 
-export const SOUND_STORAGE_KEY = "daflow-sound";
-export const SOUND_CHANGE_EVENT = "daflow-sound-change";
+// Nombres neutros (2026-10-12), igual que el tema: ver legacyPrefs.ts.
+export const SOUND_STORAGE_KEY = "ui-sound";
+export const SOUND_CHANGE_EVENT = "ui-sound-change";
 
 export function readSoundChoice(): SoundChoice {
   try {

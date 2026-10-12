@@ -53,7 +53,7 @@ export function SoundToggle() {
   return (
     <div className="flex items-center justify-between gap-2">
       <span className="text-[#C9CFC5] text-[12.5px] truncate">Sonido: {choice === "off" ? "apagado" : current.label.split(" ")[0].toLowerCase()}</span>
-      <div className="flex items-center rounded-md border border-white/15 p-0.5 shrink-0" role="radiogroup" aria-label="Sonidos de DAFLOW">
+      <div className="flex items-center rounded-md border border-white/15 p-0.5 shrink-0" role="radiogroup" aria-label="Sonidos">
         {OPTIONS.map(({ value, label, Icon }) => {
           const active = value === choice;
           return (

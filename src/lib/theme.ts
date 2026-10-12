@@ -9,11 +9,10 @@
 export type ThemeChoice = "auto" | "light" | "dark";
 export type ResolvedTheme = "light" | "dark";
 
-// Nombre neutro (2026-10-12): el script de abajo también va en provedix.com
-// y ahí no debe aparecer "daflow". La elección vieja se pasa sola la primera
-// vez que se lee (readThemeChoice).
+// Nombre neutro (2026-10-12): este código también se carga en provedix.com
+// y ahí no debe aparecer "daflow". La elección vieja la pasa
+// migrateLegacyPrefs (src/lib/legacyPrefs.ts), que solo carga DAFLOW.
 export const THEME_STORAGE_KEY = "ui-theme";
-const LEGACY_THEME_STORAGE_KEY = "daflow-theme";
 export const THEME_CHANGE_EVENT = "ui-theme-change";
 
 const SUNRISE_MIN = 6 * 60;
@@ -26,15 +25,7 @@ export function isDaytimeInGuayaquil(now: Date = new Date()): boolean {
 
 export function readThemeChoice(): ThemeChoice {
   try {
-    let v = localStorage.getItem(THEME_STORAGE_KEY);
-    if (v === null) {
-      v = localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
-      if (v !== null) {
-        localStorage.setItem(THEME_STORAGE_KEY, v);
-        localStorage.removeItem(LEGACY_THEME_STORAGE_KEY);
-        if (v === "light" || v === "dark" || v === "auto") applyTheme(v);
-      }
-    }
+    const v = localStorage.getItem(THEME_STORAGE_KEY);
     if (v === "light" || v === "dark" || v === "auto") return v;
   } catch {}
   return "auto";
