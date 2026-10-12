@@ -263,10 +263,22 @@ const GUIDE_RE = /Nro:\s*\d+\s*Guia:\s*([A-Z0-9-]+?)(?=\s|Ciudad|$)/i;
 // guías nunca se registraron y su devolución no se podía escanear.
 const GUIDE_HEADER_RE = /^\s*Nro:\s*Guia:/i;
 const GUIDE_ROW_RE = /^\s*\d+\s+([A-Z]{0,4}\d{6,}[A-Z0-9]*)\b/i;
-// Número de guía de una línea de la relación (cualquiera de los dos formatos).
+// Tercer formato (Urbano real 2026-10-12, corte MF-0078, guías 1 a 9): el
+// encabezado va partido en dos renglones — "Guia:  Valor de Recaudo: … CON"
+// y abajo "Nro: 1   Ciudad Destino: QUITO" — y el número viene solo en la
+// fila siguiente, SIN el Nro delante ("WYB185789977  19.99  RECAUDO").
+// Sin esto esas 9 guías no se registraron (salían 13 de Urbano en vez de 21).
+const GUIDE_HEADER_TOP_RE = /^\s*Guia:/i;
+const GUIDE_NRO_ONLY_RE = /^\s*Nro:\s*\d+(?!\s*Guia)/i;
+const GUIDE_BARE_ROW_RE = /^\s*([A-Z]{0,4}\d{6,}[A-Z0-9]*)\b/i;
+// Número de guía de una línea de la relación (cualquiera de los formatos).
 function summaryGuideAt(lines: PdfLine[], i: number): string | null {
   const g = lines[i].text.match(GUIDE_RE);
   if (g) return g[1].toUpperCase();
+  if (i >= 2 && GUIDE_NRO_ONLY_RE.test(lines[i - 1].text) && GUIDE_HEADER_TOP_RE.test(lines[i - 2].text)) {
+    const r = lines[i].text.match(GUIDE_BARE_ROW_RE);
+    if (r) return r[1].toUpperCase();
+  }
   for (let j = i - 1; j >= Math.max(0, i - 2); j--) {
     if (!GUIDE_HEADER_RE.test(lines[j].text)) continue;
     const r = lines[i].text.match(GUIDE_ROW_RE);
@@ -646,7 +658,7 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false, excludeGui
       if (g) {
         guides.set(g, { carrier, warranty: false });
         // Relación partida: "CON" va al final del encabezado y "RECAUDO" en la fila.
-        const split = !GUIDE_RE.test(l.text) && /RECAUDO/i.test(l.text) && lines.slice(Math.max(0, i - 2), i).some((x) => GUIDE_HEADER_RE.test(x.text) && /CON\s*$/i.test(x.text));
+        const split = !GUIDE_RE.test(l.text) && /RECAUDO/i.test(l.text) && lines.slice(Math.max(0, i - 2), i).some((x) => (GUIDE_HEADER_RE.test(x.text) || GUIDE_HEADER_TOP_RE.test(x.text)) && /CON\s*$/i.test(x.text));
         if (/CON\s+RECAUDO/i.test(l.text) || split) conRecaudo.push(g);
       }
       const s = summaryRowOf(l);
