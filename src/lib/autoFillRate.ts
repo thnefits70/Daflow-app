@@ -8,9 +8,11 @@ import { getCompiledLot, ecuadorDay } from "@/lib/fulfillmentGuides";
 //   2. Guías totales = las guías de los PDF de los cortes enviados a
 //      Inventario. Falta de stock = 1 guía por cada unidad que Daniel
 //      confirmó que NO salió (la mayoría de pedidos lleva 1 unidad).
-//   3. Preparadas y Generadas las escribe Yair UNA vez por semana (el total
-//      de la semana de cada una) — DAFLOW no ve cuándo el courier se lleva
-//      el paquete, y el usuario prefirió esto a que Yair suba reportes.
+//   3. Preparadas y Generadas las escribía Yair UNA vez por semana. Pedido
+//      del usuario 2026-10-12: se quitaron (casi siempre daban 0); en su
+//      lugar la tarjeta muestra Manifiestos fuera de plazo y Guías
+//      canceladas, que salen solas (dashboard.ts). Las semanas viejas que
+//      sí las tenían conservan su valor.
 //   Despachadas = guías − falta de stock − preparadas − generadas
 //                 + ventas externas entregadas al motorizado.
 //
@@ -35,7 +37,7 @@ export function isoWeekOf(day: string): string {
   return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
 }
 
-function daysOfIsoWeek(week: string): string[] {
+export function daysOfIsoWeek(week: string): string[] {
   const [y, w] = week.split("-W").map(Number);
   const jan4 = new Date(Date.UTC(y, 0, 4));
   const monday = new Date(jan4.getTime() - ((jan4.getUTCDay() || 7) - 1) * 86400000 + (w - 1) * 7 * 86400000);

@@ -264,7 +264,7 @@ async function buildDispatchVolumeMetricsBlock(): Promise<string | null> {
   }
   if (breakdown) {
     lines.push(
-      `- De lo no despachado esa semana: ${breakdown.prepared} en preparación, ${breakdown.generated} generado sin despachar, ${breakdown.outOfStock} sin stock.`
+      `- Esa semana: ${breakdown.outOfStock} guías sin stock, ${breakdown.cancelledGuides.count} guías canceladas, ${breakdown.lateManifests.late} de ${breakdown.lateManifests.total} manifiestos subidos fuera de plazo.`
     );
     if (breakdown.needsJustification) {
       lines.push(`- Fill Rate por debajo del 95% — todavía necesita justificación del equipo.`);

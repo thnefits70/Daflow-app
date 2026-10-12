@@ -105,18 +105,32 @@ export async function AutoReturnRatePanel() {
         <details key={m.month} className="bg-surface border border-rule rounded-md p-4" open={m === months[0]}>
           <summary className="cursor-pointer flex items-center gap-3 flex-wrap">
             <span className="font-semibold text-[13.5px]">{monthLabel(m.month)}</span>
-            <span className="font-mono text-[13px]">{m.pct === null ? "—" : `${m.pct}%`}</span>
-            <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 border ${m.closed ? "text-teal border-teal/40" : "text-gold border-gold/40"}`}>
-              {m.closed ? "Cerrado" : `Preliminar · cierra ${RETURN_CLOSE_DAYS} días después de fin de mes`}
-            </span>
-            <span className="text-[11px] text-steel">
-              {m.returned} de {m.out} unidades
-            </span>
+            <span className="font-mono text-[13px]">{!m.started || m.pct === null ? "—" : `${m.pct}%`}</span>
+            {m.started ? (
+              <>
+                <span className={`text-[10px] font-semibold rounded-full px-2 py-0.5 border ${m.closed ? "text-teal border-teal/40" : "text-gold border-gold/40"}`}>
+                  {m.closed ? "Cerrado" : `Preliminar · cierra ${RETURN_CLOSE_DAYS} días después de fin de mes`}
+                </span>
+                <span className="text-[11px] text-steel">
+                  {m.returned} de {m.out} unidades
+                </span>
+              </>
+            ) : (
+              <span className="text-[11px] text-steel">
+                Se empieza a medir el {m.startsAt.toLocaleDateString("es-EC", { day: "numeric", month: "long", timeZone: "America/Guayaquil" })} · van {m.out} unidades salidas
+              </span>
+            )}
           </summary>
-          <div className="mt-3 flex flex-col gap-4">
-            <Table rows={m.byBrand} label="Marca" />
-            <Table rows={m.byProduct.filter((p) => p.out > 0)} label="Producto" limit={PRODUCT_LIMIT} />
-          </div>
+          {m.started ? (
+            <div className="mt-3 flex flex-col gap-4">
+              <Table rows={m.byBrand} label="Marca" />
+              <Table rows={m.byProduct.filter((p) => p.out > 0)} label="Producto" limit={PRODUCT_LIMIT} />
+            </div>
+          ) : (
+            <div className="mt-3 text-[12px] text-steel">
+              Las devoluciones de este mes se cuentan desde {RETURN_LAG_DAYS} días después de que empieza; antes de eso el % saldría 0% sin serlo.
+            </div>
+          )}
         </details>
       ))}
     </div>

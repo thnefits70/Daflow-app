@@ -132,6 +132,8 @@ export function FillRateBreakdownCard({
       color: "#14C7C7",
       desc: "Se preparó, se etiquetó y se entregó al courier — el proceso completo.",
     },
+    // Pedido del usuario 2026-10-12: Preparadas/Generadas ya no se escriben
+    // (casi siempre daban 0) — solo aparecen si una semana vieja las tenía.
     {
       label: "Preparadas",
       value: data.prepared,
@@ -150,7 +152,9 @@ export function FillRateBreakdownCard({
       color: "#E0574A",
       desc: "No se pudo ni preparar porque no había la mercadería disponible.",
     },
-  ];
+  ].filter((s) => (s.label !== "Preparadas" && s.label !== "Generadas") || s.value > 0);
+  const fmtDay = (d: string) => d.slice(5).split("-").reverse().join("/");
+  const { lateManifests: lm, cancelledGuides: cg } = data;
 
   return (
     <div className="bg-surface border border-rule rounded-lg p-6 mb-5">
@@ -184,7 +188,7 @@ export function FillRateBreakdownCard({
         })}
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">
+      <div className={`grid grid-cols-2 gap-2.5 mb-2.5 ${segs.length > 2 ? "sm:grid-cols-4" : ""}`}>
         {segs.map((s) => (
           <div key={s.label} className="bg-cloud border border-rule rounded-md px-3 py-2.5">
             <div className="flex items-center gap-1.5 text-[11px] text-steel mb-0.5">
@@ -198,6 +202,49 @@ export function FillRateBreakdownCard({
             <div className="text-[10.5px] text-steel mt-1 leading-snug">{s.desc}</div>
           </div>
         ))}
+      </div>
+
+      {/* Pedido del usuario 2026-10-12: se calculan solas y no entran en el % del Fill Rate. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4">
+        <div className="bg-cloud border border-rule rounded-md px-3 py-2.5">
+          <div className="text-[11px] text-steel mb-0.5">Manifiestos fuera de plazo</div>
+          <div className="font-display text-[18px] font-bold" style={lm.late > 0 ? { color: "#D9A441" } : undefined}>
+            {lm.late}
+            <span className="text-[11px] text-steel font-normal ml-1">
+              de {lm.total} {lm.total === 1 ? "manifiesto" : "manifiestos"}
+            </span>
+          </div>
+          <div className="text-[10.5px] text-steel mt-1 leading-snug">Se subieron después del siguiente día de trabajo.</div>
+          {lm.examples.length > 0 && (
+            <div className="text-[10.5px] text-steel mt-1.5 pt-1.5 border-t border-dashed border-rule leading-relaxed">
+              {lm.examples.map((e, i) => (
+                <div key={i}>
+                  Manifiesto del {fmtDay(e.manifestDay)} · plazo {fmtDay(e.deadline)} · subido {fmtDay(e.uploadDay)}
+                </div>
+              ))}
+              {lm.late > lm.examples.length && <div>y {lm.late - lm.examples.length} más</div>}
+            </div>
+          )}
+        </div>
+        <div className="bg-cloud border border-rule rounded-md px-3 py-2.5">
+          <div className="text-[11px] text-steel mb-0.5">Guías canceladas</div>
+          <div className="font-display text-[18px] font-bold">
+            {cg.count}
+            {cg.guides > 0 && (
+              <span className="text-[11px] text-steel font-normal ml-1">{pct(cg.count, cg.guides)}% de las guías</span>
+            )}
+          </div>
+          <div className="text-[10.5px] text-steel mt-1 leading-snug">Guías reportadas como canceladas esa semana.</div>
+          {cg.byReason.length > 0 && (
+            <div className="text-[10.5px] text-steel mt-1.5 pt-1.5 border-t border-dashed border-rule leading-relaxed">
+              {cg.byReason.map((r) => (
+                <div key={r.reason}>
+                  {r.reason} · {r.count}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2 text-[11px] text-steel mb-4">

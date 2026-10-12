@@ -97,8 +97,9 @@ export function WeeklyMetricPanel({
   // escribir esa explicación (canJustify) — si no, el registro se guarda
   // igual y queda pendiente como antes.
   // Confirmado 2026-09-25: desde la semana 40 las guías, la falta de stock y
-  // las despachadas se calculan solas con los cortes (ver autoFillRate.ts);
-  // Yair solo escribe Preparadas y Generadas de la semana.
+  // las despachadas se calculan solas con los cortes (ver autoFillRate.ts).
+  // Pedido del usuario 2026-10-12: ya no se escriben Preparadas/Generadas —
+  // en semanas automáticas el formulario queda solo para la explicación.
   const autoWeek = week >= "2026-W40";
   const hasBreakdownDraft = !autoWeek && (prepared !== "" || generated !== "" || outOfStock !== "");
   const draftTotal = hasBreakdownDraft
@@ -158,10 +159,6 @@ export function WeeklyMetricPanel({
       setErr("Completa la semana y el valor.");
       return;
     }
-    if (autoWeek && (prepared === "" || generated === "")) {
-      setErr("Escribe cuántas guías quedaron preparadas y cuántas generadas esta semana (0 si no hubo).");
-      return;
-    }
     if (needsJustificationDraft && justification.trim().length < 10) {
       setErr(`Este Fill Rate va a quedar en ${draftPct}% (alerta) — escribe una explicación para el equipo antes de guardar.`);
       return;
@@ -170,8 +167,8 @@ export function WeeklyMetricPanel({
     setBusy(true);
     const payload = {
       value: autoWeek ? 0 : Number(value),
-      prepared: prepared === "" ? null : Number(prepared),
-      generated: generated === "" ? null : Number(generated),
+      prepared: autoWeek || prepared === "" ? null : Number(prepared),
+      generated: autoWeek || generated === "" ? null : Number(generated),
       outOfStock: outOfStock === "" ? null : Number(outOfStock),
       justification: justification.trim() === "" ? undefined : justification.trim(),
     };
@@ -252,13 +249,13 @@ export function WeeklyMetricPanel({
             {/* Confirmado 2026-09-25: desde la semana 40 se llena solo (ver autoFillRate.ts). */}
             {autoWeek && (
               <div className="mt-1.5 text-[11.5px] text-teal font-semibold">
-                Desde la semana 40 las guías despachadas y la falta de stock se calculan solas con los cortes de despacho. Solo escribe cuántas guías quedaron
-                preparadas y cuántas generadas en toda la semana (0 si no hubo).
+                Desde la semana 40 todo se calcula solo con los cortes de despacho: guías despachadas, falta de stock, manifiestos fuera de plazo y
+                guías canceladas. No hay que escribir números.
               </div>
             )}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
-            <div className={autoWeek ? "hidden" : ""}>
+          <div className={autoWeek ? "hidden" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3"}>
+            <div>
               <label className="flex items-center gap-1.5 mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
                 <span className="w-2 h-2 rounded-sm bg-teal shrink-0" />
                 {label} (despachadas)
@@ -306,7 +303,7 @@ export function WeeklyMetricPanel({
               />
               <div className="text-[10.5px] text-steel mt-1">Ya existe la guía/etiqueta, pero el producto no se empacó — no alcanzó el tiempo.</div>
             </div>
-            <div className={autoWeek ? "hidden" : ""}>
+            <div>
               <label className="flex items-center gap-1.5 mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
                 <span className="w-2 h-2 rounded-sm bg-red shrink-0" />
                 Por falta de stock
@@ -323,7 +320,7 @@ export function WeeklyMetricPanel({
               <div className="text-[10.5px] text-steel mt-1">No se pudo ni preparar porque no había la mercadería disponible.</div>
             </div>
           </div>
-          <div className="text-[11.5px] text-steel mb-3">
+          <div className={autoWeek ? "hidden" : "text-[11.5px] text-steel mb-3"}>
             Las 3 de la derecha son opcionales — con ellas calculamos el Fill Rate y el desglose que se ve en Inicio: despachadas ÷ (despachadas + preparadas + generadas + falta de stock).
           </div>
           {autoWeek && canJustify && (
@@ -440,8 +437,12 @@ export function WeeklyMetricPanel({
             </div>
             {hasBreakdown && (
               <div className="flex items-center gap-3 flex-wrap mt-2 pt-2 border-t border-dashed border-rule text-[11.5px] text-steel">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue" />Preparadas: {(r.prepared ?? 0).toLocaleString("es-MX")}</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-gold" />Generadas: {(r.generated ?? 0).toLocaleString("es-MX")}</span>
+                {(r.prepared ?? 0) > 0 && (
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue" />Preparadas: {(r.prepared ?? 0).toLocaleString("es-MX")}</span>
+                )}
+                {(r.generated ?? 0) > 0 && (
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-gold" />Generadas: {(r.generated ?? 0).toLocaleString("es-MX")}</span>
+                )}
                 <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red" />Falta de stock: {(r.outOfStock ?? 0).toLocaleString("es-MX")}</span>
               </div>
             )}

@@ -4,7 +4,8 @@ import { isAutoReturnRateMonth } from "@/lib/returnRateConstants";
 import { getMonthDispatchSummary } from "@/lib/commissionTiers";
 import { prevMonthStr } from "@/lib/pendingTasks";
 import { computeAutoStockoutWeeks, isAutoStockoutWeek } from "@/lib/autoStockout";
-import { isAutoFillRateWeek, isoWeekOf } from "@/lib/autoFillRate";
+import { isAutoFillRateWeek, isoWeekOf, daysOfIsoWeek } from "@/lib/autoFillRate";
+import { isManifestLate, manifestDeadline } from "@/lib/ecuadorHolidays";
 import { brandLabel, sortBrands } from "@/lib/brandLabels";
 import { guideBrandsOf } from "@/lib/guideBrands";
 import { NO_BRAND, ecuadorDay } from "@/lib/fulfillmentGuides";
@@ -145,6 +146,8 @@ export async function getCommissionProgress(): Promise<CommissionProgress> {
 export type WeeklyTrend = {
   deptName: string;
   points: { week: string; value: number; detail?: string; brands?: { label: string; value: number }[] }[];
+  // Solo Tasa de Devolución: mes en curso que todavía no se puede medir.
+  pending?: { month: string; startsAt: string };
 } | null;
 
 // Shared by both the admin dashboard and every employee's Inicio — whichever
@@ -273,6 +276,10 @@ export type FillRateBreakdown = {
   prepared: number;
   generated: number;
   outOfStock: number;
+  // Pedido del usuario 2026-10-12: reemplazan a Preparadas/Generadas en la
+  // tarjeta. Solo informativas — no entran en el % del Fill Rate.
+  lateManifests: { total: number; late: number; examples: { manifestDay: string; deadline: string; uploadDay: string }[] };
+  cancelledGuides: { count: number; guides: number; byReason: { reason: string; count: number }[] };
   // Confirmado 2026-08-31: si fillRatePct < 95, el líder de Fulfillment le
   // debe una explicación al equipo (visible para todos, no un mensaje
   // privado). needsJustification es ese umbral — es independiente de las
@@ -310,6 +317,7 @@ export async function getLatestFillRateBreakdown(): Promise<FillRateBreakdown> {
   if (total === 0) return null;
 
   const fillRatePct = Math.round((record.value / total) * 100);
+  const [lateManifests, cancelledGuides] = await Promise.all([getLateManifests(record.week), getCancelledGuides(record.week)]);
   // Confirmado 2026-08-31: bandas reemplazan las anteriores (98/95) — ≥96%
   // excelente, 90-95% muy bueno, <90% alerta/ineficiente.
   const status = fillRatePct >= 96 ? "good" : fillRatePct >= 90 ? "regular" : "crit";
@@ -326,11 +334,48 @@ export async function getLatestFillRateBreakdown(): Promise<FillRateBreakdown> {
     prepared,
     generated,
     outOfStock,
+    lateManifests,
+    cancelledGuides,
     needsJustification: fillRatePct < 95,
     justification: record.fillRateJustification,
     justificationBy: record.fillRateJustificationBy,
     justificationAt: record.fillRateJustificationAt?.toISOString() ?? null,
   };
+}
+
+// Pedido del usuario 2026-10-12: de los manifiestos de esa semana (por la
+// fecha impresa en el PDF), cuántos se subieron después del siguiente día de
+// trabajo — mismo plazo que el aviso al admin (ecuadorHolidays.ts). Los que
+// se cargan como "ya despachado" también cuentan: llegaron tarde igual. Las
+// subidas por foto o Excel no traen fecha y quedan fuera.
+async function getLateManifests(week: string): Promise<NonNullable<FillRateBreakdown>["lateManifests"]> {
+  const batches = await prisma.fulfillmentRequestBatch.findMany({
+    where: { manifestDate: { in: daysOfIsoWeek(week) } },
+    select: { manifestDate: true, requestedAt: true },
+    orderBy: { requestedAt: "asc" },
+  });
+  const late = batches
+    .map((b) => ({ manifestDay: b.manifestDate!, deadline: manifestDeadline(b.manifestDate!), uploadDay: ecuadorDay(b.requestedAt) }))
+    .filter((b) => isManifestLate(b.manifestDay, b.uploadDay));
+  return { total: batches.length, late: late.length, examples: late.slice(0, 3) };
+}
+
+// Pedido del usuario 2026-10-12: guías reportadas en "Guías canceladas" esa
+// semana (hora de Ecuador), por motivo, y qué parte son de las guías de los
+// cortes enviados a Inventario (mismo total que computeAutoCounts).
+async function getCancelledGuides(week: string): Promise<NonNullable<FillRateBreakdown>["cancelledGuides"]> {
+  const days = daysOfIsoWeek(week);
+  const from = new Date(`${days[0]}T00:00:00-05:00`);
+  const to = new Date(`${days[days.length - 1]}T23:59:59.999-05:00`);
+  const [reports, guides] = await Promise.all([
+    prisma.cancelledGuideReport.groupBy({ by: ["reason"], where: { createdAt: { gte: from, lte: to } }, _count: { _all: true } }),
+    prisma.fulfillmentRequestGuide.count({ where: { batch: { lot: { day: { in: days }, status: { in: ["SENT", "CLOSED"] } } } } }),
+  ]);
+  const sorted = reports.map((r) => ({ reason: r.reason, count: r._count._all })).sort((a, b) => b.count - a.count);
+  const byReason = sorted.slice(0, 3);
+  const rest = sorted.slice(3).reduce((a, r) => a + r.count, 0);
+  if (rest > 0) byReason.push({ reason: "Otros motivos", count: rest });
+  return { count: sorted.reduce((a, r) => a + r.count, 0), guides, byReason };
 }
 
 export type UnjustifiedFillRateWeek = { week: string; fillRatePct: number } | null;
@@ -414,8 +459,11 @@ export async function getReturnRateTrend(): Promise<WeeklyTrend> {
     ...records.filter((r) => !isAutoReturnRateMonth(r.month)).map((r) => ({ week: r.month, value: r.value })),
     // Pedido del usuario 2026-10-01: cada mes automático trae su desglose
     // por marca (la tarjeta de Inicio deja cambiar General ↔ marca).
+    // Pedido del usuario 2026-10-12: un mes cuyas devoluciones aún no
+    // empiezan a contar (antes del día 15) salía "0% Excelente"; no se
+    // grafica y la tarjeta dice desde cuándo se mide.
     ...autoMonths
-      .filter((m) => m.pct !== null)
+      .filter((m) => m.started && m.pct !== null)
       .reverse()
       .map((m) => {
         const brands = m.byBrand.filter((b) => b.pct !== null).map((b) => ({ label: b.name, value: b.pct! }));
@@ -423,9 +471,11 @@ export async function getReturnRateTrend(): Promise<WeeklyTrend> {
         return { week: m.month, value: m.pct!, brands, detail: parts.join(" · ") || undefined };
       }),
   ];
-  if (points.length === 0) return null;
+  const notStarted = autoMonths.find((m) => !m.started);
+  const pending = notStarted ? { month: notStarted.month, startsAt: notStarted.startsAt.toISOString() } : undefined;
+  if (points.length === 0 && !pending) return null;
 
-  return { deptName: "General", points };
+  return { deptName: "General", points, pending };
 }
 
 export type StockoutWeekPoint = { week: string; value: number; products: string[] };

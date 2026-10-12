@@ -321,14 +321,24 @@ export function ReturnRateTile({ trend }: { trend: NonNullable<WeeklyTrend> }) {
     : trend.points;
   const latest = series[series.length - 1] ?? trend.points[trend.points.length - 1];
   const preliminary = !brand && !!trend.points[trend.points.length - 1]?.detail?.includes("preliminar");
+  // Pedido del usuario 2026-10-12: antes del día 15 el mes en curso no tiene
+  // devoluciones que contar — en vez de "0% Excelente", desde cuándo se mide.
+  const pending = trend.pending;
+  const pendingFrom = pending
+    ? new Date(pending.startsAt).toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" }).replace(".", "")
+    : "";
   const chip = (active: boolean) =>
     `rounded-full border px-2 py-0.5 text-[10px] font-semibold cursor-pointer ${active ? "border-teal bg-teal/15 text-teal" : "border-rule text-steel"}`;
   return (
     <KpiTile
       kicker={`Tasa de Devolución · ${brand ?? trend.deptName}`}
-      value={`${Math.round(latest.value)}%`}
-      period={`${formatMonthShort(latest.week)} · último mes${preliminary ? " · preliminar" : ""}`}
-      pill={returnRateStatus(latest.value)}
+      value={pending || !latest ? "—" : `${Math.round(latest.value)}%`}
+      period={
+        pending
+          ? `${formatMonthShort(pending.month)} · se empieza a medir el ${pendingFrom}`
+          : `${formatMonthShort(latest.week)} · último mes${preliminary ? " · preliminar" : ""}`
+      }
+      pill={pending || !latest ? undefined : returnRateStatus(latest.value)}
       legend={[
         { color: "#22C55E", label: "<20% Excelente" },
         { color: "#D9A441", label: "21–27% Muy bueno" },
@@ -347,13 +357,13 @@ export function ReturnRateTile({ trend }: { trend: NonNullable<WeeklyTrend> }) {
           ))}
         </div>
       )}
-      <MiniSparkline
+      {series.length > 0 && <MiniSparkline
         points={series}
         color="#14C7C7"
         dangerAbove={28}
         formatPeriod={formatMonthShort}
         formatValue={(v) => `${Math.round(v)}%`}
-      />
+      />}
     </KpiTile>
   );
 }

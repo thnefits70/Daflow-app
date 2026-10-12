@@ -26,6 +26,10 @@ export type ReturnRateRow = { key: string; name: string; out: number; returned: 
 export type ReturnRateMonth = {
   month: string;
   closed: boolean;
+  // Día en que empiezan a contar las devoluciones del mes (inicio + 14 días).
+  // Antes de eso el mes no se puede medir: saldría 0% sin serlo.
+  startsAt: Date;
+  started: boolean;
   out: number;
   returned: number;
   pct: number | null;
@@ -117,7 +121,8 @@ export async function getReturnRateMonth(month: string): Promise<ReturnRateMonth
   const lag = RETURN_LAG_DAYS * DAY_MS;
   const { out, returned } = await unitsByItem(from, to, new Date(from.getTime() + lag), new Date(to.getTime() + lag));
   const rows = await buildRows(out, returned);
-  return { month, closed: Date.now() >= to.getTime() + RETURN_CLOSE_DAYS * DAY_MS, ...rows };
+  const startsAt = new Date(from.getTime() + lag);
+  return { month, closed: Date.now() >= to.getTime() + RETURN_CLOSE_DAYS * DAY_MS, startsAt, started: Date.now() >= startsAt.getTime(), ...rows };
 }
 
 // Meses automáticos ya empezados (desde octubre 2026), del más reciente al
