@@ -671,6 +671,30 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false, excludeGui
     }
   }
 
+  // Respaldo (pedido del usuario 2026-10-12, tras MF-0078: 9 guías de Urbano
+  // perdidas por un formato nuevo de la relación): cualquier número con forma
+  // de guía de una transportadora conocida que aparezca en el PDF (relación o
+  // etiqueta) y no se haya leído arriba, se agrega solo — así un formato
+  // nuevo de Dropi no vuelve a perder guías en silencio ni frena a Yair.
+  // Se saltan las filas de productos (ID/SKU) y la "guía original" de una
+  // garantía de Veloces (es de otro día). Los 9 dígitos sueltos (Servientrega)
+  // solo cuentan en renglones con "Guia" o "Recaudo".
+  const rescuedGuides: string[] = [];
+  // (Gintracom, real 2026-10-08: "…a través de la guia original" y en el
+  // renglón de abajo "#D002084818").
+  for (const lines of pages)
+    for (const [i, l] of lines.entries()) {
+      if (/\(ID:|SKU|original/i.test(l.text) || /original\s*$/i.test(lines[i - 1]?.text ?? "")) continue;
+      for (const m of l.text.toUpperCase().matchAll(/(?<![A-Z0-9])([A-Z]{1,3}\d{6,}|\d{9})(?![A-Z0-9])/g)) {
+        const n = m[1];
+        const c = carrierFromGuide(n);
+        if (c === "SIN TRANSPORTADORA" || guides.has(n)) continue;
+        if (/^\d+$/.test(n) && !/GUIA|RECAUDO/i.test(l.text)) continue;
+        guides.set(n, { carrier: c, warranty: false });
+        rescuedGuides.push(n);
+      }
+    }
+
   // Palabras que este PDF usa como variante en etiquetas rotuladas (ver isColorOrSize).
   const learnedVariantWords = new Set<string>();
   for (const lines of pages)
@@ -1003,6 +1027,12 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false, excludeGui
   if (repeated.length > 0) {
     warnings.push(
       `${repeated.length === 1 ? "La guía" : `${repeated.length} guías`} ${repeated.slice(0, 5).join(", ")} ${repeated.length === 1 ? "venía" : "venían"} repetida(s) en el PDF. Por qué: Dropi la imprimió dos veces en el mismo manifiesto. Qué hacer: nada — se contó una sola vez.`
+    );
+  }
+  const rescued = rescuedGuides.filter((g) => guides.has(g));
+  if (rescued.length > 0) {
+    warnings.push(
+      `${rescued.length} guía(s) (ej. ${rescued.slice(0, 3).join(", ")}) venían en un formato que DAFLOW todavía no conocía. Por qué: Dropi cambió cómo imprime la lista. Qué hacer: nada — se agregaron solas al corte con su transportadora.`
     );
   }
   if (warrantyFile && conRecaudo.length > 0) {
