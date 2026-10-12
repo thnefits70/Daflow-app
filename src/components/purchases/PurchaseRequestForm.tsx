@@ -192,6 +192,13 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const [emergencyReason, setEmergencyReason] = useState("");
   const [supplier, setSupplier] = useState<PurchaseSupplierDTO | null>(null);
   const [bankAccountId, setBankAccountId] = useState<string | null>(null);
+  // Confirmado 2026-10-12 (caso Jariel, hidrolavadora 111351 con Chen): si
+  // el proveedor está marcado "no da factura", no cobra IVA — la casilla del
+  // 15% se oculta y se ignora aunque haya quedado marcada (ej. en un
+  // borrador), para que $13.25 no se convierta en $15.24 por error.
+  const supplierNoInvoice = supplier?.givesInvoice === false;
+  const lineUnitCost = (l: { unitCost: string; ivaIncluded: boolean }) =>
+    effectiveLineUnitCost(supplierNoInvoice ? { ...l, ivaIncluded: false } : l);
   // Confirmado 2026-09-14: solo trazabilidad — se llena sola cuando Jariel
   // viene desde "Listo para comprar" en Análisis de Mercado, nunca se pide
   // a mano. Nunca cambia ningún otro comportamiento del formulario.
@@ -633,7 +640,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setErr("");
   }
 
-  const lineTotals = lines.map((l) => (Number(l.quantity) || 0) * effectiveLineUnitCost(l));
+  const lineTotals = lines.map((l) => (Number(l.quantity) || 0) * lineUnitCost(l));
   const totalQty = lines.reduce((s, l) => s + (Number(l.quantity) || 0), 0);
   const total = lineTotals.reduce((s, t) => s + t, 0);
 
@@ -717,7 +724,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     .map((l, i) => {
       if (!l.stats || l.stats.last3Avg === null) return null;
       const qty = Number(l.quantity) || 0;
-      const cost = effectiveLineUnitCost(l);
+      const cost = lineUnitCost(l);
       const lineShipping = shippingIncluded || !shippingCostTotal || totalQty === 0 ? 0 : (Number(shippingCostTotal) * qty) / totalQty;
       const effCost = cost + (qty > 0 ? lineShipping / qty : 0);
       return effCost > l.stats.last3Avg ? { idx: i, name: l.catalogItem?.name ?? "?", effCost, last3Avg: l.stats.last3Avg } : null;
@@ -739,7 +746,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       // otro proveedor, hoy $2.00 con este).
       const qty = Number(l.quantity) || 0;
       const lineShipping = shippingIncluded || !shippingCostTotal || totalQty === 0 ? 0 : (Number(shippingCostTotal) * qty) / totalQty;
-      const effCost = effectiveLineUnitCost(l) + (qty > 0 ? lineShipping / qty : 0);
+      const effCost = lineUnitCost(l) + (qty > 0 ? lineShipping / qty : 0);
       if (effCost <= cheapest.latest) return null;
       return { idx: i, name: l.catalogItem.name, cheapestSupplierName: cheapest.supplierName, cheapestPrice: cheapest.latest };
     })
@@ -880,7 +887,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // la IA leyó para ese código.
   const codeLinePriceMismatchIdxs = codeOnlyIdxs.filter((i) => {
     const ml = matchedAiLineByForm[i]!;
-    return !quoteLineMatches({ quantity: Number(lines[i].quantity) || 0, unitCost: effectiveLineUnitCost(lines[i]), quoteUnitPrice: ml.unitPrice, quoteQuantity: ml.quantity });
+    return !quoteLineMatches({ quantity: Number(lines[i].quantity) || 0, unitCost: lineUnitCost(lines[i]), quoteUnitPrice: ml.unitPrice, quoteQuantity: ml.quantity });
   });
   const quoteVerified =
     isCreditoSupplier || (!!verifyResult && quoteTotalMatches && allCodeOnlyResolved && codeLinePriceMismatchIdxs.length === 0);
@@ -971,7 +978,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         catalogItemId: l.catalogItem!.id,
         fulfillmentSize: sizeByItem[l.catalogItem!.id] ?? null,
         quantity: Number(l.quantity),
-        unitCost: effectiveLineUnitCost(l),
+        unitCost: lineUnitCost(l),
         justification: justificationNeededIdx.has(i) ? l.justification.trim() : null,
         quoteReferenceCode: isLineCodeOnly(i) ? matchedAiLineByForm[i]!.referenceCodeFound : null,
         quoteUnitPrice: isLineCodeOnly(i) ? matchedAiLineByForm[i]!.unitPrice : null,
@@ -1110,7 +1117,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
               const item = line.catalogItem;
               if (rc.approved) {
                 const a = rc.approved;
-                const cost = effectiveLineUnitCost(line);
+                const cost = lineUnitCost(line);
                 const problems: string[] = [];
                 if (supplier && supplier.id !== a.supplierId) problems.push(`se aprobó con ${a.supplierName}, no con ${supplier.name}`);
                 if (cost > a.unitCost + 0.005) problems.push(`se aprobó a $${a.unitCost.toFixed(2)} por unidad y aquí está a $${cost.toFixed(2)}`);
@@ -1154,7 +1161,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                         itemId={item.id}
                         preset={{
                           supplier: supplier ? { id: supplier.id, name: supplier.name } : null,
-                          unitCost: Number(line.unitCost) > 0 ? String(Number(effectiveLineUnitCost(line).toFixed(4))) : "",
+                          unitCost: Number(line.unitCost) > 0 ? String(Number(lineUnitCost(line).toFixed(4))) : "",
                           quantity: line.quantity,
                         }}
                         onSent={(sent) => {
@@ -1300,15 +1307,19 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
               </div>
               <div>
                 <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
-                  Subtotal {line.ivaIncluded && <span className="text-teal normal-case">(con IVA)</span>}
+                  Subtotal {line.ivaIncluded && !supplierNoInvoice && <span className="text-teal normal-case">(con IVA)</span>}
                 </label>
                 <div className="rounded border border-rule px-2.5 py-2 text-[13px] font-bold bg-cloud">${lineTotals[idx].toFixed(2)}</div>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-[11.5px] text-steel">
-              <input type="checkbox" className="w-auto cursor-pointer" checked={line.ivaIncluded} onChange={(e) => updateLine(idx, { ivaIncluded: e.target.checked })} />
-              <span>El proveedor cobra 15% de IVA aparte de este costo <span className="text-steel-dim">— súmalo para que cuadre con la cotización</span></span>
-            </div>
+            {supplierNoInvoice ? (
+              <div className="text-[11.5px] text-steel-dim">Este proveedor no da factura — no se suma IVA al costo.</div>
+            ) : (
+              <div className="flex items-center gap-2 text-[11.5px] text-steel">
+                <input type="checkbox" className="w-auto cursor-pointer" checked={line.ivaIncluded} onChange={(e) => updateLine(idx, { ivaIncluded: e.target.checked })} />
+                <span>El proveedor cobra 15% de IVA aparte de este costo <span className="text-steel-dim">— súmalo para que cuadre con la cotización</span></span>
+              </div>
+            )}
           </div>
         ))}
       </div>
