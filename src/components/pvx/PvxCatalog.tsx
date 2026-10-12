@@ -5,7 +5,7 @@ import type { PublicCard } from "@/lib/provedixPublic";
 import type { SnapshotProduct } from "@/lib/provedixSnapshot";
 import { PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxRegister } from "@/components/pvx/PvxRegister";
-import { CopyId, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
+import { CopyId, DropiLink, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
 import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
 
 const BRAND = { MKT_PROVEDIX: "Provedix", MKT_DAMIAN: "Importadora Damián" } as const;
@@ -250,6 +250,7 @@ export function PvxCatalog({ cards }: { cards: PublicCard[] }) {
                 <div className="mt-2">
                   <div className="flex flex-wrap gap-1">
                     <CopyId code={c.code} label="Dropi" />
+                    <DropiLink code={c.code} compact />
                     {(c.rocketSkus ?? []).slice(0, 1).map((r) => (
                       <CopyId key={r} code={r} label="Rocket" kind="SKU" />
                     ))}

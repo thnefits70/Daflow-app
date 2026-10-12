@@ -36,8 +36,15 @@ export function resolveTheme(choice: ThemeChoice): ResolvedTheme {
   return choice;
 }
 
+// La página pública de provedix.com tiene sus propios colores y va siempre
+// clara: no sigue el modo día/noche de DAFLOW (salía oscura de noche, 2026-10-12).
+const PUBLIC_LIGHT_CHECK = `/(^|\\.)provedix\\.com$/.test(location.hostname)||location.pathname.indexOf("/pvx")===0`;
+function isPublicLightPage(): boolean {
+  return /(^|\.)provedix\.com$/.test(location.hostname) || location.pathname.startsWith("/pvx");
+}
+
 export function applyTheme(choice: ThemeChoice = readThemeChoice()) {
-  const resolved = resolveTheme(choice);
+  const resolved = isPublicLightPage() ? "light" : resolveTheme(choice);
   const root = document.documentElement;
   if (root.dataset.theme !== resolved) root.dataset.theme = resolved;
 }
@@ -52,4 +59,4 @@ export function saveThemeChoice(choice: ThemeChoice) {
 
 // Se corre en <head> antes de pintar, para que la página no aparezca un
 // instante en el tema equivocado. Misma lógica que arriba, en texto plano.
-export const THEME_INIT_SCRIPT = `(function(){try{var c=localStorage.getItem("${THEME_STORAGE_KEY}");if(c!=="light"&&c!=="dark"){var d=new Date();var m=(((d.getUTCHours()-5)*60+d.getUTCMinutes())%1440+1440)%1440;c=(m>=${SUNRISE_MIN}&&m<${SUNSET_MIN})?"light":"dark";}document.documentElement.dataset.theme=c;}catch(e){document.documentElement.dataset.theme="dark";}})();`;
+export const THEME_INIT_SCRIPT = `(function(){try{if(${PUBLIC_LIGHT_CHECK}){document.documentElement.dataset.theme="light";return;}var c=localStorage.getItem("${THEME_STORAGE_KEY}");if(c!=="light"&&c!=="dark"){var d=new Date();var m=(((d.getUTCHours()-5)*60+d.getUTCMinutes())%1440+1440)%1440;c=(m>=${SUNRISE_MIN}&&m<${SUNSET_MIN})?"light":"dark";}document.documentElement.dataset.theme=c;}catch(e){document.documentElement.dataset.theme="dark";}})();`;

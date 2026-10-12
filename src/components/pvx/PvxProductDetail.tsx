@@ -11,6 +11,22 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
+// Abre la búsqueda de Dropi con ese ID, en otra pestaña (pedido 2026-10-12:
+// llegar al producto en Dropi con un clic).
+export function DropiLink({ code, compact = false }: { code: string; compact?: boolean }) {
+  return (
+    <a
+      href={`https://app.dropi.ec/dashboard/search?search=${encodeURIComponent(code)}&search_type=semantic`}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className={`inline-flex items-center gap-1 rounded-md bg-[#ff5a1f] text-white font-semibold hover:bg-[#e64a12] ${compact ? "px-2 py-1 text-[11px]" : "px-2.5 py-1 text-[12px]"}`}
+    >
+      Ver en Dropi ↗
+    </a>
+  );
+}
+
 // label: "Dropi" o "Rocket" — el mismo producto en cada una (2026-10-12).
 // En Rocket se busca por SKU (kind="SKU"), que es largo: puede partirse.
 export function CopyId({ code, label, kind = "ID" }: { code: string; label?: string; kind?: "ID" | "SKU" }) {
@@ -93,6 +109,7 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
           <h2 className="text-[19px] font-bold leading-snug mt-0.5">{p.name}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <CopyId code={p.code} label="Dropi" />
+            <DropiLink code={p.code} />
             {(p.rocketSkus ?? []).map((r) => (
               <CopyId key={r} code={r} label="Rocket" kind="SKU" />
             ))}
@@ -212,7 +229,10 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
                     )}
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <CopyId code={c.code} label="Dropi" />
+                    <div className="flex items-center gap-1">
+                      <CopyId code={c.code} label="Dropi" />
+                      <DropiLink code={c.code} compact />
+                    </div>
                     {(c.rocketSkus ?? []).map((r) => (
                       <CopyId key={r} code={r} label="Rocket" kind="SKU" />
                     ))}
