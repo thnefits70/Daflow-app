@@ -177,11 +177,14 @@ export function PvxCatalog({ cards, windowTo }: { cards: PublicCard[]; windowTo:
             >
               <div className="relative aspect-square bg-[#ebe8e1]">
                 <PvxPhoto src={c.photo} alt={c.name} sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw" priority={i < 4} />
-                <span className="absolute top-2 left-2 rounded-full bg-black/70 text-white text-[10.5px] font-bold px-2 py-0.5">#{c.rank}</span>
-                {c.trend === "up" && <span className="absolute top-2 right-2 rounded-full bg-[#ff5a1f] text-white text-[10.5px] font-bold px-2 py-0.5">🔥 En subida</span>}
               </div>
               <div className="p-3">
-                <div className="text-[10.5px] font-bold uppercase tracking-wide text-[#8a8f98]">{BRAND[c.brand]}</div>
+                {/* Puesto y "En subida" fuera de la foto, para no tapar nada de la imagen. */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="rounded-full bg-[#16181d] text-white text-[10px] font-bold px-1.5 py-px">#{c.rank}</span>
+                  {c.trend === "up" && <span className="rounded-full bg-[#ff5a1f] text-white text-[10px] font-bold px-1.5 py-px">🔥 En subida</span>}
+                  <span className="text-[10.5px] font-bold uppercase tracking-wide text-[#8a8f98]">{BRAND[c.brand]}</span>
+                </div>
                 <div className="text-[13.5px] font-semibold leading-snug line-clamp-2 mt-0.5 min-h-[2.5em]">{c.name}</div>
                 <div className="mt-2 text-[13px] font-bold text-[#16181d]">🔥 {c.soldRange} vendidos</div>
                 <div className="text-[11.5px] text-[#5b616b]">{c.unitsRange} unidades en 30 días</div>

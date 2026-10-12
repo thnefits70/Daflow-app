@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { SnapshotProduct } from "@/lib/provedixSnapshot";
 import { PvxPhoto } from "@/components/pvx/PvxPhoto";
+import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
 
 const BRAND = { MKT_PROVEDIX: "Provedix", MKT_DAMIAN: "Importadora Damián" } as const;
 
@@ -79,10 +80,13 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
         {/* En computadora la foto se achica según el alto de la pantalla, para que la ficha entre completa. */}
         <div className="relative aspect-[16/9] md:aspect-auto md:h-[min(36vh,340px)] bg-[#ebe8e1]">
           <PvxPhoto src={p.photo} alt={p.name} sizes="(max-width: 768px) 100vw, 420px" priority />
-          {p.trend === "up" && <span className="absolute top-3 left-3 rounded-full bg-[#ff5a1f] text-white text-[12px] font-bold px-3 py-1">🔥 En subida</span>}
         </div>
         <div className="p-4">
-          <div className="text-[11px] font-bold uppercase tracking-[.12em] text-[#ff5a1f]">{BRAND[p.brand]} · #{p.rank} más vendido</div>
+          {/* "En subida" va acá y no sobre la foto: tapaba datos de la imagen (pedido 2026-10-12). */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-[.12em] text-[#ff5a1f]">{BRAND[p.brand]} · #{p.rank} más vendido</span>
+            {p.trend === "up" && <span className="rounded-full bg-[#ff5a1f] text-white text-[11px] font-bold px-2.5 py-0.5">🔥 En subida</span>}
+          </div>
           <h2 className="text-[19px] font-bold leading-snug mt-0.5">{p.name}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <CopyId code={p.code} />
@@ -171,6 +175,11 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
               <div className="mt-2 h-2.5 rounded-full bg-[#f1efea] overflow-hidden">
                 <div className="h-full rounded-full bg-[#1f9d55]" style={{ width: `${p.deliveryRate}%` }} />
               </div>
+            </Stat>
+          )}
+          {p.curve && p.curve.some((v) => v > 0) && (
+            <Stat label="Tendencia de ventas · 30 días">
+              <PvxSalesCurve values={p.curve} />
             </Stat>
           )}
         </div>

@@ -65,6 +65,10 @@ export type SnapshotProduct = {
   women: number | null; // % mujeres (aprox. por el nombre)
   deliveryRate: number | null; // % entregado (sin devolución)
   combos: SnapshotCombo[];
+  // Curva de ventas día a día de los 30 días (pedido 2026-10-12): 0–100
+  // relativo al mejor día y suavizada — nunca unidades exactas ni fechas.
+  // Falta en resúmenes calculados antes de ese día.
+  curve?: number[];
   rank: number;
 };
 export type ProvedixSnapshotData = {
@@ -100,6 +104,7 @@ type ProductAcc = {
   women: number;
   men: number;
   combos: Map<string, { units: number; prices: Map<number, number> }>;
+  daily: Map<string, number>; // día → unidades (solo para la curva)
 };
 
 const newAcc = (): ProductAcc => ({
@@ -117,7 +122,18 @@ const newAcc = (): ProductAcc => ({
   women: 0,
   men: 0,
   combos: new Map(),
+  daily: new Map(),
 });
+
+// Promedio de 3 días (suaviza los saltos de un solo día) y escala 0–100.
+function salesCurve(daily: number[]): number[] {
+  const smooth = daily.map((_, i) => {
+    const w = daily.slice(Math.max(0, i - 1), i + 2);
+    return w.reduce((x, y) => x + y, 0) / w.length;
+  });
+  const max = Math.max(...smooth);
+  return max > 0 ? smooth.map((v) => Math.round((v / max) * 100)) : smooth.map(() => 0);
+}
 
 function percentile(sorted: number[], p: number): number {
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.round((sorted.length - 1) * p)))];
@@ -217,6 +233,7 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
         const a = acc.get(part.id) ?? newAcc();
         acc.set(part.id, a);
         a.units += part.units;
+        a.daily.set(g.day, (a.daily.get(g.day) ?? 0) + part.units);
         if (g.day >= last7From) a.unitsLast7 += part.units;
         else if (g.day >= prev7From) a.unitsPrev7 += part.units;
         if (g.cod != null) {
@@ -277,6 +294,8 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
     }
   }
 
+  const windowDays = Array.from({ length: WINDOW_DAYS }, (_, i) => shiftDay(windowFrom, i));
+
   // Unidades exactas solo para ordenar: nunca se guardan.
   const ranked: { units: number; product: SnapshotProduct }[] = [];
   for (const [id, a] of acc) {
@@ -327,6 +346,7 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
         .sort((x, y) => y[1].units - x[1].units)
         .slice(0, 3)
         .map(([code, c]) => ({ code, name: comboNames.get(code) ?? code, photos: comboPhotos.get(code) ?? [], unitsRange: unitsRange(c.units), price: topKey(c.prices) })),
+      curve: salesCurve(windowDays.map((d) => a.daily.get(d) ?? 0)),
       rank: 0,
     } });
   }
