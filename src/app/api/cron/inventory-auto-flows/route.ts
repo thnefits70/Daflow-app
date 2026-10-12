@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { runInventoryAutoFlows } from "@/lib/inventoryAutoFlows";
 import { backfillGuideMarketData } from "@/lib/localWarranty";
 import { saveProvedixSnapshot } from "@/lib/provedixSnapshot";
+import { refreshProvedixPublic } from "@/lib/provedixPublic";
 
 // Leer los PDF de cortes viejos toma tiempo (ver backfillGuideMarketData).
 export const maxDuration = 300;
@@ -30,5 +31,6 @@ export async function GET(req: NextRequest) {
     console.error("[cron inventory-auto-flows] resumen provedix:", err);
     return null;
   });
+  if (snapshot) refreshProvedixPublic();
   return NextResponse.json({ ok: true, marketBatches, provedixProducts: snapshot?.products.length ?? null });
 }

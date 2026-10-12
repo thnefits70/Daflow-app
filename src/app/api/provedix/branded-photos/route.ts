@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canBrandNewIds } from "@/lib/newIdBranding";
 import { getLatestProvedixSnapshot } from "@/lib/provedixSnapshot";
+import { refreshProvedixPublic } from "@/lib/provedixPublic";
 
 // Fotos brandeadas para provedix.com (pedido del usuario 2026-10-10): Robert
 // las sube, empezando por los productos que más se venden. El admin solo
@@ -50,5 +51,6 @@ export async function POST(req: NextRequest) {
     where: { id: catalogItemId },
     data: url ? { brandedPhotoUrl: url, brandedPhotoAt: new Date(), brandedPhotoById: session.user.id } : { brandedPhotoUrl: null, brandedPhotoAt: null, brandedPhotoById: null },
   });
+  refreshProvedixPublic();
   return NextResponse.json({ ok: true });
 }

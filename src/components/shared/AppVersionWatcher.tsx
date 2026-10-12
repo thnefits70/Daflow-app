@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
+import { isProvedixHost } from "@/lib/provedixHosts";
 
 // Pedido 2026-10-03: Joel seguía usando una versión vieja del escáner porque
 // tenía DAFLOW abierto en el celular desde antes de publicar la mejora (el
@@ -44,6 +45,9 @@ export function AppVersionWatcher() {
   // cámara o la galería y "saca" de DAFLOW: eso cuenta como escrito, para no
   // recargar justo cuando vuelve con la foto.
   useEffect(() => {
+    // provedix.com (página pública, 2026-10-12): no se recarga al volver — el
+    // visitante pierde la ficha que tenía abierta al regresar de WhatsApp/Dropi.
+    if (isProvedixHost(window.location.hostname) || window.location.pathname.startsWith("/pvx")) return;
     let hiddenAt = 0;
     const markDirty = () => { dirtyRef.current = true; };
     const onClick = (e: MouseEvent) => {

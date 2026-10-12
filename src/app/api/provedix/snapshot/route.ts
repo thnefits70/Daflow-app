@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { saveProvedixSnapshot } from "@/lib/provedixSnapshot";
+import { refreshProvedixPublic } from "@/lib/provedixPublic";
 
 export const maxDuration = 120;
 
@@ -12,5 +13,6 @@ export async function POST() {
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   }
   const data = await saveProvedixSnapshot();
+  refreshProvedixPublic();
   return NextResponse.json({ ok: true, products: data.products.length });
 }

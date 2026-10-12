@@ -8023,3 +8023,38 @@ model ProvedixSnapshot {
   data      Json
   createdAt DateTime @default(now())
 }
+
+// Etapa 3 de provedix.com (pedido del usuario 2026-10-12): dropshippers que
+// se registran en la página pública con nombre + WhatsApp — la "cartera de
+// dropshippers". Por ahora NO se contacta a nadie (decisión del usuario);
+// solo los ve el admin en la sección Provedix. Un registro por WhatsApp.
+model ProvedixLead {
+  id          String          @id @default(cuid())
+  name        String
+  whatsapp    String          @unique // normalizado: 09XXXXXXXX o +código
+  consentAt   DateTime // aceptó recibir productos ganadores por WhatsApp
+  createdAt   DateTime        @default(now())
+  lastSeenAt  DateTime        @default(now())
+  visits      Int             @default(1)
+  events      ProvedixEvent[]
+
+  @@index([lastSeenAt])
+}
+
+// Actividad en provedix.com (etapas 3–4): visitas, búsquedas y productos
+// vistos — para saber cuánta gente entra y qué busca cada dropshipper.
+// visitorId = cookie anónima del navegador (cuenta visitantes sin registro).
+model ProvedixEvent {
+  id          String        @id @default(cuid())
+  visitorId   String
+  leadId      String?
+  lead        ProvedixLead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  type        String // "visit" | "search" | "product"
+  query       String?
+  productCode String?
+  createdAt   DateTime      @default(now())
+
+  @@index([createdAt])
+  @@index([leadId])
+  @@index([visitorId])
+}

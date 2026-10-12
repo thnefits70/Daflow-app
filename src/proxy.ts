@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { isProvedixHost, PROVEDIX_PUBLIC_PREFIXES } from "@/lib/provedixHosts";
 
 // Confirmado 2026-09-15, bug real reportado por el usuario: el dominio
 // propio de CHEN (dunxingchen.cc, ver NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN)
@@ -13,8 +14,20 @@ import { auth } from "@/auth";
 const SUPPLIER_LEDGER_DOMAIN = process.env.NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN;
 const SUPPLIER_LEDGER_ALLOWED_PREFIXES = ["/proveedor-ledger", "/api/proveedor-ledger"];
 
+// provedix.com (etapa 3, 2026-10-12): mismo criterio — la raíz muestra la
+// página pública (/pvx) y solo pasan sus rutas; todo lo demás, 404 liso.
+// /api/auth/session y /api/app-version los piden componentes globales del
+// layout; no revelan nada (sin sesión en ese dominio).
+const PROVEDIX_EXTRA_PATHS = ["/api/auth/session", "/api/app-version", "/robots.txt"];
+
 export default auth((req) => {
   const { pathname } = req.nextUrl;
+
+  if (isProvedixHost(req.nextUrl.hostname)) {
+    if (pathname === "/") return NextResponse.rewrite(new URL("/pvx", req.nextUrl));
+    const allowed = PROVEDIX_PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) || PROVEDIX_EXTRA_PATHS.includes(pathname);
+    return allowed ? NextResponse.next() : new NextResponse(null, { status: 404 });
+  }
 
   if (SUPPLIER_LEDGER_DOMAIN && req.nextUrl.hostname === SUPPLIER_LEDGER_DOMAIN) {
     const allowed = SUPPLIER_LEDGER_ALLOWED_PREFIXES.some((p) => pathname.startsWith(p));

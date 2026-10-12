@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { notifyOwner } from "@/lib/notifications";
 import { canBrandNewIds, getNewIdRealPhotosWatcherIds } from "@/lib/newIdBranding";
+import { refreshProvedixPublic } from "@/lib/provedixPublic";
 
 const schema = z
   .object({
@@ -109,6 +110,7 @@ export async function POST(req: NextRequest) {
     const photo = { brandedPhotoUrl, brandedPhotoAt: now, brandedPhotoById: userId };
     if (dropiComboId) await prisma.dropiCombo.update({ where: { id: dropiComboId }, data: photo });
     else if (catalogItemId) await prisma.purchaseCatalogItem.update({ where: { id: catalogItemId }, data: photo });
+    refreshProvedixPublic();
   }
   const stepData = done ? { [atField]: now, [byField]: userId } : { [atField]: null, [byField]: null };
 
