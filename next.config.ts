@@ -17,6 +17,25 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: process.env.VERCEL_GIT_COMMIT_SHA ?? "dev",
   },
+  // Seguridad (pedido del usuario 2026-10-12): ninguna página de DAFLOW ni de
+  // provedix.com se puede meter dentro de otra web (engaños tipo "página
+  // falsa"); el navegador no adivina tipos de archivo; al salir a otra web no
+  // se manda la dirección completa. Cámara (escáner) y micrófono (dictado)
+  // solo para la propia app.
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(self), microphone=(self), geolocation=(), browsing-topics=()" },
+        ],
+      },
+    ];
+  },
   images: {
     remotePatterns: supabaseHost ? [{ protocol: "https", hostname: supabaseHost, pathname: "/storage/v1/object/public/**" }] : [],
     minimumCacheTTL: 60 * 60 * 24 * 30,

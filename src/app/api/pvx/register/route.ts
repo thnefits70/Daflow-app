@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { normalizeWhatsapp, signLead } from "@/lib/provedixPublic";
-import { readVisitor, setVisitorCookies } from "@/lib/provedixVisitor";
+import { readVisitor, registerAllowed, setVisitorCookies } from "@/lib/provedixVisitor";
 
 // Registro en provedix.com: nombre + WhatsApp + aceptación (obligatoria).
 // "website" es un campo oculto: si viene lleno es un robot y se ignora.
@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Revisa tus datos." }, { status: 400 });
   if (parsed.data.website) return NextResponse.json({ ok: true });
+  if (!(await registerAllowed(req))) return NextResponse.json({ error: "Hay muchos registros en este momento. Intenta de nuevo en unos minutos." }, { status: 429 });
 
   const whatsapp = normalizeWhatsapp(parsed.data.whatsapp);
   if (!whatsapp) return NextResponse.json({ error: "Ese WhatsApp no es válido. Ejemplo: 0991234567." }, { status: 400 });
