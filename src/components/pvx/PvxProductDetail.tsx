@@ -14,16 +14,17 @@ function money(n: number) {
 
 // Abre la búsqueda de Dropi con ese ID, en otra pestaña (pedido 2026-10-12:
 // llegar al producto en Dropi con un clic).
-export function DropiLink({ code, compact = false }: { code: string; compact?: boolean }) {
+// block: ocupa todo el ancho (tarjetas del catálogo, para que en celular no se desarme).
+export function DropiLink({ code, compact = false, block = false }: { code: string; compact?: boolean; block?: boolean }) {
   return (
     <a
       href={`https://app.dropi.ec/dashboard/search?search=${encodeURIComponent(code)}&search_type=semantic`}
       target="_blank"
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
-      className={`inline-flex items-center gap-1 rounded-md bg-[#ff5a1f] text-white font-semibold hover:bg-[#e64a12] ${compact ? "px-2 py-1 text-[11px]" : "px-2.5 py-1 text-[12px]"}`}
+      className={`inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md bg-[#ff5a1f] text-white font-semibold hover:bg-[#e64a12] ${block ? "w-full" : ""} ${compact ? "px-2 py-1 text-[11px]" : "px-2.5 py-1 text-[12px]"}`}
     >
-      Ver en Dropi ↗
+      {block ? "Dropi ↗" : "Ver en Dropi ↗"}
     </a>
   );
 }

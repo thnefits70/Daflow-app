@@ -5,9 +5,10 @@ import type { PublicCard } from "@/lib/provedixPublic";
 import type { SnapshotProduct } from "@/lib/provedixSnapshot";
 import { PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxRegister } from "@/components/pvx/PvxRegister";
-import { CopyId, DropiLink, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
+import { DropiLink, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
 import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
 import { WhatsAppButton } from "@/components/pvx/PvxContact";
+import { PvxRocketSku } from "@/components/pvx/PvxRocketSku";
 
 const BRAND = { MKT_PROVEDIX: "Provedix", MKT_DAMIAN: "Importadora Damián" } as const;
 type BrandFilter = "ALL" | keyof typeof BRAND;
@@ -68,6 +69,30 @@ function CardMetrics({ curve, unlocked, onUnlock }: { curve: number[]; unlocked:
       </div>
       <div className="text-[10px] text-[#8a8f98] mt-0.5 text-center">Ventas día a día</div>
     </div>
+  );
+}
+
+// ID de Dropi en la tarjeta: siempre en una sola línea (en celular la
+// tarjeta es angosta y "ID 132006 Copiar" se partía); copiar con un ícono.
+function CardDropiId({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard?.writeText(code).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1800);
+        });
+      }}
+      title="Copiar ID"
+      className="flex w-full items-center justify-between gap-1 whitespace-nowrap rounded-md border border-[#d9d6cf] bg-white px-2 py-1 hover:border-[#ff5a1f] cursor-pointer"
+    >
+      <span className="text-[10px] font-bold uppercase text-[#8a8f98]">Dropi</span>
+      <span className="font-mono text-[12.5px] font-semibold text-[#16181d]">{code}</span>
+      <span className="text-[11px] font-semibold text-[#ff5a1f]">{copied ? "✓" : "⧉"}</span>
+    </button>
   );
 }
 
@@ -272,15 +297,16 @@ export function PvxCatalog({ cards }: { cards: PublicCard[] }) {
                   </div>
                 )}
                 {c.curve && c.curve.some((v) => v > 0) && <CardMetrics curve={c.curve} unlocked={registered === true} onUnlock={() => openCard(c.code)} />}
-                <div className="mt-2">
-                  <div className="flex flex-wrap gap-1">
-                    <CopyId code={c.code} label="Dropi" />
-                    <DropiLink code={c.code} compact />
-                    <WhatsAppButton p={c} outOfStock={c.stock === "out"} compact />
-                    {(c.rocketSkus ?? []).slice(0, 1).map((r) => (
-                      <CopyId key={r} code={r} label="Rocket" kind="SKU" />
-                    ))}
+                {/* Mismo orden y alto en todas las tarjetas, también en celular (2026-10-12). */}
+                <div className="relative mt-2 flex flex-col gap-1">
+                  <CardDropiId code={c.code} />
+                  <div className="grid grid-cols-2 gap-1">
+                    <DropiLink code={c.code} compact block />
+                    <WhatsAppButton p={c} outOfStock={c.stock === "out"} compact block />
                   </div>
+                  {(c.rocketSkus ?? []).slice(0, 1).map((r) => (
+                    <PvxRocketSku key={r} sku={r} />
+                  ))}
                 </div>
                 <div className="mt-2.5 rounded-lg bg-[#fff4ee] text-[#ff5a1f] text-center text-[12px] font-bold py-1.5 group-hover:bg-[#ff5a1f] group-hover:text-white transition">
                   Ver precio, ganancia y ciudades
