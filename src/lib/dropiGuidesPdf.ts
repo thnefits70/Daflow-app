@@ -675,7 +675,7 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false, excludeGui
   // perdidas por un formato nuevo de la relación): cualquier número con forma
   // de guía de una transportadora conocida que aparezca en el PDF (relación o
   // etiqueta) y no se haya leído arriba, se agrega solo — así un formato
-  // nuevo de Dropi no vuelve a perder guías en silencio ni frena a Yair.
+  // nuevo de Dropi no vuelve a perder guías en silencio ni frena a Daniel.
   // Se saltan las filas de productos (ID/SKU) y la "guía original" de una
   // garantía de Veloces (es de otro día). Los 9 dígitos sueltos (Servientrega)
   // solo cuentan en renglones con "Guia" o "Recaudo".
