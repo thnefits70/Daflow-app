@@ -4,6 +4,8 @@ import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { prisma } from "@/lib/prisma";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
+import { headers } from "next/headers";
+import { isProvedixHost } from "@/lib/provedixHosts";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -24,10 +26,21 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
+  // provedix.com (2026-10-12, pedido del usuario: que nadie sepa que está
+  // conectado con DAFLOW): cualquier 404 de ese dominio (/favicon.ico,
+  // /pvx/loquesea) se pintaba con este layout y mostraba "DAFLOW" en el
+  // título, la descripción y el ícono de Supabase "daflow-files".
+  const host = (await headers()).get("host")?.split(":")[0];
+  if (isProvedixHost(host)) {
+    return {
+      title: "Provedix",
+      icons: { icon: { url: "/pvx/icon.png", type: "image/png" }, apple: "/pvx/apple-icon.png" },
+    };
+  }
   const settings = await prisma.platformSettings.findUnique({ where: { id: "singleton" } });
   return {
     title: "DAFLOW — Process Standardization Platform",
-    description: "Plataforma interna de gestión de procesos de Provedix.",
+    description: "Plataforma interna de gestión de procesos.",
     icons: settings?.faviconUrl ? { icon: settings.faviconUrl } : undefined,
   };
 }
