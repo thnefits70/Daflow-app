@@ -16,6 +16,7 @@ import { VariantSalesPanel } from "@/components/marketanalysis/VariantSalesPanel
 import { MaxPurchasePrice } from "@/components/marketanalysis/MaxPurchasePrice";
 import { CopyDropiPrice } from "@/components/shared/CopyDropiPrice";
 import { DropiPriceChangesQueue } from "./DropiPriceChangesQueue";
+import { DropiPriceMissingQueue } from "./DropiPriceMissingQueue";
 import { computePreviewPrice, computeCompetitorComparison } from "./PriceCalculator";
 import { AdvisorComboRegister } from "./AdvisorComboRegister";
 
@@ -208,6 +209,7 @@ export function MarketProductPanel({
       {tab === "publicar" && (
         <>
           <DropiPriceChangesQueue />
+          <DropiPriceMissingQueue />
           <MakePublicQueue />
           <CatalogMissingIdQueue />
           <PublishQueue />

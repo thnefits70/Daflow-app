@@ -35,6 +35,7 @@ import { formerLeaderIdsFor, isSummaryComplete } from "@/lib/formerLeaders";
 import { getUnlinkedShanghaiCount } from "@/lib/storeTracking";
 import { getCountedUnconfirmedLots, overdueCountedLots } from "@/lib/fulfillmentPicking";
 import { getDropiPriceChanges } from "@/lib/dropiPriceChanges";
+import { getMissingDropiPrices } from "@/lib/dropiPriceMissing";
 import { getUnmatchedGuideVariants } from "@/lib/variantSales";
 import { COMBO_BRAND_HREF } from "@/lib/comboAlias";
 
@@ -552,6 +553,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   seguimiento_tiendas_sin_tienda: "Seguimiento de tiendas — productos de Shanghai sin tienda",
   analisis_mercado_compra_en_camino: "Ya se está comprando — publícalo en Dropi",
   precio_dropi_cambio: "Cambió el precio mínimo de un producto publicado en Dropi",
+  precio_dropi_faltante: "Productos de provedix.com sin Precio Dropi — escribir el precio publicado en Dropi",
   combos_semana: "Combos sugeridos de la semana por revisar",
   combos_sin_marca: "Combos vendidos en Dropi sin marca — elegir su marca",
   fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
@@ -1947,6 +1949,22 @@ async function getDropiPriceChangesPendingItem(href: string): Promise<PendingIte
     meta: changes.length === 1 ? `${changes[0].name} → $${changes[0].newPrice.toFixed(2)}` : parts.join(" · "),
     // Una subida es urgente: con el precio viejo se gana menos del 20%.
     overdue: up > 0,
+    href,
+  };
+}
+
+// Pedido del usuario 2026-10-12 — ver dropiPriceMissing.ts: productos de
+// provedix.com sin Precio Dropi. Ella escribe el precio PUBLICADO en Dropi
+// (no el de INVESTOCK); el aviso se va cuando no queda ninguno.
+async function getMissingDropiPricesPendingItem(href: string): Promise<PendingItem | null> {
+  const missing = await getMissingDropiPrices();
+  if (missing.length === 0) return null;
+  return {
+    type: "precio_dropi_faltante",
+    icon: "🏷️",
+    label: `Escribe el Precio Dropi de ${missing.length} producto${missing.length === 1 ? "" : "s"}`,
+    meta: "El precio PUBLICADO en Dropi, no el de INVESTOCK",
+    overdue: false,
     href,
   };
 }
@@ -4214,6 +4232,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (inTransitItem) teamItems.unshift(inTransitItem);
       const priceChangeItem = await getDropiPriceChangesPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
       if (priceChangeItem) teamItems.unshift(priceChangeItem);
+      const missingPriceItem = await getMissingDropiPricesPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
+      if (missingPriceItem) teamItems.push(missingPriceItem);
       const makePublicItem = await getMakePublicPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
       if (makePublicItem) teamItems.unshift(makePublicItem);
     }
@@ -4609,7 +4629,7 @@ export async function getPossiblePendingTypesForActor(
       // pero no su líder — mismo criterio que el resto de este bloque.
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar", "analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
-      if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "analisis_mercado_pasar_publico");
+      if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "precio_dropi_faltante", "analisis_mercado_pasar_publico");
       if (me.canUploadRocketSku) types.push("analisis_mercado_subir_rocket");
       if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca");
       if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
@@ -4621,7 +4641,7 @@ export async function getPossiblePendingTypesForActor(
 
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
-    if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio");
+    if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "precio_dropi_faltante");
       if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca");
     if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
     if (me.leadsDept.code === "FIN") types.push("compras_frias", "analisis_mercado_listo_comprar", "analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");
