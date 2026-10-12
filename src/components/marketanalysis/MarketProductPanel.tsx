@@ -88,7 +88,7 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-type Tab = "proponer" | "ganadores" | "sinstock" | "despiertan" | "variantes" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "rocket" | "registrarcombo" | "trazabilidad";
+type Tab = "proponer" | "ganadores" | "sinstock" | "despiertan" | "variantes" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "rocket" | "registrarcombo" | "trazabilidad" | "preciodropi";
 
 export function MarketProductPanel({
   canPropose,
@@ -117,6 +117,10 @@ export function MarketProductPanel({
   canReportStockout?: boolean;
   canResolveStockout?: boolean;
 }) {
+  // PROVISIONAL (pedido del usuario 2026-10-12): Yair ayuda con la lista de
+  // Precio Dropi faltante (ver lib/dropiPriceMissing.ts). La pestaña solo sale
+  // mientras queden productos sin precio y él no tenga "Publicar en Dropi".
+  const [priceHelper, setPriceHelper] = useState(false);
   const tabs: { key: Tab; label: string }[] = [
     ...(canPropose ? [{ key: "proponer" as Tab, label: "Proponer" }] : []),
     // Confirmado 2026-09-22, pedido de Jariel: su lista de productos que ve
@@ -158,9 +162,23 @@ export function MarketProductPanel({
     // en Dropi o Rocket, con marca y productos, antes de venderlo.
     ...(canPublish || canUploadRocketSku ? [{ key: "registrarcombo" as Tab, label: "Registrar combo" }] : []),
     ...(canReview ? [{ key: "trazabilidad" as Tab, label: "Trazabilidad" }] : []),
+    ...(priceHelper && !canPublish ? [{ key: "preciodropi" as Tab, label: "Precio Dropi (provisional)" }] : []),
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "proponer");
   const [proposePrefill, setProposePrefill] = useState<ProposePrefill | null>(null);
+
+  useEffect(() => {
+    if (canPublish) return;
+    fetch("/api/market-products/dropi-price-missing")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows: unknown[]) => {
+        if (rows.length === 0) return;
+        setPriceHelper(true);
+        if (new URLSearchParams(window.location.search).get("ptab") === "preciodropi") setTab("preciodropi");
+      })
+      .catch(() => null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Confirmado 2026-09-23: el pendiente de Inicio de "Sin stock de
   // proveedor" enlaza con ?ptab=sinstock — mismo patrón que ya usa
@@ -217,6 +235,7 @@ export function MarketProductPanel({
       )}
       {tab === "mispublicados" && <PublishedHistoryView />}
       {tab === "rocket" && <RocketUploadView />}
+      {tab === "preciodropi" && <DropiPriceMissingQueue />}
       {tab === "registrarcombo" && <AdvisorComboRegister />}
       {tab === "trazabilidad" && <TraceabilityView canDecidePurchase={canDecidePurchase} canCancel={canReview} canRequestPublic={canActOnReview} />}
     </div>

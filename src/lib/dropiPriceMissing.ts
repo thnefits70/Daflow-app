@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getLatestProvedixSnapshot } from "@/lib/provedixSnapshot";
+import { auth } from "@/auth";
+import { canPublishMarketProduct } from "@/lib/guards";
 
 // Pedido del usuario 2026-10-12: productos que se venden en provedix.com sin
 // Precio Dropi registrado (PurchaseCatalogItem.dropiPriceRef). DAFLOW lo
@@ -7,6 +9,18 @@ import { getLatestProvedixSnapshot } from "@/lib/provedixSnapshot";
 // DAFLOW y no tienen costo → en provedix.com salen sin "te cuesta" ni
 // "ganas aprox.". La asesora B2B escribe UNA vez el precio que está
 // PUBLICADO EN DROPI (no el de INVESTOCK) y el producto sale de la lista.
+// PROVISIONAL (pedido del usuario 2026-10-12): Yair ayuda a la asesora B2B
+// SOLO con esta lista (no con el resto de "Publicar en Dropi"). Su acceso se
+// apaga solo cuando ya no quedan productos sin precio — entonces se puede
+// quitar este bloque.
+export const PROVISIONAL_DROPI_PRICE_HELPERS = new Set(["cmrk1e8l60002b0vna4u0g8gs"]); // YAIR URGILEZ
+
+export async function canFillMissingDropiPrices(): Promise<boolean> {
+  if (await canPublishMarketProduct()) return true;
+  const session = await auth();
+  return !!session && PROVISIONAL_DROPI_PRICE_HELPERS.has(session.user.id);
+}
+
 export type MissingDropiPrice = { catalogItemId: string; code: string; name: string; photo: string | null; rank: number; unitsRange: string };
 
 export async function getMissingDropiPrices(): Promise<MissingDropiPrice[]> {

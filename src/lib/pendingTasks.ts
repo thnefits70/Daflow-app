@@ -35,7 +35,7 @@ import { formerLeaderIdsFor, isSummaryComplete } from "@/lib/formerLeaders";
 import { getUnlinkedShanghaiCount } from "@/lib/storeTracking";
 import { getCountedUnconfirmedLots, overdueCountedLots } from "@/lib/fulfillmentPicking";
 import { getDropiPriceChanges } from "@/lib/dropiPriceChanges";
-import { getMissingDropiPrices } from "@/lib/dropiPriceMissing";
+import { getMissingDropiPrices, PROVISIONAL_DROPI_PRICE_HELPERS } from "@/lib/dropiPriceMissing";
 import { getUnmatchedGuideVariants } from "@/lib/variantSales";
 import { COMBO_BRAND_HREF } from "@/lib/comboAlias";
 
@@ -4236,6 +4236,11 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (missingPriceItem) teamItems.push(missingPriceItem);
       const makePublicItem = await getMakePublicPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
       if (makePublicItem) teamItems.unshift(makePublicItem);
+    } else if (PROVISIONAL_DROPI_PRICE_HELPERS.has(actor.userId)) {
+      // PROVISIONAL (2026-10-12): Yair ayuda solo con el Precio Dropi faltante;
+      // el aviso se va solo cuando no quedan productos.
+      const missingPriceItem = await getMissingDropiPricesPendingItem("/area/workspace?tab=analisis-mercado&ptab=preciodropi");
+      if (missingPriceItem) teamItems.push(missingPriceItem);
     }
     if (me.canUploadRocketSku) {
       const rocketItem = await getRocketUploadPendingItem("/area/workspace?tab=analisis-mercado&ptab=rocket");
