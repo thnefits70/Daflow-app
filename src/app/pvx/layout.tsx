@@ -6,6 +6,15 @@ export const metadata: Metadata = {
   description:
     "Descubre gratis qué productos de nuestras bodegas se están vendiendo en Ecuador: ventas, precio al público, ciudades y combos, con datos reales de despacho.",
   robots: { index: true, follow: true },
+  // Logo oficial de Provedix (2026-10-12): el layout raíz pone el favicon
+  // de DAFLOW (platformSettings.faviconUrl); definir `icons` acá lo tapa,
+  // igual que en proveedor-ledger. Vive en public/pvx/ porque en
+  // provedix.com el proxy solo deja pasar rutas que empiezan con /pvx.
+  icons: {
+    icon: { url: "/pvx/icon.png", type: "image/png", sizes: "512x512" },
+    shortcut: "/pvx/icon.png",
+    apple: "/pvx/apple-icon.png",
+  },
 };
 
 export default function PvxLayout({ children }: { children: React.ReactNode }) {
