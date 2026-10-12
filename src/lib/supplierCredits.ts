@@ -211,37 +211,55 @@ export async function getConfirmedSupplierExchangeCreditTotals(): Promise<Suppli
 
 export type StaleSupplierCreditPush = { ownerId: string; title: string; body: string; url: string };
 
-// Confirmado 2026-08-06: si un crédito AVAILABLE lleva más de 30 días sin
-// aplicarse a una compra nueva, se avisa a admin + Nairoby (Finanzas) +
-// quien tenga la delegación de Compras (hoy Bryan, vía canManagePurchases)
-// — mismo espíritu que getStalePurchaseRequestPushes: se vuelve a avisar
-// cada día mientras siga sin recuperarse, no solo una vez.
+// Si un crédito AVAILABLE lleva más de 30 días sin aplicarse a una compra
+// nueva, se avisa cada día mientras siga sin recuperarse. Pedido del usuario
+// 2026-10-12: le llega a quien hizo la compra (es quien lo usa) y al admin
+// (para preguntar por qué no se usa) — ya no a Compras ni líderes COM/FIN.
+// Crédito sin compra (manual o de cambio con proveedor) → quien lo registró.
+// Si esa persona ya no está activa → quien tiene Compras delegado.
 export async function getStaleSupplierCreditPushes(): Promise<StaleSupplierCreditPush[]> {
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const [staleCredits, purchaseLeaders] = await Promise.all([
-    prisma.supplierCredit.findMany({
-      where: { status: "AVAILABLE", createdAt: { lt: cutoff } },
-      include: { supplier: { select: { name: true } } },
-    }),
-    prisma.user.findMany({
-      where: { isActive: true, OR: [{ canManagePurchases: true }, { isLeader: true, leadsDept: { code: { in: ["COM", "FIN"] } } }] },
-      select: { id: true },
-    }),
-  ]);
+  const staleCredits = await prisma.supplierCredit.findMany({
+    where: { status: "AVAILABLE", createdAt: { lt: cutoff } },
+    include: {
+      supplier: { select: { name: true } },
+      createdBy: { select: { id: true, name: true, isActive: true } },
+      urgentResolution: {
+        select: { report: { select: { request: { select: { requestedBy: { select: { id: true, name: true, isActive: true } } } } } } },
+      },
+    },
+  });
   if (staleCredits.length === 0) return [];
 
-  const targets = new Set<string>(["admin", ...purchaseLeaders.map((u) => u.id)]);
+  let purchaseManagerIds: string[] | null = null;
   const pushes: StaleSupplierCreditPush[] = [];
   for (const c of staleCredits) {
     const days = Math.floor((Date.now() - c.createdAt.getTime()) / 86400000);
-    for (const ownerId of targets) {
+    const owner = c.urgentResolution?.report.request.requestedBy ?? c.createdBy;
+    let ownerIds: string[];
+    if (owner?.isActive) {
+      ownerIds = [owner.id];
+    } else {
+      purchaseManagerIds ??= (
+        await prisma.user.findMany({ where: { isActive: true, canManagePurchases: true }, select: { id: true } })
+      ).map((u) => u.id);
+      ownerIds = purchaseManagerIds;
+    }
+    const body = `${c.supplier.name} — $${c.amount.toFixed(2)} · ${c.reason} · ${days} días`;
+    for (const ownerId of ownerIds) {
       pushes.push({
         ownerId,
-        title: "💰 Crédito con proveedor sin recuperar hace más de 1 mes",
-        body: `${c.supplier.name} — $${c.amount.toFixed(2)} · ${c.reason} · ${days} días`,
-        url: ownerId === "admin" ? "/admin" : "/area/workspace",
+        title: "💰 Tienes un crédito con proveedor sin usar hace más de 1 mes",
+        body,
+        url: "/area/workspace?tab=compras&ptab=solicitar",
       });
     }
+    pushes.push({
+      ownerId: "admin",
+      title: "💰 Crédito con proveedor sin recuperar hace más de 1 mes",
+      body: owner ? `${body} · compra de ${owner.name}` : body,
+      url: "/admin",
+    });
   }
   return pushes;
 }
