@@ -5,7 +5,7 @@ import type { PublicCard } from "@/lib/provedixPublic";
 import type { SnapshotProduct } from "@/lib/provedixSnapshot";
 import { PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxRegister } from "@/components/pvx/PvxRegister";
-import { PvxProductDetail } from "@/components/pvx/PvxProductDetail";
+import { CopyId, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
 
 const BRAND = { MKT_PROVEDIX: "Provedix", MKT_DAMIAN: "Importadora Damián" } as const;
 type BrandFilter = "ALL" | keyof typeof BRAND;
@@ -162,10 +162,17 @@ export function PvxCatalog({ cards, windowTo }: { cards: PublicCard[]; windowTo:
         {cards.length > 0 && filtered.length === 0 && <div className="py-16 text-center text-[#5b616b]">No encontramos productos con esa búsqueda.</div>}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {filtered.slice(0, shown).map((c, i) => (
-            <button
+            <div
               key={c.code}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={() => openCard(c.code)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  openCard(c.code);
+                }
+              }}
               className="group text-left rounded-xl bg-white border border-[#ebe8e1] overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition cursor-pointer"
             >
               <div className="relative aspect-square bg-[#ebe8e1]">
@@ -178,11 +185,14 @@ export function PvxCatalog({ cards, windowTo }: { cards: PublicCard[]; windowTo:
                 <div className="text-[13.5px] font-semibold leading-snug line-clamp-2 mt-0.5 min-h-[2.5em]">{c.name}</div>
                 <div className="mt-2 text-[13px] font-bold text-[#16181d]">🔥 {c.soldRange} vendidos</div>
                 <div className="text-[11.5px] text-[#5b616b]">{c.unitsRange} unidades en 30 días</div>
+                <div className="mt-2">
+                  <CopyId code={c.code} />
+                </div>
                 <div className="mt-2.5 rounded-lg bg-[#fff4ee] text-[#ff5a1f] text-center text-[12px] font-bold py-1.5 group-hover:bg-[#ff5a1f] group-hover:text-white transition">
                   Ver precio, ganancia y ciudades
                 </div>
               </div>
-            </button>
+            </div>
           ))}
         </div>
         {filtered.length > shown && (

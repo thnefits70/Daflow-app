@@ -10,12 +10,13 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-function CopyId({ code }: { code: string }) {
+export function CopyId({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
-      onClick={() => {
+      onClick={(e) => {
+        e.stopPropagation();
         navigator.clipboard?.writeText(code).then(() => {
           setCopied(true);
           setTimeout(() => setCopied(false), 1800);
