@@ -23,7 +23,7 @@ function norm(s: string) {
 // importar tildes ni mayúsculas, y acepta plurales ("almohadas" encuentra
 // "almohada").
 function matches(c: PublicCard, words: string[]): boolean {
-  const hay = norm(`${c.name} ${BRAND[c.brand]} ${c.code} ${(c.rocketCodes ?? []).join(" ")}`);
+  const hay = norm(`${c.name} ${BRAND[c.brand]} ${c.code} ${(c.rocketSkus ?? []).join(" ")}`);
   return words.every((w) => {
     if (hay.includes(w)) return true;
     if (w.length > 4 && w.endsWith("es") && hay.includes(w.slice(0, -2))) return true;
@@ -210,8 +210,8 @@ export function PvxCatalog({ cards }: { cards: PublicCard[] }) {
                 <div className="mt-2">
                   <div className="flex flex-wrap gap-1">
                     <CopyId code={c.code} label="Dropi" />
-                    {(c.rocketCodes ?? []).slice(0, 1).map((r) => (
-                      <CopyId key={r} code={r} label="Rocket" />
+                    {(c.rocketSkus ?? []).slice(0, 1).map((r) => (
+                      <CopyId key={r} code={r} label="Rocket" kind="SKU" />
                     ))}
                   </div>
                 </div>

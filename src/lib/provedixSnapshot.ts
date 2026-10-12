@@ -47,7 +47,7 @@ export function moneyRange(n: number): string {
 export type SnapshotOffer = { units: number; price: number; share: number };
 // sold: false = combo ya creado (DropiCombo) que todavía no sale en guías de
 // los 30 días — se muestra igual para sugerirlo (pedido 2026-10-12).
-export type SnapshotCombo = { code: string; name: string; photos: string[]; unitsRange: string; price: number | null; rocketCodes?: string[]; sold?: boolean };
+export type SnapshotCombo = { code: string; name: string; photos: string[]; unitsRange: string; price: number | null; rocketSkus?: string[]; sold?: boolean };
 export type SnapshotProduct = {
   code: string; // ID de Dropi del producto suelto
   name: string;
@@ -71,9 +71,9 @@ export type SnapshotProduct = {
   // relativo al mejor día y suavizada — nunca unidades exactas ni fechas.
   // Falta en resúmenes calculados antes de ese día.
   curve?: number[];
-  // ID(s) del mismo producto en Rocket (RocketCodeMapping, solo los
-  // numéricos — los "N:<nombre>" no son IDs). Pedido 2026-10-12.
-  rocketCodes?: string[];
+  // SKU del mismo producto en Rocket (pedido 2026-10-12): en Rocket se busca
+  // por SKU, no por el número de la etiqueta. Ver rocketSkus().
+  rocketSkus?: string[];
   rank: number;
 };
 export type ProvedixSnapshotData = {
@@ -130,8 +130,21 @@ const newAcc = (): ProductAcc => ({
   daily: new Map(),
 });
 
-function rocketIds(rows: { rocketCode: string }[]): string[] {
-  return [...new Set(rows.map((r) => r.rocketCode.trim()).filter((c) => /^\d+$/.test(c)))].sort((a, b) => Number(a) - Number(b));
+// SKU de Rocket = "2075-" + nombre del producto en Rocket, en mayúsculas,
+// sin tildes y con guiones (así sube Provedix más del 90 %, confirmado por
+// el usuario 2026-10-12). El nombre sale de la etiqueta de Rocket
+// (RocketCodeMapping.rocketName). Se omite cuando no hay seguridad: la
+// etiqueta corta el nombre en 40 letras, y con variante ("… - Negro") no se
+// sabe si el SKU lleva el color.
+function rocketSkus(rows: { rocketName: string }[]): string[] {
+  const out = new Set<string>();
+  for (const r of rows) {
+    const name = r.rocketName.trim().replace(/\s*-\s*$/, "");
+    if (!name || name.length >= 40 || /\s-\s*\S/.test(name)) continue;
+    const slug = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    if (slug) out.add(`2075-${slug}`);
+  }
+  return [...out];
 }
 
 // Promedio de 3 días (suaviza los saltos de un solo día) y escala 0–100.
@@ -286,7 +299,7 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
   const ids = [...acc.keys()];
   const items = await prisma.purchaseCatalogItem.findMany({
     where: { id: { in: ids }, bodega: { in: ["MKT_PROVEDIX", "MKT_DAMIAN"] }, justCode: { not: null } },
-    select: { id: true, name: true, justCode: true, bodega: true, photos: true, brandedPhotoUrl: true, dropiPriceRef: true, rocketCodeMappings: { select: { rocketCode: true } } },
+    select: { id: true, name: true, justCode: true, bodega: true, photos: true, brandedPhotoUrl: true, dropiPriceRef: true, rocketCodeMappings: { select: { rocketName: true } } },
   });
   const itemById = new Map(items.map((i) => [i.id, i]));
   const comboCodes = [...new Set([...acc.values()].flatMap((a) => [...a.combos.keys()]))];
@@ -310,7 +323,7 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
         bodega: true,
         createdAt: true,
         brandedPhotoUrl: true,
-        rocketCodeMappings: { select: { rocketCode: true } },
+        rocketCodeMappings: { select: { rocketName: true } },
         components: { select: { catalogItemId: true, catalogItem: { select: { name: true, photos: true } } } },
       },
       orderBy: { createdAt: "desc" },
@@ -323,7 +336,7 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
       // Combo con foto brandeada: esa sola; si no, las fotos de sus productos.
       comboPhotos.set(c.code, c.brandedPhotoUrl ? [c.brandedPhotoUrl] : c.components.map((x) => x.catalogItem.photos[0]).filter((p): p is string => !!p));
       if (c.label) comboNames.set(c.code, c.label);
-      comboRocket.set(c.code, rocketIds(c.rocketCodeMappings));
+      comboRocket.set(c.code, rocketSkus(c.rocketCodeMappings));
     }
   }
 
@@ -379,14 +392,14 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
         ...[...a.combos.entries()]
           .sort((x, y) => y[1].units - x[1].units)
           .slice(0, 3)
-          .map(([code, c]) => ({ code, name: comboNames.get(code) ?? code, photos: comboPhotos.get(code) ?? [], unitsRange: unitsRange(c.units), price: topKey(c.prices), rocketCodes: comboRocket.get(code) ?? [], sold: true })),
+          .map(([code, c]) => ({ code, name: comboNames.get(code) ?? code, photos: comboPhotos.get(code) ?? [], unitsRange: unitsRange(c.units), price: topKey(c.prices), rocketSkus: comboRocket.get(code) ?? [], sold: true })),
         // Creados pero sin ventas en los 30 días: después, los más nuevos primero.
         ...[...new Set(createdCombos.get(id) ?? [])]
           .filter((code) => !a.combos.has(code))
           .slice(0, 3)
-          .map((code) => ({ code, name: comboNames.get(code) ?? code, photos: comboPhotos.get(code) ?? [], unitsRange: "", price: null, rocketCodes: comboRocket.get(code) ?? [], sold: false })),
+          .map((code) => ({ code, name: comboNames.get(code) ?? code, photos: comboPhotos.get(code) ?? [], unitsRange: "", price: null, rocketSkus: comboRocket.get(code) ?? [], sold: false })),
       ],
-      rocketCodes: rocketIds(item.rocketCodeMappings),
+      rocketSkus: rocketSkus(item.rocketCodeMappings),
       curve: salesCurve(windowDays.map((d) => a.daily.get(d) ?? 0)),
       rank: 0,
     } });

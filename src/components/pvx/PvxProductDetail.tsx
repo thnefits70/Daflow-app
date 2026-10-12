@@ -11,8 +11,9 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-// label: "Dropi" o "Rocket" — el mismo producto tiene un ID en cada una (2026-10-12).
-export function CopyId({ code, label }: { code: string; label?: string }) {
+// label: "Dropi" o "Rocket" — el mismo producto en cada una (2026-10-12).
+// En Rocket se busca por SKU (kind="SKU"), que es largo: puede partirse.
+export function CopyId({ code, label, kind = "ID" }: { code: string; label?: string; kind?: "ID" | "SKU" }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -24,10 +25,10 @@ export function CopyId({ code, label }: { code: string; label?: string }) {
           setTimeout(() => setCopied(false), 1800);
         });
       }}
-      className="inline-flex items-center gap-1.5 rounded-md border border-[#d9d6cf] bg-white px-2.5 py-1 font-mono text-[12.5px] hover:border-[#ff5a1f] cursor-pointer"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-[#d9d6cf] bg-white px-2.5 py-1 font-mono text-[12.5px] hover:border-[#ff5a1f] cursor-pointer"
     >
-      {label && <span className="font-sans text-[10.5px] font-bold text-[#8a8f98] uppercase">{label}</span>}
-      ID {code} <span className="text-[11px] font-sans text-[#ff5a1f] font-semibold">{copied ? "¡Copiado!" : "Copiar"}</span>
+      {label && <span className="shrink-0 font-sans text-[10.5px] font-bold text-[#8a8f98] uppercase">{label}</span>}
+      <span className={kind === "SKU" ? "break-all text-left" : ""}>{kind} {code}</span> <span className="shrink-0 text-[11px] font-sans text-[#ff5a1f] font-semibold">{copied ? "¡Copiado!" : "Copiar"}</span>
     </button>
   );
 }
@@ -92,11 +93,11 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
           <h2 className="text-[19px] font-bold leading-snug mt-0.5">{p.name}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <CopyId code={p.code} label="Dropi" />
-            {(p.rocketCodes ?? []).map((r) => (
-              <CopyId key={r} code={r} label="Rocket" />
+            {(p.rocketSkus ?? []).map((r) => (
+              <CopyId key={r} code={r} label="Rocket" kind="SKU" />
             ))}
             <span className="text-[11.5px] text-[#5b616b]">
-              {(p.rocketCodes ?? []).length > 0 ? "Es el mismo producto: búscalo con su ID en Dropi o en Rocket." : "Búscalo con este ID en Dropi para venderlo."}
+              {(p.rocketSkus ?? []).length > 0 ? "Es el mismo producto: búscalo con su ID en Dropi o con su SKU en Rocket." : "Búscalo con este ID en Dropi para venderlo."}
             </span>
           </div>
 
@@ -212,8 +213,8 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <CopyId code={c.code} label="Dropi" />
-                    {(c.rocketCodes ?? []).map((r) => (
-                      <CopyId key={r} code={r} label="Rocket" />
+                    {(c.rocketSkus ?? []).map((r) => (
+                      <CopyId key={r} code={r} label="Rocket" kind="SKU" />
                     ))}
                   </div>
                 </div>
