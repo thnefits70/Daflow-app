@@ -9,6 +9,7 @@ import { PvxCatalog } from "@/components/pvx/PvxCatalog";
 export const revalidate = 600;
 
 export default async function ProvedixPublicPage() {
-  const { windowTo, cards } = await getPublicCatalog();
-  return <PvxCatalog cards={cards} windowTo={windowTo} />;
+  // Sin la fecha de corte: dejaría ver el retraso de los datos (pedido 2026-10-12).
+  const { cards } = await getPublicCatalog();
+  return <PvxCatalog cards={cards} />;
 }

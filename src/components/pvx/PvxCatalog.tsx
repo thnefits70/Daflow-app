@@ -18,15 +18,23 @@ function norm(s: string) {
     .toLowerCase();
 }
 
-function dayLabel(iso: string) {
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
+// Búsqueda por palabras clave (2026-10-12): cada palabra tiene que estar en
+// el nombre, la marca o los IDs (Dropi o Rocket), en cualquier orden, sin
+// importar tildes ni mayúsculas, y acepta plurales ("almohadas" encuentra
+// "almohada").
+function matches(c: PublicCard, words: string[]): boolean {
+  const hay = norm(`${c.name} ${BRAND[c.brand]} ${c.code} ${(c.rocketCodes ?? []).join(" ")}`);
+  return words.every((w) => {
+    if (hay.includes(w)) return true;
+    if (w.length > 4 && w.endsWith("es") && hay.includes(w.slice(0, -2))) return true;
+    return w.length > 3 && w.endsWith("s") && hay.includes(w.slice(0, -1));
+  });
 }
 
 // Página pública de provedix.com (etapa 3, pedido del usuario 2026-10-12):
 // catálogo de los productos que más se venden de nuestras bodegas. Ver la
 // ficha completa pide registrarse una vez (nombre + WhatsApp).
-export function PvxCatalog({ cards, windowTo }: { cards: PublicCard[]; windowTo: string | null }) {
+export function PvxCatalog({ cards }: { cards: PublicCard[] }) {
   const [registered, setRegistered] = useState<boolean | null>(null);
   const [name, setName] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -64,9 +72,15 @@ export function PvxCatalog({ cards, windowTo }: { cards: PublicCard[]; windowTo:
     }, 1500);
   }
 
-  const filtered = useMemo(() => {
-    const q = norm(query.trim());
-    return cards.filter((c) => (brand === "ALL" || c.brand === brand) && (!hotOnly || c.trend === "up") && (!q || norm(c.name).includes(q) || c.code.includes(q)));
+  // Si lo buscado existe pero los botones de marca / "En subida" lo
+  // esconden, se muestra igual con un aviso (caso 103053 con "En subida"
+  // prendido, 2026-10-12).
+  const { filtered, ignoredFilters } = useMemo(() => {
+    const words = norm(query.trim()).split(/\s+/).filter(Boolean);
+    const found = words.length ? cards.filter((c) => matches(c, words)) : cards;
+    const withFilters = found.filter((c) => (brand === "ALL" || c.brand === brand) && (!hotOnly || c.trend === "up"));
+    if (words.length && withFilters.length === 0 && found.length > 0) return { filtered: found, ignoredFilters: true };
+    return { filtered: withFilters, ignoredFilters: false };
   }, [cards, query, brand, hotOnly]);
 
   async function loadDetail(code: string) {
@@ -115,7 +129,6 @@ export function PvxCatalog({ cards, windowTo }: { cards: PublicCard[]; windowTo:
           <div className="mt-5 flex flex-wrap gap-2 text-[12.5px]">
             <span className="rounded-full bg-white/10 px-3 py-1">✅ {cards.length} productos con ventas</span>
             {hotCount > 0 && <span className="rounded-full bg-white/10 px-3 py-1">🔥 {hotCount} en subida</span>}
-            {windowTo && <span className="rounded-full bg-white/10 px-3 py-1">📅 Datos hasta el {dayLabel(windowTo)}</span>}
             <span className="rounded-full bg-[#ff5a1f] px-3 py-1 font-semibold">Gratis · sin suscripción</span>
           </div>
         </div>
@@ -160,6 +173,12 @@ export function PvxCatalog({ cards, windowTo }: { cards: PublicCard[]; windowTo:
       <main className="mx-auto max-w-6xl px-4 py-6">
         {cards.length === 0 && <div className="py-20 text-center text-[#5b616b]">Muy pronto verás aquí los productos ganadores.</div>}
         {cards.length > 0 && filtered.length === 0 && <div className="py-16 text-center text-[#5b616b]">No encontramos productos con esa búsqueda.</div>}
+        {ignoredFilters && (
+          <div className="mb-4 rounded-lg bg-[#fff4ee] border border-[#ffd9c7] px-3 py-2 text-[13px] text-[#16181d]">
+            No está entre los filtros que elegiste ({[brand !== "ALL" ? BRAND[brand] : null, hotOnly ? "En subida" : null].filter(Boolean).join(" · ")}), pero
+            aquí lo tienes.
+          </div>
+        )}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {filtered.slice(0, shown).map((c, i) => (
             <div
