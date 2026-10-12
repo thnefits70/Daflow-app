@@ -219,7 +219,7 @@ export function PvxCatalog({ cards, windowTo }: { cards: PublicCard[]; windowTo:
       {open && (
         <div className="fixed inset-0 z-50 bg-black/55 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setOpen(null)}>
           <div
-            className="w-full sm:max-w-xl max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-[#f6f5f2]"
+            className={`w-full sm:max-w-xl ${open.mode === "detail" ? "md:max-w-5xl" : ""} max-h-[94vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-[#f6f5f2]`}
             onClick={(e) => e.stopPropagation()}
           >
             {open.mode === "register" && (
