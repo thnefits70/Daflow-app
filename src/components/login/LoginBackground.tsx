@@ -36,15 +36,15 @@ export function LoginBackground() {
 
       <div
         className="absolute -top-40 -left-32 w-[560px] h-[560px] rounded-full opacity-25 blur-[110px]"
-        style={{ background: "radial-gradient(circle, #1E5EFF, transparent 70%)", animation: "daflow-drift 22s ease-in-out infinite" }}
+        style={{ background: "radial-gradient(circle, #1E5EFF, transparent 70%)", animation: "app-drift 22s ease-in-out infinite" }}
       />
       <div
         className="absolute -bottom-48 -right-24 w-[620px] h-[620px] rounded-full opacity-20 blur-[120px]"
-        style={{ background: "radial-gradient(circle, #14C7C7, transparent 70%)", animation: "daflow-drift-slow 26s ease-in-out infinite" }}
+        style={{ background: "radial-gradient(circle, #14C7C7, transparent 70%)", animation: "app-drift-slow 26s ease-in-out infinite" }}
       />
       <div
         className="absolute top-1/3 right-1/4 w-[340px] h-[340px] rounded-full opacity-[0.14] blur-[100px]"
-        style={{ background: "radial-gradient(circle, #7C5CFF, transparent 70%)", animation: "daflow-drift 30s ease-in-out infinite" }}
+        style={{ background: "radial-gradient(circle, #7C5CFF, transparent 70%)", animation: "app-drift 30s ease-in-out infinite" }}
       />
 
       <svg
@@ -93,7 +93,7 @@ export function LoginBackground() {
             r={r}
             fill={i % 3 === 0 ? "#14C7C7" : "#4C86FF"}
             filter="url(#daflow-node-glow)"
-            style={{ animation: `daflow-node-pulse 3.6s ease-in-out infinite`, animationDelay: `${delay}s` }}
+            style={{ animation: `app-node-pulse 3.6s ease-in-out infinite`, animationDelay: `${delay}s` }}
           />
         ))}
       </svg>
