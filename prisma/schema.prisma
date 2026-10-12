@@ -3048,6 +3048,12 @@ model FulfillmentRequestGuide {
   buyerGender   String?
   senderPhone   String?
   marketReadAt  DateTime?
+  // Pedido de Daniel 2026-10-12 (sí del usuario): de qué PDF (manifiesto)
+  // del batch vino la guía — posición en batch.fileUrls. "Guías por marca"
+  // cuenta cada guía en la marca de su manifiesto, no la de su producto (un
+  // ID de Imp. Damián unido a un ID madre de Provedix la pasaba de fila).
+  // null = guía de antes que no se pudo ubicar.
+  manifestFile  Int?
   createdAt     DateTime                @default(now())
 
   @@index([batchId])

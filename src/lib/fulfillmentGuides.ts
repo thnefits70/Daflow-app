@@ -12,6 +12,7 @@ import { guayaquilMonth, syncWarrantyMonth } from "@/lib/warrantyKpi";
 import { linkProductsFromGuides } from "@/lib/storeTracking";
 import { lotNoVariantUnits, soldOutVariantsOf } from "@/lib/variantStock";
 import { fetchStoredFile } from "@/lib/privateFiles";
+import { guideBrandsByManifest } from "@/lib/manifestGuideBrand";
 
 export const NO_BRAND = "SIN_MARCA";
 
@@ -312,7 +313,7 @@ export type GuidesApplyInput = {
   // Lo que no se pudo leer bien (se le mostró a Yair) — queda guardado.
   parseWarnings?: string[];
   manifestDate: string | null;
-  guides: { number: string; carrier: string; codes?: string[]; sender?: string | null }[];
+  guides: { number: string; carrier: string; codes?: string[]; sender?: string | null; file?: number | null }[];
   rows: GuidesApplyRow[];
   warranty: GuidesApplyWarranty[];
   // Manifiesto atrasado: el día real del manifiesto (ver getOrCreateBackfillLot).
@@ -718,7 +719,7 @@ export async function applyGuidesImport(input: GuidesApplyInput, userId: string 
               warrantyCategoryId: r.warrantyCategoryId ?? null,
             })),
           },
-          guides: { create: input.guides.map((g) => ({ guideNumber: g.number, carrier: g.carrier, codes: g.codes ?? [], sender: g.sender ?? null })) },
+          guides: { create: input.guides.map((g) => ({ guideNumber: g.number, carrier: g.carrier, codes: g.codes ?? [], sender: g.sender ?? null, manifestFile: g.file ?? null })) },
           provisionalLines: { create: provisionalLines },
           discontinuedSales: { create: discontinuedSales },
           variantNotes: {
@@ -848,7 +849,7 @@ export async function getCompiledLot(lotId: string) {
           requestedBy: { select: { name: true } },
           items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true, warehouseArea: true, bodega: true } } } },
           variantNotes: { select: { catalogItemId: true, carrier: true, label: true, quantity: true } },
-          guides: { select: { guideNumber: true, carrier: true, codes: true, labelProducts: true } },
+          guides: { select: { guideNumber: true, carrier: true, codes: true, labelProducts: true, manifestFile: true } },
           provisionalLines: true,
           discontinuedSales: { select: { code: true, name: true, quantity: true, guideNumbers: true, carriers: true } },
         },
@@ -944,13 +945,14 @@ export async function getCompiledLot(lotId: string) {
   const guidesByBrand: Record<string, Record<string, number>> = {};
   let guidesWithCodes = 0;
   for (const b of lot.batches) {
+    // Marca del manifiesto en que vino cada guía (pedido de Daniel 2026-10-12).
+    const brandOf = guideBrandsByManifest(b.source, b.guides, brandByCode, NO_BRAND);
     for (const g of b.guides) {
       guidesByCarrier[g.carrier] = (guidesByCarrier[g.carrier] ?? 0) + 1;
       const bySource = (guidesBySource[b.source] ??= {});
       bySource[g.carrier] = (bySource[g.carrier] ?? 0) + 1;
       if (g.codes.length > 0) guidesWithCodes++;
-      const rocket = b.source === "ROCKET" || /^RKT/i.test(g.guideNumber) || g.codes.some(isRocketCode);
-      const brand = rocket ? "ROCKET" : (g.codes.map((c) => brandByCode.get(c)).find(Boolean) ?? NO_BRAND);
+      const brand = brandOf.get(g.guideNumber) ?? NO_BRAND;
       const byBrand = (guidesByBrand[brand] ??= {});
       byBrand[g.carrier] = (byBrand[g.carrier] ?? 0) + 1;
     }

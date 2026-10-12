@@ -215,7 +215,7 @@ async function guidesByBrandPerWeek(fromWeek: string): Promise<Map<string, Recor
     select: {
       source: true,
       lot: { select: { day: true } },
-      guides: { select: { guideNumber: true, codes: true } },
+      guides: { select: { guideNumber: true, codes: true, manifestFile: true } },
       items: { select: { sourceCode: true, fromComboCode: true, catalogItem: { select: { bodega: true } } } },
     },
   });

@@ -145,7 +145,7 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
       select: {
         source: true,
         lot: { select: { day: true } },
-        guides: { select: { guideNumber: true, codes: true, labelProducts: true, manifestDay: true, destCity: true, buyerGender: true, codAmount: true } },
+        guides: { select: { guideNumber: true, codes: true, manifestFile: true, labelProducts: true, manifestDay: true, destCity: true, buyerGender: true, codAmount: true } },
         items: { select: { sourceCode: true, fromComboCode: true, warrantyGuide: true, catalogItem: { select: { bodega: true } } } },
       },
     }),

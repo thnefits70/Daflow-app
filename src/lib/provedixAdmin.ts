@@ -40,7 +40,7 @@ export async function getProvedixOverview(): Promise<ProvedixOverview> {
       select: {
         source: true,
         guides: {
-          select: { guideNumber: true, codes: true, sender: true, senderPhone: true, destCity: true, buyerGender: true, codAmount: true, marketReadAt: true },
+          select: { guideNumber: true, codes: true, manifestFile: true, sender: true, senderPhone: true, destCity: true, buyerGender: true, codAmount: true, marketReadAt: true },
         },
         items: { select: { sourceCode: true, fromComboCode: true, warrantyGuide: true, catalogItem: { select: { bodega: true } } } },
       },

@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     manifestDate,
     carriers: [...new Set([...guides.values()].map((g) => g.carrier))].filter(Boolean),
-    guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty, codes: g.codes, sender: g.sender })),
+    guides: [...guides.entries()].map(([number, g]) => ({ number, carrier: g.carrier, warranty: g.warranty, codes: g.codes, sender: g.sender, file: g.file })),
     rows: rows.map((r) => ({ ...r, manifestBrand: brandByCode.get(r.code) ?? null })),
     warranty,
     unreadWarrantyGuides: unreadWarranty,
@@ -120,7 +120,9 @@ export async function POST(req: NextRequest) {
   });
 }
 
-type GuideInfo = { carrier: string; warranty: boolean; codes: string[]; sender: string | null; removable: boolean; names: string[] };
+// file: posición del PDF (manifiesto) en fileUrls — "Guías por marca" cuenta
+// cada guía en la marca de su manifiesto (pedido de Daniel 2026-10-12).
+type GuideInfo = { carrier: string; warranty: boolean; codes: string[]; sender: string | null; removable: boolean; names: string[]; file: number };
 
 // Lee todos los PDF de la subida y los junta (sin tocar la base). `exclude`:
 // guías que ya están en otro corte y se quitan (solo PDF de Dropi).
@@ -151,6 +153,7 @@ function readFiles(fileUrls: string[], filePages: PdfLine[][][], warrantyFileUrl
           warranty: g.warranty,
           codes: g.codes,
           sender: g.sender ?? null,
+          file: idx,
           // Se puede quitar sola solo si es de Dropi y se leyó qué productos trae.
           removable: r.source === "DROPI" && g.codes.length > 0,
           names: (r.guideUnits[g.number] ?? []).map((u) => `${u.units} ${u.name}`),
