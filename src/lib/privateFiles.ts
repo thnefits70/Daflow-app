@@ -22,6 +22,25 @@ export const PRIVATE_FOLDERS = new Set([
   "payroll-message-attachments",
   "personal-purchase-proofs",
   "dropi-guides-pdf",
+  // Segunda etapa (2026-10-12): documentos financieros internos. NO entran
+  // los que ve CHEN sin sesión en su hoja de Google (=IMAGEN):
+  // supplier-debt-transfers y supplier-shipping-photos, ni fotos de producto.
+  "purchase-payments",
+  "petty-cash",
+  "admin-payments",
+  "purchase-invoices",
+  "purchase-quotes",
+  "purchase-orders",
+  "purchase-receipts",
+  "purchase-price-corrections",
+  "external-payment-proofs",
+  "external-payment-invoices",
+  "external-sale-payment-proofs",
+  "external-sale-invoices",
+  "supplier-credits",
+  "finance-kpis",
+  "inventory-proofs",
+  "mismanagement-evidence",
 ]);
 
 // Siempre el dominio de producción: así el enlace guardado vale igual desde
