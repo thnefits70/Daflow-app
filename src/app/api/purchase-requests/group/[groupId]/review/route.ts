@@ -138,10 +138,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
     // /login. Debe abrir /admin/dept/<deptId> con la pestaña de Finanzas y
     // el groupId puestos, para caer directo en subir el comprobante de
     // ESTA solicitud (ver focusGroupId en PurchaseInvoicingPanel).
+    // Corregido 2026-10-12, reportado por el usuario: rows[0].deptId es el
+    // departamento de quien pidió (p.ej. Marketing), y "Control de
+    // Compras" con su Finanzas solo existe en la vista admin de COM (ver
+    // admin/dept/[id]/page.tsx) — el aviso abría otra pestaña cualquiera.
+    const comDept = await prisma.department.findUnique({ where: { code: "COM" }, select: { id: true } });
     await notifyOwner("admin", {
       title: "Solicitud de compra aprobada",
       body: `${names} — ${totalLabel} — lista para pagar`,
-      url: `/admin/dept/${rows[0].deptId}?tab=compras&ptab=finanzas&group=${groupId}`,
+      url: comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=finanzas&group=${groupId}` : "/admin",
     });
   }
 
