@@ -46,6 +46,9 @@ export type ProvedixTraffic = {
   daily: { day: string; visitors: number; leads: number }[];
   topSearches: { label: string; count: number }[];
   topProducts: { code: string; name: string; count: number }[];
+  // Clics en "Consultar con el asesor" (WhatsApp) por producto — para ver la
+  // demanda, sobre todo de lo que está sin stock (pedido 2026-10-12).
+  topWhatsapp: { code: string; name: string; count: number }[];
 };
 
 export async function getProvedixTraffic(): Promise<ProvedixTraffic> {
@@ -54,7 +57,7 @@ export async function getProvedixTraffic(): Promise<ProvedixTraffic> {
   const d30 = ecuadorDayStart(29);
   const chartFrom = ecuadorDayStart(CHART_DAYS - 1);
 
-  const [vToday, v7, v30, lToday, l7, l30, lTotal, dailyVisitors, dailyLeads, searches, products] = await Promise.all([
+  const [vToday, v7, v30, lToday, l7, l30, lTotal, dailyVisitors, dailyLeads, searches, products, whatsapp] = await Promise.all([
     distinctVisitors(today),
     distinctVisitors(d7),
     distinctVisitors(d30),
@@ -80,9 +83,16 @@ export async function getProvedixTraffic(): Promise<ProvedixTraffic> {
       orderBy: { _count: { productCode: "desc" } },
       take: 10,
     }),
+    prisma.provedixEvent.groupBy({
+      by: ["productCode"],
+      where: { type: "whatsapp", productCode: { not: null }, createdAt: { gte: d30 } },
+      _count: { _all: true },
+      orderBy: { _count: { productCode: "desc" } },
+      take: 10,
+    }),
   ]);
 
-  const names = await productNames(products.map((p) => p.productCode!));
+  const names = await productNames([...products, ...whatsapp].map((p) => p.productCode!));
   const vByDay = new Map(dailyVisitors.map((r) => [r.day, Number(r.n)]));
   const lByDay = new Map(dailyLeads.map((r) => [r.day, Number(r.n)]));
   const daily = Array.from({ length: CHART_DAYS }, (_, i) => {
@@ -96,6 +106,7 @@ export async function getProvedixTraffic(): Promise<ProvedixTraffic> {
     daily,
     topSearches: searches.map((s) => ({ label: s.label, count: Number(s.n) })),
     topProducts: products.map((p) => ({ code: p.productCode!, name: names.get(p.productCode!) ?? p.productCode!, count: p._count._all })),
+    topWhatsapp: whatsapp.map((p) => ({ code: p.productCode!, name: names.get(p.productCode!) ?? p.productCode!, count: p._count._all })),
   };
 }
 
@@ -137,14 +148,14 @@ export async function getProvedixLeads(): Promise<ProvedixLeadRow[]> {
 export type ProvedixLeadActivity = {
   searches: { label: string; count: number }[];
   products: { code: string; name: string; count: number }[];
-  recent: { type: "visit" | "search" | "product"; text: string; at: string }[];
+  recent: { type: "visit" | "search" | "product" | "whatsapp"; text: string; at: string }[];
 };
 
 // Historial de un dropshipper: lo que más buscó, los productos que más abrió
 // y lo último que hizo en la página.
 export async function getProvedixLeadActivity(leadId: string): Promise<ProvedixLeadActivity> {
   const events = await prisma.provedixEvent.findMany({
-    where: { leadId, type: { in: ["visit", "search", "product"] } },
+    where: { leadId, type: { in: ["visit", "search", "product", "whatsapp"] } },
     orderBy: { createdAt: "desc" },
     take: 500,
     select: { type: true, query: true, productCode: true, createdAt: true },
@@ -161,8 +172,15 @@ export async function getProvedixLeadActivity(leadId: string): Promise<ProvedixL
     searches: top(searches, (label, count) => ({ label, count })),
     products: top(products, (code, count) => ({ code, name: names.get(code) ?? code, count })),
     recent: events.slice(0, 30).map((e) => ({
-      type: e.type as "visit" | "search" | "product",
-      text: e.type === "search" ? `Buscó "${e.query ?? ""}"` : e.type === "product" ? `Abrió ${names.get(e.productCode ?? "") ?? e.productCode}` : "Entró a la página",
+      type: e.type as "visit" | "search" | "product" | "whatsapp",
+      text:
+        e.type === "search"
+          ? `Buscó "${e.query ?? ""}"`
+          : e.type === "product"
+            ? `Abrió ${names.get(e.productCode ?? "") ?? e.productCode}`
+            : e.type === "whatsapp"
+              ? `Escribió al asesor por ${names.get(e.productCode ?? "") ?? e.productCode}`
+              : "Entró a la página",
       at: e.createdAt.toISOString(),
     })),
   };

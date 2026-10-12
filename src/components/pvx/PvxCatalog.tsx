@@ -7,6 +7,7 @@ import { PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxRegister } from "@/components/pvx/PvxRegister";
 import { CopyId, DropiLink, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
 import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
+import { WhatsAppButton } from "@/components/pvx/PvxContact";
 
 const BRAND = { MKT_PROVEDIX: "Provedix", MKT_DAMIAN: "Importadora Damián" } as const;
 type BrandFilter = "ALL" | keyof typeof BRAND;
@@ -79,6 +80,7 @@ export function PvxCatalog({ cards }: { cards: PublicCard[] }) {
   const [query, setQuery] = useState("");
   const [brand, setBrand] = useState<BrandFilter>("ALL");
   const [hotOnly, setHotOnly] = useState(false);
+  const [newOnly, setNewOnly] = useState(false);
   const [shown, setShown] = useState(PAGE);
   const [open, setOpen] = useState<{ code: string; mode: "register" | "loading" | "detail" | "error"; product?: SnapshotProduct } | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,10 +119,13 @@ export function PvxCatalog({ cards }: { cards: PublicCard[] }) {
   const { filtered, ignoredFilters } = useMemo(() => {
     const words = norm(query.trim()).split(/\s+/).filter(Boolean);
     const found = words.length ? cards.filter((c) => matches(c, words)) : cards;
-    const withFilters = found.filter((c) => (brand === "ALL" || c.brand === brand) && (!hotOnly || c.trend === "up"));
-    if (words.length && withFilters.length === 0 && found.length > 0) return { filtered: found, ignoredFilters: true };
-    return { filtered: withFilters, ignoredFilters: false };
-  }, [cards, query, brand, hotOnly]);
+    const withFilters = found.filter((c) => (brand === "ALL" || c.brand === brand) && (!hotOnly || c.trend === "up") && (!newOnly || c.stock === "new"));
+    // Lo que acaba de volver a tener stock va primero (pedido 2026-10-12:
+    // anunciarlo para que se posicione); el resto, en su orden de ventas.
+    const ordered = (list: PublicCard[]) => [...list].sort((a, b) => Number(b.stock === "new") - Number(a.stock === "new"));
+    if (words.length && withFilters.length === 0 && found.length > 0) return { filtered: ordered(found), ignoredFilters: true };
+    return { filtered: ordered(withFilters), ignoredFilters: false };
+  }, [cards, query, brand, hotOnly, newOnly]);
 
   async function loadDetail(code: string) {
     setOpen({ code, mode: "loading" });
@@ -147,6 +152,7 @@ export function PvxCatalog({ cards }: { cards: PublicCard[] }) {
   }, [open]);
 
   const hotCount = cards.filter((c) => c.trend === "up").length;
+  const newCount = cards.filter((c) => c.stock === "new").length;
 
   return (
     <div>
@@ -168,6 +174,7 @@ export function PvxCatalog({ cards }: { cards: PublicCard[] }) {
           <div className="mt-5 flex flex-wrap gap-2 text-[12.5px]">
             <span className="rounded-full bg-white/10 px-3 py-1">✅ {cards.length} productos con ventas</span>
             {hotCount > 0 && <span className="rounded-full bg-white/10 px-3 py-1">🔥 {hotCount} en subida</span>}
+            {newCount > 0 && <span className="rounded-full bg-[#1faa53] px-3 py-1 font-semibold">🆕 {newCount} con nuevo stock</span>}
             <span className="rounded-full bg-[#ff5a1f] px-3 py-1 font-semibold">Gratis · sin suscripción</span>
           </div>
         </div>
@@ -205,6 +212,18 @@ export function PvxCatalog({ cards }: { cards: PublicCard[] }) {
             >
               🔥 En subida
             </button>
+            {newCount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setNewOnly(!newOnly);
+                  setShown(PAGE);
+                }}
+                className={`shrink-0 rounded-full border px-3 py-1.5 text-[12.5px] font-semibold cursor-pointer ${newOnly ? "bg-[#1faa53] text-white border-[#1faa53]" : "bg-white border-[#d9d6cf]"}`}
+              >
+                🆕 Nuevo stock
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -214,7 +233,7 @@ export function PvxCatalog({ cards }: { cards: PublicCard[] }) {
         {cards.length > 0 && filtered.length === 0 && <div className="py-16 text-center text-[#5b616b]">No encontramos productos con esa búsqueda.</div>}
         {ignoredFilters && (
           <div className="mb-4 rounded-lg bg-[#fff4ee] border border-[#ffd9c7] px-3 py-2 text-[13px] text-[#16181d]">
-            No está entre los filtros que elegiste ({[brand !== "ALL" ? BRAND[brand] : null, hotOnly ? "En subida" : null].filter(Boolean).join(" · ")}), pero
+            No está entre los filtros que elegiste ({[brand !== "ALL" ? BRAND[brand] : null, hotOnly ? "En subida" : null, newOnly ? "Nuevo stock" : null].filter(Boolean).join(" · ")}), pero
             aquí lo tienes.
           </div>
         )}
@@ -240,17 +259,24 @@ export function PvxCatalog({ cards }: { cards: PublicCard[] }) {
                 {/* Puesto y "En subida" fuera de la foto, para no tapar nada de la imagen. */}
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="rounded-full bg-[#16181d] text-white text-[10px] font-bold px-1.5 py-px">#{c.rank}</span>
+                  {c.stock === "new" && <span className="rounded-full bg-[#1faa53] text-white text-[10px] font-bold px-1.5 py-px">🆕 Nuevo stock</span>}
                   {c.trend === "up" && <span className="rounded-full bg-[#ff5a1f] text-white text-[10px] font-bold px-1.5 py-px">🔥 En subida</span>}
                   <span className="text-[10.5px] font-bold uppercase tracking-wide text-[#8a8f98]">{BRAND[c.brand]}</span>
                 </div>
                 <div className="text-[13.5px] font-semibold leading-snug line-clamp-2 mt-0.5 min-h-[2.5em]">{c.name}</div>
                 <div className="mt-2 text-[13px] font-bold text-[#16181d]">🔥 {c.soldRange} vendidos</div>
                 <div className="text-[11.5px] text-[#5b616b]">{c.unitsRange} unidades en 30 días</div>
+                {c.stock === "out" && (
+                  <div className="mt-1.5 rounded-md bg-[#fff4e5] border border-[#ffd8a8] px-2 py-1 text-[11px] font-semibold text-[#a35a00]">
+                    ⏳ Agotado por ahora · llega más stock. Consulta con el asesor.
+                  </div>
+                )}
                 {c.curve && c.curve.some((v) => v > 0) && <CardMetrics curve={c.curve} unlocked={registered === true} onUnlock={() => openCard(c.code)} />}
                 <div className="mt-2">
                   <div className="flex flex-wrap gap-1">
                     <CopyId code={c.code} label="Dropi" />
                     <DropiLink code={c.code} compact />
+                    <WhatsAppButton p={c} outOfStock={c.stock === "out"} compact />
                     {(c.rocketSkus ?? []).slice(0, 1).map((r) => (
                       <CopyId key={r} code={r} label="Rocket" kind="SKU" />
                     ))}

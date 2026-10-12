@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { SnapshotProduct } from "@/lib/provedixSnapshot";
 import { PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
+import { WhatsAppButton } from "@/components/pvx/PvxContact";
 
 const BRAND = { MKT_PROVEDIX: "Provedix", MKT_DAMIAN: "Importadora Damián" } as const;
 
@@ -118,6 +119,18 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
             </span>
           </div>
 
+          {/* Stock de nuestra bodega (sí/no, nunca cantidades) + asesor por WhatsApp — pedido 2026-10-12. */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            {p.stock === "out" ? (
+              <span className="rounded-md bg-[#fff4e5] border border-[#ffd8a8] text-[#a35a00] text-[12px] font-semibold px-2.5 py-1">⏳ Agotado por ahora · llega más stock</span>
+            ) : p.stock === "new" ? (
+              <span className="rounded-md bg-[#e8f7ee] border border-[#b7e4c7] text-[#1f7a43] text-[12px] font-semibold px-2.5 py-1">🆕 ¡Llegó nuevo stock!</span>
+            ) : (
+              <span className="rounded-md bg-[#e8f7ee] border border-[#b7e4c7] text-[#1f7a43] text-[12px] font-semibold px-2.5 py-1">✅ Hay stock disponible</span>
+            )}
+            <WhatsAppButton p={p} outOfStock={p.stock === "out"} />
+          </div>
+
           <div className="mt-3 rounded-xl bg-[#16181d] text-white p-3.5">
             <div className="text-[11.5px] text-white/70">Últimos 30 días</div>
             <div className="text-[21px] font-bold leading-tight">🔥 {p.soldRange} vendidos</div>
@@ -204,7 +217,7 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
           )}
           {p.curve && p.curve.some((v) => v > 0) && (
             <Stat label="Tendencia de ventas · 30 días">
-              <PvxSalesCurve values={p.curve} />
+              <PvxSalesCurve values={p.curve} tips={p.dailyRanges} />
             </Stat>
           )}
         </div>

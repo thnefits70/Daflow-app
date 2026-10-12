@@ -53,7 +53,7 @@ export async function registerAllowed(req: NextRequest): Promise<boolean> {
   return recent < 60;
 }
 
-export async function logProvedixEvent(data: { visitorId: string; leadId: string | null; type: "visit" | "search" | "product"; query?: string; productCode?: string }) {
+export async function logProvedixEvent(data: { visitorId: string; leadId: string | null; type: "visit" | "search" | "product" | "whatsapp"; query?: string; productCode?: string }) {
   if (!(await eventAllowed(data.visitorId).catch(() => false))) return;
   await prisma.provedixEvent
     .create({ data: { visitorId: data.visitorId, leadId: data.leadId, type: data.type, query: data.query?.slice(0, 120) ?? null, productCode: data.productCode ?? null } })

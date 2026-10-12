@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
-import { getLatestProvedixSnapshot, type SnapshotProduct } from "@/lib/provedixSnapshot";
+import { prisma } from "@/lib/prisma";
+import { getLatestProvedixSnapshot, type PublicStock, type SnapshotProduct } from "@/lib/provedixSnapshot";
 
 // Página pública provedix.com (etapa 3, pedido del usuario 2026-10-12).
 // Lo que ve CUALQUIERA (sin registrarse): foto, nombre, marca, 🔥 y rango de
@@ -12,7 +13,7 @@ import { getLatestProvedixSnapshot, type SnapshotProduct } from "@/lib/provedixS
 
 export const PROVEDIX_SNAPSHOT_TAG = "provedix-snapshot";
 
-export type PublicCard = Pick<SnapshotProduct, "code" | "name" | "brand" | "photo" | "unitsRange" | "soldRange" | "trend" | "rank" | "rocketSkus" | "curve">;
+export type PublicCard = Pick<SnapshotProduct, "code" | "name" | "brand" | "photo" | "unitsRange" | "soldRange" | "trend" | "rank" | "rocketSkus" | "curve"> & { stock: PublicStock };
 
 const cachedSnapshot = unstable_cache(async () => getLatestProvedixSnapshot(), ["provedix-public-snapshot"], {
   revalidate: 600,
@@ -33,12 +34,50 @@ export function publicPhotoUrl(url: string | null): string | null {
   return PVX_PHOTO_FOLDERS.some((f) => rest.startsWith(`${f}/`)) ? `/pvx/f/${rest}` : url;
 }
 
+// Stock de INVESTOCK para provedix.com (pedido 2026-10-12): solo sí/no —
+// nunca la cantidad. "new" = el producto estaba en 0 y en los últimos 7 días
+// entró una compra (se anuncia como "Nuevo stock"). Se lee del Kardex (último
+// saldo de cada producto) y se guarda 10 minutos en caché.
+const RESTOCK_DAYS = 7;
+const cachedStock = unstable_cache(
+  async (codes: string[]): Promise<Record<string, PublicStock>> => {
+    const items = await prisma.purchaseCatalogItem.findMany({
+      where: { justCode: { in: codes }, bodega: { in: ["MKT_PROVEDIX", "MKT_DAMIAN"] } },
+      select: { id: true, justCode: true },
+    });
+    const ids = items.map((i) => i.id);
+    const [latest, arrivals] = await Promise.all([
+      prisma.stockKardexEntry.findMany({
+        where: { catalogItemId: { in: ids } },
+        distinct: ["catalogItemId"],
+        orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
+        select: { catalogItemId: true, balanceAfter: true },
+      }),
+      prisma.stockKardexEntry.findMany({
+        where: { catalogItemId: { in: ids }, type: "IN", purchaseRequestReceiptId: { not: null }, occurredAt: { gte: new Date(Date.now() - RESTOCK_DAYS * 86_400_000) } },
+        select: { catalogItemId: true, balanceAfter: true, quantity: true },
+      }),
+    ]);
+    const balance = new Map(latest.map((e) => [e.catalogItemId, e.balanceAfter]));
+    const restocked = new Set(arrivals.filter((e) => e.balanceAfter - e.quantity <= 0).map((e) => e.catalogItemId));
+    const out: Record<string, PublicStock> = {};
+    for (const i of items) {
+      const b = balance.get(i.id) ?? 0;
+      out[i.justCode!] = b <= 0 ? "out" : restocked.has(i.id) ? "new" : "in";
+    }
+    return out;
+  },
+  ["provedix-public-stock"],
+  { revalidate: 600, tags: [PROVEDIX_SNAPSHOT_TAG] },
+);
+
 export async function getPublicCatalog(): Promise<{ windowTo: string | null; cards: PublicCard[] }> {
   const s = await cachedSnapshot();
   if (!s) return { windowTo: null, cards: [] };
+  const stock = await cachedStock(s.products.map((p) => p.code)).catch(() => ({}) as Record<string, PublicStock>);
   return {
     windowTo: s.windowTo,
-    cards: s.products.map((p) => ({ code: p.code, name: p.name, brand: p.brand, photo: publicPhotoUrl(p.photo), unitsRange: p.unitsRange, soldRange: p.soldRange, trend: p.trend, rank: p.rank, rocketSkus: p.rocketSkus ?? [], curve: p.curve })),
+    cards: s.products.map((p) => ({ code: p.code, name: p.name, brand: p.brand, photo: publicPhotoUrl(p.photo), unitsRange: p.unitsRange, soldRange: p.soldRange, trend: p.trend, rank: p.rank, rocketSkus: p.rocketSkus ?? [], curve: p.curve, stock: stock[p.code] ?? "in" })),
   };
 }
 
@@ -46,8 +85,10 @@ export async function getPublicProduct(code: string): Promise<SnapshotProduct | 
   const s = await cachedSnapshot();
   const p = s?.products.find((x) => x.code === code);
   if (!p) return null;
+  const stock = await cachedStock(s!.products.map((x) => x.code)).catch(() => ({}) as Record<string, PublicStock>);
   return {
     ...p,
+    stock: stock[p.code] ?? "in",
     photo: publicPhotoUrl(p.photo),
     combos: p.combos.map((c) => ({ ...c, photos: c.photos.map((u) => publicPhotoUrl(u) ?? u) })),
   };

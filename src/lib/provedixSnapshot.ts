@@ -48,6 +48,8 @@ export type SnapshotOffer = { units: number; price: number; share: number };
 // sold: false = combo ya creado (DropiCombo) que todavía no sale en guías de
 // los 30 días — se muestra igual para sugerirlo (pedido 2026-10-12).
 export type SnapshotCombo = { code: string; name: string; photos: string[]; unitsRange: string; price: number | null; rocketSkus?: string[]; sold?: boolean };
+export type PublicStock = "in" | "out" | "new";
+
 export type SnapshotProduct = {
   code: string; // ID de Dropi del producto suelto
   name: string;
@@ -71,6 +73,12 @@ export type SnapshotProduct = {
   // relativo al mejor día y suavizada — nunca unidades exactas ni fechas.
   // Falta en resúmenes calculados antes de ese día.
   curve?: number[];
+  // Rango de ventas de cada uno de esos 30 días (pedido 2026-10-12, opción
+  // "b"): se ve al tocar la curva en la ficha. Nunca la cifra exacta.
+  dailyRanges?: string[];
+  // Lo agrega provedixPublic EN VIVO (no se guarda en el resumen): sí/no hay
+  // stock en INVESTOCK, o "new" si acaba de volver. Nunca la cantidad.
+  stock?: PublicStock;
   // SKU del mismo producto en Rocket (pedido 2026-10-12): en Rocket se busca
   // por SKU, no por el número de la etiqueta. Ver rocketSkus().
   rocketSkus?: string[];
@@ -145,6 +153,16 @@ function rocketSkus(rows: { rocketName: string }[]): string[] {
     if (slug) out.add(`2075-${slug}`);
   }
   return [...out];
+}
+
+function dayRange(units: number): string {
+  if (units <= 0) return "Sin ventas ese día";
+  if (units <= 5) return "1–5 ventas ese día";
+  if (units <= 10) return "6–10 ventas ese día";
+  if (units <= 20) return "11–20 ventas ese día";
+  if (units <= 50) return "21–50 ventas ese día";
+  if (units <= 100) return "51–100 ventas ese día";
+  return "Más de 100 ventas ese día";
 }
 
 // Promedio de 3 días (suaviza los saltos de un solo día) y escala 0–100.
@@ -401,6 +419,7 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
       ],
       rocketSkus: rocketSkus(item.rocketCodeMappings),
       curve: salesCurve(windowDays.map((d) => a.daily.get(d) ?? 0)),
+      dailyRanges: windowDays.map((d) => dayRange(a.daily.get(d) ?? 0)),
       rank: 0,
     } });
   }
