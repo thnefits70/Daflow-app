@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { logProvedixEvent, readVisitor, setVisitorCookies } from "@/lib/provedixVisitor";
+import { checkProvedixSpike } from "@/lib/provedixTraffic";
 
 // Cada vez que alguien abre provedix.com: se cuenta la visita y se dice si
 // ya está registrado (para abrir las fichas completas sin pedir datos).
@@ -20,6 +21,8 @@ export async function POST(req: NextRequest) {
     }
   }
   await logProvedixEvent({ visitorId, leadId, type: "visit" });
+  // Etapa 4: aviso al admin si hay un pico de visitas (después de responder).
+  after(() => checkProvedixSpike().catch((e) => console.error("[provedix spike]", e)));
   const res = NextResponse.json({ registered: !!leadId, name });
   setVisitorCookies(res, visitorId);
   return res;

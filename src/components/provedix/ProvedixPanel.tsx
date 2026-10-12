@@ -3,12 +3,15 @@ import { brandLabel } from "@/lib/brandLabels";
 import { StoreSalesTable } from "@/components/provedix/StoreSalesTable";
 import { SnapshotPreview } from "@/components/provedix/SnapshotPreview";
 import type { ProvedixSnapshotData } from "@/lib/provedixSnapshot";
+import type { ProvedixLeadRow, ProvedixTraffic } from "@/lib/provedixTraffic";
+import { ProvedixTrafficCard } from "@/components/provedix/ProvedixTrafficCard";
+import { ProvedixLeadsTable } from "@/components/provedix/ProvedixLeadsTable";
 
 const STAGES: { title: string; detail: string; done: boolean }[] = [
   { title: "1. Leer las guías", detail: "Ciudad, valor cobrado, hombre/mujer y tienda de cada guía.", done: true },
   { title: "2. Resumen por producto", detail: "Ventas en rangos, precio más común, ciudades y combos reales, con 7 días de retraso.", done: true },
-  { title: "3. Página provedix.com", detail: "Catálogo con fotos y registro con nombre y WhatsApp.", done: false },
-  { title: "4. Cartera de dropshippers", detail: "Registrados, cuántas veces entran, qué buscan y visitas a la página.", done: false },
+  { title: "3. Página provedix.com", detail: "Catálogo con fotos y registro con nombre y WhatsApp.", done: true },
+  { title: "4. Cartera de dropshippers", detail: "Registrados, cuántas veces entran, qué buscan y visitas a la página.", done: true },
 ];
 
 function money(n: number) {
@@ -24,7 +27,17 @@ function dayLabel(iso: string) {
   return `${d}/${m}/${y}`;
 }
 
-export function ProvedixPanel({ overview, snapshot }: { overview: ProvedixOverview; snapshot: (ProvedixSnapshotData & { generatedAt: string }) | null }) {
+export function ProvedixPanel({
+  overview,
+  snapshot,
+  traffic,
+  leads,
+}: {
+  overview: ProvedixOverview;
+  snapshot: (ProvedixSnapshotData & { generatedAt: string }) | null;
+  traffic: ProvedixTraffic;
+  leads: ProvedixLeadRow[];
+}) {
   const { progress, guides, byBrand, cities, gender, cod, stores, windowFrom } = overview;
   const readPct = pct(progress.read, progress.total);
   const knownGender = gender.F + gender.M;
@@ -59,6 +72,9 @@ export function ProvedixPanel({ overview, snapshot }: { overview: ProvedixOvervi
           </div>
         ))}
       </div>
+
+      <ProvedixTrafficCard traffic={traffic} />
+      <ProvedixLeadsTable leads={leads} />
 
       <div className="bg-surface border border-rule rounded-lg p-5 mb-5">
         <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
