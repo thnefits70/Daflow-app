@@ -356,6 +356,9 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // pregunta si ya hizo el análisis frente a la competencia y, con "Sí, ya lo
   // hice", la solicitud se envía directo a Bryan.
   const [hotAsk, setHotAsk] = useState(false);
+  // Aviso de precio muy distinto al historial (ver priceOutlierLines).
+  const [priceAsk, setPriceAsk] = useState(false);
+  const [priceOkSig, setPriceOkSig] = useState<string | null>(null);
 
   function fetchLineStats(idx: number, catalogItemId: string, groupId: string | null = editingGroupId) {
     fetch(`/api/purchase-catalog/${catalogItemId}${groupId ? `?groupId=${encodeURIComponent(groupId)}` : ""}`)
@@ -643,6 +646,8 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setBlockedByLine({});
     setRepurchaseByLine({});
     setAnalyzingLine(null);
+    setPriceAsk(false);
+    setPriceOkSig(null);
   }
 
   function discardDraft() {
@@ -768,6 +773,25 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // global para toda la solicitud. Ver purchaseLineSchema en lib/purchases.ts.
   const justificationNeededIdx = new Set<number>([...overThresholdLines.map((l) => l.idx), ...supplierNotCheapestLines.map((l) => l.idx)]);
   const needsJustification = justificationNeededIdx.size > 0;
+
+  // Pedido del usuario 2026-10-12 (SC-178): la Pistola Hidrolavadora siempre
+  // se compró a $13.25 y se envió a $2.85 × 160 sin ningún aviso — Bryan la
+  // tuvo que rechazar. Si el costo se aleja 40% o más (hacia arriba o hacia
+  // abajo) de lo que se ha pagado antes, se pide confirmar antes de enviar.
+  // La confirmación vale solo para esos mismos números: si cambian, se vuelve
+  // a preguntar.
+  const PRICE_OUTLIER_PCT = 0.4;
+  const priceOutlierLines = lines
+    .map((l, i) => {
+      const ref = l.stats?.last3Avg ?? l.stats?.avg ?? null;
+      const cost = lineUnitCost(l);
+      if (!l.catalogItem || ref === null || ref <= 0 || cost <= 0) return null;
+      const pct = (cost - ref) / ref;
+      if (Math.abs(pct) < PRICE_OUTLIER_PCT) return null;
+      return { idx: i, name: l.catalogItem.name, qty: Number(l.quantity) || 0, cost, ref, pct };
+    })
+    .filter((x): x is { idx: number; name: string; qty: number; cost: number; ref: number; pct: number } => x !== null);
+  const priceOutlierSig = priceOutlierLines.map((o) => `${lines[o.idx].catalogItem!.id}:${o.qty}:${o.cost.toFixed(4)}`).join("|");
 
   // Confirmado 2026-09-03: pedido explícito del usuario — si hay crédito
   // disponible con el proveedor que no se marcó (todo o en parte), hace
@@ -906,7 +930,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   const isHotRepurchaseLine = (i: number) => !!repurchaseByLine[i]?.hot && !repurchaseByLine[i]!.approved;
   const hotRepurchaseNames = emergencyOnly ? [] : lines.filter((l, i) => l.catalogItem && isHotRepurchaseLine(i)).map((l) => l.catalogItem!.name);
 
-  async function submit(hotDeclared = false, hotNotRepurchase = false) {
+  async function submit(hotDeclared = false, hotNotRepurchase = false, priceConfirmed = false) {
     if (validLines.length === 0 || validLines.length !== lines.length || !supplier || (!isCreditoSupplier && !quoteImageUrl)) {
       setErr("Completa producto, mercadería o insumo, cantidad y costo de cada línea, el proveedor, y la cotización.");
       return;
@@ -976,6 +1000,13 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       setErr(`Hay $${skippedTotal.toFixed(2)} de crédito disponible con este proveedor y no lo estás aplicando — márcalo arriba o explica por qué no.`);
       return;
     }
+    if (priceOutlierLines.length > 0 && !priceConfirmed && priceOkSig !== priceOutlierSig) {
+      setErr("");
+      setHotAsk(false);
+      setPriceAsk(true);
+      return;
+    }
+    setPriceAsk(false);
     if (hotRepurchaseNames.length > 0 && !hotDeclared) {
       setErr("");
       setHotAsk(true);
@@ -1822,7 +1853,39 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
 
       {toast && <div className="text-teal text-[12.5px] mb-3">{toast}</div>}
       {err && <div className="text-red text-[12.5px] mb-3">{err}</div>}
-      {hotAsk && hotRepurchaseNames.length > 0 ? (
+      {priceAsk && priceOutlierLines.length > 0 && priceOkSig !== priceOutlierSig ? (
+        <div className="bg-red/10 border border-red/40 rounded-md px-3.5 py-3 text-[12.5px]">
+          <div className="flex items-center gap-1.5 font-bold text-red">
+            <AlertTriangle size={14} /> Revisa el precio antes de enviar
+          </div>
+          <div className="text-ink mt-1">Este costo está muy lejos de lo que se ha pagado antes:</div>
+          <ul className="mt-1.5 list-disc pl-5 text-ink">
+            {priceOutlierLines.map((o) => (
+              <li key={o.idx}>
+                <span className="font-semibold">{o.name}</span>: escribiste {o.qty} un. × ${o.cost.toFixed(2)} = ${(o.qty * o.cost).toFixed(2)}. Antes se pagaba ${o.ref.toFixed(2)} por unidad —{" "}
+                <span className="font-semibold text-red">{Math.round(Math.abs(o.pct) * 100)}% {o.pct < 0 ? "más barato" : "más caro"}</span>.
+              </li>
+            ))}
+          </ul>
+          <div className="text-steel mt-1.5">Revisa también la cantidad. Si todo está bien, confirma para seguir.</div>
+          <div className="flex flex-wrap gap-2 mt-2.5">
+            <button type="button" disabled={busy} className="rounded border border-rule px-4 py-2 text-[13px] font-bold text-ink cursor-pointer disabled:opacity-60" onClick={() => setPriceAsk(false)}>
+              Corregir
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className="rounded border border-red px-4 py-2 text-[13px] font-bold text-red cursor-pointer disabled:opacity-60"
+              onClick={() => {
+                setPriceOkSig(priceOutlierSig);
+                submit(false, false, true);
+              }}
+            >
+              {busy ? "Enviando…" : "Sí, el precio y la cantidad están bien"}
+            </button>
+          </div>
+        </div>
+      ) : hotAsk && hotRepurchaseNames.length > 0 ? (
         <div className="bg-amber/10 border border-amber/35 rounded-md px-3.5 py-3 text-[12.5px]">
           <div className="font-bold text-amber">🔁 ¿Es una recompra? {hotRepurchaseNames.join(", ")}</div>
           <div className="text-ink mt-1">¿Ya investigaste el precio frente a la competencia en Dropi?</div>
