@@ -30,6 +30,7 @@ import {
 } from "@/lib/guards";
 import { canBrandNewIds } from "@/lib/newIdBranding";
 import { ensurePrivateBucket, privateFileUrl, PRIVATE_BUCKET, PRIVATE_FOLDERS } from "@/lib/privateFiles";
+import { PERSONAL_PRIVATE_FOLDERS } from "@/lib/privateFileAccess";
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
 // Compras (cotización, orden de compra, fotos de catálogo, comprobante de
@@ -232,7 +233,10 @@ export async function POST(req: NextRequest) {
 
   const safeFolder = folder.replace(/[^a-z0-9-]/gi, "_");
   const safeName = fileName.replace(/[^a-z0-9.\-_]/gi, "_");
-  const path = `${safeFolder}/${crypto.randomUUID()}-${safeName}`;
+  // Documentos personales (2026-10-12): la ruta lleva el id de quien sube, así
+  // esa persona puede verlo apenas lo sube (ver privateFileAccess.ts).
+  const owner = PERSONAL_PRIVATE_FOLDERS.has(safeFolder) && session?.user.id ? `${session.user.id.replace(/[^a-z0-9]/gi, "")}/` : "";
+  const path = `${safeFolder}/${owner}${crypto.randomUUID()}-${safeName}`;
 
   try {
     // Documentos sensibles (2026-10-12): al bucket privado, con enlace que

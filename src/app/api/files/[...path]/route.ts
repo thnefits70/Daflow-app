@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { supabaseAdmin } from "@/lib/supabase";
 import { isPrivateFolder, PRIVATE_BUCKET } from "@/lib/privateFiles";
+import { canOpenPrivateFile } from "@/lib/privateFileAccess";
 
 // Abre un documento privado (ver src/lib/privateFiles.ts): solo con sesión de
 // DAFLOW. Entrega un enlace firmado que vence en 10 minutos — si alguien
@@ -15,6 +16,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
   const path = parts.join("/");
   if (!isPrivateFolder(path) || parts.some((p) => p === ".." || p === "")) {
     return new NextResponse(null, { status: 404 });
+  }
+  // Documentos personales: solo su dueño, quien lo subió, nómina y el admin.
+  if (!(await canOpenPrivateFile(path))) {
+    return new NextResponse("Este documento no es tuyo.", { status: 403, headers: { "content-type": "text/plain; charset=utf-8" } });
   }
   const download = req.nextUrl.searchParams.get("download");
   const { data, error } = await supabaseAdmin()
