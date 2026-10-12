@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Pencil, Search } from "lucide-react";
+import { Trash2, Pencil, Search } from "lucide-react";
 import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 
 export type WeeklyMetricDTO = {
@@ -130,18 +130,6 @@ export function WeeklyMetricPanel({
     : sorted.slice(0, RECENT_WEEKS);
   const hiddenCount = query ? 0 : Math.max(0, sorted.length - RECENT_WEEKS);
 
-  const startNew = () => {
-    setEditingId(null);
-    setWeek("");
-    setValue("");
-    setPrepared("");
-    setGenerated("");
-    setOutOfStock("");
-    setJustification("");
-    setFormOpen(true);
-    setErr("");
-  };
-
   const startEdit = (r: WeeklyMetricDTO) => {
     setEditingId(r.id);
     setWeek(r.week);
@@ -214,24 +202,17 @@ export function WeeklyMetricPanel({
         <div className="text-[13px] text-steel">
           Registro semanal de {label.toLowerCase()}. Se muestra en Inicio para todo el equipo.
         </div>
+        {/* Pedido del usuario 2026-10-12: sin "Nuevo registro" — cada semana se
+            crea sola con los cortes (autoFillRate.ts) y nadie escribe datos a
+            mano. La explicación bajo 95% se escribe con el lápiz o en Inicio. */}
         <PushTypeToggle type="pedidos_despachados" />
-        {editable && (
-          <button
-            type="button"
-            disabled={busy || !!oldestUnjustified}
-            className="inline-flex items-center gap-1.5 rounded border border-blue bg-blue px-3.5 py-2 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60 shrink-0"
-            onClick={startNew}
-          >
-            <Plus size={14} /> Nuevo registro
-          </button>
-        )}
       </div>
 
       {oldestUnjustified && (
         <div className="rounded-md border border-red bg-red/10 px-3.5 py-3 mb-4 text-[12.5px]">
           Tienes la semana <strong>{formatWeek(oldestUnjustified.week)}</strong> sin explicar (quedó en{" "}
-          {oldestUnjustified.pct}%, alerta) — no puedes registrar una semana nueva hasta que le expliques al equipo qué
-          pasó. Ábrela con el lápiz para escribirla.
+          {oldestUnjustified.pct}%, alerta) — explícale al equipo qué pasó.
+          Ábrela con el lápiz para escribirla.
         </div>
       )}
 
