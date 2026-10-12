@@ -193,7 +193,7 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
 
         {p.combos.length > 0 && (
           <div className="mt-3">
-            <div className="text-[12.5px] font-bold">Combos que más se venden con este producto</div>
+            <div className="text-[12.5px] font-bold">{p.combos.every((c) => c.sold !== false) ? "Combos que más se venden con este producto" : "Combos con este producto"}</div>
             <div className="mt-1.5 flex flex-col gap-1">
               {p.combos.map((c) => (
                 <div key={c.code} className="flex items-center gap-2.5 rounded-lg bg-white border border-[#ebe8e1] px-2 py-1.5">
@@ -202,9 +202,13 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-[12.5px] font-semibold leading-snug line-clamp-1">{c.name}</div>
-                    <div className="text-[11px] text-[#5b616b]">
-                      {c.unitsRange} vendidos{c.price != null ? ` · se vende a ${money(c.price)}` : ""}
-                    </div>
+                    {c.sold === false ? (
+                      <div className="text-[11px] font-semibold text-[#ff5a1f]">Nuevo · listo para vender</div>
+                    ) : (
+                      <div className="text-[11px] text-[#5b616b]">
+                        {c.unitsRange} vendidos{c.price != null ? ` · se vende a ${money(c.price)}` : ""}
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <CopyId code={c.code} label="Dropi" />

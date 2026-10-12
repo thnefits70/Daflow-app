@@ -45,7 +45,9 @@ export function moneyRange(n: number): string {
 }
 
 export type SnapshotOffer = { units: number; price: number; share: number };
-export type SnapshotCombo = { code: string; name: string; photos: string[]; unitsRange: string; price: number | null; rocketCodes?: string[] };
+// sold: false = combo ya creado (DropiCombo) que todavía no sale en guías de
+// los 30 días — se muestra igual para sugerirlo (pedido 2026-10-12).
+export type SnapshotCombo = { code: string; name: string; photos: string[]; unitsRange: string; price: number | null; rocketCodes?: string[]; sold?: boolean };
 export type SnapshotProduct = {
   code: string; // ID de Dropi del producto suelto
   name: string;
@@ -290,12 +292,34 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
   const comboCodes = [...new Set([...acc.values()].flatMap((a) => [...a.combos.keys()]))];
   const comboPhotos = new Map<string, string[]>();
   const comboRocket = new Map<string, string[]>();
-  if (comboCodes.length) {
+  // Combos creados con cada producto, se hayan vendido o no (solo los madre
+  // de nuestras marcas — un alias es el mismo combo con otro ID).
+  const createdCombos = new Map<string, string[]>(); // catalogItemId → códigos
+  {
     const combos = await prisma.dropiCombo.findMany({
-      where: { code: { in: comboCodes } },
-      select: { code: true, label: true, brandedPhotoUrl: true, rocketCodeMappings: { select: { rocketCode: true } }, components: { select: { catalogItem: { select: { photos: true } } } } },
+      where: {
+        OR: [
+          { code: { in: comboCodes } },
+          { aliasOfId: null, bodega: { in: ["MKT_PROVEDIX", "MKT_DAMIAN"] }, components: { some: { catalogItemId: { in: ids } } } },
+        ],
+      },
+      select: {
+        code: true,
+        label: true,
+        aliasOfId: true,
+        bodega: true,
+        createdAt: true,
+        brandedPhotoUrl: true,
+        rocketCodeMappings: { select: { rocketCode: true } },
+        components: { select: { catalogItemId: true, catalogItem: { select: { name: true, photos: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
     });
     for (const c of combos) {
+      if (!c.label) comboNames.set(c.code, comboNames.get(c.code) ?? c.components.map((x) => x.catalogItem.name).join(" + "));
+      if (c.aliasOfId == null && (c.bodega === "MKT_PROVEDIX" || c.bodega === "MKT_DAMIAN")) {
+        for (const x of c.components) createdCombos.set(x.catalogItemId, [...(createdCombos.get(x.catalogItemId) ?? []), c.code]);
+      }
       // Combo con foto brandeada: esa sola; si no, las fotos de sus productos.
       comboPhotos.set(c.code, c.brandedPhotoUrl ? [c.brandedPhotoUrl] : c.components.map((x) => x.catalogItem.photos[0]).filter((p): p is string => !!p));
       if (c.label) comboNames.set(c.code, c.label);
@@ -351,10 +375,17 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
       cities,
       women: knownGender >= MIN_GENDER_GUIDES ? Math.round((a.women / knownGender) * 100) : null,
       deliveryRate: d && d.sent >= MIN_DELIVERY_GUIDES ? Math.round(((d.sent - d.returned) / d.sent) * 100) : null,
-      combos: [...a.combos.entries()]
-        .sort((x, y) => y[1].units - x[1].units)
-        .slice(0, 3)
-        .map(([code, c]) => ({ code, name: comboNames.get(code) ?? code, photos: comboPhotos.get(code) ?? [], unitsRange: unitsRange(c.units), price: topKey(c.prices), rocketCodes: comboRocket.get(code) ?? [] })),
+      combos: [
+        ...[...a.combos.entries()]
+          .sort((x, y) => y[1].units - x[1].units)
+          .slice(0, 3)
+          .map(([code, c]) => ({ code, name: comboNames.get(code) ?? code, photos: comboPhotos.get(code) ?? [], unitsRange: unitsRange(c.units), price: topKey(c.prices), rocketCodes: comboRocket.get(code) ?? [], sold: true })),
+        // Creados pero sin ventas en los 30 días: después, los más nuevos primero.
+        ...[...new Set(createdCombos.get(id) ?? [])]
+          .filter((code) => !a.combos.has(code))
+          .slice(0, 3)
+          .map((code) => ({ code, name: comboNames.get(code) ?? code, photos: comboPhotos.get(code) ?? [], unitsRange: "", price: null, rocketCodes: comboRocket.get(code) ?? [], sold: false })),
+      ],
       rocketCodes: rocketIds(item.rocketCodeMappings),
       curve: salesCurve(windowDays.map((d) => a.daily.get(d) ?? 0)),
       rank: 0,
