@@ -519,6 +519,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_cambios_verificar: "Control de Compras — verificar cambios de mercadería",
   compras_reclamo_posterior_revision: "Reclamos posteriores al cierre por revisar",
   compras_creditos_pendientes: "Créditos pendientes de recuperar",
+  compras_creditos_sin_usar_30d: "Créditos con proveedor sin usar hace más de 30 días",
   deterioro_compras_gestion: "Deterioro escalado — pendiente de gestionar con el proveedor",
   compras_excedente_gestion: "Excedente de mercadería — pendiente de gestionar con el proveedor",
   compras_excedente_confirmar: "Excedente de mercadería — pendiente de tu confirmación",
@@ -2504,6 +2505,34 @@ async function getPurchaseCreditsPendingItem(
   };
 }
 
+// Pedido del usuario 2026-10-12: el admin ve en Inicio los créditos con
+// proveedor que llevan 30+ días sin usarse (de cualquier origen, mismo
+// criterio que getStaleSupplierCreditPushes), con el nombre de quien debe
+// usarlo — para preguntar por qué y que ningún proveedor nos quede debiendo.
+async function getStaleSupplierCreditsAdminPendingItem(href: string): Promise<PendingItem | null> {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const rows = await prisma.supplierCredit.findMany({
+    where: { status: "AVAILABLE", createdAt: { lt: cutoff } },
+    select: {
+      amount: true,
+      createdBy: { select: { name: true } },
+      urgentResolution: { select: { report: { select: { request: { select: { requestedBy: { select: { name: true } } } } } } } },
+    },
+  });
+  if (rows.length === 0) return null;
+
+  const total = rows.reduce((s, r) => s + r.amount, 0);
+  const names = [...new Set(rows.map((r) => (r.urgentResolution?.report.request.requestedBy ?? r.createdBy)?.name).filter((n): n is string => !!n))];
+  return {
+    type: "compras_creditos_sin_usar_30d",
+    icon: "🪙",
+    label: "Créditos con proveedor sin usar hace más de 30 días",
+    meta: `${rows.length} crédito${rows.length === 1 ? "" : "s"} · $${total.toFixed(2)}${names.length ? ` · ${names.join(", ")}` : ""}`,
+    overdue: true,
+    href,
+  };
+}
+
 // Confirmado 2026-09-16: pedido explícito del usuario — la campanita avisa
 // en el momento en que Compras sube un comprobante que sí coincide, pero si
 // ese día no la revisa se pierde entre el resto de avisos. Este ítem se
@@ -4015,8 +4044,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       // colaborador resuelva el pago" los atiende Nairoby (Finanzas, ya los
       // ve en su Inicio) — el admin no hace nada ahí.
       Promise.resolve(null),
-      // Pedido del usuario 2026-10-12: el crédito lo usa quien compró, no el admin.
-      Promise.resolve(null),
+      // Pedido del usuario 2026-10-12: el crédito lo usa quien compró; al
+      // admin solo le aparece si ya lleva 30+ días sin usarse.
+      getStaleSupplierCreditsAdminPendingItem(comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=creditos` : "/admin"),
       getPurchaseRefundBankConfirmPendingItem(comCreditsHref),
       getSupplierExchangeRejectedAdminPendingItem(invEgresosHref),
       getOvertimeApprovalPendingItem("/admin/nomina?tab=pagos"),
