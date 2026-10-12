@@ -2472,9 +2472,21 @@ async function getLateClaimReviewPendingItem(href: string): Promise<PendingItem 
 // AVAILABLE), pero acá "atrasado" usa el mismo umbral de 24h que el resto de
 // este archivo en vez del "30 días" que ese panel usa solo para resaltar en
 // rojo visualmente.
-async function getPurchaseCreditsPendingItem(href: string): Promise<PendingItem | null> {
+// Pedido del usuario 2026-10-12: el crédito le aparece a quien hizo la
+// compra (requestedById), que es quien lo usa en su próxima solicitud a ese
+// proveedor — ya no al admin ni a toda Compras. orphaned = créditos cuyo
+// comprador ya no está activo (o no quedó registrado), para que no se pierdan.
+async function getPurchaseCreditsPendingItem(
+  href: string,
+  opts: { requestedById?: string; orphaned?: boolean; label?: string } = {}
+): Promise<PendingItem | null> {
+  const requestFilter = opts.requestedById
+    ? { requestedById: opts.requestedById }
+    : opts.orphaned
+      ? { OR: [{ requestedById: null }, { requestedBy: { isActive: false } }] }
+      : undefined;
   const rows = await prisma.purchaseUrgentResolution.findMany({
-    where: { type: "CREDIT", credit: { status: "AVAILABLE" } },
+    where: { type: "CREDIT", credit: { status: "AVAILABLE" }, ...(requestFilter ? { report: { request: requestFilter } } : {}) },
     select: { amount: true, createdAt: true },
   });
   if (rows.length === 0) return null;
@@ -2485,7 +2497,7 @@ async function getPurchaseCreditsPendingItem(href: string): Promise<PendingItem 
   return {
     type: "compras_creditos_pendientes",
     icon: "🪙",
-    label: "Créditos pendientes de recuperar",
+    label: opts.label ?? "Créditos pendientes de recuperar",
     meta: `${rows.length} crédito${rows.length === 1 ? "" : "s"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
@@ -4003,7 +4015,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       // colaborador resuelva el pago" los atiende Nairoby (Finanzas, ya los
       // ve en su Inicio) — el admin no hace nada ahí.
       Promise.resolve(null),
-      getPurchaseCreditsPendingItem(comCreditsHref),
+      // Pedido del usuario 2026-10-12: el crédito lo usa quien compró, no el admin.
+      Promise.resolve(null),
       getPurchaseRefundBankConfirmPendingItem(comCreditsHref),
       getSupplierExchangeRejectedAdminPendingItem(invEgresosHref),
       getOvertimeApprovalPendingItem("/admin/nomina?tab=pagos"),
@@ -4199,8 +4212,11 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (me.canManagePurchases) {
       const purchaseRequesterItems = await getPurchaseRequesterPendingItems(actor.userId, "/area/workspace?tab=compras&ptab=mias");
       teamItems.push(...purchaseRequesterItems);
-      const purchaseCreditsItem = await getPurchaseCreditsPendingItem("/area/workspace?tab=compras&ptab=urgentes");
-      if (purchaseCreditsItem) teamItems.push(purchaseCreditsItem);
+      const orphanCreditsItem = await getPurchaseCreditsPendingItem("/area/workspace?tab=compras&ptab=solicitar", {
+        orphaned: true,
+        label: "Créditos con proveedores de compras de alguien que ya no está",
+      });
+      if (orphanCreditsItem) teamItems.push(orphanCreditsItem);
       // Confirmado 2026-09-15: bug real — a Jariel (canManagePurchases, quien
       // hoy coordina con el proveedor en "Reportes urgentes") nunca le
       // aparecía este aviso en Inicio porque solo estaba conectado para el
@@ -4244,6 +4260,11 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
         if (myShortItem) teamItems.unshift(myShortItem);
       }
     }
+    const myCreditsItem = await getPurchaseCreditsPendingItem("/area/workspace?tab=compras&ptab=solicitar", {
+      requestedById: actor.userId,
+      label: "Crédito a tu favor con el proveedor — úsalo en tu próxima compra",
+    });
+    if (myCreditsItem) teamItems.push(myCreditsItem);
     // Confirmado 2026-09-29 (idea de Daniel): "Qué comprar" — Jariel ve sus
     // compras calientes aunque no lidere ningún departamento.
     teamItems.unshift(...(await getPurchaseSuggestionPendingItems(actor.userId)));
@@ -4437,17 +4458,19 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   const improvementPlanItems = await getImprovementPlanPendingItems(me.leadsDeptId, "/area/workspace?tab=plan-mejora");
   items.push(...improvementPlanItems);
 
-  // Confirmado 2026-08-17: pedido explícito del usuario — a diferencia de lo
-  // anterior, esto NO es un dato propio del líder, es company-wide (todos
-  // los créditos con proveedores AVAILABLE), así que solo se muestra a quien
-  // de verdad puede coordinar con el proveedor: mismo criterio de elegibilidad
-  // que canSubmitPurchaseRequests (guards.ts) — delegado vía
-  // canManagePurchases, o líder de COM/FIN.
-  if (me.canManagePurchases || ["COM", "FIN"].includes(me.leadsDept.code)) {
-    const purchaseCreditsItem = await getPurchaseCreditsPendingItem("/area/workspace?tab=compras&ptab=urgentes");
-    if (purchaseCreditsItem) items.push(purchaseCreditsItem);
-  }
+  // Pedido del usuario 2026-10-12: cada uno ve solo los créditos de SUS
+  // compras (antes era company-wide para COM/FIN y canManagePurchases).
+  const myCreditsItem = await getPurchaseCreditsPendingItem("/area/workspace?tab=compras&ptab=solicitar", {
+    requestedById: actor.userId,
+    label: "Crédito a tu favor con el proveedor — úsalo en tu próxima compra",
+  });
+  if (myCreditsItem) items.push(myCreditsItem);
   if (me.canManagePurchases) {
+    const orphanCreditsItem = await getPurchaseCreditsPendingItem("/area/workspace?tab=compras&ptab=solicitar", {
+      orphaned: true,
+      label: "Créditos con proveedores de compras de alguien que ya no está",
+    });
+    if (orphanCreditsItem) items.push(orphanCreditsItem);
     const purchaseGestionItem = await getPurchaseGestionPendingItem("/area/workspace?tab=compras&ptab=urgentes");
     if (purchaseGestionItem) items.push(purchaseGestionItem);
     const shortReceiptsItem = await getShortReceiptsUnclaimedPendingItem("/area/workspace?tab=compras&ptab=urgentes");
