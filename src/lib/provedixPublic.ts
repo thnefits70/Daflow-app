@@ -19,18 +19,38 @@ const cachedSnapshot = unstable_cache(async () => getLatestProvedixSnapshot(), [
   tags: [PROVEDIX_SNAPSHOT_TAG],
 });
 
+// Fotos sin rastro de DAFLOW (pedido del usuario 2026-10-12: nadie debe
+// saber que provedix.com está conectada a DAFLOW). La carpeta de Supabase se
+// llama "daflow-files" y salía en la dirección de cada foto; acá se cambia a
+// /pvx/f/<carpeta>/… y next.config.ts la reenvía a Supabase por dentro. Solo
+// las dos carpetas de fotos del catálogo — nada más del almacenamiento.
+export const PVX_PHOTO_FOLDERS = ["purchase-catalog", "branded-photos"] as const;
+const STORAGE_PREFIX = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/public/daflow-files/`;
+
+export function publicPhotoUrl(url: string | null): string | null {
+  if (!url || !process.env.NEXT_PUBLIC_SUPABASE_URL || !url.startsWith(STORAGE_PREFIX)) return url;
+  const rest = url.slice(STORAGE_PREFIX.length);
+  return PVX_PHOTO_FOLDERS.some((f) => rest.startsWith(`${f}/`)) ? `/pvx/f/${rest}` : url;
+}
+
 export async function getPublicCatalog(): Promise<{ windowTo: string | null; cards: PublicCard[] }> {
   const s = await cachedSnapshot();
   if (!s) return { windowTo: null, cards: [] };
   return {
     windowTo: s.windowTo,
-    cards: s.products.map((p) => ({ code: p.code, name: p.name, brand: p.brand, photo: p.photo, unitsRange: p.unitsRange, soldRange: p.soldRange, trend: p.trend, rank: p.rank })),
+    cards: s.products.map((p) => ({ code: p.code, name: p.name, brand: p.brand, photo: publicPhotoUrl(p.photo), unitsRange: p.unitsRange, soldRange: p.soldRange, trend: p.trend, rank: p.rank })),
   };
 }
 
 export async function getPublicProduct(code: string): Promise<SnapshotProduct | null> {
   const s = await cachedSnapshot();
-  return s?.products.find((p) => p.code === code) ?? null;
+  const p = s?.products.find((x) => x.code === code);
+  if (!p) return null;
+  return {
+    ...p,
+    photo: publicPhotoUrl(p.photo),
+    combos: p.combos.map((c) => ({ ...c, photos: c.photos.map((u) => publicPhotoUrl(u) ?? u) })),
+  };
 }
 
 // ---- Cookies -----------------------------------------------------------------

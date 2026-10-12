@@ -36,6 +36,17 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  // Fotos de provedix.com sin "daflow" en la dirección (2026-10-12, ver
+  // publicPhotoUrl en src/lib/provedixPublic.ts): /pvx/f/<carpeta>/… se
+  // reenvía por dentro a la carpeta pública de Supabase. Solo esas 2 carpetas.
+  async rewrites() {
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    if (!base) return [];
+    return ["purchase-catalog", "branded-photos"].map((folder) => ({
+      source: `/pvx/f/${folder}/:path*`,
+      destination: `${base}/storage/v1/object/public/daflow-files/${folder}/:path*`,
+    }));
+  },
   images: {
     remotePatterns: supabaseHost ? [{ protocol: "https", hostname: supabaseHost, pathname: "/storage/v1/object/public/**" }] : [],
     minimumCacheTTL: 60 * 60 * 24 * 30,
