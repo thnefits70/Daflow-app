@@ -1,4 +1,5 @@
 import { auth } from "@/auth";
+import { isAutoFillRateWeek } from "@/lib/autoFillRate";
 import { isAutoWarrantyMonth, WARRANTY_LAST_MANUAL_MONTH } from "@/lib/warrantyKpiConstants";
 import { isAutoReturnRateMonth, RETURN_RATE_LAST_MANUAL_MONTH } from "@/lib/returnRateConstants";
 import { prisma } from "@/lib/prisma";
@@ -668,7 +669,9 @@ async function getWeeklyMetricPendingItem(deptId: string, href: string): Promise
     const rec = await prisma.weeklyMetricRecord.findUnique({ where: { deptId_week: { deptId, week } } });
     return !!rec;
   });
-  if (!status) return null;
+  // Pedido del usuario 2026-10-12: desde la S40 cada semana se crea sola con
+  // los cortes y ya no hay "Nuevo registro" — no hay nada que pedirle al líder.
+  if (!status || isAutoFillRateWeek(status.week)) return null;
   return {
     type: "pedidos_despachados",
     icon: "📦",
