@@ -1,3 +1,4 @@
+import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getInventoryLeadId } from "@/lib/guards";
 import { effectiveUnitCost } from "@/lib/purchases";
@@ -140,7 +141,23 @@ export async function recordKardexEntry(params: {
   if (params.type === "IN" && params.purchaseRequestReceiptId) {
     await applyReceiptToVariants(params.purchaseRequestReceiptId).catch((e) => console.error("[variant stock purchase]", e));
   }
+  // La página pública dice "hay stock / agotado" (pedido 2026-10-12: que se
+  // vea AL INSTANTE, para mover el inventario). Solo cuando el producto pasa
+  // de 0 a tener stock o al revés.
+  if (current.balance <= 0 !== balanceAfter <= 0) refreshPublicStock();
   return result;
+}
+
+// Mismo nombre de etiqueta que PROVEDIX_STOCK_TAG en provedixPublic.ts (no se
+// importa de ahí para no arrastrar ese módulo a todo lo que usa el Kardex).
+function refreshPublicStock() {
+  try {
+    revalidateTag("provedix-stock", { expire: 0 });
+    revalidatePath("/pvx");
+  } catch (e) {
+    // Fuera de una petición (scripts) no hay caché que refrescar.
+    console.error("[provedix stock refresh]", e);
+  }
 }
 
 export type KardexReleaseResult = { entriesPosted: number; catalogItemId: string };

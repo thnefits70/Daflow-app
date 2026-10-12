@@ -12,6 +12,9 @@ import { getLatestProvedixSnapshot, type PublicStock, type SnapshotProduct } fro
 // visitas no toquen la base.
 
 export const PROVEDIX_SNAPSHOT_TAG = "provedix-snapshot";
+// Lo refresca el Kardex al instante cuando un producto pasa de 0 a tener
+// stock o al revés (ver refreshPublicStock en stockKardex.ts).
+export const PROVEDIX_STOCK_TAG = "provedix-stock";
 
 export type PublicCard = Pick<SnapshotProduct, "code" | "name" | "brand" | "photo" | "unitsRange" | "soldRange" | "trend" | "rank" | "rocketSkus" | "curve"> & { stock: PublicStock };
 
@@ -37,7 +40,8 @@ export function publicPhotoUrl(url: string | null): string | null {
 // Stock de INVESTOCK para provedix.com (pedido 2026-10-12): solo sí/no —
 // nunca la cantidad. "new" = el producto estaba en 0 y en los últimos 7 días
 // entró una compra (se anuncia como "Nuevo stock"). Se lee del Kardex (último
-// saldo de cada producto) y se guarda 10 minutos en caché.
+// saldo de cada producto). Se refresca al instante cuando cambia (Kardex) y,
+// por si algún otro movimiento no avisa (conteos, ajustes), cada minuto.
 const RESTOCK_DAYS = 7;
 const cachedStock = unstable_cache(
   async (codes: string[]): Promise<Record<string, PublicStock>> => {
@@ -68,7 +72,7 @@ const cachedStock = unstable_cache(
     return out;
   },
   ["provedix-public-stock"],
-  { revalidate: 600, tags: [PROVEDIX_SNAPSHOT_TAG] },
+  { revalidate: 60, tags: [PROVEDIX_SNAPSHOT_TAG, PROVEDIX_STOCK_TAG] },
 );
 
 export async function getPublicCatalog(): Promise<{ windowTo: string | null; cards: PublicCard[] }> {
