@@ -37,6 +37,26 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
+function Bars({ rows }: { rows: { label: string; pct: number; muted?: boolean }[] }) {
+  const max = Math.max(...rows.map((r) => r.pct), 1);
+  return (
+    <div className="mt-1.5 flex flex-col gap-1.5">
+      {rows.map((r) => (
+        <div key={r.label} className="grid grid-cols-[84px_1fr_36px] items-center gap-2 text-[12.5px]">
+          <span className={`truncate ${r.muted ? "text-[#8a8f98]" : "font-semibold"}`}>{r.label}</span>
+          <div className="h-2 rounded-full bg-[#f1efea] overflow-hidden">
+            <div
+              className={`h-full rounded-full ${r.muted ? "bg-[#c9c5bc]" : "bg-[#ff5a1f]"}`}
+              style={{ width: `${(r.pct / max) * 100}%` }}
+            />
+          </div>
+          <span className="text-right font-bold tabular-nums">{r.pct}%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: () => void }) {
   const offer = p.offers[0];
   return (
@@ -93,16 +113,52 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
           )}
           {p.qtyMix && (
             <Stat label="Cuántas unidades piden">
-              1 u. {p.qtyMix.one}% · 2 u. {p.qtyMix.two}% · 3+ {p.qtyMix.threePlus}%
+              <Bars
+                rows={[
+                  { label: "1 unidad", pct: p.qtyMix.one },
+                  { label: "2 unidades", pct: p.qtyMix.two },
+                  { label: "3 o más", pct: p.qtyMix.threePlus },
+                ]}
+              />
             </Stat>
           )}
-          {p.cities.length > 0 && <Stat label="Dónde se vende más">{p.cities.map((c) => `${c.city} ${c.share}%`).join(" · ")}</Stat>}
+          {p.cities.length > 0 && (
+            <Stat label="Dónde se vende más">
+              <Bars
+                rows={[
+                  ...p.cities.map((c) => ({ label: c.city, pct: c.share })),
+                  ...(() => {
+                    const rest = 100 - p.cities.reduce((s, c) => s + c.share, 0);
+                    return rest > 0 ? [{ label: "Otras", pct: rest, muted: true }] : [];
+                  })(),
+                ]}
+              />
+            </Stat>
+          )}
           {p.women != null && (
             <Stat label="Quién lo compra">
-              {p.women >= 50 ? `${p.women}% mujeres` : `${100 - p.women}% hombres`} <span className="text-[11px] text-[#8a8f98]">(aprox.)</span>
+              <div className="flex items-baseline justify-between text-[12.5px] mt-0.5">
+                <span className="font-bold text-[#ff5a1f]">👩 {p.women}% mujeres</span>
+                <span className="font-bold text-[#2f6fd6]">{100 - p.women}% hombres 👨</span>
+              </div>
+              <div className="mt-1.5 flex h-2.5 rounded-full overflow-hidden bg-[#f1efea]">
+                <div className="bg-[#ff5a1f]" style={{ width: `${p.women}%` }} />
+                <div className="bg-[#2f6fd6]" style={{ width: `${100 - p.women}%` }} />
+              </div>
+              <div className="mt-1 text-[11px] text-[#8a8f98]">Aproximado</div>
             </Stat>
           )}
-          {p.deliveryRate != null && <Stat label="Se entrega">✅ {p.deliveryRate}% de los pedidos</Stat>}
+          {p.deliveryRate != null && (
+            <Stat label="Se entrega">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[22px] font-bold text-[#1f9d55] leading-none">{p.deliveryRate}%</span>
+                <span className="text-[12.5px] text-[#5b616b]">de los pedidos</span>
+              </div>
+              <div className="mt-2 h-2.5 rounded-full bg-[#f1efea] overflow-hidden">
+                <div className="h-full rounded-full bg-[#1f9d55]" style={{ width: `${p.deliveryRate}%` }} />
+              </div>
+            </Stat>
+          )}
         </div>
 
         {p.combos.length > 0 && (
