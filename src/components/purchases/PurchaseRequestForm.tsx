@@ -496,6 +496,17 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setAnalyzingLine((a) => (a === null || a === idx ? null : a > idx ? a - 1 : a));
   }
 
+  // Quita de la solicitud un producto que otra persona ya está comprando: si
+  // hay más líneas se borra la línea; si es la única, se deja vacía.
+  function dropBlockedLine(idx: number) {
+    if (lines.length > 1) {
+      removeLine(idx);
+      return;
+    }
+    setLineCatalogItem(idx, null);
+    setLines([emptyLine()]);
+  }
+
   // Restaura el borrador (si hay uno) una sola vez al montar, y recién
   // después habilita el autoguardado — así no se pisa el borrador guardado
   // con el estado vacío inicial antes de leerlo.
@@ -1110,6 +1121,13 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
               <div className="bg-red/10 border border-red/35 rounded-md px-3 py-2 mb-2.5 text-[12.5px] text-red">
                 <AlertTriangle size={14} className="inline mr-1.5 -mt-0.5" />
                 {blockedByLine[idx]}
+                {/* Pedido de Nairoby 2026-10-12: salida directa para no comprar
+                    este producto (antes, con una sola línea, no había X). */}
+                <div className="mt-2">
+                  <button type="button" className="text-[11.5px] font-bold bg-red text-white rounded-md px-3 py-1 cursor-pointer" onClick={() => dropBlockedLine(idx)}>
+                    No comprar este producto
+                  </button>
+                </div>
               </div>
             )}
             {line.catalogItem && !emergencyOnly && !blockedByLine[idx] && repurchaseByLine[idx] && (() => {
