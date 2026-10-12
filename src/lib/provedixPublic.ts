@@ -7,12 +7,12 @@ import { getLatestProvedixSnapshot, type SnapshotProduct } from "@/lib/provedixS
 // ventas. Lo que ve solo quien se registra con nombre + WhatsApp: ID de
 // Dropi, precio al público, margen, ciudades, compradores, entregas y combos.
 // Todo sale del resumen diario (ProvedixSnapshot: rangos, 7 días de
-// retraso, sin datos de personas) y se guarda en caché para que muchas
+// retraso — eso NO se dice en la página, pedido 2026-10-12 —, sin datos de personas) y se guarda en caché para que muchas
 // visitas no toquen la base.
 
 export const PROVEDIX_SNAPSHOT_TAG = "provedix-snapshot";
 
-export type PublicCard = Pick<SnapshotProduct, "code" | "name" | "brand" | "photo" | "unitsRange" | "soldRange" | "trend" | "rank">;
+export type PublicCard = Pick<SnapshotProduct, "code" | "name" | "brand" | "photo" | "unitsRange" | "soldRange" | "trend" | "rank" | "rocketCodes">;
 
 const cachedSnapshot = unstable_cache(async () => getLatestProvedixSnapshot(), ["provedix-public-snapshot"], {
   revalidate: 600,
@@ -38,7 +38,7 @@ export async function getPublicCatalog(): Promise<{ windowTo: string | null; car
   if (!s) return { windowTo: null, cards: [] };
   return {
     windowTo: s.windowTo,
-    cards: s.products.map((p) => ({ code: p.code, name: p.name, brand: p.brand, photo: publicPhotoUrl(p.photo), unitsRange: p.unitsRange, soldRange: p.soldRange, trend: p.trend, rank: p.rank })),
+    cards: s.products.map((p) => ({ code: p.code, name: p.name, brand: p.brand, photo: publicPhotoUrl(p.photo), unitsRange: p.unitsRange, soldRange: p.soldRange, trend: p.trend, rank: p.rank, rocketCodes: p.rocketCodes ?? [] })),
   };
 }
 

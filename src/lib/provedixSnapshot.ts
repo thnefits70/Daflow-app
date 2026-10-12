@@ -45,7 +45,7 @@ export function moneyRange(n: number): string {
 }
 
 export type SnapshotOffer = { units: number; price: number; share: number };
-export type SnapshotCombo = { code: string; name: string; photos: string[]; unitsRange: string; price: number | null };
+export type SnapshotCombo = { code: string; name: string; photos: string[]; unitsRange: string; price: number | null; rocketCodes?: string[] };
 export type SnapshotProduct = {
   code: string; // ID de Dropi del producto suelto
   name: string;
@@ -69,6 +69,9 @@ export type SnapshotProduct = {
   // relativo al mejor día y suavizada — nunca unidades exactas ni fechas.
   // Falta en resúmenes calculados antes de ese día.
   curve?: number[];
+  // ID(s) del mismo producto en Rocket (RocketCodeMapping, solo los
+  // numéricos — los "N:<nombre>" no son IDs). Pedido 2026-10-12.
+  rocketCodes?: string[];
   rank: number;
 };
 export type ProvedixSnapshotData = {
@@ -124,6 +127,10 @@ const newAcc = (): ProductAcc => ({
   combos: new Map(),
   daily: new Map(),
 });
+
+function rocketIds(rows: { rocketCode: string }[]): string[] {
+  return [...new Set(rows.map((r) => r.rocketCode.trim()).filter((c) => /^\d+$/.test(c)))].sort((a, b) => Number(a) - Number(b));
+}
 
 // Promedio de 3 días (suaviza los saltos de un solo día) y escala 0–100.
 function salesCurve(daily: number[]): number[] {
@@ -277,20 +284,22 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
   const ids = [...acc.keys()];
   const items = await prisma.purchaseCatalogItem.findMany({
     where: { id: { in: ids }, bodega: { in: ["MKT_PROVEDIX", "MKT_DAMIAN"] }, justCode: { not: null } },
-    select: { id: true, name: true, justCode: true, bodega: true, photos: true, brandedPhotoUrl: true, dropiPriceRef: true },
+    select: { id: true, name: true, justCode: true, bodega: true, photos: true, brandedPhotoUrl: true, dropiPriceRef: true, rocketCodeMappings: { select: { rocketCode: true } } },
   });
   const itemById = new Map(items.map((i) => [i.id, i]));
   const comboCodes = [...new Set([...acc.values()].flatMap((a) => [...a.combos.keys()]))];
   const comboPhotos = new Map<string, string[]>();
+  const comboRocket = new Map<string, string[]>();
   if (comboCodes.length) {
     const combos = await prisma.dropiCombo.findMany({
       where: { code: { in: comboCodes } },
-      select: { code: true, label: true, brandedPhotoUrl: true, components: { select: { catalogItem: { select: { photos: true } } } } },
+      select: { code: true, label: true, brandedPhotoUrl: true, rocketCodeMappings: { select: { rocketCode: true } }, components: { select: { catalogItem: { select: { photos: true } } } } },
     });
     for (const c of combos) {
       // Combo con foto brandeada: esa sola; si no, las fotos de sus productos.
       comboPhotos.set(c.code, c.brandedPhotoUrl ? [c.brandedPhotoUrl] : c.components.map((x) => x.catalogItem.photos[0]).filter((p): p is string => !!p));
       if (c.label) comboNames.set(c.code, c.label);
+      comboRocket.set(c.code, rocketIds(c.rocketCodeMappings));
     }
   }
 
@@ -345,7 +354,8 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
       combos: [...a.combos.entries()]
         .sort((x, y) => y[1].units - x[1].units)
         .slice(0, 3)
-        .map(([code, c]) => ({ code, name: comboNames.get(code) ?? code, photos: comboPhotos.get(code) ?? [], unitsRange: unitsRange(c.units), price: topKey(c.prices) })),
+        .map(([code, c]) => ({ code, name: comboNames.get(code) ?? code, photos: comboPhotos.get(code) ?? [], unitsRange: unitsRange(c.units), price: topKey(c.prices), rocketCodes: comboRocket.get(code) ?? [] })),
+      rocketCodes: rocketIds(item.rocketCodeMappings),
       curve: salesCurve(windowDays.map((d) => a.daily.get(d) ?? 0)),
       rank: 0,
     } });

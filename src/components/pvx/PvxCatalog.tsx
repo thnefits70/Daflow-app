@@ -189,7 +189,12 @@ export function PvxCatalog({ cards, windowTo }: { cards: PublicCard[]; windowTo:
                 <div className="mt-2 text-[13px] font-bold text-[#16181d]">🔥 {c.soldRange} vendidos</div>
                 <div className="text-[11.5px] text-[#5b616b]">{c.unitsRange} unidades en 30 días</div>
                 <div className="mt-2">
-                  <CopyId code={c.code} />
+                  <div className="flex flex-wrap gap-1">
+                    <CopyId code={c.code} label="Dropi" />
+                    {(c.rocketCodes ?? []).slice(0, 1).map((r) => (
+                      <CopyId key={r} code={r} label="Rocket" />
+                    ))}
+                  </div>
                 </div>
                 <div className="mt-2.5 rounded-lg bg-[#fff4ee] text-[#ff5a1f] text-center text-[12px] font-bold py-1.5 group-hover:bg-[#ff5a1f] group-hover:text-white transition">
                   Ver precio, ganancia y ciudades
@@ -213,8 +218,8 @@ export function PvxCatalog({ cards, windowTo }: { cards: PublicCard[]; windowTo:
 
       <footer className="border-t border-[#e6e2da] mt-6">
         <div className="mx-auto max-w-6xl px-4 py-6 text-[12px] text-[#8a8f98] leading-relaxed">
-          Provedix · Importadora Damián — Guayaquil, Ecuador. Los datos salen de los despachos reales de nuestras bodegas, se muestran en rangos y con 7
-          días de retraso. No mostramos datos de clientes ni de tiendas. Si te registras, guardamos tu nombre y WhatsApp solo para enviarte productos
+          Provedix · Importadora Damián — Guayaquil, Ecuador. Los datos salen de los despachos reales de nuestras bodegas, se muestran en
+          rangos. No mostramos datos de clientes ni de tiendas. Si te registras, guardamos tu nombre y WhatsApp solo para enviarte productos
           ganadores; puedes pedir que los borremos cuando quieras.
         </div>
       </footer>

@@ -11,7 +11,8 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-export function CopyId({ code }: { code: string }) {
+// label: "Dropi" o "Rocket" — el mismo producto tiene un ID en cada una (2026-10-12).
+export function CopyId({ code, label }: { code: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -25,6 +26,7 @@ export function CopyId({ code }: { code: string }) {
       }}
       className="inline-flex items-center gap-1.5 rounded-md border border-[#d9d6cf] bg-white px-2.5 py-1 font-mono text-[12.5px] hover:border-[#ff5a1f] cursor-pointer"
     >
+      {label && <span className="font-sans text-[10.5px] font-bold text-[#8a8f98] uppercase">{label}</span>}
       ID {code} <span className="text-[11px] font-sans text-[#ff5a1f] font-semibold">{copied ? "¡Copiado!" : "Copiar"}</span>
     </button>
   );
@@ -89,8 +91,13 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
           </div>
           <h2 className="text-[19px] font-bold leading-snug mt-0.5">{p.name}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <CopyId code={p.code} />
-            <span className="text-[11.5px] text-[#5b616b]">Búscalo con este ID en Dropi para venderlo.</span>
+            <CopyId code={p.code} label="Dropi" />
+            {(p.rocketCodes ?? []).map((r) => (
+              <CopyId key={r} code={r} label="Rocket" />
+            ))}
+            <span className="text-[11.5px] text-[#5b616b]">
+              {(p.rocketCodes ?? []).length > 0 ? "Es el mismo producto: búscalo con su ID en Dropi o en Rocket." : "Búscalo con este ID en Dropi para venderlo."}
+            </span>
           </div>
 
           <div className="mt-3 rounded-xl bg-[#16181d] text-white p-3.5">
@@ -199,13 +206,18 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
                       {c.unitsRange} vendidos{c.price != null ? ` · se vende a ${money(c.price)}` : ""}
                     </div>
                   </div>
-                  <CopyId code={c.code} />
+                  <div className="flex flex-col items-end gap-1">
+                    <CopyId code={c.code} label="Dropi" />
+                    {(c.rocketCodes ?? []).map((r) => (
+                      <CopyId key={r} code={r} label="Rocket" />
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
-        <div className="mt-3 text-[10.5px] text-[#8a8f98]">Datos reales de despacho de nuestras bodegas, en rangos y con 7 días de retraso.</div>
+        <div className="mt-3 text-[10.5px] text-[#8a8f98]">Datos reales de despacho de nuestras bodegas, en rangos.</div>
       </div>
     </div>
   );
