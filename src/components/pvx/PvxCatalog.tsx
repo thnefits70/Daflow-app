@@ -6,6 +6,7 @@ import type { SnapshotProduct } from "@/lib/provedixSnapshot";
 import { PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxRegister } from "@/components/pvx/PvxRegister";
 import { CopyId, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
+import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
 
 const BRAND = { MKT_PROVEDIX: "Provedix", MKT_DAMIAN: "Importadora Damián" } as const;
 type BrandFilter = "ALL" | keyof typeof BRAND;
@@ -29,6 +30,44 @@ function matches(c: PublicCard, words: string[]): boolean {
     if (w.length > 4 && w.endsWith("es") && hay.includes(w.slice(0, -2))) return true;
     return w.length > 3 && w.endsWith("s") && hay.includes(w.slice(0, -1));
   });
+}
+
+// Mini gráfica de ventas día a día en cada tarjeta (pedido 2026-10-12, idea
+// tipo DropKiller): 7 o 30 días, sin cifras ni fechas. Difuminada hasta que
+// la persona se registra con nombre + WhatsApp — se ve que hay movimiento,
+// no cuánto. Los valores ya son relativos (0–100), nunca unidades.
+function CardMetrics({ curve, unlocked, onUnlock }: { curve: number[]; unlocked: boolean; onUnlock: () => void }) {
+  const [days, setDays] = useState<7 | 30>(7);
+  const slice = days === 7 ? curve.slice(-7) : curve;
+  const max = Math.max(...slice, 1);
+  const values = slice.map((v) => Math.round((v / max) * 100));
+  return (
+    <div className="mt-2 rounded-lg border border-[#ebe8e1] bg-[#fbfaf8] p-2" onClick={(e) => e.stopPropagation()}>
+      <div className="flex gap-1">
+        {([7, 30] as const).map((d) => (
+          <button
+            key={d}
+            type="button"
+            onClick={() => setDays(d)}
+            className={`flex-1 rounded-md py-0.5 text-[11px] font-semibold cursor-pointer ${days === d ? "bg-[#16181d] text-white" : "bg-white border border-[#e6e2da] text-[#5b616b]"}`}
+          >
+            {d} días
+          </button>
+        ))}
+      </div>
+      <div className="relative mt-1.5">
+        <div className={unlocked ? "" : "blur-[5px] select-none pointer-events-none"} aria-hidden={!unlocked}>
+          <PvxSalesCurve values={values} height={48} labels={false} />
+        </div>
+        {!unlocked && (
+          <button type="button" onClick={onUnlock} className="absolute inset-0 grid place-items-center cursor-pointer">
+            <span className="rounded-full bg-white/90 border border-[#e6e2da] px-2 py-0.5 text-[10.5px] font-bold text-[#16181d] shadow-sm">🔒 Regístrate y míralo</span>
+          </button>
+        )}
+      </div>
+      <div className="text-[10px] text-[#8a8f98] mt-0.5 text-center">Ventas día a día</div>
+    </div>
+  );
 }
 
 // Página pública de provedix.com (etapa 3, pedido del usuario 2026-10-12):
@@ -207,6 +246,7 @@ export function PvxCatalog({ cards }: { cards: PublicCard[] }) {
                 <div className="text-[13.5px] font-semibold leading-snug line-clamp-2 mt-0.5 min-h-[2.5em]">{c.name}</div>
                 <div className="mt-2 text-[13px] font-bold text-[#16181d]">🔥 {c.soldRange} vendidos</div>
                 <div className="text-[11.5px] text-[#5b616b]">{c.unitsRange} unidades en 30 días</div>
+                {c.curve && c.curve.some((v) => v > 0) && <CardMetrics curve={c.curve} unlocked={registered === true} onUnlock={() => openCard(c.code)} />}
                 <div className="mt-2">
                   <div className="flex flex-wrap gap-1">
                     <CopyId code={c.code} label="Dropi" />

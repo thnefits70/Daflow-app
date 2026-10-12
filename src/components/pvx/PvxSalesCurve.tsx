@@ -2,14 +2,16 @@
 // 2026-10-12): solo la forma — cómo se movió el volumen día a día en los
 // últimos 30 días —, sin fechas ni cifras. Los valores ya vienen 0–100 y
 // suavizados desde el resumen (salesCurve en provedixSnapshot.ts).
+// También va chica en cada tarjeta del catálogo (height + 7/30 días).
+
+import { useId } from "react";
 
 const W = 300;
-const H = 70;
 const PAD = 4;
 
 // Curva suave que pasa por cada punto (Catmull-Rom → Bézier), sin pasarse
 // de los bordes.
-function smoothPath(pts: [number, number][]): string {
+function smoothPath(pts: [number, number][], H: number): string {
   if (pts.length < 2) return "";
   let d = `M${pts[0][0]},${pts[0][1]}`;
   for (let i = 0; i < pts.length - 1; i++) {
@@ -27,27 +29,31 @@ function smoothPath(pts: [number, number][]): string {
   return d;
 }
 
-export function PvxSalesCurve({ values }: { values: number[] }) {
+export function PvxSalesCurve({ values, height = 70, labels = true }: { values: number[]; height?: number; labels?: boolean }) {
+  const H = height;
+  const gradientId = `pvx-curve-${useId().replace(/:/g, "")}`;
   const step = (W - PAD * 2) / Math.max(1, values.length - 1);
   const pts = values.map((v, i): [number, number] => [PAD + i * step, H - PAD - (v / 100) * (H - PAD * 2)]);
-  const line = smoothPath(pts);
+  const line = smoothPath(pts, H);
   const area = `${line} L${pts[pts.length - 1][0]},${H} L${pts[0][0]},${H} Z`;
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-[70px] block" aria-label="Curva de ventas de los últimos 30 días" role="img">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full block" style={{ height: H }} aria-label="Curva de ventas" role="img">
         <defs>
-          <linearGradient id="pvx-curve-fill" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#ff5a1f" stopOpacity="0.28" />
             <stop offset="100%" stopColor="#ff5a1f" stopOpacity="0" />
           </linearGradient>
         </defs>
-        <path d={area} fill="url(#pvx-curve-fill)" />
+        <path d={area} fill={`url(#${gradientId})`} />
         <path d={line} fill="none" stroke="#ff5a1f" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       </svg>
-      <div className="flex justify-between text-[10px] text-[#8a8f98] mt-0.5">
-        <span>Antes</span>
-        <span>Reciente</span>
-      </div>
+      {labels && (
+        <div className="flex justify-between text-[10px] text-[#8a8f98] mt-0.5">
+          <span>Antes</span>
+          <span>Reciente</span>
+        </div>
+      )}
     </div>
   );
 }

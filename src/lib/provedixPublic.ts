@@ -12,7 +12,7 @@ import { getLatestProvedixSnapshot, type SnapshotProduct } from "@/lib/provedixS
 
 export const PROVEDIX_SNAPSHOT_TAG = "provedix-snapshot";
 
-export type PublicCard = Pick<SnapshotProduct, "code" | "name" | "brand" | "photo" | "unitsRange" | "soldRange" | "trend" | "rank" | "rocketSkus">;
+export type PublicCard = Pick<SnapshotProduct, "code" | "name" | "brand" | "photo" | "unitsRange" | "soldRange" | "trend" | "rank" | "rocketSkus" | "curve">;
 
 const cachedSnapshot = unstable_cache(async () => getLatestProvedixSnapshot(), ["provedix-public-snapshot"], {
   revalidate: 600,
@@ -38,7 +38,7 @@ export async function getPublicCatalog(): Promise<{ windowTo: string | null; car
   if (!s) return { windowTo: null, cards: [] };
   return {
     windowTo: s.windowTo,
-    cards: s.products.map((p) => ({ code: p.code, name: p.name, brand: p.brand, photo: publicPhotoUrl(p.photo), unitsRange: p.unitsRange, soldRange: p.soldRange, trend: p.trend, rank: p.rank, rocketSkus: p.rocketSkus ?? [] })),
+    cards: s.products.map((p) => ({ code: p.code, name: p.name, brand: p.brand, photo: publicPhotoUrl(p.photo), unitsRange: p.unitsRange, soldRange: p.soldRange, trend: p.trend, rank: p.rank, rocketSkus: p.rocketSkus ?? [], curve: p.curve })),
   };
 }
 
