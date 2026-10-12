@@ -47,7 +47,8 @@ export async function uploadFile(file: File, folder: string, signUrl: string = "
       const data = await signRes.json().catch(() => null);
       return { ok: false, error: data?.error ?? "No se pudo iniciar la subida." };
     }
-    const { token, path, publicUrl, fileName } = await signRes.json();
+    // bucket: los documentos sensibles van al bucket privado (2026-10-12).
+    const { token, path, publicUrl, fileName, bucket } = await signRes.json();
 
     // Confirmado 2026-09-29: Yair vio "Failed to fetch" subiendo el PDF de
     // guías de Dropi. Dos causas típicas: (1) el navegador lee el archivo del
@@ -70,7 +71,7 @@ export async function uploadFile(file: File, folder: string, signUrl: string = "
         // Cada archivo tiene nombre único y nunca cambia: el navegador lo
         // guarda un año y no lo vuelve a descargar (2026-10-06, para bajar el
         // consumo de datos de Supabase).
-        const { error } = await supabase.storage.from(BUCKET).uploadToSignedUrl(path, token, body, { cacheControl: "31536000" });
+        const { error } = await supabase.storage.from(bucket ?? BUCKET).uploadToSignedUrl(path, token, body, { cacheControl: "31536000" });
         if (!error) {
           lastError = "";
           break;

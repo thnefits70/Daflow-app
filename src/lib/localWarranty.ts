@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { fetchStoredFile } from "@/lib/privateFiles";
 import { Prisma } from "@/generated/prisma/client";
 import { extractPages, normalizeName, isRocketCode, labelLineUnits, parseGuidesPages, rocketNameCode, ROCKET_NAME_PREFIX, ROCKET_PREFIX, type PdfLine, type ParsedGuidesLine } from "@/lib/dropiGuidesPdf";
 import { resolveGuideLines } from "@/lib/fulfillmentGuides";
@@ -226,7 +227,7 @@ async function findGuideInPdfs(fileUrls: string[], guide: string) {
   for (const url of fileUrls) {
     let pages: PdfLine[][];
     try {
-      const res = await fetch(url);
+      const res = await fetchStoredFile(url);
       if (!res.ok) continue;
       pages = await extractPages(new Uint8Array(await res.arrayBuffer()));
     } catch {
@@ -306,7 +307,7 @@ export async function cacheGuideLabelsForBatch(batchId: string, opts: { quiet?: 
   for (const url of batch.fileUrls) {
     let pages: PdfLine[][];
     try {
-      const res = await fetch(url);
+      const res = await fetchStoredFile(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       pages = await extractPages(new Uint8Array(await res.arrayBuffer()));
     } catch (e) {

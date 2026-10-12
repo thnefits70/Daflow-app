@@ -1,5 +1,6 @@
 import { getAnthropicClient } from "@/lib/nancy";
 import { logAiUsage } from "@/lib/aiUsage";
+import { fetchStoredFile } from "@/lib/privateFiles";
 
 export const LEARNING_PATH_AI_MODEL = "claude-sonnet-5";
 
@@ -100,7 +101,7 @@ export type ContentSource = { title: string; parts: ContentPart[] };
 // (incluye páginas escaneadas/con imágenes), sin necesitar una librería de
 // extracción de texto en el servidor.
 async function fetchPdfBase64(url: string): Promise<string> {
-  const res = await fetch(url);
+  const res = await fetchStoredFile(url);
   if (!res.ok) throw new Error(`No se pudo descargar el PDF (${res.status}).`);
   const buf = await res.arrayBuffer();
   return Buffer.from(buf).toString("base64");

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import type { MarketProductBodega } from "@/generated/prisma/client";
 import { parseGuidesPdf } from "@/lib/dropiGuidesPdf";
+import { fetchStoredFile } from "@/lib/privateFiles";
 
 // Confirmado 2026-09-28 con el usuario: cada PDF de guías que descarga Yair
 // es el manifiesto de UNA marca en Dropi (su cuenta), y cada ID (producto o
@@ -56,7 +57,7 @@ export async function learnBrandsFromFiles(fileUrls: string[]): Promise<Manifest
   const out: ManifestLearnResult & { unread: number } = { brand: null, combos: [], products: [], conflicts: [], unread: 0 };
   for (const url of fileUrls) {
     try {
-      const res = await fetch(url);
+      const res = await fetchStoredFile(url);
       if (!res.ok) {
         out.unread++;
         continue;

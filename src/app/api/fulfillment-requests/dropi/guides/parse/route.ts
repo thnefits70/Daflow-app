@@ -5,6 +5,7 @@ import { addGuidesLine, extractPages, parseGuidesPages, rocketNameCode, ROCKET_N
 import { learnBrandsFromManifest, manifestBrandFor } from "@/lib/manifestBrand";
 import { alreadyUploadedMessage, alreadyUploadedWhere, findAlreadyUploadedGuides, resolveGuideLines, type AlreadyUploadedGuide } from "@/lib/fulfillmentGuides";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
+import { fetchStoredFile, isPrivateFolder, privatePathOf } from "@/lib/privateFiles";
 
 // Un PDF de ~280 páginas tarda ~2-3 s en leerse; con 40 PDF hace falta más
 // de un minuto (pedido de Yair 2026-09-29: subir más de 20 de una vez).
@@ -27,7 +28,9 @@ export async function POST(req: NextRequest) {
 
   // Solo archivos de nuestro propio almacenamiento (subidos con uploadFile).
   const storageBase = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-  if (!storageBase || parsed.data.fileUrls.some((u) => !u.startsWith(storageBase))) {
+  // 2026-10-12: los PDF de guías ahora van al bucket privado (/api/files/…).
+  const ours = (u: string) => (!!storageBase && u.startsWith(storageBase)) || (privatePathOf(u) !== null && isPrivateFolder(privatePathOf(u)!));
+  if (parsed.data.fileUrls.some((u) => !ours(u))) {
     return NextResponse.json({ error: "Archivo no válido." }, { status: 400 });
   }
 
@@ -35,7 +38,7 @@ export async function POST(req: NextRequest) {
   // la lectura sigue en orden para que los avisos digan "PDF #n" correcto.
   const downloads = await Promise.all(
     parsed.data.fileUrls.map(async (url) => {
-      const res = await fetch(url).catch(() => null);
+      const res = await fetchStoredFile(url).catch(() => null);
       return res?.ok ? new Uint8Array(await res.arrayBuffer()) : null;
     })
   );

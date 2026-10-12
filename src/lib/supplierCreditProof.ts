@@ -4,6 +4,7 @@ import { logAiUsage } from "@/lib/aiUsage";
 import { fetchFileContentBlock } from "@/lib/purchaseAi";
 import { prisma } from "@/lib/prisma";
 import { normalizeSupplierCode, type CreditProofClaim, type CreditProofLine, type CreditProofRead, type CreditDuplicateWarning } from "@/lib/supplierCreditProofShared";
+import { fetchStoredFile } from "@/lib/privateFiles";
 
 export * from "@/lib/supplierCreditProofShared";
 
@@ -174,7 +175,7 @@ export function verifyCreditProofRead(read: CreditProofRead, proofUrl: string, s
 
 export async function hashProofFile(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url);
+    const res = await fetchStoredFile(url);
     if (!res.ok) return null;
     return crypto.createHash("sha256").update(Buffer.from(await res.arrayBuffer())).digest("hex");
   } catch {

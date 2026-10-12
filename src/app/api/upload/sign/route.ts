@@ -29,6 +29,7 @@ import {
   canManageOutflowPurchaseGestion,
 } from "@/lib/guards";
 import { canBrandNewIds } from "@/lib/newIdBranding";
+import { ensurePrivateBucket, privateFileUrl, PRIVATE_BUCKET, PRIVATE_FOLDERS } from "@/lib/privateFiles";
 
 // Confirmado 2026-08-03: bug real — ninguna de estas carpetas de Control de
 // Compras (cotización, orden de compra, fotos de catálogo, comprobante de
@@ -234,6 +235,18 @@ export async function POST(req: NextRequest) {
   const path = `${safeFolder}/${crypto.randomUUID()}-${safeName}`;
 
   try {
+    // Documentos sensibles (2026-10-12): al bucket privado, con enlace que
+    // exige sesión — ver src/lib/privateFiles.ts.
+    if (PRIVATE_FOLDERS.has(safeFolder)) {
+      await ensurePrivateBucket();
+      const { data, error } = await supabaseAdmin().storage.from(PRIVATE_BUCKET).createSignedUploadUrl(path);
+      if (error || !data) {
+        console.error("[upload/sign] Supabase error (privado):", error);
+        return NextResponse.json({ error: `No se pudo iniciar la subida: ${error?.message ?? "error desconocido"}.` }, { status: 500 });
+      }
+      return NextResponse.json({ signedUrl: data.signedUrl, token: data.token, path, bucket: PRIVATE_BUCKET, publicUrl: privateFileUrl(path), fileName });
+    }
+
     await ensureBucket();
     const supabase = supabaseAdmin();
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path);
@@ -250,6 +263,7 @@ export async function POST(req: NextRequest) {
       signedUrl: data.signedUrl,
       token: data.token,
       path,
+      bucket: BUCKET,
       publicUrl: publicData.publicUrl,
       fileName,
     });

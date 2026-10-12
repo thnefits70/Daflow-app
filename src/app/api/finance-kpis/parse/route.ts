@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { canEditDeptKpis } from "@/lib/guards";
+import { fetchStoredFile } from "@/lib/privateFiles";
 
 const PERIOD_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No se recibió ningún archivo." }, { status: 400 });
   }
 
-  const fileRes = await fetch(fileUrl);
+  const fileRes = await fetchStoredFile(fileUrl);
   if (!fileRes.ok) {
     return NextResponse.json({ error: "No se pudo leer el archivo subido." }, { status: 400 });
   }

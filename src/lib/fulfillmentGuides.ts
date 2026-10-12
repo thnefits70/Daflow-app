@@ -11,6 +11,7 @@ import { areaRank } from "@/lib/warehouseAreas";
 import { guayaquilMonth, syncWarrantyMonth } from "@/lib/warrantyKpi";
 import { linkProductsFromGuides } from "@/lib/storeTracking";
 import { lotNoVariantUnits, soldOutVariantsOf } from "@/lib/variantStock";
+import { fetchStoredFile } from "@/lib/privateFiles";
 
 export const NO_BRAND = "SIN_MARCA";
 
@@ -1521,7 +1522,7 @@ export async function rereadLotVariants(lotId: string, userId: string | null): P
     const warrantyGuides = new Set(batch.items.map((i) => i.warrantyGuide).filter((g): g is string => !!g));
     const lines = new Map<string, ParsedGuidesLine>();
     for (const url of batch.fileUrls) {
-      const res = await fetch(url).catch(() => null);
+      const res = await fetchStoredFile(url).catch(() => null);
       if (!res?.ok) return { ok: false, error: "No se pudo abrir uno de los PDF guardados del corte." };
       const parsed = await parseGuidesPdf(new Uint8Array(await res.arrayBuffer())).catch(() => null);
       if (!parsed || parsed.source !== "DROPI") continue;

@@ -2,6 +2,7 @@ import { getAnthropicClient } from "@/lib/nancy";
 import { logAiUsage } from "@/lib/aiUsage";
 import { prisma } from "@/lib/prisma";
 import { SCREEN_PHOTO_NOTE_PREFIX } from "@/lib/receiptPhotoScreen";
+import { fetchStoredFile } from "@/lib/privateFiles";
 
 const PURCHASE_AI_MODEL = "claude-sonnet-5";
 
@@ -10,7 +11,7 @@ const PURCHASE_AI_MODEL = "claude-sonnet-5";
 // bloque de contenido correcto según el tipo real del archivo en vez de
 // mandar bytes de PDF disfrazados de imagen, que Claude no puede leer así.
 export async function fetchFileContentBlock(url: string): Promise<{ type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/webp"; data: string } } | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }> {
-  const res = await fetch(url);
+  const res = await fetchStoredFile(url);
   if (!res.ok) throw new Error(`No se pudo leer el archivo (${res.status}).`);
   const contentType = res.headers.get("content-type") ?? "";
   const buf = await res.arrayBuffer();
