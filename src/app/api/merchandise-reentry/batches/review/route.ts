@@ -53,7 +53,8 @@ export async function GET() {
   // 2026-09-29: lo listo ya no espera a Daniel (autoApproveReadyReentryItems) —
   // si quedó alguno de antes del cambio, se procesa al abrir la pantalla.
   await autoApproveReadyReentryItems().catch((err) => console.error("[reentry review] aprobación automática:", err));
-  const batches = await fetchBatches();
+  // Un lote al que Daniel le eliminó todos los productos ya no tiene nada que revisar.
+  const batches = (await fetchBatches()).filter((b) => b.items.length > 0);
 
   const ready = batches.filter((b) => b.items.every((i) => !itemNeedsReview(i))).map((b) => ({ ...b, items: b.items.map(toItemDTO) }));
   const needsReview = batches.filter((b) => b.items.some((i) => itemNeedsReview(i))).map((b) => ({ ...b, items: b.items.map(toItemDTO) }));

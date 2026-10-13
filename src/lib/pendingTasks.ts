@@ -7,7 +7,6 @@ import { evaluationDeadline, adminConfirmDeadline, summaryFieldsFromScores } fro
 import { addBusinessHours } from "@/lib/businessHours";
 import { getPettyCashBoxStatuses, getPendingMotorizadoFreights, type PettyCashBoxTypeStr } from "@/lib/pettyCash";
 import { getUpcomingBirthdays } from "@/lib/birthdays";
-import { getFinanzasDeptId } from "@/lib/inventoryKpis";
 import { isEndOfMonthQuincena, monthOfPeriod } from "@/lib/payrollCalc";
 import { getMarketingLeadId } from "@/lib/guards";
 import { NICHO_AUTO_MONTHLY_BUDGET_USD } from "@/lib/nichoAi";
@@ -27,7 +26,6 @@ import { getLinesToConfirm, INVENTORY_RECEIVING_HREF } from "@/lib/purchaseLeftB
 import { getPurchaseSuggestionAdminPendingItems, getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 import { getRepurchasePendingItems } from "@/lib/repurchaseReviews";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
-import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
 import { DISCONTINUED_URL, getDiscontinuedOrderPendingCount, getDiscontinuedPendingCount } from "@/lib/dropiDiscontinued";
 import { SUPPLIER_STOCKOUT_INFO_DAYS } from "@/lib/supplierStockout";
 import { getClaimFollowupRows, describeClaimRows } from "@/lib/purchaseClaimFollowup";
@@ -534,8 +532,6 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   caja_chica_excepcion_flete: "Caja Chica — excepción de flete por aprobar",
   sueldo_nairoby_transferencia: "Transferencia del sueldo de Nairoby",
   plan_mejora_admin: "Plan de Mejora que tú abriste — evaluación o etapa vencida",
-  catalogo_producto_faltante: "Productos reportados como faltantes en el catálogo",
-  control_inventario: "Control de Inventario — captura mensual",
   combo_sugerencias_nicho_backfill: "Sugerencias de Combos — nichos por asignar (tope de gasto alcanzado)",
   plan_mejora_evaluacion_pendiente: "Plan de Mejora — evaluación semanal pendiente",
   plan_mejora_etapa_vencida: "Plan de Mejora — etapa vencida, falta decidir cómo siguió",
@@ -2226,27 +2222,9 @@ async function getPayrollNairobySalaryTransferPendingItem(forAdmin: boolean, hre
   return getPayrollTransferKindPendingItem({ forAdmin, href, noun: "sueldo de Nairoby", type: "sueldo_nairoby_transferencia", rows });
 }
 
-// Confirmado 2026-09-28, pedido del usuario: cuando alguien reporta que un
-// producto no está en el catálogo, antes no le salía a nadie en Inicio —
-// lo resuelve Daniel (JustCatalogPanel → MissingReportsQueue).
-async function getCatalogMissingReportPendingItem(href: string): Promise<PendingItem | null> {
-  await autoResolveFoundMissingReports();
-  const rows = await prisma.catalogMissingReport.findMany({
-    where: { resolvedAt: null },
-    select: { query: true },
-    orderBy: { reportedAt: "asc" },
-  });
-  if (rows.length === 0) return null;
-  const names = rows.map((r) => `"${r.query}"`);
-  return {
-    type: "catalogo_producto_faltante",
-    icon: "🔎",
-    label: "Reportan productos que no están en el catálogo",
-    meta: `${names.slice(0, 3).join(", ")}${names.length > 3 ? ` y ${names.length - 3} más` : ""}`,
-    overdue: false,
-    href,
-  };
-}
+// Pedido de Daniel 2026-10-13: el aviso "Reportan productos que no están en
+// el catálogo" ya no sale en su Inicio. Los reportes siguen en Productos
+// (JustCatalogPanel → MissingReportsQueue).
 
 // Confirmado 2026-08-27, pedido explícito del usuario: si un proveedor
 // rechaza un cambio (ni cambia el producto ni da crédito), es una pérdida
@@ -2580,35 +2558,8 @@ async function getPurchaseRefundBankConfirmPendingItem(href: string): Promise<Pe
   };
 }
 
-// Confirmado 2026-08-17: pedido explícito del usuario (día 3, mismo plazo
-// que Roles de pago) — la captura mensual de Control de Inventario que
-// Daniel hace a mano no tenía ningún aviso en Inicio, había que entrar a
-// ojear el tab para notar que faltaba. El valor vive en
-// FinanceSharedMonthlyBalance bajo el departamento Finanzas, no Inventario
-// (mismo detalle ya documentado en getFinanzasDeptId/inventoryKpis.ts) —
-// company-wide, no por departamento.
-async function getInventoryControlPendingItem(href: string): Promise<PendingItem | null> {
-  const today = currentMonthStr();
-  const prev = prevMonthStr(today);
-  if (!fixedDayDeadlinePassed(today, 3)) return null;
-
-  const finDeptId = await getFinanzasDeptId();
-  if (!finDeptId) return null;
-  const rec = await prisma.financeSharedMonthlyBalance.findUnique({
-    where: { deptId_period: { deptId: finDeptId, period: prev } },
-    select: { inventarioFinal: true },
-  });
-  if (rec?.inventarioFinal != null) return null;
-
-  return {
-    type: "control_inventario",
-    icon: "📋",
-    label: "Control de Inventario — captura mensual",
-    meta: `${formatMonthLabel(prev)} · atrasado`,
-    overdue: true,
-    href,
-  };
-}
+// Pedido de Daniel 2026-10-13: el recordatorio "Control de Inventario —
+// captura mensual" se quitó de su Inicio — ese apartado ya es automático.
 
 // Confirmado 2026-08-14: pedido explícito del usuario — quiere ver en
 // Inicio, con un solo clic, todas las horas extra que le quedaron por
@@ -4422,10 +4373,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   }
 
   if (me.leadsDept.code === "INV") {
-    const [receivingItem, replacementItem, inventoryControlItem, merchandiseReentryItem, personalPurchaseInventoryItem, lateClaimReviewItem, nichoBackfillItem, deteriorResolutionItem, externalSaleDispatchItem] = await Promise.all([
+    const [receivingItem, replacementItem, merchandiseReentryItem, personalPurchaseInventoryItem, lateClaimReviewItem, nichoBackfillItem, deteriorResolutionItem, externalSaleDispatchItem] = await Promise.all([
       getPurchaseReceivingPendingItem("/area/workspace?tab=compras&ptab=inventario", true),
       getPurchaseReplacementVerificationPendingItem("/area/workspace?tab=compras&ptab=inventario"),
-      getInventoryControlPendingItem("/area/workspace?tab=inventario"),
       getMerchandiseReentryPendingItem("/area/reingreso-mercaderia?tab=revision"),
       getPersonalPurchasePendingInventoryItem("/area/compras-personales-inventario"),
       getLateClaimReviewPendingItem("/area/workspace?tab=compras&ptab=inventario"),
@@ -4437,7 +4387,6 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (linesToConfirmItem) items.unshift(linesToConfirmItem);
     if (receivingItem) items.push(receivingItem);
     if (replacementItem) items.push(replacementItem);
-    if (inventoryControlItem) items.push(inventoryControlItem);
     if (merchandiseReentryItem) items.push(merchandiseReentryItem);
     if (personalPurchaseInventoryItem) items.push(personalPurchaseInventoryItem);
     if (lateClaimReviewItem) items.push(lateClaimReviewItem);
@@ -4482,8 +4431,6 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     }
     const excessKardexItem = await getPurchaseExcessPendingItem("kardex", "/area/workspace?tab=compras&ptab=inventario");
     if (excessKardexItem) items.push(excessKardexItem);
-    const catalogMissingItem = await getCatalogMissingReportPendingItem("/area/reingreso-mercaderia?tab=productos");
-    if (catalogMissingItem) items.push(catalogMissingItem);
     items.unshift(...(await getFulfillmentLotSentPendingItems("/area/workspace?tab=egresos&otab=solicitud")));
   }
 
@@ -4690,7 +4637,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "control_inventario", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "variantes_guias_unir", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "conteo_inventario", "stock_negativo", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "catalogo_producto_faltante");
+      types.push("compras_recepcion", "compras_cambios_verificar", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "variantes_guias_unir", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "conteo_inventario", "stock_negativo", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

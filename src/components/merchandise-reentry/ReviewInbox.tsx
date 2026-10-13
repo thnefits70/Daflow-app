@@ -80,18 +80,34 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  // Quitar un producto duplicado que quedó por un doble-tap en la captura
-  // (bug corregido 2026-08-26) — exclusivo de Daniel (canAct) y solo antes
-  // de aprobar, ver DELETE /api/merchandise-reentry/items/[id].
+  // Quitar un producto del lote (duplicado por doble-tap, o algo que no se
+  // inventaría, como un producto de ALF) — exclusivo de Daniel (canAct) y
+  // solo antes de aprobar, ver DELETE /api/merchandise-reentry/items/[id].
+  // Pedido de Daniel 2026-10-13: pide el "por qué", que le llega al admin.
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleteReason, setDeleteReason] = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState("");
 
+  function requestRemove(itemId: string) {
+    setConfirmDeleteId(itemId);
+    setDeleteReason("");
+    setDeleteError("");
+  }
+
   async function deleteDuplicate(itemId: string) {
+    if (deleteReason.trim().length < 3) {
+      setDeleteError("Escribe por qué lo eliminas.");
+      return;
+    }
     setDeletingId(itemId);
     setDeleteError("");
     try {
-      const res = await fetch(`/api/merchandise-reentry/items/${itemId}`, { method: "DELETE" });
+      const res = await fetch(`/api/merchandise-reentry/items/${itemId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: deleteReason.trim() }),
+      });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? "No se pudo quitar el producto.");
       setConfirmDeleteId(null);
@@ -131,6 +147,39 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
     for (const b of ready) await postJson(`/api/merchandise-reentry/batches/${b.id}/approve`).catch(() => null);
     setBusy(false);
     load();
+  }
+
+  function removeConfirm(it: ItemDTO) {
+    const deleting = deletingId === it.id;
+    return (
+      <div key={it.id} className="flex flex-col gap-2 bg-red/10 border border-red/40 rounded-md p-2.5">
+        <span className="text-[11.5px]">¿Eliminar &quot;{itemName(it)}&quot; de este lote?</span>
+        <textarea
+          autoFocus
+          disabled={deleting}
+          rows={2}
+          maxLength={500}
+          className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px] disabled:opacity-60"
+          placeholder="¿Por qué lo eliminas? (ej. es un producto de ALF, no lo inventariamos)"
+          value={deleteReason}
+          onChange={(e) => setDeleteReason(e.target.value)}
+        />
+        {deleteError && <div className="text-red text-[11px]">{deleteError}</div>}
+        <div className="flex items-center justify-end gap-2">
+          <button type="button" className="text-[11px] font-semibold text-steel cursor-pointer" onClick={() => setConfirmDeleteId(null)}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={deleting || deleteReason.trim().length < 3}
+            className="rounded border border-red bg-red px-2.5 py-1 text-[11px] font-bold text-white cursor-pointer disabled:opacity-60"
+            onClick={() => deleteDuplicate(it.id)}
+          >
+            {deleting ? "Eliminando…" : "Sí, eliminar"}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (loading) return <div className="text-[13px] text-steel">Cargando…</div>;
@@ -202,30 +251,16 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
               </div>
               {expandedId === b.id && (
                 <div className="bg-cloud border-t border-rule p-3.5 flex flex-col gap-2">
-                  {deleteError && <div className="text-red text-[11px]">{deleteError}</div>}
                   {b.items.map((it) =>
                     confirmDeleteId === it.id ? (
-                      <div key={it.id} className="flex items-center gap-2 bg-red/10 border border-red/40 rounded-md p-2">
-                        <span className="flex-1 text-[11.5px]">¿Quitar &quot;{itemName(it)}&quot; de este lote?</span>
-                        <button type="button" className="text-[11px] font-semibold text-steel cursor-pointer" onClick={() => setConfirmDeleteId(null)}>
-                          Cancelar
-                        </button>
-                        <button
-                          type="button"
-                          disabled={deletingId === it.id}
-                          className="rounded border border-red bg-red px-2.5 py-1 text-[11px] font-bold text-white cursor-pointer disabled:opacity-60"
-                          onClick={() => deleteDuplicate(it.id)}
-                        >
-                          {deletingId === it.id ? "Quitando…" : "Sí, quitar"}
-                        </button>
-                      </div>
+                      removeConfirm(it)
                     ) : (
                       <ReadyItemRow
                         key={it.id}
                         item={it}
                         repeated={!!it.catalogItem && repeatedCatalogIds(b.items).has(it.catalogItem.id)}
                         canAct={canAct}
-                        onRequestRemove={() => { setConfirmDeleteId(it.id); setDeleteError(""); }}
+                        onRequestRemove={() => requestRemove(it.id)}
                         onChanged={load}
                         onExpandPhoto={setLightboxUrl}
                       />
@@ -249,9 +284,21 @@ export function ReviewInbox({ canAct }: { canAct: boolean }) {
                 <span className="text-[11px] text-steel">· {fmt(b.submittedAt)}</span>
               </div>
               <div className="flex flex-col gap-2.5">
-                {b.items.map((item) => (
-                  <ReviewItemRow key={item.id} item={item} repeated={!!item.catalogItem && repeatedCatalogIds(b.items).has(item.catalogItem.id)} canAct={canAct} onChanged={load} onExpandPhoto={setLightboxUrl} />
-                ))}
+                {b.items.map((item) =>
+                  confirmDeleteId === item.id ? (
+                    removeConfirm(item)
+                  ) : (
+                    <ReviewItemRow
+                      key={item.id}
+                      item={item}
+                      repeated={!!item.catalogItem && repeatedCatalogIds(b.items).has(item.catalogItem.id)}
+                      canAct={canAct}
+                      onRequestRemove={() => requestRemove(item.id)}
+                      onChanged={load}
+                      onExpandPhoto={setLightboxUrl}
+                    />
+                  )
+                )}
               </div>
             </div>
           ))}
@@ -366,7 +413,7 @@ function ReadyItemRow({
         </div>
         <span className="text-[11.5px] text-green font-semibold">{item.goodQty} buenas</span>
         {canAct && (
-          <button type="button" title="Quitar producto duplicado de este lote" className="text-steel hover:text-red cursor-pointer shrink-0" onClick={onRequestRemove}>
+          <button type="button" title="Eliminar este producto del lote" className="text-steel hover:text-red cursor-pointer shrink-0" onClick={onRequestRemove}>
             <Trash2 size={13} />
           </button>
         )}
@@ -398,7 +445,7 @@ function ReadyItemRow({
   );
 }
 
-function ReviewItemRow({ item, repeated, canAct, onChanged, onExpandPhoto }: { item: ItemDTO; repeated?: boolean; canAct: boolean; onChanged: () => void; onExpandPhoto: (url: string) => void }) {
+function ReviewItemRow({ item, repeated, canAct, onRequestRemove, onChanged, onExpandPhoto }: { item: ItemDTO; repeated?: boolean; canAct: boolean; onRequestRemove: () => void; onChanged: () => void; onExpandPhoto: (url: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [solving, setSolving] = useState(false);
@@ -520,6 +567,11 @@ function ReviewItemRow({ item, repeated, canAct, onChanged, onExpandPhoto }: { i
           )}
         </div>
         {item.goodQty > 0 && <span className="text-[11.5px] text-green font-semibold shrink-0 whitespace-nowrap">{item.goodQty} buenas</span>}
+        {canAct && !item.approvedAt && (
+          <button type="button" title="Eliminar este producto del lote" className="text-steel hover:text-red cursor-pointer shrink-0" onClick={onRequestRemove}>
+            <Trash2 size={13} />
+          </button>
+        )}
 
         {damageNeedsReview && !solving && !claiming && (
           <div className="w-full sm:w-auto sm:shrink-0 flex flex-wrap gap-1.5">
