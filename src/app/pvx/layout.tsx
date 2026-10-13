@@ -15,9 +15,15 @@ const saira = Saira({
 
 // provedix.com (etapa 3, 2026-10-12): título e ícono propios — nada de DAFLOW.
 export const metadata: Metadata = {
-  title: "Provedix · Productos ganadores con datos reales de venta",
+  // Dirección oficial para Google (2026-10-13): aunque la página también se
+  // abra desde otro dominio, Google la registra solo como provedix.com.
+  metadataBase: new URL("https://provedix.com"),
+  alternates: { canonical: "/" },
+  applicationName: "Provedix",
+  keywords: ["Provedix", "proveedor Dropi Ecuador", "dropshipping Ecuador", "productos ganadores", "proveedor dropshipping Guayaquil"],
+  title: "Provedix | Proveedor de Dropi en Ecuador · Productos ganadores",
   description:
-    "Descubre gratis qué productos de nuestras bodegas se están vendiendo en Ecuador: ventas, precio al público, ciudades y combos, con datos reales de despacho.",
+    "Provedix es proveedor verificado de Dropi en Ecuador. Mira gratis qué productos se están vendiendo, a qué precio y en qué ciudades. Más de 3 cortes diarios y despacho en menos de 3 horas.",
   robots: { index: true, follow: true },
   // Logo oficial de Provedix (2026-10-12): el layout raíz pone el favicon
   // de DAFLOW (platformSettings.faviconUrl); definir `icons` acá lo tapa,
@@ -29,8 +35,12 @@ export const metadata: Metadata = {
     apple: "/pvx/apple-icon.png",
   },
   openGraph: {
-    title: "Provedix · Productos ganadores con datos reales de venta",
-    description: "Mira gratis qué se está vendiendo en Ecuador y véndelo en Dropi.",
+    type: "website",
+    url: "/",
+    siteName: "Provedix",
+    locale: "es_EC",
+    title: "Provedix | Proveedor de Dropi en Ecuador",
+    description: "Mira gratis qué productos se están vendiendo en Ecuador y véndelos en Dropi. Despacho en menos de 3 horas.",
     images: [{ url: "/pvx/brand/stacked-orange.png", width: 900, height: 581 }],
   },
 };

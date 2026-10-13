@@ -26,28 +26,36 @@ const CARRIERS = ["Servientrega", "Gintracom", "LaarCourier", "Urbano", "Veloces
 
 const WEEKDAY = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
-function ecuadorNow(): { day: string; minutes: number; dow: number } {
+function ecuadorNow(): { day: string; minutes: number; seconds: number; dow: number } {
   // Ecuador: UTC−5 todo el año, sin horario de verano.
   const d = new Date(Date.now() - 5 * 3_600_000);
-  return { day: d.toISOString().slice(0, 10), minutes: d.getUTCHours() * 60 + d.getUTCMinutes(), dow: d.getUTCDay() };
+  const seconds = d.getUTCHours() * 3600 + d.getUTCMinutes() * 60 + d.getUTCSeconds();
+  return { day: d.toISOString().slice(0, 10), minutes: Math.floor(seconds / 60), seconds, dow: d.getUTCDay() };
+}
+
+// Cuenta regresiva (pedido de Daniel 2026-10-13): HH:MM:SS, en vivo.
+export function clock(total: number): string {
+  const t = Math.max(0, Math.floor(total));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(Math.floor(t / 3600))}:${pad(Math.floor((t % 3600) / 60))}:${pad(t % 60)}`;
+}
+
+function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86_400_000);
 }
 
 function cutsFor(dow: number) {
   return dow === 6 ? CUTS.slice(0, 1) : CUTS;
 }
 
-function waitText(min: number): string {
-  const h = Math.floor(min / 60);
-  const m = min % 60;
-  if (h === 0) return `${m} min`;
-  return m === 0 ? `${h} h` : `${h} h ${m} min`;
-}
-
-type CutState = { active: number | null; title: string; detail: string; saturday: boolean };
+// countdown: segundos que faltan; countdownLabel: qué se está contando.
+type CutState = { active: number | null; title: string; detail: string; saturday: boolean; countdown: number | null; countdownLabel: string };
 
 export function cutState(): CutState {
-  const { day, minutes, dow } = ecuadorNow();
+  const { day, minutes, seconds, dow } = ecuadorNow();
   const saturday = dow === 6;
+  // Segundos hasta el primer corte (8:30) del siguiente día de trabajo.
+  const toNextMorning = () => daysBetween(day, nextWorkingDay(day)) * 86_400 + CUTS[0].print[0] * 60 - seconds;
   // Próximo día de trabajo; si es sábado, se avisa que ese día hay un solo corte.
   const nextDay = () => {
     const n = nextWorkingDay(day);
@@ -56,16 +64,18 @@ export function cutState(): CutState {
     return ndow === 6 ? `${when}, a las 8:30 (el sábado hay un solo corte, con ${SATURDAY_CARRIERS})` : `${when}, a las 8:30`;
   };
   if (!isWorkingDay(day)) {
-    return { active: null, saturday, title: "Hoy no despachamos", detail: `Los pedidos que confirmes hoy salen en el primer corte ${nextDay()}.` };
+    return { active: null, saturday, title: "Hoy no despachamos", detail: `Los pedidos que confirmes hoy salen en el primer corte ${nextDay()}.`, countdown: toNextMorning(), countdownLabel: "Próximo corte en" };
   }
   const satNote = saturday ? ` Hoy sábado hay un solo corte, con ${SATURDAY_CARRIERS}.` : "";
   const cuts = cutsFor(dow);
   for (let i = 0; i < cuts.length; i++) {
     const [from, to] = cuts[i].print;
-    if (minutes < from) return { active: i, saturday, title: `Próximo corte en ${waitText(from - minutes)}`, detail: `${cuts[i].label}: imprimimos guías a las ${cuts[i].printText.split(" – ")[0]} y despachamos de ${cuts[i].dispatchText}.${satNote}` };
-    if (minutes < to) return { active: i, saturday, title: "Imprimiendo guías ahora", detail: `${cuts[i].label}: lo que entra ahora sale de ${cuts[i].dispatchText}.${satNote}` };
+    if (minutes < from)
+      return { active: i, saturday, title: "Próximo corte en", detail: `${cuts[i].label}: imprimimos guías a las ${cuts[i].printText.split(" – ")[0]} y despachamos de ${cuts[i].dispatchText}.${satNote}`, countdown: from * 60 - seconds, countdownLabel: "" };
+    if (minutes < to)
+      return { active: i, saturday, title: "Imprimiendo guías ahora", detail: `${cuts[i].label}: lo que entra ahora sale de ${cuts[i].dispatchText}.${satNote}`, countdown: to * 60 - seconds, countdownLabel: "Este corte cierra en" };
   }
-  return { active: null, saturday, title: saturday ? "El corte del sábado ya pasó" : "Los cortes de hoy ya terminaron", detail: `Lo que confirmes ahora sale en el primer corte ${nextDay()}.` };
+  return { active: null, saturday, title: saturday ? "El corte del sábado ya pasó" : "Los cortes de hoy ya terminaron", detail: `Lo que confirmes ahora sale en el primer corte ${nextDay()}.`, countdown: toNextMorning(), countdownLabel: "Próximo corte en" };
 }
 
 function LiveCut() {
@@ -73,11 +83,11 @@ function LiveCut() {
   useEffect(() => {
     const tick = () => setState(cutState());
     tick();
-    const t = setInterval(tick, 30_000);
+    const t = setInterval(tick, 1000);
     return () => clearInterval(t);
   }, []);
   return (
-    <div className="rounded-[24px] bg-[var(--pvx-night-2)] p-5 sm:p-6" aria-live="polite">
+    <div className="rounded-[24px] bg-[var(--pvx-night-2)] p-5 sm:p-6">
       <div className="flex items-center gap-2 text-[13px] font-bold text-[var(--pvx-orange)]">
         <span className="relative flex h-2.5 w-2.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--pvx-orange)] opacity-60 motion-reduce:hidden" />
@@ -85,7 +95,27 @@ function LiveCut() {
         </span>
         Ahora en Guayaquil
       </div>
-      <p className="pvx-heading mt-3 min-h-[1em] text-[26px] text-white sm:text-[32px]">{state?.title ?? " "}</p>
+      <p className="pvx-heading mt-3 min-h-[1em] text-[24px] text-white sm:text-[28px]" aria-live="polite">
+        {state?.title ?? " "}
+      </p>
+      {state?.countdown != null && (
+        <div className="mt-3">
+          {state.countdownLabel && <span className="block text-[13px] font-semibold text-white/60">{state.countdownLabel}</span>}
+          <time aria-label={`Faltan ${clock(state.countdown)}`} className="pvx-display pvx-num mt-1 flex items-baseline gap-1 text-[52px] text-[var(--pvx-orange)] sm:text-[64px]">
+            {clock(state.countdown)
+              .split(":")
+              .map((part, i) => (
+                <span key={i} className="flex items-baseline gap-1">
+                  {i > 0 && <span className="text-white/25">:</span>}
+                  <span className="flex flex-col items-center">
+                    {part}
+                    <span className="mt-1 text-[11px] font-semibold not-italic normal-case tracking-normal text-white/45">{["horas", "min", "seg"][i]}</span>
+                  </span>
+                </span>
+              ))}
+          </time>
+        </div>
+      )}
       <p className="mt-2 min-h-[3em] text-[15px] leading-relaxed text-white/75">{state?.detail ?? ""}</p>
       <ol className="mt-5 flex flex-col gap-2">
         {CUTS.map((c, i) => (
@@ -184,7 +214,7 @@ export function PvxCities({ stats }: { stats: PublicStats }) {
     <section className="bg-[var(--pvx-paper-2)] py-24 sm:py-32" aria-labelledby="pvx-cities">
       <div className="mx-auto grid max-w-[1240px] gap-12 px-4 sm:px-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-20">
         <div data-r>
-          <h2 id="pvx-cities" className="pvx-display text-[38px] sm:text-[60px]">
+          <h2 id="pvx-cities" className="pvx-display text-[38px] sm:text-[clamp(40px,4.4vw,60px)]">
             Dónde se <span className="text-[var(--pvx-orange)]">vende más</span>
           </h2>
           <p className="mt-6 max-w-[440px] text-[17px] leading-relaxed text-[var(--pvx-ink-2)]">

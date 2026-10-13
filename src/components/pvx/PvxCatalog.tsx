@@ -324,7 +324,7 @@ function Stats({ stats }: { stats: PublicStats }) {
         <div key={r.label} data-r style={{ ["--d" as string]: i }}>
           <dt className="sr-only">{r.label}</dt>
           <dd>
-            <span className="pvx-display pvx-num block text-[44px] text-[var(--pvx-orange)] sm:text-[64px]">{r.value}</span>
+            <span className="pvx-display pvx-num block whitespace-nowrap text-[44px] text-[var(--pvx-orange)] sm:text-[clamp(44px,4.4vw,64px)]">{r.value}</span>
             <span className="mt-2 block max-w-[220px] text-[15px] leading-snug text-white/75 sm:text-[16px]">{r.label}</span>
           </dd>
         </div>
@@ -465,27 +465,26 @@ function Promises() {
     { icon: <IconImage className="w-7 h-7" />, title: "Fotos brandeadas listas", text: "Fotos del producto listas para tus anuncios y tu tienda." },
     { icon: <IconWhatsApp className="w-7 h-7" />, title: "Un asesor por WhatsApp", text: "Una persona real te ayuda a elegir y resuelve tus dudas." },
   ];
+  // Titular arriba a todo el ancho y las promesas en cuadrícula (2026-10-13:
+  // "despachamos" quedaba pegado a los íconos en la versión de dos columnas).
   return (
     <section className="bg-[var(--pvx-orange)] py-24 text-white sm:py-32" aria-labelledby="pvx-promise">
-      <div className="mx-auto grid max-w-[1240px] gap-14 px-4 sm:px-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-20">
-        <div data-r>
-          <h2 id="pvx-promise" className="pvx-display text-[40px] sm:text-[68px]">
-            Tú vendes. Nosotros despachamos.
+      <div className="mx-auto max-w-[1240px] px-4 sm:px-8">
+        <div data-r className="flex flex-col items-start gap-8">
+          <h2 id="pvx-promise" className="pvx-display text-[38px] sm:text-[clamp(44px,5.2vw,76px)]">
+            <span className="block">Tú vendes.</span>
+            <span className="block text-[var(--pvx-ink)]">Nosotros despachamos.</span>
           </h2>
-          <div className="mt-9">
-            <AdvisorPicker className="pvx-press inline-flex items-center gap-2 rounded-full bg-white px-6 py-3.5 text-[15px] font-bold text-[var(--pvx-ink)] hover:bg-[var(--pvx-ink)] hover:text-white cursor-pointer">
-              <IconWhatsApp className="w-5 h-5" /> Escribir al asesor
-            </AdvisorPicker>
-          </div>
+          <AdvisorPicker className="pvx-press inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-white px-6 py-3.5 text-[15px] font-bold text-[var(--pvx-ink)] hover:bg-[var(--pvx-ink)] hover:text-white cursor-pointer">
+            <IconWhatsApp className="w-5 h-5" /> Escribir al asesor
+          </AdvisorPicker>
         </div>
-        <ul className="flex flex-col gap-10 sm:gap-12">
+        <ul className="mt-14 grid gap-4 sm:mt-20 sm:grid-cols-2 lg:grid-cols-4">
           {rows.map((r, i) => (
-            <li key={r.title} data-r style={{ ["--d" as string]: i + 1 }} className="grid grid-cols-[auto_1fr] gap-5">
+            <li key={r.title} data-r style={{ ["--d" as string]: i + 1 }} className="flex flex-col rounded-[24px] bg-white/[.12] p-6 sm:p-7">
               <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[var(--pvx-ink)] text-[var(--pvx-orange)]">{r.icon}</span>
-              <span>
-                <span className="pvx-heading block text-[26px] sm:text-[34px]">{r.title}</span>
-                <span className="mt-2 block text-[16px] leading-relaxed text-white sm:text-[17px]">{r.text}</span>
-              </span>
+              <span className="pvx-heading mt-8 block text-[23px] lg:text-[22px] xl:text-[24px]">{r.title}</span>
+              <span className="mt-3 block text-[16px] leading-relaxed text-white">{r.text}</span>
             </li>
           ))}
         </ul>

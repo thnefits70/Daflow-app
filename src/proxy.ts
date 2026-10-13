@@ -18,12 +18,19 @@ const SUPPLIER_LEDGER_ALLOWED_PREFIXES = ["/proveedor-ledger", "/api/proveedor-l
 // página pública (/pvx) y solo pasan sus rutas; todo lo demás, 404 liso.
 // /api/auth/session y /api/app-version los piden componentes globales del
 // layout; no revelan nada (sin sesión en ese dominio).
-const PROVEDIX_EXTRA_PATHS = ["/api/auth/session", "/api/app-version", "/robots.txt"];
+const PROVEDIX_EXTRA_PATHS = ["/api/auth/session", "/api/app-version", "/robots.txt", "/sitemap.xml"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
 
   if (isProvedixHost(req.nextUrl.hostname)) {
+    // Una sola dirección para Google (2026-10-13): www.provedix.com → provedix.com.
+    if (req.nextUrl.hostname.toLowerCase().startsWith("www.")) {
+      const url = req.nextUrl.clone();
+      url.hostname = req.nextUrl.hostname.slice(4);
+      url.port = "";
+      return NextResponse.redirect(url, 308);
+    }
     if (pathname === "/") return NextResponse.rewrite(new URL("/pvx", req.nextUrl));
     const allowed = PROVEDIX_PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) || PROVEDIX_EXTRA_PATHS.includes(pathname);
     return allowed ? NextResponse.next() : new NextResponse(null, { status: 404 });
