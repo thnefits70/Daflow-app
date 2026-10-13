@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import type { PublicStats } from "@/lib/provedixPublic";
 import { isWorkingDay, nextWorkingDay } from "@/lib/ecuadorHolidays";
-import { IconArrow, IconCheck, IconClock, IconExternal, IconImage, IconTruck, IconWhatsApp } from "@/components/pvx/PvxIcons";
+import { IconArrow, IconBox, IconCheck, IconClock, IconExternal, IconImage, IconSpark, IconTrendUp, IconTruck, IconWhatsApp } from "@/components/pvx/PvxIcons";
 
 // Secciones sacadas del "Manual de Trabajo Provedix – Actualizado 2026"
 // (pedido del usuario 2026-10-13): cortes y despachos, cómo empacamos,
@@ -306,6 +306,32 @@ export function PvxResources() {
               </li>
             ))}
           </ol>
+        </div>
+
+        {/* Beneficio del manual ("Buenas prácticas de venta"), pedido 2026-10-13. */}
+        <div data-r className="mt-4 grid gap-8 rounded-[28px] bg-white p-7 sm:p-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
+          <div>
+            <h3 className="pvx-heading text-[28px] sm:text-[36px]">
+              Vende bien y <span className="text-[var(--pvx-orange)]">te premiamos</span>
+            </h3>
+            <p className="mt-3 text-[16px] leading-relaxed text-[var(--pvx-ink-2)]">
+              Los dropshippers que atienden bien a sus clientes reciben beneficios. Revisa que haya stock antes de lanzar campañas, no prometas de más y mantén una
+              comunicación clara con tus clientes.
+            </p>
+          </div>
+          <ul className="grid gap-3 self-center sm:grid-cols-3">
+            {[
+              { icon: <IconTrendUp className="w-5 h-5" />, title: "Prioridad en reposiciones", text: "Cuando llega stock, primero para ti." },
+              { icon: <IconSpark className="w-5 h-5" />, title: "Productos nuevos antes", text: "Acceso anticipado a lo que recién llega." },
+              { icon: <IconBox className="w-5 h-5" />, title: "Stock reservado", text: "Stock apartado para que vendas tranquilo." },
+            ].map((b) => (
+              <li key={b.title} className="rounded-2xl bg-[var(--pvx-paper-2)] p-5">
+                <span className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--pvx-orange)] text-white">{b.icon}</span>
+                <span className="mt-4 block text-[16px] font-bold">{b.title}</span>
+                <span className="mt-1 block text-[14.5px] leading-relaxed text-[var(--pvx-ink-2)]">{b.text}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </section>
