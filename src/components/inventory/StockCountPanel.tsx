@@ -6,6 +6,7 @@ import type { CountView } from "@/lib/stockCount";
 import type { AssignmentBoard, AssignmentView } from "@/lib/stockCountAssignments";
 import { WAREHOUSE_AREAS, areaLabel } from "@/lib/warehouseAreas";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { BIG_DIFF_UNITS } from "@/lib/stockCountRules";
 
 type Data = { count: CountView | null; fullCompleted: boolean; weeklyArea: string | null; isLead: boolean; board: AssignmentBoard | null };
 
@@ -124,6 +125,7 @@ export function StockCountPanel() {
   const [openNames, setOpenNames] = useState<Set<string>>(new Set());
   const [err, setErr] = useState("");
   const [confirmSend, setConfirmSend] = useState(false);
+  const [confirmApply, setConfirmApply] = useState(false);
   const [confirmStart, setConfirmStart] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -245,8 +247,21 @@ export function StockCountPanel() {
     setBusy(false);
     setConfirmSend(false);
     if (!r.ok) return;
-    const differences = Number(r.json?.differences ?? 0);
-    setMsg(differences > 0 ? `Enviado: ${differences} producto(s) con diferencia pasan a aprobación del administrador.` : "Enviado: todo cuadró, no hay nada que ajustar.");
+    const recount = Number(r.json?.recount ?? 0);
+    setMsg(`Enviado y aplicado a INVESTOCK.${recount > 0 ? ` ${recount} producto(s) con diferencia grande pasan a recuento: asígnalo a otra persona.` : ""}`);
+    load();
+  }
+
+  async function applyNow() {
+    if (!count) return;
+    setBusy(true);
+    const r = await post(`/api/stock-count/${count.id}/apply`);
+    setBusy(false);
+    setConfirmApply(false);
+    if (!r.ok) return;
+    const applied = Number(r.json?.applied ?? 0);
+    const recount = Array.isArray(r.json?.recount) ? r.json.recount.length : 0;
+    setMsg(`Aplicado a INVESTOCK: ${applied} producto(s).${recount > 0 ? ` ${recount} con diferencia grande pasan a recuento: asígnalo a otra persona.` : ""}`);
     load();
   }
 
@@ -282,11 +297,13 @@ export function StockCountPanel() {
   }
 
   const counted = count.products.filter((p) => p.countedQty !== null).length;
+  const toApply = count.products.filter((p) => p.countedQty !== null && !p.applied && !p.recount).length;
   const total = count.products.length;
   const locked = count.status !== "COUNTING";
   const mineIds = new Set(mine?.productIds ?? []);
   const recounting = mine?.area === "RECOUNT";
   const canEdit = (p: CountView["products"][number]) => {
+    if (p.applied) return false;
     if (!isLead && !board?.window.inWindow) return false;
     if (recounting && mineIds.has(p.id)) return !!mine?.startedAt && p.recount;
     if (locked) return false;
@@ -373,6 +390,7 @@ export function StockCountPanel() {
                     <div className="text-steel font-mono text-[11px]">
                       {p.justCode ? <span className="inline-flex items-center gap-1 align-middle"><CatalogCode code={p.justCode} size="text-[11px]" /></span> : "sin ID"} · {areaLabel(p.area)}
                       {p.recount && " · para recontar"}
+                      {p.applied && " · ✓ aplicado a INVESTOCK"}
                       {p.countedQty !== null && ` · contado ${p.countedQty}${p.countedByName && isLead ? ` por ${p.countedByName}` : ""}`}
                     </div>
                     {p.variantCounts && p.variantCounts.length > 0 && !vRows && <div className="text-steel text-[11.5px]">{variantSummary(p.variantCounts)}</div>}
@@ -422,11 +440,31 @@ export function StockCountPanel() {
         </>
       )}
 
+      {/* Pedido del usuario 2026-10-13: aplicar por partes, sin cerrar el conteo. */}
+      {isLead && !locked && (
+        <div className="mt-4 max-w-2xl border border-teal/40 bg-teal/5 rounded p-3 text-[12.5px]">
+          <div className="font-semibold mb-1">Aplicar lo contado a INVESTOCK</div>
+          <div className="text-steel mb-2">
+            Lo que ya revisaste pasa al stock sin esperar a que termine todo el conteo. Las diferencias pequeñas se aplican solas; las grandes (más de {BIG_DIFF_UNITS} u. y más del doble o menos de la mitad) las vuelve a contar otra persona y, si coincide, se aplican solas. Lo aplicado ya no se corrige desde aquí.
+          </div>
+          {confirmApply ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span>¿Aplicar {toApply} producto(s)?</span>
+              <button type="button" disabled={busy} className="rounded border border-teal bg-teal px-3 py-1.5 font-bold text-navy cursor-pointer" onClick={applyNow}>{busy ? "Aplicando…" : "Sí, aplicar"}</button>
+              <button type="button" className="text-steel cursor-pointer" onClick={() => setConfirmApply(false)}>Cancelar</button>
+            </div>
+          ) : (
+            <button type="button" disabled={toApply === 0} className="rounded border border-teal px-3.5 py-2 font-bold text-teal cursor-pointer disabled:opacity-50" onClick={() => setConfirmApply(true)}>
+              Aplicar lo contado ({toApply} sin aplicar)
+            </button>
+          )}
+        </div>
+      )}
       {isLead && !locked && (
         <div className="mt-4 max-w-2xl">
           {confirmSend ? (
             <div className="bg-cloud border border-gold/50 rounded p-3 text-[12.5px]">
-              <b>¿Enviar el conteo?</b> Ya no se podrá cambiar lo contado. Las diferencias le llegan al administrador en una lista para aprobarlas.
+              <b>¿Cerrar y enviar el conteo?</b> Ya no se podrá cambiar lo contado. Lo que falte aplicar se aplica igual que con el botón de arriba (las diferencias grandes, a recuento).
               {counted < total && <div className="text-gold font-semibold mt-1">Faltan {total - counted} producto(s) por contar: esos no se ajustan.</div>}
               <div className="flex gap-2 mt-2">
                 <button type="button" disabled={busy} className="rounded border border-gold bg-gold px-3 py-1.5 font-bold text-navy cursor-pointer" onClick={send}>{busy ? "Enviando…" : "Sí, enviar"}</button>
@@ -435,7 +473,7 @@ export function StockCountPanel() {
             </div>
           ) : (
             <button type="button" disabled={counted === 0} className="rounded border border-teal bg-teal px-3.5 py-2 font-bold text-navy cursor-pointer disabled:opacity-50" onClick={() => setConfirmSend(true)}>
-              Revisé el conteo — enviar a aprobación ({counted}/{total})
+              Revisé el conteo — cerrar y enviar ({counted}/{total})
             </button>
           )}
         </div>
@@ -613,7 +651,7 @@ function AssignBoard({ count, board, busy, setBusy, post, reload }: {
       )}
       {(board.unassignedRecount > 0 || board.recounts.length > 0) && (
         <div className="mt-3">
-          <div className="font-semibold text-[13px] mb-1">🔁 Recuento pedido por el administrador</div>
+          <div className="font-semibold text-[13px] mb-1">🔁 Recuento de diferencias grandes</div>
           {board.recounts.map((a) => (
             <div key={a.id} className="text-[12.5px] text-steel mb-1">
               {a.assigneeName}: {a.total} producto(s) · {a.finishedAt ? "✓ terminó" : `${a.done}/${a.total} · meta ${hour(a.deadline)}${a.late ? " · ⏰ atrasado" : ""}`}

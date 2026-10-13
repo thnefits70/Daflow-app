@@ -26,7 +26,11 @@ export async function getCountGate(catalogItemIds?: string[]): Promise<CountGate
     select: { catalogItemId: true, countedQty: true, expectedQty: true, decision: true },
   });
   const counted = new Map<string, number>();
-  for (const l of lines) counted.set(l.catalogItemId, l.decision === "APPROVED" || l.decision === "REJECTED" ? 0 : l.countedQty - l.expectedQty);
+  for (const l of lines) {
+    // En recuento (diferencia grande, 2026-10-13): todavía no se sabe, cuenta como no contado.
+    if (l.decision === "RECOUNT") continue;
+    counted.set(l.catalogItemId, l.decision === "APPROVED" || l.decision === "REJECTED" ? 0 : l.countedQty - l.expectedQty);
+  }
   return { active: true, counted };
 }
 
@@ -41,7 +45,7 @@ export function isUncounted(gate: CountGate, catalogItemId: string, hasKardex: b
 }
 
 export function uncountedMessage(name: string): string {
-  return `"${name}" todavía no se cuenta en el conteo físico, así que no se sabe cuánto hay de verdad. No se puede comprar hasta que se cuente: usa "Pedir que lo cuenten" en Qué comprar (le llega a Daniel). Si es una emergencia, va por la vía de emergencia.`;
+  return `"${name}" todavía no se cuenta en el conteo físico (o está en recuento por una diferencia grande), así que no se sabe cuánto hay de verdad. No se puede comprar hasta que se cuente: usa "Pedir que lo cuenten" en Qué comprar (le llega a Daniel). Si es una emergencia, va por la vía de emergencia.`;
 }
 
 // Para frenar solicitudes de compra y recompras. Los suministros (no se

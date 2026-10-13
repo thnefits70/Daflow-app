@@ -7878,6 +7878,10 @@ model StockCountLine {
   // recontarse vuelve a null y regresa a la lista del admin).
   decision      String?
   decidedAt     DateTime?
+  // Recuento automático (pedido del usuario 2026-10-13): diferencia
+  // (contado − esperado) del conteo anterior. Al recontar, si la nueva
+  // diferencia coincide se aplica sola; si no, otra persona vuelve a contar.
+  prevDelta     Int?
   // Segundos que tomó contar este producto (desde el producto anterior de la
   // misma persona; null si hubo una pausa larga). Base del tiempo estimado
   // de los próximos conteos.

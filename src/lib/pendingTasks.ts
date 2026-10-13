@@ -3087,9 +3087,22 @@ async function getStockCountPendingItems(forLead: boolean, userId: string | null
   const title = count.kind === "FULL" ? "Conteo general" : `Conteo semanal · Área ${count.area}`;
   const late = [...board.areas.map((a) => a.assignment), ...board.recounts].filter((a): a is AssignmentView => !!a && a.late);
   if (board.unassignedRecount > 0) {
-    items.push({ type: "conteo_inventario", icon: "🔁", label: `${board.unassignedRecount} producto(s) para recontar — asígnalos a otra persona`, meta: "El administrador los desmarcó. No puede recontarlos quien los contó.", overdue: true, href: "/area/conteo-inventario" });
+    items.push({ type: "conteo_inventario", icon: "🔁", label: `${board.unassignedRecount} producto(s) para recontar — asígnalos a otra persona`, meta: "Diferencia grande: si el recuento coincide, se aplica solo. No puede recontarlos quien los contó.", overdue: true, href: "/area/conteo-inventario" });
   }
   if (count.status !== "COUNTING") return items;
+  // Pedido del usuario 2026-10-13: lo contado se aplica a INVESTOCK por
+  // partes. Mientras haya contado sin aplicar, Daniel lo ve arriba.
+  const toApply = await prisma.stockCountLine.count({ where: { countId: count.id, decision: null } });
+  if (toApply > 0) {
+    items.unshift({
+      type: "conteo_inventario",
+      icon: "✅",
+      label: `${title}: ${toApply} producto(s) contados sin aplicar a INVESTOCK — pulsa «Aplicar lo contado»`,
+      meta: "Las diferencias pequeñas se aplican solas; las grandes pasan a recuento por otra persona",
+      overdue: true,
+      href: "/area/conteo-inventario",
+    });
+  }
   const finished = board.areas.filter((a) => a.assignment?.finishedAt).length;
   const inProgress = board.areas.filter((a) => a.assignment && !a.assignment.finishedAt);
   const free = board.areas.filter((a) => !a.assignment && a.total > 0);

@@ -157,7 +157,8 @@ export async function assignArea(params: { countId: string; area: string; assign
   const count = await prisma.stockCount.findUnique({ where: { id: params.countId }, select: { id: true, kind: true, area: true, status: true } });
   if (!count) return { ok: false, error: "Conteo no encontrado." };
   const isRecount = params.area === RECOUNT;
-  if (isRecount ? count.status !== "SUBMITTED" : count.status !== "COUNTING") return { ok: false, error: "Este conteo ya no está abierto para asignar." };
+  // 2026-10-13: el recuento de diferencias grandes también va mientras se cuenta.
+  if (count.status === "APPROVED" || (!isRecount && count.status !== "COUNTING")) return { ok: false, error: "Este conteo ya no está abierto para asignar." };
   if (!isRecount && !(await countAreas(count)).includes(params.area)) return { ok: false, error: "Esa área no es de este conteo." };
 
   const team = await inventoryTeam();
@@ -264,7 +265,11 @@ export async function finishAssignment(id: string, userId: string, closeIfSettle
   const shifts = await prisma.stockCountShift.findMany({ where: { assignmentId: id }, select: { startedAt: true, endedAt: true } });
   const totalSec = shifts.reduce((s, x) => s + (x.endedAt.getTime() - x.startedAt.getTime()) / 1000, 0);
   if (a.area === RECOUNT) {
-    await notifyOwner("admin", { title: "📋 Recuento terminado", body: `${who} volvió a contar ${p.total} producto(s). Revisa la lista de diferencias en Stock Actual.`, url: await adminStockHref() }).catch(() => null);
+    // 2026-10-13: cada recuento se aplica solo si coincide (settleRecount en
+    // stockCount.ts); a Daniel le queda el resumen, el admin ya no aprueba.
+    if (danielId) {
+      await notifyOwner(danielId, { title: "🔁 Recuento terminado", body: `${who} volvió a contar ${p.total} producto(s). Lo que coincidió ya se aplicó a INVESTOCK; lo que no, te sale para asignar otro recuento.`, url: "/area/conteo-inventario" }).catch(() => null);
+    }
     await closeIfSettled(a.countId);
   } else if (danielId) {
     const left = await areasWithoutAssignment(a.countId);
@@ -275,11 +280,6 @@ export async function finishAssignment(id: string, userId: string, closeIfSettle
     }).catch(() => null);
   }
   return { ok: true, ...shift, complete };
-}
-
-async function adminStockHref(): Promise<string> {
-  const inv = await prisma.department.findFirst({ where: { code: "INV" }, select: { id: true } });
-  return inv ? `/admin/dept/${inv.id}?tab=stock-actual` : "/admin";
 }
 
 export async function areasWithoutAssignment(countId: string): Promise<string[]> {
