@@ -104,6 +104,8 @@ type StockRow = {
   pendingAdjustmentQuantity?: number | null;
   // PROVISIONAL (Daniel 2026-10-07): ya recontado en el conteo físico.
   recounted?: boolean;
+  // PROVISIONAL (2026-10-13): contado pero falta aplicarlo o está en recuento.
+  countPending?: "pending" | "recount" | null;
   notPurchasedYet?: boolean;
   pendingDropiId?: string | null;
   variantStock?: { variants: { id: string; name: string; stock: number }[]; unidentified: number } | null;
@@ -902,6 +904,7 @@ export function StockLevelsPanel({
   const sinStockCount = rows.filter((r) => r.balance === 0).length;
   const sinAreaCount = rows.filter((r) => r.warehouseArea == null).length;
   const recountedCount = rows.filter((r) => r.recounted).length;
+  const countPendingCount = rows.filter((r) => r.countPending).length;
 
   // Pedido del usuario 2026-10-02 (para Nairoby, Contabilidad): bajar en
   // Excel el ID, nombre y costo del proveedor para cruzarlo con la IA y
@@ -1298,6 +1301,11 @@ export function StockLevelsPanel({
                 · <span className="inline-block w-2 h-2 rounded-sm bg-green align-middle" /> {recountedCount} ya recontado(s): stock real
               </span>
             )}
+            {countPendingCount > 0 && (
+              <span className="ml-2 text-gold font-semibold">
+                · <span className="inline-block w-2 h-2 rounded-sm bg-gold align-middle" /> {countPendingCount} contado(s) sin aplicar o en recuento
+              </span>
+            )}
           </div>
 
       {/* Confirmado 2026-09-15, pedido explícito del usuario: la primera
@@ -1326,8 +1334,8 @@ export function StockLevelsPanel({
             sorted.map((r, i) => (
               <div
                 key={r.catalogItemId}
-                title={r.recounted ? "Ya recontado en el conteo físico: stock real" : undefined}
-                className={`grid grid-cols-[auto_minmax(200px,1fr)_110px_80px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center border-l-4 ${r.recounted ? "border-l-green bg-green/10" : `border-l-transparent ${i % 2 === 1 ? "bg-cloud/40" : ""}`}`}
+                title={r.recounted ? "Ya recontado en el conteo físico: stock real" : r.countPending === "recount" ? "Contado con una diferencia grande: lo vuelve a contar otra persona" : r.countPending ? "Contado: falta que Daniel lo aplique a INVESTOCK" : undefined}
+                className={`grid grid-cols-[auto_minmax(200px,1fr)_110px_80px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center border-l-4 ${r.recounted ? "border-l-green bg-green/10" : r.countPending ? "border-l-gold bg-gold/10" : `border-l-transparent ${i % 2 === 1 ? "bg-cloud/40" : ""}`}`}
               >
                 {r.photos[0] ? (
                   // Confirmado 2026-09-15 (pedido de Daniel): foto real del

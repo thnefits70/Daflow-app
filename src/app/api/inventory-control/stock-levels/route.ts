@@ -52,6 +52,15 @@ export async function GET() {
   // No cuenta lo que espera aprobación del admin ni lo mandado a recontar.
   const recountedLines = countLines.filter((l) => l.decision === "APPROVED" || l.decision === "REJECTED" || (l.decision === null && l.countedQty === l.expectedQty));
   const recountedIds = new Set(recountedLines.map((l) => l.catalogItemId));
+  // PROVISIONAL (pedido del usuario 2026-10-13): todo lo contado se ve. Verde
+  // = ya es stock real; amarillo = contado pero falta aplicarlo a INVESTOCK
+  // ("pending") o está en recuento por una diferencia grande ("recount").
+  const countedStateById = new Map<string, "pending" | "recount">();
+  for (const l of countLines) {
+    if (l.decision === "RECOUNT") countedStateById.set(l.catalogItemId, "recount");
+    else if (l.decision === null && l.countedQty !== l.expectedQty) countedStateById.set(l.catalogItemId, "pending");
+    else countedStateById.delete(l.catalogItemId);
+  }
   // Pedido del usuario 2026-10-08: al pulsar el nombre se ven las variantes
   // (color/talla) del último recuento de cada producto, apenas queda
   // recontado — la lista oficial recién se arma al cerrar todo el conteo.
@@ -87,11 +96,13 @@ export async function GET() {
     const base = costBasisByItemId.get(r.catalogItemId) ?? null;
     const pendingAdjustmentQuantity = pendingAdjustmentByItem.get(r.catalogItemId) ?? null;
     const recounted = recountedIds.has(r.catalogItemId);
-    if (!base) return { ...r, pendingAdjustmentQuantity, recounted };
+    const countPending = recounted ? null : (countedStateById.get(r.catalogItemId) ?? null);
+    if (!base) return { ...r, pendingAdjustmentQuantity, recounted, countPending };
     return {
       ...r,
       pendingAdjustmentQuantity,
       recounted,
+      countPending,
       costSource: base.costSource,
       providerPrice: base.batchCost,
       bodegaPrice: bodegaUnitCost(base.batchCost, base.freightCost, base.batchUnits),
