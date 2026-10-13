@@ -137,8 +137,13 @@ type PendingExcessKardex = {
   excessGestionBy: { name: string } | null;
   excessConfirmedBy: { name: string } | null;
   excessConfirmedAt: string;
+  reportedBy: { name: string } | null;
+  reportedAt: string;
   request: {
     quantity: number;
+    requestedAt: string;
+    requestedBy: { name: string } | null;
+    receipt: { confirmedAt: string; confirmedBy: { name: string } | null } | null;
     catalogItem: { name: string; justCode: string | null };
     supplier: { name: string };
   };
@@ -1342,6 +1347,12 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                 <div className="text-[13px] font-bold flex items-center gap-1.5">
                   <CatalogCode code={ex.request.catalogItem.justCode} />
                   <span>{ex.request.catalogItem.name}</span>
+                </div>
+                <div className="text-[11.5px] text-steel">
+                  Comprado por {actorName(ex.request.requestedBy?.name)} · {formatDateTime(ex.request.requestedAt)}
+                </div>
+                <div className="text-[11.5px] text-steel">
+                  Recibido por {actorName((ex.request.receipt?.confirmedBy ?? ex.reportedBy)?.name)} · {formatDateTime(ex.request.receipt?.confirmedAt ?? ex.reportedAt)}
                 </div>
                 <div className="text-[11.5px] text-steel mb-1.5">
                   {ex.request.supplier.name} — se pidieron {ex.request.quantity} un., {ex.excessQty} de excedente confirmado por {actorName(ex.excessConfirmedBy?.name)} · {formatDateTime(ex.excessConfirmedAt)}

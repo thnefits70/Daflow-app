@@ -16,9 +16,15 @@ export async function GET(_req: NextRequest) {
     include: {
       excessGestionBy: { select: { name: true } },
       excessConfirmedBy: { select: { name: true } },
+      // Pedido de Daniel 2026-10-13: además de quién confirmó el excedente,
+      // quién compró y quién recibió, con sus fechas.
+      reportedBy: { select: { name: true } },
       request: {
         select: {
           quantity: true,
+          requestedAt: true,
+          requestedBy: { select: { name: true } },
+          receipt: { select: { confirmedAt: true, confirmedBy: { select: { name: true } } } },
           catalogItem: { select: { name: true, justCode: true } },
           supplier: { select: { name: true } },
         },
