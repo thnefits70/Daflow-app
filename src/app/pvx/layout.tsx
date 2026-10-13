@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/" },
   applicationName: "Provedix",
   keywords: ["Provedix", "proveedor Dropi Ecuador", "dropshipping Ecuador", "productos ganadores", "proveedor dropshipping Guayaquil"],
-  title: "Provedix | Proveedor de Dropi en Ecuador · Productos ganadores",
+  title: "Provedix | Proveedor Premium verificado en Ecuador",
   description:
     "Provedix es proveedor verificado de Dropi en Ecuador. Mira gratis qué productos se están vendiendo, a qué precio y en qué ciudades. Más de 3 cortes diarios y despacho en menos de 3 horas.",
   robots: { index: true, follow: true },
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
     url: "/",
     siteName: "Provedix",
     locale: "es_EC",
-    title: "Provedix | Proveedor de Dropi en Ecuador",
+    title: "Provedix | Proveedor Premium verificado en Ecuador",
     description: "Mira gratis qué productos se están vendiendo en Ecuador y véndelos en Dropi. Despacho en menos de 3 horas.",
     images: [{ url: "/pvx/brand/stacked-orange.png", width: 900, height: 581 }],
   },
