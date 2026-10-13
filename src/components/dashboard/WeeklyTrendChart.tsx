@@ -145,6 +145,7 @@ export function WeeklyTrendChart({
   latestCaption,
   dailyDivisor,
   liveNote,
+  onPointClick,
 }: {
   label: string;
   deptName: string;
@@ -187,6 +188,9 @@ export function WeeklyTrendChart({
   // Línea bajo la fecha solo mientras la última semana sea la de hoy — ej.
   // "se actualiza con cada corte" en Pedidos despachados.
   liveNote?: string;
+  // Pedido de Daniel 2026-10-13: clic en una semana (con desglose por marca)
+  // abre el detalle por día — ver DispatchedOrdersTrend.
+  onPointClick?: (week: string) => void;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [dateTooltipWeek, setDateTooltipWeek] = useState<string | null>(null);
@@ -670,6 +674,7 @@ export function WeeklyTrendChart({
             r={hitR}
             fill="transparent"
             onMouseEnter={() => setHoverIndex(i)}
+            onClick={onPointClick && points[i].brands?.length ? () => onPointClick(points[i].week) : undefined}
             style={{ cursor: "pointer" }}
           />
         ))}
@@ -681,7 +686,8 @@ export function WeeklyTrendChart({
             const brands = p.brands ?? [];
             const boxW = p.detail || brands.length ? 172 : 128;
             const brandTop = (p.detail ? 58 : 42) + (brands.length ? 4 : 0);
-            const boxH = brandTop + brands.length * 15 + (brands.length ? 4 : 0);
+            const clickHint = !!onPointClick && brands.length > 0;
+            const boxH = brandTop + brands.length * 15 + (brands.length ? 4 : 0) + (clickHint ? 16 : 0);
             const boxX = Math.max(padL, Math.min(c.x - boxW / 2, width - padR - boxW));
             const boxY = Math.max(4, c.y - boxH - 12);
             return (
@@ -711,6 +717,11 @@ export function WeeklyTrendChart({
                     </text>
                   </g>
                 ))}
+                {clickHint && (
+                  <text x={boxX + boxW / 2} y={boxY + boxH - 7} textAnchor="middle" fontSize="10" fontWeight="600" fill="#14C7C7">
+                    Clic para ver por día
+                  </text>
+                )}
               </g>
             );
           })()}

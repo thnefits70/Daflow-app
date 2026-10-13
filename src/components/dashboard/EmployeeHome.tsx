@@ -3,6 +3,7 @@ import { GitBranch, FileText, GraduationCap, Scale, ClipboardList, LineChart } f
 import { DailyQuoteBanner } from "./DailyQuoteBanner";
 import { PushOptIn } from "@/components/shared/PushOptIn";
 import { PendingTasksCard } from "./PendingTasksCard";
+import { DispatchedOrdersTrend } from "./DispatchedOrdersTrend";
 import { DraftsPendingCard } from "./DraftsPendingCard";
 import { UnfoundWinnersCarousel } from "./UnfoundWinnersCarousel";
 import { PeriodicRemindersCard } from "./PeriodicRemindersCard";
@@ -166,15 +167,7 @@ export function EmployeeHome({
 
       {weeklyTrend && (
         <div className="bg-surface border border-rule rounded-lg p-6 mb-5">
-          <WeeklyTrendChart
-            label="Pedidos despachados"
-            deptName={weeklyTrend.deptName}
-            points={weeklyTrend.points}
-            weeklyGoal={6000}
-            dailyDivisor={6}
-            liveNote="Se actualiza sola cada vez que un corte se envía a Inventario — no es un número cerrado todavía."
-            latestCaption={`≈ ${Math.round(weeklyTrend.points[weeklyTrend.points.length - 1].value / 6).toLocaleString("es-MX")} pedidos/día en promedio (lunes a sábado)`}
-          />
+          <DispatchedOrdersTrend deptName={weeklyTrend.deptName} points={weeklyTrend.points} />
         </div>
       )}
 

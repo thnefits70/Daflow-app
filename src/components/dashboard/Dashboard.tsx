@@ -3,11 +3,11 @@ import { Building2, Package } from "lucide-react";
 import { DailyQuoteBanner } from "./DailyQuoteBanner";
 import { PushOptIn } from "@/components/shared/PushOptIn";
 import { PendingTasksCard } from "./PendingTasksCard";
+import { DispatchedOrdersTrend } from "./DispatchedOrdersTrend";
 import { UnfoundWinnersCarousel } from "./UnfoundWinnersCarousel";
 import { PeriodicRemindersCard } from "./PeriodicRemindersCard";
 import { RecognitionPodium } from "@/components/recognition/RecognitionPodium";
 import { ScoreGauge } from "./ScoreGauge";
-import { WeeklyTrendChart } from "./WeeklyTrendChart";
 import { CommissionProgressCard } from "./CommissionProgressCard";
 import { FillRateTile, ReturnProductsTile, ReturnRateTile, WarrantyCostTile, WarrantyMonthTile, WarrantyProductsTile } from "./KpiTile";
 import type { WarrantyLossOverview, WarrantyProductRow } from "@/lib/warrantyInsights";
@@ -134,15 +134,7 @@ export function Dashboard({
 
       {weeklyTrend && (
         <div className="bg-surface border border-rule rounded-lg p-6 mb-5">
-          <WeeklyTrendChart
-            label="Pedidos despachados"
-            deptName={weeklyTrend.deptName}
-            points={weeklyTrend.points}
-            weeklyGoal={6000}
-            dailyDivisor={6}
-            liveNote="Se actualiza sola cada vez que un corte se envía a Inventario — no es un número cerrado todavía."
-            latestCaption={`≈ ${Math.round(weeklyTrend.points[weeklyTrend.points.length - 1].value / 6).toLocaleString("es-MX")} pedidos/día en promedio (lunes a sábado)`}
-          />
+          <DispatchedOrdersTrend deptName={weeklyTrend.deptName} points={weeklyTrend.points} />
         </div>
       )}
 
