@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
 import { useRouter } from "next/navigation";
 import { Camera, CheckCircle2, X, AlertTriangle, Truck, Package } from "lucide-react";
@@ -15,6 +15,8 @@ import { isScreenPhotoNote } from "@/lib/receiptPhotoScreen";
 import { WAREHOUSE_AREAS, areaLabel, type WarehouseArea } from "@/lib/warehouseAreas";
 import { isFullyReportedNotArrived } from "@/lib/purchaseFullyReported";
 import { needsOpenProductPhoto, OPEN_PRODUCT_PHOTO_HINT } from "@/lib/openProductPhoto";
+import { StockLabelPrintButton } from "@/components/shared/StockLabelPrintButton";
+import type { StockLabelPrintSummary } from "@/app/api/stock-label-prints/route";
 
 type ReceiptVariantRow = { name: string; qty: string; added: boolean };
 type ReceiptDraftData ={ receivedQty: string; receivedPhotoUrls: string[]; receivedVideoUrls: string[]; comment: string; minorDifferenceConfirmed: boolean };
@@ -46,7 +48,7 @@ type Row = {
   totalCost: number;
   requestedAt: string;
   paidAt: string | null;
-  catalogItem: { name: string; photos: string[]; justCode: string | null; hasExpiration: boolean; awaitingDropiId: boolean; warehouseArea: string | null };
+  catalogItem: { id: string; name: string; photos: string[]; justCode: string | null; hasExpiration: boolean; awaitingDropiId: boolean; warehouseArea: string | null };
   // Colores/tallas oficiales del producto (stock por variante, 2026-10-06).
   variantNames?: string[];
   supplier: { name: string; paymentMode?: "PREPAGO" | "CREDITO" };
@@ -310,6 +312,12 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   // confirmado por Bryan, pendiente de que Daniel lo ingrese al Kardex
   // (entrada separada de "Confirmar que llegó" — ver excess-receive/route.ts).
   const [pendingExcessKardex, setPendingExcessKardex] = useState<PendingExcessKardex[]>([]);
+  // Pedido de Daniel 2026-10-13: qué productos ya tienen etiqueta de percha,
+  // para ofrecer "Imprimir QR" al recibir uno que todavía no la tiene.
+  const [labelPrints, setLabelPrints] = useState<StockLabelPrintSummary | null>(null);
+  const loadLabelPrints = useCallback(() => {
+    fetch("/api/stock-label-prints").then((r) => (r.ok ? r.json() : null)).then(setLabelPrints).catch(() => setLabelPrints(null));
+  }, []);
   const [excessReceiveId, setExcessReceiveId] = useState<string | null>(null);
   // Confirmado 2026-08-27: pedido explícito del usuario — Daniel es quien
   // ajusta la cantidad faltante antes de aprobar (él sí ve pr.request.quantity),
@@ -452,6 +460,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     if (canApprove || isAdmin) {
       fetch("/api/purchase-requests/urgent-reports/pending-review").then((r) => (r.ok ? r.json() : [])).then(setPendingUrgentReports).catch(() => setPendingUrgentReports([]));
       fetch("/api/purchase-requests/urgent-reports/pending-excess-kardex").then((r) => (r.ok ? r.json() : [])).then(setPendingExcessKardex).catch(() => setPendingExcessKardex([]));
+      loadLabelPrints();
       fetch("/api/purchase-requests/late-claims/pending-review").then((r) => (r.ok ? r.json() : [])).then(setLateClaimsReview).catch(() => setLateClaimsReview([]));
     }
   }
@@ -2326,6 +2335,14 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                         Recibido por {actorName(r.receipt.confirmedBy?.name)} · {formatDateTime(r.receipt.confirmedAt)}
                         {r.receipt.comment && ` — "${r.receipt.comment}"`}
                       </div>
+                      {canApprove && labelPrints && !labelPrints[r.catalogItem.id] && (
+                        <StockLabelPrintButton
+                          catalogItemId={r.catalogItem.id}
+                          name={r.catalogItem.name}
+                          code={r.catalogItem.justCode ?? r.catalogItem.id}
+                          onPrinted={loadLabelPrints}
+                        />
+                      )}
                       {/* Confirmado 2026-09-15, pedido explícito del usuario: Daniel
                           preguntó cómo comparó la IA sin poder ver la foto de
                           referencia — este paso final (aprobar recepción) mostraba
