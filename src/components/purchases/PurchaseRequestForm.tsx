@@ -365,7 +365,8 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         updateLine(idx, { stats: data?.stats ?? null });
-        setBlockedByLine((m) => ({ ...m, [idx]: data?.blockedBy ?? null }));
+        // Conteo físico (2026-10-13): lo que no se contó no se compra, salvo emergencia.
+        setBlockedByLine((m) => ({ ...m, [idx]: data?.blockedBy ?? (emergencyOnly ? null : data?.uncounted ?? null) }));
         setRepurchaseByLine((m) => ({ ...m, [idx]: data?.repurchase ?? null }));
         setNeedsSizeByItem((m) => ({ ...m, [catalogItemId]: !!data?.needsFulfillmentSize }));
         setSavedSizeByItem((m) => ({ ...m, [catalogItemId]: data?.fulfillmentSize ?? null }));

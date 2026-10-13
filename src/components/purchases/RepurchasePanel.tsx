@@ -67,6 +67,7 @@ type Row = {
   soldLast30: number;
   daysLeft: number | null;
   audience: "HOT" | "COLD";
+  countNow?: { counted: boolean; stock: number } | null;
   note: string | null;
   state: State;
   requestedById: string | null;
@@ -848,6 +849,15 @@ function RowCard({ r, data, onChanged }: { r: Row; data: Data; onChanged: () => 
           <div className="text-[12px] text-steel">
             Envió {r.requestedByName ?? "—"} el {fmtDateTime(r.requestedAt)} · al enviar quedaban {r.stockAtRequest}, se vendieron {r.soldLast30} en 30 días ({daysLeftText(r.daysLeft)})
           </div>
+          {/* Conteo físico (2026-10-13): lo contado frente a lo que había al enviarla. */}
+          {r.countNow && !r.countNow.counted && (
+            <div className="text-[12px] text-red font-semibold mt-0.5">⏳ Todavía no se cuenta en el conteo físico: no se puede aprobar ni comprar hasta que se cuente.</div>
+          )}
+          {r.countNow?.counted && r.countNow.stock !== r.stockAtRequest && (
+            <div className="text-[12px] text-amber font-semibold mt-0.5">
+              🔢 Según el conteo físico hay <b>{r.countNow.stock}</b> (al enviarla el sistema decía {r.stockAtRequest}). Revisa si todavía hace falta.
+            </div>
+          )}
           {r.stockStillCovered && <div className="text-[12px] text-amber font-semibold mt-0.5">⚠️ Al enviarla todavía había stock suficiente: revisa el motivo en la nota.</div>}
           {r.waitingTooLong && (
             <div className="text-[12px] text-red font-semibold mt-0.5">

@@ -20,7 +20,7 @@ import { detectSuddenDemand, SUDDEN_DEMAND_PENDING_TYPE } from "@/lib/suddenDema
 
 // Estos tienen su propio aviso (Qué comprar a las 8:00; Producto que despierta
 // en el momento en que se detecta), no se repiten en el resumen diario.
-const PURCHASE_SUGGESTION_TYPES = new Set(["compras_calientes", "compras_frias", "compras_urgentes_sin_atender", "compras_sin_encargado", SUDDEN_DEMAND_PENDING_TYPE, "recompras_por_aprobar", "recompras_sin_respuesta",
+const PURCHASE_SUGGESTION_TYPES = new Set(["compras_calientes", "compras_frias", "compras_urgentes_sin_atender", "compras_sin_encargado", "compras_falta_contar", SUDDEN_DEMAND_PENDING_TYPE, "recompras_por_aprobar", "recompras_sin_respuesta",
   // Reclamos al proveedor: aviso propio a quien compró (más abajo).
   "compras_urgentes_sin_resolver", "compras_reposicion_seguimiento"]);
 

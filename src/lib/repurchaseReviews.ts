@@ -6,6 +6,7 @@ import { findOpenPurchasesByOthers, formatPurchaseRequestCode, getCatalogItemSup
 import { currentDropiPrices } from "@/lib/dropiPriceChanges";
 import { resolveDropiParamsForCatalogItems } from "@/lib/marketProduct";
 import { COLD_MAX, COVER_DAYS_AFTER_ARRIVAL, getSalesWindow, getSoldUnitsByItem, HOT_MAX, isStockCoverBlockActive, stockCoverMessage, stockStillCovers, suggestedQuantity, urgentDaysForSupplier } from "@/lib/purchaseSuggestions";
+import { countedBalance, findUncountedItems, getCountGate, isUncounted } from "@/lib/countGate";
 import { computeRepurchase, formatRepurchaseCode, hotSelfConfirmBlock, REPURCHASE_VERDICT_LABELS, type RepurchasePriceParams, type RepurchaseVerdict } from "@/lib/repurchasePricing";
 
 // Pedido del usuario 2026-10-06: recompras con aprobación de Bryan Ríos
@@ -94,13 +95,17 @@ async function isHotBuyer(userId: string): Promise<boolean> {
   return !!u?.isActive && u.handlesHotPurchases;
 }
 
+// Con el conteo físico abierto, lo contado manda sobre el Kardex (2026-10-13).
 async function latestStock(catalogItemId: string): Promise<number> {
-  const last = await prisma.stockKardexEntry.findFirst({
-    where: { catalogItemId },
-    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
-    select: { balanceAfter: true },
-  });
-  return last?.balanceAfter ?? 0;
+  const [last, gate] = await Promise.all([
+    prisma.stockKardexEntry.findFirst({
+      where: { catalogItemId },
+      orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+      select: { balanceAfter: true },
+    }),
+    getCountGate([catalogItemId]),
+  ]);
+  return countedBalance(gate, catalogItemId, last?.balanceAfter ?? 0);
 }
 
 export async function getRepurchaseAnalysis(catalogItemId: string, userId: string | null): Promise<RepurchaseAnalysis | null> {
@@ -186,6 +191,9 @@ export async function getRepurchaseAnalysis(catalogItemId: string, userId: strin
 // compren lo mismo sin saberlo). Quien ya tiene una RC abierta de ese
 // producto tampoco abre otra.
 async function findRepurchaseBlocker(catalogItemId: string, userId: string | null): Promise<string | null> {
+  // Pedido del usuario 2026-10-13: sin contar no se sabe cuánto hay.
+  const [uncounted] = await findUncountedItems([catalogItemId]);
+  if (uncounted) return uncounted.message;
   const now = new Date();
   const open = await prisma.repurchaseReview.findFirst({
     where: {
@@ -258,6 +266,9 @@ export type RepurchaseRow = {
   selfConfirmed: boolean;
   // Al enviarla todavía había stock (2026-10-07): Bryan lo ve resaltado.
   stockStillCovered: boolean;
+  // Conteo físico abierto (2026-10-13), solo en RC abiertas: si ya se contó
+  // y cuánto hay según lo contado (para comparar con stockAtRequest).
+  countNow: { counted: boolean; stock: number } | null;
 };
 
 const rowSelect = {
@@ -317,8 +328,28 @@ async function toRows(records: RowRecord[]): Promise<RepurchaseRow[]> {
     ? await prisma.purchaseRequest.findMany({ where: { groupId: { in: groupIds } }, distinct: ["groupId"], select: { groupId: true, requestNumber: true } })
     : [];
   const codeByGroup = new Map(purchases.map((p) => [p.groupId, p.requestNumber ? formatPurchaseRequestCode(p.requestNumber) : null]));
+  // Conteo físico (2026-10-13): en las RC abiertas, lo que hay según lo contado.
+  const openIds = [...new Set(records.filter((r) => ["PENDING_APPROVAL", "APPROVED"].includes(stateOf(r, now))).map((r) => r.catalogItemId))];
+  const gate = openIds.length ? await getCountGate(openIds) : null;
+  const kardex = gate?.active
+    ? new Map(
+        (
+          await prisma.stockKardexEntry.findMany({
+            where: { catalogItemId: { in: openIds } },
+            distinct: ["catalogItemId"],
+            orderBy: [{ catalogItemId: "asc" }, { occurredAt: "desc" }, { createdAt: "desc" }],
+            select: { catalogItemId: true, balanceAfter: true },
+          })
+        ).map((k) => [k.catalogItemId, k.balanceAfter]),
+      )
+    : null;
   return records.map((r) => {
     const state = stateOf(r, now);
+    const bal = kardex?.get(r.catalogItemId);
+    const countNow =
+      gate && kardex && openIds.includes(r.catalogItemId) && (state === "PENDING_APPROVAL" || state === "APPROVED")
+        ? { counted: !isUncounted(gate, r.catalogItemId, bal !== undefined), stock: countedBalance(gate, r.catalogItemId, bal ?? 0) }
+        : null;
     return {
       id: r.id,
       code: formatRepurchaseCode(r.code),
@@ -365,6 +396,7 @@ async function toRows(records: RowRecord[]): Promise<RepurchaseRow[]> {
       selfConfirmed: !!r.reviewedById && r.reviewedById === r.requestedById,
       waitingTooLong: state === "PENDING_APPROVAL" && now.getTime() - r.requestedAt.getTime() >= NO_RESPONSE_HOURS * 60 * 60 * 1000,
       stockStillCovered: r.stockAtRequest > COLD_MAX && (r.daysLeft === null || r.daysLeft >= urgentDaysForSupplier(r.supplier.paymentMode) + COVER_DAYS_AFTER_ARRIVAL),
+      countNow,
     };
   });
 }
@@ -516,7 +548,7 @@ export async function decideRepurchaseReview(params: {
 }): Promise<Result> {
   const rc = await prisma.repurchaseReview.findUnique({
     where: { id: params.id },
-    select: { id: true, code: true, status: true, quantity: true, requestedById: true, catalogItem: { select: { name: true } } },
+    select: { id: true, code: true, status: true, quantity: true, requestedById: true, catalogItemId: true, catalogItem: { select: { name: true } } },
   });
   if (!rc) return { ok: false, status: 404, error: "No se encontró la recompra." };
   if (rc.status !== "PENDING_APPROVAL") return { ok: false, status: 409, error: "Esta recompra ya se resolvió. Recarga la pantalla." };
@@ -541,6 +573,9 @@ export async function decideRepurchaseReview(params: {
     return { ok: true };
   }
 
+  // Pedido del usuario 2026-10-13: no se aprueba lo que todavía no se contó.
+  const [uncounted] = await findUncountedItems([rc.catalogItemId]);
+  if (uncounted) return { ok: false, status: 409, error: `${uncounted.message} Puedes rechazarla o esperar a que se cuente.` };
   const qty = params.approvedQuantity ?? rc.quantity;
   if (!Number.isInteger(qty) || qty < 1) return { ok: false, status: 400, error: "La cantidad aprobada tiene que ser un número entero mayor a 0." };
   const expires = new Date(now.getTime() + APPROVAL_VALID_DAYS * DAY_MS);

@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getInventoryLeadId } from "@/lib/guards";
+import { countedBalance, findUncountedItems, getCountGate, isUncounted } from "@/lib/countGate";
 import { formatPurchaseRequestCode, OPEN_PURCHASE_STATUSES, openPurchaseWhere } from "@/lib/purchases";
 import { getReadyToBuyPendingProposalIdsByBuyer } from "@/lib/marketProduct";
 import { notifyOwner } from "@/lib/notifications";
@@ -67,7 +68,7 @@ export { OPEN_PURCHASE_STATUSES };
 // preguntar_proveedor = toca preguntar si el proveedor ya lo tiene;
 // sin_proveedor = marcado sin proveedor, esperando los 15 días.
 // descartado = Nairoby dijo "No hace falta comprarlo" (solo compras frías).
-export type SuggestionStatus = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "descartado" | "no_sale" | "en_compra";
+export type SuggestionStatus = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "descartado" | "no_sale" | "en_compra" | "falta_contar";
 
 export type DiscardInfo = { id: string; reason: string; reasonLabel: string; note: string | null; byName: string | null; at: string };
 
@@ -99,6 +100,11 @@ export type SuggestionRow = {
   // Colores/tallas que salieron en los últimos 30 días (2026-10-05), para
   // repartir lo que se compra. null si no tiene variantes o hay muy pocas.
   variants: { label: string; units: number }[] | null;
+  // Conteo físico (2026-10-13): true = ya contado, false = falta contar,
+  // null = no hay conteo general abierto. countedUrgent = falta contarlo y
+  // según el sistema ya estaría urgente (Daniel lo cuenta primero).
+  counted: boolean | null;
+  countedUrgent: boolean;
 };
 
 export type NewProductRow = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
@@ -113,7 +119,7 @@ export type PurchaseSuggestions = {
   coldNewProducts: NewProductRow[];
 };
 
-const STATUS_ORDER: Record<SuggestionStatus, number> = { preguntar_proveedor: 0, urgente: 1, pronto: 2, sin_proveedor: 3, en_compra: 4, descartado: 5, no_sale: 6 };
+const STATUS_ORDER: Record<SuggestionStatus, number> = { preguntar_proveedor: 0, urgente: 1, pronto: 2, falta_contar: 3, sin_proveedor: 4, en_compra: 5, descartado: 6, no_sale: 7 };
 
 function sortRows(rows: SuggestionRow[]): SuggestionRow[] {
   return rows.sort((a, b) => {
@@ -219,12 +225,15 @@ export async function findItemsWithStockCover(catalogItemIds: string[]): Promise
   ]);
   const name = new Map(items.map((i) => [i.id, i.name]));
   const mode = new Map(lastPurchases.map((p) => [p.catalogItemId, p.supplier.paymentMode]));
+  // Con el conteo físico abierto, lo contado manda (2026-10-13).
+  const gate = await getCountGate(ids);
   const out: { catalogItemId: string; message: string }[] = [];
   for (const b of balances) {
+    const stock = countedBalance(gate, b.catalogItemId, b.balanceAfter);
     const perDay = (sold.get(b.catalogItemId) ?? 0) / windowDays;
-    if (!stockStillCovers(b.balanceAfter, perDay, urgentDaysForSupplier(mode.get(b.catalogItemId)))) continue;
-    const daysLeft = perDay > 0 ? b.balanceAfter / perDay : null;
-    out.push({ catalogItemId: b.catalogItemId, message: stockCoverMessage(name.get(b.catalogItemId) ?? "este producto", b.balanceAfter, daysLeft) });
+    if (!stockStillCovers(stock, perDay, urgentDaysForSupplier(mode.get(b.catalogItemId)))) continue;
+    const daysLeft = perDay > 0 ? stock / perDay : null;
+    out.push({ catalogItemId: b.catalogItemId, message: stockCoverMessage(name.get(b.catalogItemId) ?? "este producto", stock, daysLeft) });
   }
   return out;
 }
@@ -233,10 +242,11 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   const now = new Date();
   const { windowStart, windowDays } = await getSalesWindow(now);
 
-  const [balances, balancesBefore, balancesBeforeCold, sold, openPurchases, readyByBuyer] = await Promise.all([
+  const [kardexBalances, kardexBefore, kardexBeforeCold, gate, sold, openPurchases, readyByBuyer] = await Promise.all([
     latestBalances(),
     latestBalances(new Date(now.getTime() - ESCALATE_DAYS * DAY_MS)),
     latestBalances(new Date(now.getTime() - COLD_ESCALATE_DAYS * DAY_MS)),
+    getCountGate(),
     getSoldUnitsByItem(windowStart),
     prisma.purchaseRequest.findMany({
       where: openPurchaseWhere(),
@@ -246,6 +256,11 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
     getReadyToBuyPendingProposalIdsByBuyer(),
   ]);
   const readyIds = [...readyByBuyer.hot, ...readyByBuyer.cold];
+  // Conteo físico abierto (2026-10-13): lo contado manda sobre el Kardex.
+  const withCount = (m: Map<string, number>) => new Map([...m].map(([id, bal]) => [id, countedBalance(gate, id, bal)]));
+  const balances = withCount(kardexBalances);
+  const balancesBefore = withCount(kardexBefore);
+  const balancesBeforeCold = withCount(kardexBeforeCold);
 
   const openByItem = new Map<string, { code: string | null; quantity: number }>();
   for (const p of openPurchases) {
@@ -262,7 +277,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   const [items, lastPurchases, stockoutReports, discards] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({
       where: { id: { in: candidateIds }, awaitingDropiId: false },
-      select: { id: true, name: true, photos: true, justCode: true },
+      select: { id: true, name: true, photos: true, justCode: true, bodega: true },
     }),
     prisma.purchaseRequest.findMany({
       where: { catalogItemId: { in: candidateIds }, status: { not: "REJECTED" } },
@@ -336,13 +351,18 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       if (!expired && !turnedUrgent) discard = info;
       else if (baseStatus === "urgente" || baseStatus === "pronto") discardReturned = { ...info, why: turnedUrgent ? "urgente" : "vencido" };
     }
-    const status: SuggestionStatus = discard && (baseStatus === "urgente" || baseStatus === "pronto") ? "descartado" : baseStatus;
+    // Pedido del usuario 2026-10-13: sin contar no se sabe cuánto hay de
+    // verdad — no se sugiere cantidad ni se puede comprar (salvo emergencia).
+    const isSupply = item.bodega === "MKT_SUMINISTROS" || !!item.justCode?.includes("-SUM-");
+    const uncounted = !isSupply && isUncounted(gate, item.id, true);
+    const status: SuggestionStatus =
+      uncounted && (baseStatus === "urgente" || baseStatus === "pronto") ? "falta_contar" : discard && (baseStatus === "urgente" || baseStatus === "pronto") ? "descartado" : baseStatus;
     // Ya era urgente hace 3 días (7 en compras frías) con el stock de ese día y la venta de hoy.
     const before = (isCold ? balancesBeforeCold : balancesBefore).get(item.id);
     const escalated = status === "urgente" && before !== undefined && Math.max(0, before) / perDay <= urgentDays;
     const thisWeek = isCold && (status === "urgente" || (status === "pronto" && daysLeft !== null && daysLeft <= urgentDays + COLD_WEEK_AHEAD_DAYS));
     // Si con lo que hay ya alcanza para todo ese tiempo, todavía no se sugiere nada.
-    const suggestedQty = status !== "en_compra" && status !== "no_sale" ? suggestedQuantity(perDay, urgentDays, stock) : null;
+    const suggestedQty = status !== "en_compra" && status !== "no_sale" && status !== "falta_contar" ? suggestedQuantity(perDay, urgentDays, stock) : null;
     const row: SuggestionRow = {
       catalogItemId: item.id,
       name: item.name,
@@ -361,8 +381,10 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       supplierOut: supplierOut ? { reportId: supplierOut.reportId, since: supplierOut.since.toISOString(), askAt: supplierOut.askAt.toISOString() } : null,
       thisWeek,
       discard: status === "descartado" ? discard : null,
-      discardReturned,
+      discardReturned: status === "falta_contar" ? null : discardReturned,
       variants: null,
+      counted: gate.active && !isSupply ? !uncounted : null,
+      countedUrgent: status === "falta_contar" && baseStatus === "urgente",
     };
     (stock <= HOT_MAX ? hot : cold).push(row);
   }
@@ -537,6 +559,27 @@ export function buildSuggestionNotice(s: PurchaseSuggestions, audience: Suggesti
 }
 
 export const PURCHASE_SUGGESTIONS_HREF = "/area/workspace?tab=compras&ptab=que-comprar";
+export const COUNT_FIRST_TYPE = "compras_falta_contar";
+export const STOCK_COUNT_HREF = "/area/conteo-inventario";
+
+// Pedido del usuario 2026-10-13: lo que no se contó no se puede comprar. Al
+// líder de Inventario le sale lo que ya estaría urgente para que lo cuente
+// primero (él puede contar cualquier producto del conteo general).
+export function buildCountFirstNotice(s: PurchaseSuggestions): SuggestionNotice | null {
+  const rows = [...s.hot, ...s.cold].filter((r) => r.countedUrgent);
+  if (rows.length === 0) return null;
+  const names = rows.slice(0, 4).map((r) => r.name).join("; ");
+  const meta = `${plural(rows.length, "producto urgente", "productos urgentes")} de Qué comprar sin contar — no se pueden comprar hasta contarlos`;
+  return {
+    audience: "escalation",
+    type: COUNT_FIRST_TYPE,
+    icon: "🔢",
+    label: "Cuenta primero lo que hay que comprar",
+    meta,
+    body: `${meta}: ${names}${rows.length > 4 ? ` y ${rows.length - 4} más` : ""}.`,
+    overdue: true,
+  };
+}
 
 // Para el cron de las 8:00: un aviso por persona, con su resumen.
 export async function getPurchaseSuggestionPushes(): Promise<{ ownerId: string; type: string; title: string; body: string; url: string; mandatory?: boolean }[]> {
@@ -564,6 +607,8 @@ export async function getPurchaseSuggestionPushes(): Promise<{ ownerId: string; 
   // Compras frías: el aviso sale solo los lunes (en Inicio se queda toda la semana).
   if (new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: "America/Guayaquil" }) === "Mon") add(coldIds, "cold");
   add([inventoryLeadId], "escalation");
+  const countFirst = buildCountFirstNotice(s);
+  if (countFirst && inventoryLeadId) out.push({ ownerId: inventoryLeadId, type: countFirst.type, title: `DAFLOW · ${countFirst.label}`, body: countFirst.body, url: STOCK_COUNT_HREF });
   return out;
 }
 
@@ -574,10 +619,13 @@ export async function getPurchaseSuggestionPendingItems(userId: string, href: st
   const audiences = await getSuggestionAudiencesForUser(userId);
   if (audiences.length === 0) return [];
   const s = await getPurchaseSuggestions();
-  return audiences
+  const items = audiences
     .map((a) => buildSuggestionNotice(s, a))
     .filter((n): n is SuggestionNotice => !!n)
     .map((n) => ({ type: n.type, icon: n.icon, label: n.label, meta: n.meta, overdue: n.overdue, href }));
+  const countFirst = audiences.includes("escalation") ? buildCountFirstNotice(s) : null;
+  if (countFirst) items.unshift({ type: countFirst.type, icon: countFirst.icon, label: countFirst.label, meta: countFirst.meta, overdue: true, href: STOCK_COUNT_HREF });
+  return items;
 }
 
 // Inicio del admin: por cada lista sin encargado, el recordatorio (siempre
@@ -597,6 +645,21 @@ export async function getPurchaseSuggestionAdminPendingItems() {
     if (n) items.push({ type: n.type, icon: n.icon, label: n.label, meta: n.meta, overdue: n.overdue, href });
   }
   return items;
+}
+
+// ---- "Pedir que lo cuenten" (pedido del usuario 2026-10-13) ---------------
+
+export async function requestProductCount(catalogItemId: string, actorName: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const [uncounted] = await findUncountedItems([catalogItemId]);
+  if (!uncounted) return { ok: false, error: "Este producto ya se contó (o no hace falta contarlo) — recarga la lista." };
+  const leadId = await getInventoryLeadId();
+  if (!leadId) return { ok: false, error: "No hay líder de Inventario a quien avisarle." };
+  await notifyOwner(leadId, {
+    title: "🔢 Piden contar un producto",
+    body: `${actorName} necesita comprar "${uncounted.name}" y todavía no se cuenta en el conteo físico. Cuéntalo en el conteo general para que se pueda comprar.`,
+    url: STOCK_COUNT_HREF,
+  });
+  return { ok: true };
 }
 
 // ---- "No hace falta comprarlo" (pedido del usuario 2026-10-02) -----------

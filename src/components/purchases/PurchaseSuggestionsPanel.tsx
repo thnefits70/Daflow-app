@@ -5,7 +5,7 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 import { PriceCalculator } from "@/components/marketanalysis/PriceCalculator";
 import { splitByVariant } from "@/lib/variantMix";
 
-type Status = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "descartado" | "no_sale" | "en_compra";
+type Status = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "descartado" | "no_sale" | "en_compra" | "falta_contar";
 type DiscardInfo = { id: string; reason: string; reasonLabel: string; note: string | null; byName: string | null; at: string };
 type Row = {
   catalogItemId: string;
@@ -27,6 +27,8 @@ type Row = {
   discard: DiscardInfo | null;
   discardReturned: (DiscardInfo & { why: "urgente" | "vencido" }) | null;
   variants?: { label: string; units: number }[] | null;
+  counted?: boolean | null;
+  countedUrgent?: boolean;
 };
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
 type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; coldNewProducts?: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null; canUseCalculator?: boolean; canRepurchase?: boolean; repurchases?: Record<string, OpenRepurchase>; buyerNames?: { hot: string[]; cold: string[] } };
@@ -41,6 +43,12 @@ const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = 
   },
   { status: "urgente", title: "🔴 Urgente", hint: "Se acaba antes de que el proveedor pueda traerlo: 15 días o menos si es de CHEN, 7 días o menos con los demás", tone: "text-red" },
   { status: "pronto", title: "🟡 Pronto", hint: "Se vende, pero todavía alcanza para más tiempo del que tarda el proveedor", tone: "text-amber" },
+  {
+    status: "falta_contar",
+    title: "⏳ Falta contar",
+    hint: "Todavía no se cuentan en el conteo físico: no se sabe cuánto hay de verdad y no se pueden comprar (salvo emergencia). Pide que los cuenten",
+    tone: "text-amber",
+  },
   {
     status: "sin_proveedor",
     title: "🚫 Ningún proveedor lo tiene",
@@ -201,6 +209,25 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Pedido del usuario 2026-10-13: lo que no se contó se le pide a Daniel.
+  const [countAsked, setCountAsked] = useState(false);
+  function askCount() {
+    setBusy(true);
+    setError(null);
+    fetch("/api/purchase-suggestions/request-count", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ catalogItemId: r.catalogItemId }),
+    })
+      .then((res) => res.json().then((j) => ({ ok: res.ok, j })))
+      .then(({ ok, j }) => {
+        if (!ok) setError(j.error ?? "No se pudo avisar.");
+        else setCountAsked(true);
+      })
+      .catch(() => setError("No se pudo avisar."))
+      .finally(() => setBusy(false));
+  }
+
   // Pedido de Jariel 2026-10-01: un clic para responder si el proveedor ya lo tiene.
   function answer(a: "not_yet" | "has_it") {
     if (!r.supplierOut) return;
@@ -236,7 +263,8 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
           </div>
         )}
         <div className="text-[12px] text-steel">
-          Quedan <b className="text-ink">{r.stock}</b> · {fmtPerDay(r.perDay)}
+          {r.status === "falta_contar" ? "El sistema dice" : "Quedan"} <b className="text-ink">{r.stock}</b>
+          {r.counted ? <span className="text-teal font-semibold"> (contado)</span> : null} · {fmtPerDay(r.perDay)}
           {days && r.status !== "en_compra" ? (
             <>
               {" "}· <b className={r.status === "urgente" ? "text-red" : "text-ink"}>{days}</b>
@@ -305,9 +333,21 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
             {r.status === "sin_proveedor" ? ` · se te vuelve a preguntar el ${fmtDate(r.supplierOut.askAt)}` : ""}
           </div>
         )}
+        {r.countedUrgent && <div className="text-[11.5px] text-red font-semibold mt-0.5">Según el sistema ya estaría urgente — a Daniel le sale para contarlo primero</div>}
+        {countAsked && <div className="text-[11.5px] text-teal font-semibold mt-0.5">Listo: se le avisó a Daniel para que lo cuente.</div>}
         {error && <div className="text-[11.5px] text-red mt-0.5">{error}</div>}
       </div>
-      {canRepurchase && !repurchase && !discarding && r.status !== "en_compra" && r.status !== "sin_proveedor" && r.status !== "preguntar_proveedor" && (
+      {canRepurchase && r.status === "falta_contar" && !countAsked && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={askCount}
+          className="shrink-0 rounded border border-amber px-2.5 py-1.5 text-[11.5px] font-semibold text-amber hover:bg-amber/10 disabled:opacity-50"
+        >
+          Pedir que lo cuenten
+        </button>
+      )}
+      {canRepurchase && !repurchase && !discarding && r.status !== "en_compra" && r.status !== "sin_proveedor" && r.status !== "preguntar_proveedor" && r.status !== "falta_contar" && (
         <a
           href={repurchaseUrl(r.catalogItemId)}
           onClick={(e) => {

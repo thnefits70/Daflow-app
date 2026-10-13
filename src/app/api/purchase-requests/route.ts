@@ -8,6 +8,7 @@ import { linkReadyToBuyProposalsToGroup } from "@/lib/marketProduct";
 import { canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
 import { checkRepurchaseApprovals, markRepurchaseReviewsUsed, type DeclaredHotRepurchase } from "@/lib/repurchaseReviews";
 import { findItemsWithStockCover, isStockCoverBlockActive } from "@/lib/purchaseSuggestions";
+import { findUncountedItems } from "@/lib/countGate";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, lockAndFindOpenPurchaseByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes, formatPurchaseRequestCode } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
 import { isFullyReportedNotArrived } from "@/lib/purchaseFullyReported";
@@ -476,6 +477,12 @@ export async function POST(req: NextRequest) {
 
   const check = await checkPurchaseSubmission(d);
   if (!check.ok) return NextResponse.json({ error: check.error }, { status: check.status });
+  // Pedido del usuario 2026-10-13: mientras el conteo general esté abierto,
+  // no se compra lo que todavía no se contó. El admin y la emergencia no.
+  if (!isAdmin && !isEmergencySubmission) {
+    const [uncounted] = await findUncountedItems(d.items.map((it) => it.catalogItemId));
+    if (uncounted) return NextResponse.json({ error: uncounted.message }, { status: 409 });
+  }
   // Pedido del usuario 2026-10-06: toda recompra necesita su RC aprobada por
   // Bryan (ver repurchaseReviews.ts). El admin y la vía de emergencia no.
   let repurchaseReviewIds: string[] = [];
