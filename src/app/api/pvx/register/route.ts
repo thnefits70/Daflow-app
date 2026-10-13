@@ -3,12 +3,16 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { normalizeWhatsapp, signLead } from "@/lib/provedixPublic";
 import { readVisitor, registerAllowed, setVisitorCookies } from "@/lib/provedixVisitor";
+import { checkWhatsapp } from "@/lib/pvxPhone";
 
 // Registro en provedix.com: nombre + WhatsApp + aceptación (obligatoria).
 // "website" es un campo oculto: si viene lleno es un robot y se ignora.
 const schema = z.object({
   name: z.string().trim().min(2, "Escribe tu nombre.").max(80),
-  whatsapp: z.string().trim().min(7, "Escribe tu WhatsApp.").max(20),
+  // País obligatorio (idea de Daniel 2026-10-13): el número se revisa con
+  // las reglas de celular de ese país (pvxPhone.ts).
+  country: z.string().trim().length(2, "Elige el país de tu WhatsApp."),
+  whatsapp: z.string().trim().min(6, "Escribe tu WhatsApp.").max(24),
   consent: z.literal(true, { message: "Acepta recibir los productos ganadores para continuar." }),
   website: z.string().optional(),
 });
@@ -19,8 +23,12 @@ export async function POST(req: NextRequest) {
   if (parsed.data.website) return NextResponse.json({ ok: true });
   if (!(await registerAllowed(req))) return NextResponse.json({ error: "Hay muchos registros en este momento. Intenta de nuevo en unos minutos." }, { status: 429 });
 
-  const whatsapp = normalizeWhatsapp(parsed.data.whatsapp);
-  if (!whatsapp) return NextResponse.json({ error: "Ese WhatsApp no es válido. Ejemplo: 0991234567." }, { status: 400 });
+  const checked = checkWhatsapp(parsed.data.country, parsed.data.whatsapp);
+  if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+  // Se guarda igual que antes (Ecuador 09…, otro país +<prefijo>…) para que
+  // siga cuadrando con los registros viejos y con los celulares de las guías.
+  const whatsapp = normalizeWhatsapp(checked.full);
+  if (!whatsapp) return NextResponse.json({ error: "Ese WhatsApp no es válido." }, { status: 400 });
   const name = parsed.data.name.replace(/\s+/g, " ");
 
   const { visitorId } = await readVisitor(req);
