@@ -54,6 +54,10 @@ type RequestDTO = {
   createdBy: { name: string } | null;
   paidBy: { name: string } | null;
   confirmedBy: { name: string } | null;
+  invoiceFileUrl: string | null;
+  invoiceFileName: string | null;
+  invoiceUploadedAt: string | null;
+  invoiceUploadedBy: { name: string } | null;
 };
 
 type LunchQueueDTO = {
@@ -188,6 +192,8 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
   const declarationFileInputRef = useRef<HTMLInputElement>(null);
 
   const [uploadingProofFor, setUploadingProofFor] = useState<string | null>(null);
+  // Factura que llega después del pago (pedido de Nairoby 2026-10-13).
+  const [uploadingInvoiceFor, setUploadingInvoiceFor] = useState<string | null>(null);
   const [confirmingPaymentId, setConfirmingPaymentId] = useState<string | null>(null);
   const proofRowIdRef = useRef<string | null>(null);
   const { onPaste: onPasteProof, onMouseEnter: armProofPaste, onMouseLeave: disarmProofPaste } = usePasteFile((file) => {
@@ -631,6 +637,30 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
     }
     const data = await res.json().catch(() => null);
     setRequests((cur) => cur && cur.map((x) => (x.id === id ? { ...x, paymentNotifiedAt: data?.paymentNotifiedAt ?? new Date().toISOString() } : x)));
+  }
+
+  async function uploadInvoiceFor(id: string, file: File) {
+    setUploadingInvoiceFor(id);
+    setErr("");
+    const compressed = await compressImage(file);
+    const uploaded = await uploadFile(compressed, "admin-payments");
+    if (!uploaded.ok) {
+      setUploadingInvoiceFor(null);
+      setErr(uploaded.error);
+      return;
+    }
+    const res = await fetch(`/api/admin-payments/${id}/invoice`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileUrl: uploaded.url, fileName: uploaded.name }),
+    });
+    setUploadingInvoiceFor(null);
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setErr(j.error ?? "No se pudo guardar la factura.");
+      return;
+    }
+    load();
   }
 
   async function confirmDone(id: string) {
@@ -1843,6 +1873,37 @@ export function AdminPaymentsPanel({ isAdmin }: { isAdmin: boolean }) {
                   {r.paymentNotifiedAt && (
                     <div className="text-[10px] text-steel-dim mt-1">
                       Avisado el {formatDateTime(r.paymentNotifiedAt)} · toca el botón para reenviar
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {(r.status !== "PENDING_PAYMENT" || r.invoiceFileUrl) && (
+                <div className="bg-cloud border border-rule rounded-md p-2.5 mb-2.5">
+                  <div className="text-[10px] font-semibold uppercase tracking-wide text-steel mb-1">📄 Factura</div>
+                  {r.invoiceFileUrl && (
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <ProofPreview url={r.invoiceFileUrl} size={36} filename={r.invoiceFileName ?? "factura"} />
+                      <span className="text-[11px] text-steel">
+                        Subida por {actorName(r.invoiceUploadedBy?.name)}
+                        {r.invoiceUploadedAt ? ` · ${formatDateTime(r.invoiceUploadedAt)}` : ""}
+                      </span>
+                    </div>
+                  )}
+                  {uploadingInvoiceFor === r.id ? (
+                    <div className="flex items-center gap-2 text-[12px] text-steel">
+                      <span className="w-3.5 h-3.5 rounded-full border-2 border-rule border-t-teal animate-spin" /> Subiendo factura…
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <label className="flex items-center gap-1.5 border-[1.5px] border-dashed border-rule rounded px-3 py-1.5 text-[12px] text-steel cursor-pointer hover:border-teal w-fit">
+                        <Upload size={13} /> {r.invoiceFileUrl ? "Cambiar factura (foto)" : "Subir factura (foto)"}
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && uploadInvoiceFor(r.id, e.target.files[0])} />
+                      </label>
+                      <label className="flex items-center gap-1 text-[11px] text-steel cursor-pointer hover:text-teal w-fit">
+                        ¿Es un PDF? Subir documento
+                        <input type="file" accept="application/pdf" className="hidden" onChange={(e) => e.target.files?.[0] && uploadInvoiceFor(r.id, e.target.files[0])} />
+                      </label>
                     </div>
                   )}
                 </div>

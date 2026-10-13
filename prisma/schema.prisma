@@ -522,6 +522,7 @@ model User {
   adminPaymentRequestsCreated                      AdminPaymentRequest[]                 @relation("AdminPaymentRequestCreatedBy")
   adminPaymentsPaid                                AdminPaymentRequest[]                 @relation("AdminPaymentPaidBy")
   adminPaymentsConfirmed                           AdminPaymentRequest[]                 @relation("AdminPaymentConfirmedBy")
+  adminPaymentInvoicesUploaded                     AdminPaymentRequest[]                 @relation("AdminPaymentInvoiceUploadedBy")
   adminPaymentPayeesCreated                        AdminPaymentPayee[]                   @relation("AdminPaymentPayeeCreatedBy")
   adminPaymentPayeeBankAccountsCreated             AdminPaymentPayeeBankAccount[]        @relation("AdminPaymentPayeeBankAccountCreatedBy")
   inventoryProductSnapshotsCreated                 InventoryProductSnapshot[]            @relation("InventoryProductSnapshotCreatedBy")
@@ -5300,6 +5301,14 @@ model AdminPaymentRequest {
   confirmedAt   DateTime?
   confirmedById String?
   confirmedBy   User?     @relation("AdminPaymentConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+
+  // Pedido de Nairoby 2026-10-13: factura que el proveedor entrega DESPUÉS
+  // del pago. Solo se guarda (sin IA, no bloquea nada); se puede reemplazar.
+  invoiceFileUrl      String?
+  invoiceFileName     String?
+  invoiceUploadedAt   DateTime?
+  invoiceUploadedById String?
+  invoiceUploadedBy   User?     @relation("AdminPaymentInvoiceUploadedBy", fields: [invoiceUploadedById], references: [id], onDelete: SetNull)
 
   createdById String?
   createdBy   User?    @relation("AdminPaymentRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
