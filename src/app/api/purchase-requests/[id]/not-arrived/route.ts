@@ -5,6 +5,35 @@ import { canReceivePurchasesTeam, canActOnPurchaseReceiving, getPurchaseApprover
 import { notifyOwner } from "@/lib/notifications";
 import { LEFT_BEHIND_HREF } from "@/lib/purchases";
 import { getLinesToConfirm, resolveInventoryLinesToConfirm } from "@/lib/purchaseLeftBehind";
+import { formatPurchaseRequestCode } from "@/lib/purchases";
+
+// Pedido de Daniel 2026-10-13: en un pedido de UN solo producto no hay "lo
+// demás ya llegó" que dispare la confirmación — Daniel (y solo él) puede
+// marcar igual que no llegó. Mismas condiciones que getLinesToConfirm,
+// menos lo del resto del pedido.
+async function getSingleProductLine(id: string) {
+  const r = await prisma.purchaseRequest.findFirst({
+    where: {
+      id,
+      receipt: null,
+      urgentReports: { none: {} },
+      OR: [{ status: "PAID" }, { status: "APPROVED", supplier: { paymentMode: "CREDITO" } }],
+    },
+    select: { id: true, groupId: true, requestNumber: true, quantity: true, requestedById: true, requestedBy: { select: { name: true } }, catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
+  });
+  if (!r) return null;
+  if ((await prisma.purchaseRequest.count({ where: { groupId: r.groupId } })) !== 1) return null;
+  return {
+    id: r.id,
+    groupId: r.groupId,
+    code: r.requestNumber ? formatPurchaseRequestCode(r.requestNumber) : null,
+    name: r.catalogItem.name,
+    quantity: r.quantity,
+    supplierName: r.supplier?.name ?? "proveedor",
+    requestedById: r.requestedById,
+    requestedByName: r.requestedBy?.name ?? null,
+  };
+}
 
 // Pedido de Jariel 2026-10-05: Inventario confirma que un producto no llegó
 // con el resto del pedido. Se abre el reclamo por todo lo pedido, ya revisado
@@ -18,7 +47,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const line = (await getLinesToConfirm()).find((l) => l.id === id);
+  let line: Awaited<ReturnType<typeof getSingleProductLine>> = (await getLinesToConfirm()).find((l) => l.id === id) ?? null;
+  const single = !line && (await canActOnPurchaseReceiving());
+  if (single) line = await getSingleProductLine(id);
   if (!line) {
     return NextResponse.json({ error: "Este producto ya se registró o ya tiene un reporte." }, { status: 409 });
   }
@@ -32,7 +63,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     data: {
       requestId: id,
       missingQty: line.quantity,
-      description: "No llegó con el resto del pedido (confirmado por Inventario).",
+      description: single ? "No llegó (pedido de un solo producto, confirmado por el líder de Inventario)." : "No llegó con el resto del pedido (confirmado por Inventario).",
       mediaUrls: [],
       reportedById: session.user.role === "admin" ? null : session.user.id,
       reviewedByLeadAt: now,
@@ -42,7 +73,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (line.requestedById) {
     await notifyOwner(line.requestedById, {
       title: "🚨 Mercadería no recibida — coordina con el proveedor",
-      body: `${codePrefix}${line.name} (${line.quantity} un.) · ${line.supplierName} — Inventario confirmó que no llegó con el resto del pedido. Acuerda si llega otro día, crédito a favor o devolución del dinero.`,
+      body: `${codePrefix}${line.name} (${line.quantity} un.) · ${line.supplierName} — Inventario confirmó que no llegó${single ? "" : " con el resto del pedido"}. Acuerda si llega otro día, crédito a favor o devolución del dinero.`,
       url: LEFT_BEHIND_HREF,
     }).catch(() => null);
   }
@@ -52,7 +83,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     if (approverId === line.requestedById) continue;
     await notifyOwner(approverId, {
       title: "📦 Mercadería no recibida (solo aviso)",
-      body: `${codePrefix}${line.name} (${line.quantity} un.) · ${line.supplierName} — Inventario confirmó que no llegó con el resto del pedido. ${line.requestedByName ?? "Compras"} lo coordina con el proveedor.`,
+      body: `${codePrefix}${line.name} (${line.quantity} un.) · ${line.supplierName} — Inventario confirmó que no llegó${single ? "" : " con el resto del pedido"}. ${line.requestedByName ?? "Compras"} lo coordina con el proveedor.`,
       url: LEFT_BEHIND_HREF,
     }).catch(() => null);
   }

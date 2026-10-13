@@ -2147,9 +2147,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                           {/* Pedido de Jariel 2026-10-05: lo demás del pedido ya se
                               registró y esto no — Inventario confirma al instante si
                               llegó o no. "No llegó" avisa en el momento a Compras. */}
-                          {r.urgentReports.length === 0 && !r.receipt && (r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")) && g.some((o) => o.id !== r.id && o.receipt) && (
+                          {r.urgentReports.length === 0 && !r.receipt && (r.status === "PAID" || (r.status === "APPROVED" && r.supplier.paymentMode === "CREDITO")) && (g.some((o) => o.id !== r.id && o.receipt) || (canApprove && g.length === 1)) && (
                             <div className="bg-red/10 border border-red/40 rounded-md p-2.5 mb-2 text-[11.5px]">
-                              <div className="font-semibold text-red mb-1.5">Lo demás de este pedido ya se registró y este producto no. ¿Llegó?</div>
+                              {/* Pedido de Daniel 2026-10-13: en un pedido de un solo
+                                  producto, solo él ve "No llegó" (ver not-arrived/route.ts). */}
+                              <div className="font-semibold text-red mb-1.5">
+                                {g.length === 1 ? "Si este pedido no llegó, márcalo aquí." : "Lo demás de este pedido ya se registró y este producto no. ¿Llegó?"}
+                              </div>
                               {notArrivedConfirmId === r.id ? (
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span>¿Seguro que no llegó? Se avisa a Compras para que lo coordine con el proveedor.</span>
