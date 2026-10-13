@@ -202,6 +202,24 @@ export function stockCoverMessage(itemName: string, stock: number, daysLeft: num
   return `Todavía hay stock de "${itemName}": quedan ${stock} u. ${lasts}. No hace falta comprarlo todavía.`;
 }
 
+// Pedido del usuario 2026-10-13: en Solicitar (también la vía rápida de
+// compras calientes) lo que todavía alcanza solo se pide con un motivo en la
+// justificación de esa línea, que Bryan ve al aprobar. Devuelve el error o,
+// si todo está bien, el motivo de cada línea frenada (índice → texto).
+export const STOCK_COVER_REASON_MIN = 10;
+export async function checkStockCoverReasons(items: { catalogItemId: string; justification?: string | null }[]): Promise<{ ok: true; reasons: Map<number, string> } | { ok: false; error: string }> {
+  const reasons = new Map<number, string>();
+  if (!isStockCoverBlockActive()) return { ok: true, reasons };
+  const covered = await findItemsWithStockCover(items.map((it) => it.catalogItemId));
+  for (const c of covered) {
+    const idx = items.findIndex((it) => it.catalogItemId === c.catalogItemId);
+    const why = items[idx]?.justification?.trim() ?? "";
+    if (why.length < STOCK_COVER_REASON_MIN) return { ok: false, error: `${c.message} Si de verdad hace falta (ej. temporada, oferta del proveedor), explica el motivo en la justificación de ese producto para Bryan.` };
+    reasons.set(idx, why);
+  }
+  return { ok: true, reasons };
+}
+
 // Mismo cálculo que la lista, para los productos de una solicitud de compra.
 export async function findItemsWithStockCover(catalogItemIds: string[]): Promise<{ catalogItemId: string; message: string }[]> {
   const ids = [...new Set(catalogItemIds)];
@@ -221,14 +239,17 @@ export async function findItemsWithStockCover(catalogItemIds: string[]): Promise
       orderBy: [{ catalogItemId: "asc" }, { createdAt: "desc" }],
       select: { catalogItemId: true, supplier: { select: { paymentMode: true } } },
     }),
-    prisma.purchaseCatalogItem.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }),
+    prisma.purchaseCatalogItem.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, bodega: true, justCode: true } }),
   ]);
   const name = new Map(items.map((i) => [i.id, i.name]));
+  // Los suministros (fundas, cintas…) no se venden: siempre "alcanzan", no se frenan.
+  const supplies = new Set(items.filter((i) => i.bodega === "MKT_SUMINISTROS" || !!i.justCode?.includes("-SUM-")).map((i) => i.id));
   const mode = new Map(lastPurchases.map((p) => [p.catalogItemId, p.supplier.paymentMode]));
   // Con el conteo físico abierto, lo contado manda (2026-10-13).
   const gate = await getCountGate(ids);
   const out: { catalogItemId: string; message: string }[] = [];
   for (const b of balances) {
+    if (supplies.has(b.catalogItemId)) continue;
     const stock = countedBalance(gate, b.catalogItemId, b.balanceAfter);
     const perDay = (sold.get(b.catalogItemId) ?? 0) / windowDays;
     if (!stockStillCovers(stock, perDay, urgentDaysForSupplier(mode.get(b.catalogItemId)))) continue;

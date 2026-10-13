@@ -7,6 +7,7 @@ import { notifyOwner } from "@/lib/notifications";
 import { reserveCreditsForGroup, releaseCreditsForGroup } from "@/lib/supplierCredits";
 import { checkRepurchaseApprovals, markRepurchaseReviewsUsed, type DeclaredHotRepurchase } from "@/lib/repurchaseReviews";
 import { findUncountedItems } from "@/lib/countGate";
+import { checkStockCoverReasons } from "@/lib/purchaseSuggestions";
 
 // Confirmado 2026-08-08: cambio de política pedido explícitamente por el
 // usuario — "Corregir y reenviar" una solicitud rechazada antes creaba una
@@ -56,6 +57,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   if (!isAdmin && !r0.isEmergency) {
     const [uncounted] = await findUncountedItems(d.items.map((it) => it.catalogItemId));
     if (uncounted) return NextResponse.json({ error: uncounted.message }, { status: 409 });
+    // Pedido del usuario 2026-10-13: lo que todavía alcanza solo con motivo para Bryan.
+    const cover = await checkStockCoverReasons(d.items);
+    if (!cover.ok) return NextResponse.json({ error: cover.error }, { status: 409 });
+    for (const [idx, why] of cover.reasons) check.justificationByIndex[idx] = why;
   }
   // Pedido del usuario 2026-10-06: misma regla de recompras que al crear; la
   // RC que ya usó esta misma compra sigue valiendo al corregirla.

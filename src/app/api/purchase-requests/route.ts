@@ -7,7 +7,7 @@ import { auth } from "@/auth";
 import { linkReadyToBuyProposalsToGroup } from "@/lib/marketProduct";
 import { canSubmitPurchaseRequests, canViewOwnPurchaseHistory, canCreateNewPurchaseRequests, canSubmitEmergencyPurchaseRequest, canApprovePurchaseRequests, canConfirmPurchaseReceiving, canRegisterPurchaseInvoices, getPurchaseApproverIds } from "@/lib/guards";
 import { checkRepurchaseApprovals, markRepurchaseReviewsUsed, type DeclaredHotRepurchase } from "@/lib/repurchaseReviews";
-import { findItemsWithStockCover, isStockCoverBlockActive } from "@/lib/purchaseSuggestions";
+import { checkStockCoverReasons, findItemsWithStockCover, isStockCoverBlockActive } from "@/lib/purchaseSuggestions";
 import { findUncountedItems } from "@/lib/countGate";
 import { checkPurchaseSubmission, purchaseSubmissionSchema, nextPurchaseRequestNumber, purchaseRequestInclude, findOpenPurchasesByOthers, lockAndFindOpenPurchaseByOthers, otherOpenPurchaseMessage, checkAndSaveFulfillmentSizes, formatPurchaseRequestCode } from "@/lib/purchases";
 import { notifyOwner } from "@/lib/notifications";
@@ -482,6 +482,10 @@ export async function POST(req: NextRequest) {
   if (!isAdmin && !isEmergencySubmission) {
     const [uncounted] = await findUncountedItems(d.items.map((it) => it.catalogItemId));
     if (uncounted) return NextResponse.json({ error: uncounted.message }, { status: 409 });
+    // Pedido del usuario 2026-10-13: lo que todavía alcanza solo con motivo para Bryan.
+    const cover = await checkStockCoverReasons(d.items);
+    if (!cover.ok) return NextResponse.json({ error: cover.error }, { status: 409 });
+    for (const [idx, why] of cover.reasons) check.justificationByIndex[idx] = why;
   }
   // Pedido del usuario 2026-10-06: toda recompra necesita su RC aprobada por
   // Bryan (ver repurchaseReviews.ts). El admin y la vía de emergencia no.

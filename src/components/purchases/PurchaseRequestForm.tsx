@@ -350,6 +350,8 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // Recompras) en vez de salir del formulario. Por posición de línea, como
   // blockedByLine. No se guarda en el borrador (se vuelve a consultar).
   const [repurchaseByLine, setRepurchaseByLine] = useState<Record<number, RepurchaseLineStatus | null>>({});
+  // Todavía alcanza (2026-10-13): se puede pedir solo con motivo para Bryan.
+  const [stockCoverByLine, setStockCoverByLine] = useState<Record<number, string | null>>({});
   const [analyzingLine, setAnalyzingLine] = useState<number | null>(null);
   // Pedido de Jariel 2026-10-07: la recompra CALIENTE no pasa por la
   // calculadora (lo de la compra ya está en esta solicitud). Al final se le
@@ -368,6 +370,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         // Conteo físico (2026-10-13): lo que no se contó no se compra, salvo emergencia.
         setBlockedByLine((m) => ({ ...m, [idx]: data?.blockedBy ?? (emergencyOnly ? null : data?.uncounted ?? null) }));
         setRepurchaseByLine((m) => ({ ...m, [idx]: data?.repurchase ?? null }));
+        setStockCoverByLine((m) => ({ ...m, [idx]: emergencyOnly ? null : (data?.stockCover ?? null) }));
         setNeedsSizeByItem((m) => ({ ...m, [catalogItemId]: !!data?.needsFulfillmentSize }));
         setSavedSizeByItem((m) => ({ ...m, [catalogItemId]: data?.fulfillmentSize ?? null }));
       })
@@ -386,6 +389,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setSupplierComparisons((m) => { const next = { ...m }; delete next[idx]; return next; });
     setBlockedByLine((m) => ({ ...m, [idx]: null }));
     setRepurchaseByLine((m) => ({ ...m, [idx]: null }));
+    setStockCoverByLine((m) => ({ ...m, [idx]: null }));
     if (analyzingLine === idx) setAnalyzingLine(null);
     if (!item) return;
     fetchLineStats(idx, item.id);
@@ -497,6 +501,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setSupplierComparisons(shift);
     setBlockedByLine(shift);
     setRepurchaseByLine(shift);
+    setStockCoverByLine(shift);
     setAnalyzingLine((a) => (a === null || a === idx ? null : a > idx ? a - 1 : a));
   }
 
@@ -646,6 +651,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
     setManualCreditProofName(null);
     setBlockedByLine({});
     setRepurchaseByLine({});
+    setStockCoverByLine({});
     setAnalyzingLine(null);
     setPriceAsk(false);
     setPriceOkSig(null);
@@ -772,7 +778,9 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // Confirmado 2026-09-07 — qué líneas concretas necesitan SU PROPIA
   // justificación (una u otra razón, o ambas), en vez de un solo booleano
   // global para toda la solicitud. Ver purchaseLineSchema en lib/purchases.ts.
-  const justificationNeededIdx = new Set<number>([...overThresholdLines.map((l) => l.idx), ...supplierNotCheapestLines.map((l) => l.idx)]);
+  // Todavía alcanza (2026-10-13): también pide motivo en la misma justificación.
+  const stockCoverLines = lines.map((l, idx) => (l.catalogItem && stockCoverByLine[idx] ? idx : null)).filter((x): x is number => x !== null);
+  const justificationNeededIdx = new Set<number>([...overThresholdLines.map((l) => l.idx), ...supplierNotCheapestLines.map((l) => l.idx), ...stockCoverLines]);
   const needsJustification = justificationNeededIdx.size > 0;
 
   // Pedido del usuario 2026-10-12 (SC-178): la Pistola Hidrolavadora siempre
@@ -1798,7 +1806,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       {needsJustification && (
         <div className="bg-red/10 border-[1.5px] border-red/45 rounded-md p-3.5 mb-3.5">
           <div className="flex items-center gap-1.5 text-[13px] font-bold text-red mb-1">
-            <AlertTriangle size={14} /> {overThreshold && supplierNotCheapest ? "Precio sobre el historial y hay un proveedor más barato" : overThreshold ? "Precio por encima del historial" : "Hay un proveedor más barato"}
+            <AlertTriangle size={14} /> {overThreshold && supplierNotCheapest ? "Precio sobre el historial y hay un proveedor más barato" : overThreshold ? "Precio por encima del historial" : supplierNotCheapest ? "Hay un proveedor más barato" : "Todavía hay stock suficiente"}
           </div>
           <div className="text-[12px] text-steel mb-2.5">
             No se puede enviar sin explicar por qué — cada producto tiene su propia justificación, para no confundir la explicación de uno con la de otro.
@@ -1809,6 +1817,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
               .map((idx) => {
                 const overLine = overThresholdLines.find((l) => l.idx === idx);
                 const supplierLine = supplierNotCheapestLines.find((l) => l.idx === idx);
+                const coverMsg = stockCoverByLine[idx];
                 return (
                   <div key={idx}>
                     <div className="text-[12px] text-steel mb-1">
@@ -1820,6 +1829,9 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                       )}
                       {supplierLine && (
                         <> {overLine ? "Además, " : ": "}{supplierLine.cheapestSupplierName} lo vendió más barato (${supplierLine.cheapestPrice.toFixed(2)}/un.) que el proveedor elegido.</>
+                      )}
+                      {coverMsg && (
+                        <> {overLine || supplierLine ? "Además: " : ": "}{coverMsg} Escribe el motivo (mínimo 10 letras) — Bryan lo ve al aprobar.</>
                       )}
                     </div>
                     <textarea

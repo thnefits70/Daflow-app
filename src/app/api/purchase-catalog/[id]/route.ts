@@ -6,6 +6,7 @@ import { canSubmitPurchaseRequests, canUsePurchaseRequestForm } from "@/lib/guar
 import { findOpenPurchasesByOthers, getCatalogItemPriceStats, otherOpenPurchaseMessage, getCatalogItemsNeedingFulfillmentSize } from "@/lib/purchases";
 import { getRepurchaseLineStatus } from "@/lib/repurchaseReviews";
 import { findUncountedItems } from "@/lib/countGate";
+import { findItemsWithStockCover, isStockCoverBlockActive } from "@/lib/purchaseSuggestions";
 
 const OWN_DELETE_WINDOW_MS = 2 * 60 * 60 * 1000;
 
@@ -60,7 +61,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const session = await auth();
   const isAdmin = session?.user.role === "admin";
   const groupId = req.nextUrl.searchParams.get("groupId") || undefined;
-  const [stats, others, repurchase, uncountedRows] = await Promise.all([
+  const [stats, others, repurchase, uncountedRows, coverRows] = await Promise.all([
     getCatalogItemPriceStats(id),
     // Aviso apenas se elige el producto (2026-09-29): otra persona ya lo está comprando.
     isAdmin || !session ? Promise.resolve([]) : findOpenPurchasesByOthers([id], session.user.id),
@@ -69,8 +70,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Conteo físico (2026-10-13): lo que no se contó no se compra (el formulario
     // de emergencia no lo muestra; el admin no se frena).
     isAdmin ? Promise.resolve([]) : findUncountedItems([id]),
+    // Todavía alcanza (2026-10-13): se puede pedir, pero con motivo para Bryan.
+    isAdmin || !isStockCoverBlockActive() ? Promise.resolve([]) : findItemsWithStockCover([id]),
   ]);
   const uncounted = uncountedRows[0]?.message ?? null;
+  const stockCover = coverRows[0]?.message ?? null;
   const blockedBy = others.length > 0 ? otherOpenPurchaseMessage(others[0]) : null;
   const needsFulfillmentSize = (await getCatalogItemsNeedingFulfillmentSize([id])).has(id);
   // Pedido del usuario 2026-09-30: si ya está marcado, quien compra lo ve y
@@ -80,7 +84,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const fulfillmentSize = item.fulfillmentSize && item.bodega !== "MKT_SUMINISTROS"
     ? { value: item.fulfillmentSize as "SMALL" | "NORMAL", setAt: item.fulfillmentSizeSetAt, setByName: setBy?.name ?? null }
     : null;
-  return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats, blockedBy, uncounted, needsFulfillmentSize, fulfillmentSize, repurchase });
+  return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats, blockedBy, uncounted, stockCover, needsFulfillmentSize, fulfillmentSize, repurchase });
 }
 
 // Confirmado 2026-08-03/06: admin puede eliminar cualquier producto/
