@@ -29,6 +29,7 @@ type Row = {
   variants?: { label: string; units: number }[] | null;
   counted?: boolean | null;
   countedUrgent?: boolean;
+  newToday?: boolean;
 };
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
 type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; coldNewProducts?: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null; canUseCalculator?: boolean; canRepurchase?: boolean; repurchases?: Record<string, OpenRepurchase>; buyerNames?: { hot: string[]; cold: string[] } };
@@ -255,7 +256,11 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
         <div className="w-10 h-10 rounded bg-cloud shrink-0" />
       )}
       <div className="min-w-0 flex-1">
-        <div className="text-[13px] font-semibold text-ink truncate">{r.name}</div>
+        <div className="text-[13px] font-semibold text-ink truncate">
+          {/* Pedido de Jariel 2026-10-13: marcar las calientes que entraron hoy. */}
+          {r.newToday ? <span className="mr-1.5 align-middle text-[10.5px] font-bold uppercase tracking-wide text-red bg-red/10 rounded px-1.5 py-0.5">Nueva hoy</span> : null}
+          {r.name}
+        </div>
         {/* Pedido de Jariel 2026-09-29: el ID para buscarlo más rápido. */}
         {r.justCode && (
           <div className="flex items-center gap-1 text-[12px] text-steel">
@@ -532,8 +537,8 @@ export function PurchaseSuggestionsPanel({ onAnalyzeRepurchase }: { onAnalyzeRep
   const onlyCold = data.audiences.includes("cold") && !data.audiences.includes("hot");
   const onlyHot = data.audiences.includes("hot") && !data.audiences.includes("cold");
   const hotFirst = !onlyCold;
-  const hot = <List key="hot" title="🔥 Compras calientes" sub={`30 unidades o menos · ${whoText(data.buyerNames?.hot)}`} rows={data.hot} newProducts={data.newProducts} open={!onlyCold} canReportStockout={data.canReportStockout} onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
-  const cold = <List key="cold" title="❄️ Compras frías" sub={`31 a 60 unidades · ${whoText(data.buyerNames?.cold)}`} rows={data.cold} newProducts={data.coldNewProducts} open={!onlyHot} canReportStockout={data.canReportStockout} canDiscard={data.canDiscard} isCold onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
+  const hot = <List key="hot" title="🔥 Compras calientes" sub={`se acaban en 3 días o menos · ${whoText(data.buyerNames?.hot)}`} rows={data.hot} newProducts={data.newProducts} open={!onlyCold} canReportStockout={data.canReportStockout} onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
+  const cold = <List key="cold" title="❄️ Compras frías" sub={`60 unidades o menos que todavía alcanzan más de 3 días · ${whoText(data.buyerNames?.cold)}`} rows={data.cold} newProducts={data.coldNewProducts} open={!onlyHot} canReportStockout={data.canReportStockout} canDiscard={data.canDiscard} isCold onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
 
   return (
     <OpenRepurchaseContext.Provider value={onAnalyzeRepurchase ?? null}>
@@ -548,7 +553,7 @@ export function PurchaseSuggestionsPanel({ onAnalyzeRepurchase }: { onAnalyzeRep
       <div className="bg-teal/10 border border-teal/30 rounded-md px-3 py-2 text-[12px] text-steel mb-4">
         Cuánto se vende sale de los pedidos de Dropi que sube Daniel y de las ventas externas de los últimos{" "}
         <b className="text-ink">{days} día{days === 1 ? "" : "s"}</b>
-        {days < 30 ? " (los pedidos se guardan desde el 21 de septiembre; cada día que pasa el cálculo es más preciso)" : ""}. Los combos cuentan como venta de cada producto que los forma.
+        . Con ese promedio diario se calcula en cuántos días se acaba cada producto. Los combos cuentan como venta de cada producto que los forma.
       </div>
       {/* Pedido del usuario 2026-10-05: Nairoby necesita la calculadora de Análisis de Mercado para sus compras frías. */}
       {data.canUseCalculator && <PriceCalculator />}

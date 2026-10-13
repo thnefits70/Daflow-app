@@ -205,8 +205,8 @@ export function PurchaseControlPanel({
       {tab === "que-comprar" && (
         <>
           <TabGuide storageKey="compras-que-comprar">
-            Lo que conviene comprar, ordenado por los días que le quedan a cada producto. Compras calientes (30 o menos) son de Jariel; compras frías (31
-            a 60) son de Nairoby. Lo que tiene poco stock pero no se vende queda al final: no es prioridad por ahora.
+            Lo que conviene comprar, ordenado por los días que le quedan a cada producto. Compras calientes (se acaban en 3 días o menos, según
+            lo vendido los últimos 10 días) son de Jariel; compras frías (60 o menos que todavía alcanzan más de 3 días) son de Nairoby. Lo que tiene poco stock pero no se vende queda al final: no es prioridad por ahora.
           </TabGuide>
           <PurchaseSuggestionsPanel
             onAnalyzeRepurchase={

@@ -14,6 +14,18 @@ import { getVariantSales, MIX_MIN_UNITS } from "@/lib/variantSales";
 // stock que no sale no es prioridad (ejemplo de Daniel). Si un urgente pasa
 // 3 días sin comprarse, se avisa a Daniel. Todo se calcula al leer, sin
 // guardar nada en la base.
+//
+// Cambio 2026-10-13 (pedido de Jariel, reglas elegidas por el usuario): la
+// compra caliente ya no es "30 o menos". Se sigue CADA producto de la bodega:
+// con la venta diaria promedio de los últimos 10 días (pedidos de Dropi +
+// ventas externas) se pronostica en cuántos días se acaba, y lo que se acaba
+// en 3 días o menos es compra caliente (Jariel), tenga el stock que tenga.
+// Lo demás con 60 o menos va a compras frías (Nairoby) hasta que le queden
+// 3 días. A Jariel le llega el aviso TODOS los días con todas las calientes
+// sin gestionar, marcando las nuevas de ese día.
+export const HOT_DAYS = 3;
+export const HOT_SALES_WINDOW_DAYS = 10;
+// Recompras sigue usando "30 o menos" para decidir si pide calculadora.
 export const HOT_MAX = 30;
 export const COLD_MAX = 60;
 // Confirmado 2026-10-01 por Daniel: "urgente" = lo que tarda el proveedor en
@@ -105,6 +117,8 @@ export type SuggestionRow = {
   // según el sistema ya estaría urgente (Daniel lo cuenta primero).
   counted: boolean | null;
   countedUrgent: boolean;
+  // Compra caliente que entró hoy a la lista (ayer alcanzaba para más de HOT_DAYS).
+  newToday: boolean;
 };
 
 export type NewProductRow = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
@@ -147,9 +161,9 @@ async function latestBalances(before?: Date): Promise<Map<string, number>> {
 // 2026-09-21, así que al principio la ventana es más corta que 30 días.
 // Compartido con Recompras (repurchaseReviews.ts) para que ambas pantallas
 // muestren exactamente las mismas ventas.
-export async function getSalesWindow(now = new Date()): Promise<{ windowStart: Date; windowDays: number }> {
+export async function getSalesWindow(now = new Date(), days = WINDOW_DAYS): Promise<{ windowStart: Date; windowDays: number }> {
   const firstBatch = await prisma.fulfillmentRequestBatch.findFirst({ orderBy: { requestedAt: "asc" }, select: { requestedAt: true } });
-  const windowStart = new Date(Math.max(now.getTime() - WINDOW_DAYS * DAY_MS, firstBatch?.requestedAt.getTime() ?? now.getTime()));
+  const windowStart = new Date(Math.max(now.getTime() - days * DAY_MS, firstBatch?.requestedAt.getTime() ?? now.getTime()));
   return { windowStart, windowDays: Math.max(1, (now.getTime() - windowStart.getTime()) / DAY_MS) };
 }
 
@@ -261,10 +275,11 @@ export async function findItemsWithStockCover(catalogItemIds: string[]): Promise
 
 export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   const now = new Date();
-  const { windowStart, windowDays } = await getSalesWindow(now);
+  const { windowStart, windowDays } = await getSalesWindow(now, HOT_SALES_WINDOW_DAYS);
 
-  const [kardexBalances, kardexBefore, kardexBeforeCold, gate, sold, openPurchases, readyByBuyer] = await Promise.all([
+  const [kardexBalances, kardexYesterday, kardexBefore, kardexBeforeCold, gate, sold, openPurchases, readyByBuyer] = await Promise.all([
     latestBalances(),
+    latestBalances(new Date(now.getTime() - DAY_MS)),
     latestBalances(new Date(now.getTime() - ESCALATE_DAYS * DAY_MS)),
     latestBalances(new Date(now.getTime() - COLD_ESCALATE_DAYS * DAY_MS)),
     getCountGate(),
@@ -280,6 +295,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   // Conteo físico abierto (2026-10-13): lo contado manda sobre el Kardex.
   const withCount = (m: Map<string, number>) => new Map([...m].map(([id, bal]) => [id, countedBalance(gate, id, bal)]));
   const balances = withCount(kardexBalances);
+  const balancesYesterday = withCount(kardexYesterday);
   const balancesBefore = withCount(kardexBefore);
   const balancesBeforeCold = withCount(kardexBeforeCold);
 
@@ -294,7 +310,10 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   // su ID de Dropi siguen el camino de productos nuevos (Análisis de Mercado).
   // Pedido del usuario 2026-10-02: un stock negativo es un error de conteo,
   // no una compra urgente — se sacan de la lista hasta que se corrija.
-  const candidateIds = [...balances.entries()].filter(([, bal]) => bal >= 0 && bal <= COLD_MAX).map(([id]) => id);
+  // Compra caliente = se acaba en HOT_DAYS o menos, con cualquier stock.
+  const perDayOf = (id: string) => (sold.get(id) ?? 0) / windowDays;
+  const isHotStock = (id: string, bal: number) => perDayOf(id) > 0 && Math.max(0, bal) / perDayOf(id) <= HOT_DAYS;
+  const candidateIds = [...balances.entries()].filter(([id, bal]) => bal >= 0 && (bal <= COLD_MAX || isHotStock(id, bal))).map(([id]) => id);
   const [items, lastPurchases, stockoutReports, discards] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({
       where: { id: { in: candidateIds }, awaitingDropiId: false },
@@ -354,7 +373,8 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
             ? "urgente"
             : "pronto";
     // Descarte de Nairoby: solo en compras frías y solo sobre urgente/pronto.
-    const isCold = stock > HOT_MAX;
+    const isHot = isHotStock(item.id, stock);
+    const isCold = !isHot;
     const d = discardByItem.get(item.id);
     let discard: DiscardInfo | null = null;
     let discardReturned: SuggestionRow["discardReturned"] = null;
@@ -378,9 +398,13 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
     const uncounted = !isSupply && isUncounted(gate, item.id, true);
     const status: SuggestionStatus =
       uncounted && (baseStatus === "urgente" || baseStatus === "pronto") ? "falta_contar" : discard && (baseStatus === "urgente" || baseStatus === "pronto") ? "descartado" : baseStatus;
-    // Ya era urgente hace 3 días (7 en compras frías) con el stock de ese día y la venta de hoy.
+    // Ya era urgente hace 3 días (7 en compras frías) con el stock de ese día y
+    // la venta de hoy. En calientes, "urgente" = ya se acababa en HOT_DAYS.
     const before = (isCold ? balancesBeforeCold : balancesBefore).get(item.id);
-    const escalated = status === "urgente" && before !== undefined && Math.max(0, before) / perDay <= urgentDays;
+    const escalated = status === "urgente" && before !== undefined && Math.max(0, before) / perDay <= (isHot ? HOT_DAYS : urgentDays);
+    // Caliente nueva de hoy: ayer todavía alcanzaba para más de HOT_DAYS.
+    const yesterday = balancesYesterday.get(item.id);
+    const newToday = isHot && (yesterday === undefined || !isHotStock(item.id, yesterday));
     const thisWeek = isCold && (status === "urgente" || (status === "pronto" && daysLeft !== null && daysLeft <= urgentDays + COLD_WEEK_AHEAD_DAYS));
     // Si con lo que hay ya alcanza para todo ese tiempo, todavía no se sugiere nada.
     const suggestedQty = status !== "en_compra" && status !== "no_sale" && status !== "falta_contar" ? suggestedQuantity(perDay, urgentDays, stock) : null;
@@ -406,8 +430,10 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       variants: null,
       counted: gate.active && !isSupply ? !uncounted : null,
       countedUrgent: status === "falta_contar" && baseStatus === "urgente",
+      newToday,
     };
-    (stock <= HOT_MAX ? hot : cold).push(row);
+    if (isHot) hot.push(row);
+    else if (stock <= COLD_MAX) cold.push(row);
   }
 
   // Reparto por color/talla (Ventas por variante): solo con 2 variantes o
@@ -551,18 +577,25 @@ export function buildSuggestionNotice(s: PurchaseSuggestions, audience: Suggesti
   // Pedido del usuario 2026-10-02: a Jariel solo lo que de verdad es urgente
   // (sin "pronto" ni productos nuevos, que tienen su propio pendiente), para
   // no saturarlo. Los "sin proveedor" solo cuentan el día que toca preguntar.
+  // Desde 2026-10-13 (pedido de Jariel) toda la lista caliente se acaba en
+  // HOT_DAYS o menos: el aviso diario repite TODAS las que siguen sin
+  // gestionar (sin compra abierta ni marca de proveedor) y marca las nuevas.
   const rows = s.hot;
-  const urgent = rows.filter((r) => r.status === "urgente");
+  const urgent = [...rows.filter((r) => r.status === "urgente" && r.newToday), ...rows.filter((r) => r.status === "urgente" && !r.newToday)];
+  const fresh = urgent.filter((r) => r.newToday).length;
   const ask = rows.filter((r) => r.status === "preguntar_proveedor").length;
   if (urgent.length === 0 && ask === 0) return null;
   const parts = [
-    urgent.length ? plural(urgent.length, "urgente", "urgentes") : null,
+    urgent.length ? `${plural(urgent.length, "compra caliente", "compras calientes")} sin gestionar` : null,
+    fresh ? plural(fresh, "nueva hoy", "nuevas hoy") : null,
     ask ? `${ask} por preguntar al proveedor` : null,
   ].filter(Boolean);
-  const top = urgent
-    .slice(0, 3)
-    .map((r) => `${r.name} (${daysText(r.daysLeft)}${r.suggestedQty ? `, comprar ~${r.suggestedQty}` : ""})`)
-    .join("; ");
+  const SHOWN = 8;
+  const top =
+    urgent
+      .slice(0, SHOWN)
+      .map((r) => `${r.newToday ? "🆕 " : ""}${r.name} (${daysText(r.daysLeft)}${r.suggestedQty ? `, comprar ~${r.suggestedQty}` : ""})`)
+      .join("; ") + (urgent.length > SHOWN ? ` y ${urgent.length - SHOWN} más` : "");
   const askNames = rows
     .filter((r) => r.status === "preguntar_proveedor")
     .slice(0, 3)
@@ -574,7 +607,7 @@ export function buildSuggestionNotice(s: PurchaseSuggestions, audience: Suggesti
     icon: "🔥",
     label: "Compras calientes",
     meta: parts.join(" · "),
-    body: `${parts.join(" · ")}${top ? `. Primero: ${top}` : ""}${askNames ? `. ¿El proveedor ya tiene: ${askNames}?` : "."}`,
+    body: `${parts.join(" · ")}${top ? `. Se acaban en ${HOT_DAYS} días o menos: ${top}` : ""}${askNames ? `. ¿El proveedor ya tiene: ${askNames}?` : "."}`,
     overdue: urgent.some((r) => r.escalated),
   };
 }

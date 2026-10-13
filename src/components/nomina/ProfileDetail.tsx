@@ -1053,7 +1053,7 @@ export function ProfileDetail({
                   <Receipt size={11} /> ¿Se encarga de las compras calientes? 🔥
                 </label>
                 <div className="text-[11px] text-steel mb-2">
-                  Productos con 30 unidades o menos y productos nuevos listos para comprar: le llega el aviso diario de las 8:00 y la tarjeta en Inicio.
+                  Productos que se acaban en 3 días o menos (según lo vendido los últimos 10 días) y productos nuevos listos para comprar: le llega el aviso diario de las 8:00 con todas las que siguen sin gestionar y la tarjeta en Inicio.
                   Puede haber varias personas. Si nadie lo tiene, los avisos te llegan a ti con un recordatorio diario. Para poder comprar también
                   necesita &quot;¿Puede solicitar/gestionar Control de Compras?&quot;.
                 </div>
@@ -1064,7 +1064,7 @@ export function ProfileDetail({
                   <Receipt size={11} /> ¿Se encarga de las compras frías? ❄️
                 </label>
                 <div className="text-[11px] text-steel mb-2">
-                  Productos con 31 a 60 unidades: lista semanal (aviso los lunes y tarjeta en Inicio toda la semana), botón &quot;No hace falta comprarlo&quot;
+                  Productos con 60 unidades o menos que todavía alcanzan más de 3 días: lista semanal (aviso los lunes y tarjeta en Inicio toda la semana), botón &quot;No hace falta comprarlo&quot;
                   y calculadora de precio. Puede haber varias personas. Si nadie lo tiene, los avisos te llegan a ti con un recordatorio diario. Para
                   poder comprar también necesita &quot;¿Puede solicitar/gestionar Control de Compras?&quot;.
                 </div>
