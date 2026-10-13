@@ -260,6 +260,7 @@ export type RepurchaseRow = {
   approvalExpiresAt: string | null;
   usedPurchaseCode: string | null;
   usedAt: string | null;
+  cancelledAt: string | null;
   // Bryan no respondió todavía después de NO_RESPONSE_HOURS.
   waitingTooLong: boolean;
   // Compra caliente que confirmó quien compra, sin esperar a Bryan.
@@ -312,6 +313,7 @@ const rowSelect = {
   approvalExpiresAt: true,
   usedGroupId: true,
   usedAt: true,
+  cancelledAt: true,
 } satisfies Prisma.RepurchaseReviewSelect;
 
 type RowRecord = Prisma.RepurchaseReviewGetPayload<{ select: typeof rowSelect }>;
@@ -393,6 +395,7 @@ async function toRows(records: RowRecord[]): Promise<RepurchaseRow[]> {
       approvalExpiresAt: r.approvalExpiresAt?.toISOString() ?? null,
       usedPurchaseCode: r.usedGroupId ? codeByGroup.get(r.usedGroupId) ?? null : null,
       usedAt: r.usedAt?.toISOString() ?? null,
+      cancelledAt: r.cancelledAt?.toISOString() ?? null,
       selfConfirmed: !!r.reviewedById && r.reviewedById === r.requestedById,
       waitingTooLong: state === "PENDING_APPROVAL" && now.getTime() - r.requestedAt.getTime() >= NO_RESPONSE_HOURS * 60 * 60 * 1000,
       stockStillCovered: r.stockAtRequest > COLD_MAX && (r.daysLeft === null || r.daysLeft >= urgentDaysForSupplier(r.supplier.paymentMode) + COVER_DAYS_AFTER_ARRIVAL),
@@ -600,6 +603,21 @@ export async function cancelRepurchaseReview(id: string, userId: string): Promis
     data: { status: "CANCELLED", cancelledAt: new Date() },
   });
   if (updated.count === 0) return { ok: false, status: 409, error: "Solo puedes retirar tus recompras que siguen esperando a Bryan." };
+  return { ok: true };
+}
+
+// Suspender una recompra YA aprobada que todavía no se pidió (pedido de
+// Nairoby 2026-10-13: RC-001 Antena, el conteo físico dio 153 en vez de 59 y
+// ya no hace falta comprar). La suspende quien la envió o Bryan; el motivo
+// queda en rejectReason y la fila pasa a CANCELLED (con reviewedAt = "Suspendida").
+export async function suspendApprovedRepurchase(params: { id: string; userId: string; canDecide: boolean; reason: string; actorName: string }): Promise<Result> {
+  const reason = params.reason.trim();
+  if (reason.length < 5) return { ok: false, status: 400, error: "Escribe por qué se suspende la compra (mínimo 5 letras)." };
+  const updated = await prisma.repurchaseReview.updateMany({
+    where: { id: params.id, status: "APPROVED", usedGroupId: null, ...(params.canDecide ? {} : { requestedById: params.userId }) },
+    data: { status: "CANCELLED", cancelledAt: new Date(), rejectReason: `${params.actorName}: ${reason}`.slice(0, 1000) },
+  });
+  if (updated.count === 0) return { ok: false, status: 409, error: "Esta recompra ya no está aprobada (se compró, venció o ya se suspendió). Recarga la pantalla." };
   return { ok: true };
 }
 

@@ -79,6 +79,7 @@ type Row = {
   approvalExpiresAt: string | null;
   usedPurchaseCode: string | null;
   usedAt: string | null;
+  cancelledAt?: string | null;
   waitingTooLong: boolean;
   stockStillCovered: boolean;
   selfConfirmed: boolean;
@@ -798,10 +799,13 @@ function buyUrl(r: Row): string {
 function RowCard({ r, data, onChanged }: { r: Row; data: Data; onChanged: () => void }) {
   const [qty, setQty] = useState(String(r.quantity));
   const [rejecting, setRejecting] = useState(false);
+  const [suspending, setSuspending] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mine = r.requestedById === data.userId;
+  // Retirada después de aprobada = compra suspendida (con motivo).
+  const suspended = r.state === "CANCELLED" && !!r.reviewedAt;
   const calc: RepurchaseCalc = {
     bodegaCost: r.unitCost + (r.freightTotal ? r.freightTotal / r.quantity : 0),
     freightPerUnit: r.freightTotal ? r.freightTotal / r.quantity : 0,
@@ -834,7 +838,7 @@ function RowCard({ r, data, onChanged }: { r: Row; data: Data; onChanged: () => 
           <div className="flex flex-wrap items-baseline gap-x-2">
             <span className="text-[12px] font-bold text-steel">{r.code}</span>
             <span className="text-[13.5px] font-bold text-ink">{r.itemName}</span>
-            <span className={`text-[12px] font-semibold ${STATE_LABEL[r.state].tone}`}>· {STATE_LABEL[r.state].text}</span>
+            <span className={`text-[12px] font-semibold ${STATE_LABEL[r.state].tone}`}>· {suspended ? "Compra suspendida" : STATE_LABEL[r.state].text}</span>
           </div>
           {r.justCode && (
             <div className="flex items-center gap-1 text-[12px] text-steel">
@@ -910,6 +914,43 @@ function RowCard({ r, data, onChanged }: { r: Row; data: Data; onChanged: () => 
               </div>
             </>
           )}
+          {(mine || data.canDecide) &&
+            (!suspending ? (
+              <button type="button" disabled={busy} onClick={() => setSuspending(true)} className="mt-2 block text-[12px] font-semibold text-steel hover:text-red cursor-pointer">
+                ⏸ Suspender compra
+              </button>
+            ) : (
+              <div className="mt-2 rounded border border-rule bg-cloud/40 p-2">
+                <div className="text-[12px] text-ink mb-1">¿Por qué ya no se compra? (ej. el conteo físico encontró más stock)</div>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  rows={2}
+                  maxLength={900}
+                  placeholder="Motivo (obligatorio)"
+                  className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12.5px]"
+                />
+                <div className="flex gap-1.5 mt-1.5">
+                  <button
+                    type="button"
+                    disabled={busy || reason.trim().length < 5}
+                    onClick={() => post(`/api/repurchase-reviews/${r.id}/suspend`, { reason: reason.trim() })}
+                    className="rounded bg-red px-3 py-1.5 text-[12px] font-bold text-white cursor-pointer disabled:opacity-50"
+                  >
+                    {busy ? "Guardando…" : "Sí, suspender compra"}
+                  </button>
+                  <button type="button" disabled={busy} onClick={() => setSuspending(false)} className="rounded border border-rule px-3 py-1.5 text-[12px] text-steel cursor-pointer">
+                    Volver
+                  </button>
+                </div>
+                <div className="text-[11px] text-steel mt-1">La aprobación deja de valer y ya no se puede pedir la compra. Si más adelante hace falta, se analiza otra vez.</div>
+              </div>
+            ))}
+        </div>
+      )}
+      {suspended && (
+        <div className="text-[12.5px] text-steel mt-2">
+          ⏸ Compra suspendida el {fmtDate(r.cancelledAt ?? null)} — {r.rejectReason}
         </div>
       )}
       {r.selfConfirmed && r.state !== "APPROVED" && (
