@@ -8,7 +8,7 @@ import { PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxRegister } from "@/components/pvx/PvxRegister";
 import { DropiLink, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
 import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
-import { GENERAL_WHATSAPP_URL, WhatsAppButton, logGeneralContact } from "@/components/pvx/PvxContact";
+import { AdvisorPicker, WhatsAppButton } from "@/components/pvx/PvxContact";
 import { PvxRocketSku } from "@/components/pvx/PvxRocketSku";
 import { PvxCities, PvxOperation, PvxResources } from "@/components/pvx/PvxSections";
 import { IconArrow, IconBox, IconCheck, IconClock, IconCopy, IconFlame, IconImage, IconLock, IconSearch, IconSpark, IconTruck, IconWhatsApp } from "@/components/pvx/PvxIcons";
@@ -365,15 +365,14 @@ function Hero({ cards, stats, name, query, onQuery, onOpen }: { cards: PublicCar
         <div className="mt-7">
           <HeroSearch cards={cards} query={query} onQuery={onQuery} onOpen={onOpen} />
         </div>
-        <a
-          href={GENERAL_WHATSAPP_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={logGeneralContact}
-          className="mt-5 inline-flex items-center gap-2 text-[14.5px] font-semibold text-white/75 underline decoration-white/30 underline-offset-4 hover:text-white hover:decoration-[var(--pvx-orange)]"
-        >
-          <IconWhatsApp className="w-4.5 h-4.5 text-[#3ddc84]" /> ¿Dudas? Escríbele a un asesor por WhatsApp
-        </a>
+        <div className="mt-5">
+          <AdvisorPicker
+            dark
+            className="inline-flex items-center gap-2 text-left text-[14.5px] font-semibold text-white/75 underline decoration-white/30 underline-offset-4 hover:text-white hover:decoration-[var(--pvx-orange)] cursor-pointer"
+          >
+            <IconWhatsApp className="w-4.5 h-4.5 shrink-0 text-[#3ddc84]" /> ¿Dudas? Escríbele a un asesor por WhatsApp
+          </AdvisorPicker>
+        </div>
       </div>
       <div className="relative mt-14 sm:mt-20">
         <ProductMarquee cards={cards} onOpen={onOpen} />
@@ -473,15 +472,11 @@ function Promises() {
           <h2 id="pvx-promise" className="pvx-display text-[40px] sm:text-[68px]">
             Tú vendes. Nosotros despachamos.
           </h2>
-          <a
-            href={GENERAL_WHATSAPP_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={logGeneralContact}
-            className="pvx-press mt-9 inline-flex items-center gap-2 rounded-full bg-white px-6 py-3.5 text-[15px] font-bold text-[var(--pvx-ink)] hover:bg-[var(--pvx-ink)] hover:text-white"
-          >
-            <IconWhatsApp className="w-5 h-5" /> Escribir al asesor
-          </a>
+          <div className="mt-9">
+            <AdvisorPicker className="pvx-press inline-flex items-center gap-2 rounded-full bg-white px-6 py-3.5 text-[15px] font-bold text-[var(--pvx-ink)] hover:bg-[var(--pvx-ink)] hover:text-white cursor-pointer">
+              <IconWhatsApp className="w-5 h-5" /> Escribir al asesor
+            </AdvisorPicker>
+          </div>
         </div>
         <ul className="flex flex-col gap-10 sm:gap-12">
           {rows.map((r, i) => (
@@ -587,15 +582,9 @@ function Footer() {
             <a href="#productos" className="pvx-press inline-flex items-center gap-2 rounded-full bg-[var(--pvx-orange)] px-6 py-3.5 text-[15px] font-bold text-white hover:bg-[var(--pvx-orange-press)]">
               Ver productos <IconArrow className="w-4 h-4" />
             </a>
-            <a
-              href={GENERAL_WHATSAPP_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={logGeneralContact}
-              className="pvx-press inline-flex items-center gap-2 rounded-full bg-white/10 px-6 py-3.5 text-[15px] font-bold text-white hover:bg-white/15"
-            >
+            <AdvisorPicker up dark alignRight className="pvx-press inline-flex items-center gap-2 rounded-full bg-white/10 px-6 py-3.5 text-[15px] font-bold text-white hover:bg-white/15 cursor-pointer">
               <IconWhatsApp className="w-4.5 h-4.5 text-[#3ddc84]" /> Asesor
-            </a>
+            </AdvisorPicker>
           </div>
         </div>
         <Image src="/pvx/brand/wordmark-tagline-white.png" alt="Provedix · Conectando productos y oportunidades" width={1600} height={374} className="mt-20 h-auto w-full" />

@@ -132,6 +132,7 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
               <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f6ed] text-[#0f6b35] text-[12.5px] font-bold px-3 py-1.5"><IconCheck className="w-3.5 h-3.5" /> Hay stock disponible</span>
             )}
             <WhatsAppButton p={p} outOfStock={p.stock === "out"} />
+            {(p.rocketSkus ?? []).length > 0 && <WhatsAppButton p={p} outOfStock={p.stock === "out"} advisor="rocket" />}
           </div>
 
           <div className="mt-4 rounded-[22px] bg-[#0d0e11] text-white p-4">
