@@ -18,7 +18,9 @@ const SUPPLIER_LEDGER_ALLOWED_PREFIXES = ["/proveedor-ledger", "/api/proveedor-l
 // página pública (/pvx) y solo pasan sus rutas; todo lo demás, 404 liso.
 // /api/auth/session y /api/app-version los piden componentes globales del
 // layout; no revelan nada (sin sesión en ese dominio).
-const PROVEDIX_EXTRA_PATHS = ["/api/auth/session", "/api/app-version", "/robots.txt", "/sitemap.xml"];
+// Archivo de verificación de Google Search Console (2026-10-13): no borrar,
+// Google lo revisa de vez en cuando para confirmar que la página es nuestra.
+const PROVEDIX_EXTRA_PATHS = ["/api/auth/session", "/api/app-version", "/robots.txt", "/sitemap.xml", "/googleb11466063347423e.html"];
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
