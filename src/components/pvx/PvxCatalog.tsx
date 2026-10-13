@@ -10,6 +10,7 @@ import { DropiLink, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
 import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
 import { GENERAL_WHATSAPP_URL, WhatsAppButton, logGeneralContact } from "@/components/pvx/PvxContact";
 import { PvxRocketSku } from "@/components/pvx/PvxRocketSku";
+import { PvxCities, PvxOperation, PvxResources } from "@/components/pvx/PvxSections";
 import { IconArrow, IconBox, IconCheck, IconClock, IconCopy, IconFlame, IconImage, IconLock, IconSearch, IconSpark, IconTruck, IconWhatsApp } from "@/components/pvx/PvxIcons";
 
 const BRAND = { MKT_PROVEDIX: "Provedix", MKT_DAMIAN: "Importadora Damián" } as const;
@@ -134,6 +135,12 @@ function Nav({ name }: { name: string | null }) {
       <div className="flex items-center gap-1 sm:gap-6">
         <a href="#como-funciona" className="hidden text-[14px] font-semibold text-white/75 hover:text-white md:inline">
           Cómo funciona
+        </a>
+        <a href="#cortes" className="hidden text-[14px] font-semibold text-white/75 hover:text-white md:inline">
+          Cortes
+        </a>
+        <a href="#recursos" className="hidden text-[14px] font-semibold text-white/75 hover:text-white lg:inline">
+          Recursos
         </a>
         <a href="#productos" className="hidden text-[14px] font-semibold text-white/75 hover:text-white md:inline">
           Productos
@@ -416,7 +423,7 @@ function Steps({ top }: { top: PublicCard | undefined }) {
     },
     {
       title: "Vende. Nosotros despachamos",
-      text: "Tú consigues la venta y nosotros preparamos y enviamos el pedido el mismo día.",
+      text: "Tú consigues la venta. Nosotros lo preparamos en el siguiente corte y sale en menos de 3 horas.",
       ui: (
         <div data-ui className="inline-flex items-center gap-3 rounded-2xl bg-white p-2.5 pr-5">
           <span className="grid h-14 w-14 place-items-center rounded-xl bg-[var(--pvx-ink)] text-[var(--pvx-orange)]">
@@ -424,7 +431,7 @@ function Steps({ top }: { top: PublicCard | undefined }) {
           </span>
           <span>
             <span className="block text-[12px] font-bold text-[var(--pvx-green)]">Pedido despachado</span>
-            <span className="block text-[15px] font-bold">Sale hoy mismo</span>
+            <span className="block text-[15px] font-bold">Sale en menos de 3 horas</span>
           </span>
         </div>
       ),
@@ -454,7 +461,8 @@ function Steps({ top }: { top: PublicCard | undefined }) {
 
 function Promises() {
   const rows = [
-    { icon: <IconTruck className="w-7 h-7" />, title: "Despacho el mismo día", text: "Tus pedidos salen el mismo día. Menos espera, menos devoluciones." },
+    { icon: <IconClock className="w-7 h-7" />, title: "Más de 3 cortes diarios", text: "Imprimimos guías varias veces al día para que tu pedido salga apenas ingresa." },
+    { icon: <IconTruck className="w-7 h-7" />, title: "Despacho en menos de 3 horas", text: "Del corte a la transportadora en menos de 3 horas. Menos espera, menos devoluciones." },
     { icon: <IconImage className="w-7 h-7" />, title: "Fotos brandeadas listas", text: "Fotos del producto listas para tus anuncios y tu tienda." },
     { icon: <IconWhatsApp className="w-7 h-7" />, title: "Un asesor por WhatsApp", text: "Una persona real te ayuda a elegir y resuelve tus dudas." },
   ];
@@ -641,8 +649,15 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
     const root = rootRef.current?.closest(".pvx") as HTMLElement | null;
     if (!root || !("IntersectionObserver" in window)) return;
     root.dataset.reveal = "on";
+    // Protección: si el navegador no avisa nada en 2 s (pestaña en segundo
+    // plano, navegador raro), se muestra todo sin animación.
+    let fired = false;
+    const fallback = setTimeout(() => {
+      if (!fired) delete root.dataset.reveal;
+    }, 2000);
     const io = new IntersectionObserver(
       (entries) => {
+        fired = true;
         for (const e of entries) {
           if (e.isIntersecting) {
             e.target.classList.add("is-in");
@@ -653,7 +668,10 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
       { rootMargin: "0px 0px -8% 0px" },
     );
     root.querySelectorAll("[data-r]").forEach((el) => io.observe(el));
-    return () => io.disconnect();
+    return () => {
+      clearTimeout(fallback);
+      io.disconnect();
+    };
   }, []);
 
   // Se anota qué busca (cuando deja de escribir), para la cartera.
@@ -718,6 +736,8 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
       <Hero cards={cards} stats={stats} name={name} query={query} onQuery={onSearch} onOpen={openCard} />
       <Steps top={cards.find((c) => c.photo) ?? cards[0]} />
       <Promises />
+      <PvxOperation />
+      <PvxCities stats={stats} />
 
       <section id="productos" className="scroll-mt-0 bg-[var(--pvx-paper)] pt-24 sm:pt-32" aria-labelledby="pvx-products">
         <div className="mx-auto max-w-[1240px] px-4 sm:px-8">
@@ -822,6 +842,7 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
         </div>
       </section>
 
+      <PvxResources />
       <Footer />
 
       {open && (

@@ -89,7 +89,9 @@ export async function getPublicCatalog(): Promise<{ windowTo: string | null; car
 // productos con ventas, pedidos despachados en 30 días (en RANGO, nunca la
 // cifra exacta), ciudades a las que llegaron y productos nuevos del mes
 // (artículos del catálogo creados en los últimos 30 días que ya venden).
-export type PublicStats = { products: number; orders: string | null; cities: string | null; newProducts: number };
+// topCities: ciudades que más compran (% de pedidos, todos los productos) —
+// pedido 2026-10-13. Vacío hasta que el resumen se recalcule con ese dato.
+export type PublicStats = { products: number; orders: string | null; cities: string | null; newProducts: number; topCities: { city: string; share: number }[] };
 
 const ORDER_STEPS = [100, 250, 500, 1000, 2500, 5000, 7500, 10000, 15000, 20000, 30000, 50000];
 
@@ -113,9 +115,9 @@ const cachedNewProducts = unstable_cache(
 
 export async function getPublicStats(): Promise<PublicStats> {
   const s = await cachedSnapshot();
-  if (!s) return { products: 0, orders: null, cities: null, newProducts: 0 };
+  if (!s) return { products: 0, orders: null, cities: null, newProducts: 0, topCities: [] };
   const newProducts = await cachedNewProducts(s.products.map((p) => p.code)).catch(() => 0);
-  return { products: s.products.length, orders: ordersRange(s.guides), cities: citiesRange(s.cityCount), newProducts };
+  return { products: s.products.length, orders: ordersRange(s.guides), cities: citiesRange(s.cityCount), newProducts, topCities: s.topCities ?? [] };
 }
 
 export async function getPublicProduct(code: string): Promise<SnapshotProduct | null> {

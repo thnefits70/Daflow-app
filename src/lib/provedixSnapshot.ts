@@ -21,6 +21,8 @@ const WINDOW_DAYS = 30;
 const OUR_BRANDS = new Set(["MKT_PROVEDIX", "MKT_DAMIAN"]);
 const MIN_CITY_GUIDES = 3;
 const MIN_GENDER_GUIDES = 5;
+const MIN_TOP_CITY_GUIDES = 10;
+const TOP_CITIES = 8;
 // La devolución llega semanas después: se mide en guías que salieron hace
 // 15–45 días, si no los pedidos recientes parecerían todos entregados.
 const DELIVERY_FROM_DAYS = 45;
@@ -93,6 +95,10 @@ export type ProvedixSnapshotData = {
   // Ciudades distintas a las que llegaron los pedidos de la ventana (portada
   // de provedix.com, 2026-10-13). Falta en resúmenes anteriores a ese día.
   cityCount?: number;
+  // Ciudades que más compran, sumando todos los productos (pedido del
+  // usuario 2026-10-13, sección "Dónde se vende más"): % de los pedidos de
+  // la ventana. Solo ciudades con al menos MIN_TOP_CITY_GUIDES pedidos.
+  topCities?: { city: string; share: number }[];
 };
 
 function shiftDay(day: string, days: number): string {
@@ -238,7 +244,8 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
   const delivery = new Map<string, { sent: number; returned: number }>();
   const comboNames = new Map<string, string>();
   let windowGuides = 0;
-  const windowCities = new Set<string>();
+  const windowCities = new Map<string, number>(); // ciudad → pedidos
+  let windowCityGuides = 0;
 
   for (const g of guides) {
     const inWindow = g.day >= windowFrom && g.day <= windowTo;
@@ -246,7 +253,11 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
     if (!inWindow && !inDelivery) continue;
     if (inWindow) {
       windowGuides++;
-      if (g.city) windowCities.add(g.city.trim().toUpperCase());
+      if (g.city) {
+        const city = g.city.trim().toUpperCase();
+        windowCities.set(city, (windowCities.get(city) ?? 0) + 1);
+        windowCityGuides++;
+      }
     }
     // Unidades por línea de la etiqueta y a qué productos sueltos llegan.
     const lines = g.products.map((p) => {
@@ -432,7 +443,12 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
   }
   const products = ranked.sort((x, y) => y.units - x.units).map((r, i) => ({ ...r.product, rank: i + 1 }));
 
-  return { day: today, windowFrom, windowTo, products, guides: windowGuides, cityCount: windowCities.size };
+  const topCities = [...windowCities.entries()]
+    .filter(([, n]) => n >= MIN_TOP_CITY_GUIDES)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, TOP_CITIES)
+    .map(([city, n]) => ({ city, share: Math.round((n / windowCityGuides) * 1000) / 10 }));
+  return { day: today, windowFrom, windowTo, products, guides: windowGuides, cityCount: windowCities.size, topCities };
 }
 
 // Lo corre el cron diario; también el botón "Recalcular ahora" del admin.
