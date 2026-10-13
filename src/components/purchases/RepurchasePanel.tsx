@@ -356,7 +356,7 @@ export function RepurchaseAnalyzer({
   itemId: string;
   onBack?: () => void;
   onSent: (r: RepurchaseSent) => void;
-  preset?: { supplier: { id: string; name: string } | null; unitCost: string; quantity: string };
+  preset?: { supplier: { id: string; name: string } | null; unitCost: string; quantity: string; note?: string };
 }) {
   const [a, setA] = useState<Analysis | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -369,7 +369,7 @@ export function RepurchaseAnalyzer({
   const [competitorPrice, setCompetitorPrice] = useState("");
   const [noCompetitor, setNoCompetitor] = useState(false);
   const [noCompetitorNote, setNoCompetitorNote] = useState("");
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(preset?.note ?? "");
   const [confirming, setConfirming] = useState(false);
   // Doble confirmación de la compra caliente: 1) revisé hoy la competencia, 2) confirmación final.
   const [checkedToday, setCheckedToday] = useState(false);
@@ -796,7 +796,7 @@ function buyUrl(r: Row): string {
   return `${window.location.pathname}?${params.toString()}`;
 }
 
-function RowCard({ r, data, onChanged }: { r: Row; data: Data; onChanged: () => void }) {
+function RowCard({ r, data, onChanged, onRetry }: { r: Row; data: Data; onChanged: () => void; onRetry?: (r: Row) => void }) {
   const [qty, setQty] = useState(String(r.quantity));
   const [rejecting, setRejecting] = useState(false);
   const [suspending, setSuspending] = useState(false);
@@ -897,6 +897,16 @@ function RowCard({ r, data, onChanged }: { r: Row; data: Data; onChanged: () => 
       {r.state === "REJECTED" && (
         <div className="text-[12.5px] text-red mt-2">
           Rechazada por {r.reviewedByName ?? "Bryan"} el {fmtDate(r.reviewedAt)}: {r.rejectReason}
+          {/* Pedido de Nairoby 2026-10-13 (RC-023): Bryan rechaza porque otro
+              proveedor lo tiene más barato → se analiza otra vez y se reenvía. */}
+          {mine && onRetry && (
+            <>
+              <button type="button" onClick={() => onRetry(r)} className="mt-1.5 block rounded bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white cursor-pointer">
+                🔁 Cambiar proveedor y volver a enviar
+              </button>
+              <div className="text-[11px] text-steel mt-1">Se abre el análisis de este producto arriba: elige el otro proveedor, pon su precio y se envía otra vez a Bryan como una recompra nueva.</div>
+            </>
+          )}
         </div>
       )}
       {r.state === "APPROVED" && (
@@ -1026,6 +1036,7 @@ export function RepurchasePanel({ initialItemId = null }: { initialItemId?: stri
   const [itemId, setItemId] = useState<string | null>(() => initialItemId ?? (typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("rcItem")));
   const [sentCode, setSentCode] = useState<string | null>(null);
   const [showAllHistory, setShowAllHistory] = useState(false);
+  const [retry, setRetry] = useState<{ itemId: string; quantity: string; note: string } | null>(null);
 
   function load() {
     fetch("/api/repurchase-reviews")
@@ -1046,6 +1057,19 @@ export function RepurchasePanel({ initialItemId = null }: { initialItemId?: stri
   const ready = data ? data.history.filter((r) => r.state === "APPROVED" && r.requestedById === data.userId) : [];
   const rest = data ? data.history.filter((r) => !(r.state === "APPROVED" && r.requestedById === data.userId)) : [];
   const shownRest = showAllHistory ? rest : rest.slice(0, 8);
+  // Solo la RC más nueva de cada producto se puede reenviar (si ya hay otra
+  // después, esa manda); el servidor igual frena si hay una abierta.
+  const newestByItem = new Map<string, string>();
+  for (const r of data ? [...data.pending, ...data.history] : []) {
+    const prev = newestByItem.get(r.catalogItemId);
+    if (!prev || r.requestedAt > prev) newestByItem.set(r.catalogItemId, r.requestedAt);
+  }
+  function retryRejected(r: Row) {
+    setSentCode(null);
+    setRetry({ itemId: r.catalogItemId, quantity: String(r.quantity), note: `Reenvío de ${r.code} (rechazada: ${r.rejectReason ?? "sin motivo"}). ` });
+    setItemId(r.catalogItemId);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   return (
     <div>
@@ -1074,7 +1098,11 @@ export function RepurchasePanel({ initialItemId = null }: { initialItemId?: stri
             <RepurchaseAnalyzer
               key={itemId}
               itemId={itemId}
-              onBack={() => setItemId(null)}
+              preset={retry?.itemId === itemId ? { supplier: null, unitCost: "", quantity: retry.quantity, note: retry.note } : undefined}
+              onBack={() => {
+                setRetry(null);
+                setItemId(null);
+              }}
               onSent={(sent) => {
                 // Caliente confirmada por quien compra: directo a Solicitar con todo lleno.
                 if (sent.selfConfirmed) {
@@ -1143,7 +1171,13 @@ export function RepurchasePanel({ initialItemId = null }: { initialItemId?: stri
         ) : (
           <div className="flex flex-col gap-2.5">
             {shownRest.map((r) => (
-              <RowCard key={r.id} r={r} data={data} onChanged={load} />
+              <RowCard
+                key={r.id}
+                r={r}
+                data={data}
+                onChanged={load}
+                onRetry={r.state === "REJECTED" && newestByItem.get(r.catalogItemId) === r.requestedAt ? retryRejected : undefined}
+              />
             ))}
             {rest.length > shownRest.length && (
               <button type="button" onClick={() => setShowAllHistory(true)} className="text-[12.5px] text-teal font-semibold cursor-pointer self-start">
