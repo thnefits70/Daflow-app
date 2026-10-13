@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { getFinanceLeadId, getInventoryLeadId, getSupplierStockoutResolverIds } from "@/lib/guards";
+import { getInventoryLeadId, getSupplierStockoutResolverIds } from "@/lib/guards";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
 import { notifyOwner } from "@/lib/notifications";
 import { formatPurchaseRequestCode, openPurchaseWhere } from "@/lib/purchases";
-import { COLD_MAX, HOT_MAX, getHotBuyerIds } from "@/lib/purchaseSuggestions";
+import { COLD_MAX, HOT_MAX, getColdBuyerIds, getHotBuyerIds } from "@/lib/purchaseSuggestions";
 
 // "Producto que despierta" — pedido de Daniel, regla aprobada por él y por el
 // usuario 2026-09-29. Un producto que salió 10 o menos en los 30 días
@@ -90,8 +90,8 @@ function inColdRange(stock: number) {
 }
 
 export async function canViewSuddenDemand(userId: string): Promise<boolean> {
-  const [base, financeLeadId] = await Promise.all([getSuddenDemandBaseAudienceIds(), getFinanceLeadId()]);
-  return base.includes(userId) || financeLeadId === userId;
+  const [base, coldIds] = await Promise.all([getSuddenDemandBaseAudienceIds(), getColdBuyerIds()]);
+  return base.includes(userId) || coldIds.includes(userId);
 }
 
 // Solo Jariel (quien compra) escribe la nota; el admin también puede.
@@ -141,7 +141,7 @@ export async function detectSuddenDemand(now: Date = new Date()): Promise<number
   const nameById = new Map(items.map((i) => [i.id, i.name]));
 
   let created = 0;
-  const [baseIds, financeLeadId] = await Promise.all([getSuddenDemandBaseAudienceIds(), getFinanceLeadId()]);
+  const [baseIds, coldIds] = await Promise.all([getSuddenDemandBaseAudienceIds(), getColdBuyerIds()]);
   for (const c of candidates.sort((a, b) => a.day.localeCompare(b.day))) {
     if (alreadyActive.has(c.catalogItemId)) continue;
     alreadyActive.add(c.catalogItemId);
@@ -156,7 +156,7 @@ export async function detectSuddenDemand(now: Date = new Date()): Promise<number
     }
     created++;
     const recipients = new Set(baseIds);
-    if (financeLeadId && inColdRange(stockNow)) recipients.add(financeLeadId);
+    if (inColdRange(stockNow)) for (const id of coldIds) recipients.add(id);
     const when = c.day === today ? "hoy" : `el ${fmtDayShort(c.day)}`;
     const body = `${nameById.get(c.catalogItemId) ?? "Un producto"}: salieron ${c.units} ${when} (antes ${c.baseline} en todo el mes). Quedan ${Math.max(0, stockNow)} en bodega.`;
     await Promise.all(
@@ -282,9 +282,9 @@ export async function saveSuddenDemandNote(params: { alertId: string; note: stri
 // ---- Inicio ---------------------------------------------------------------
 
 export async function getSuddenDemandPendingItems(userId: string) {
-  const [baseIds, financeLeadId, hotIds] = await Promise.all([getSuddenDemandBaseAudienceIds(), getFinanceLeadId(), getHotBuyerIds()]);
+  const [baseIds, coldIds, hotIds] = await Promise.all([getSuddenDemandBaseAudienceIds(), getColdBuyerIds(), getHotBuyerIds()]);
   const isBase = baseIds.includes(userId);
-  const isFinance = financeLeadId === userId;
+  const isFinance = coldIds.includes(userId);
   if (!isBase && !isFinance) return [];
 
   const today = ecuadorDay(new Date());

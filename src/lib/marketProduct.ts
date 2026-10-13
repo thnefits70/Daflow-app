@@ -399,17 +399,19 @@ export function computeProposalTraceability(p: {
 // comprado también si existe cualquier solicitud (no rechazada) del mismo
 // artículo creada después de marcarse listo.
 // Pedido del usuario 2026-10-05: cada quien compra lo que propuso. Lo que
-// propuso el líder de Finanzas (Nairoby, compras frías) le toca a ella; todo
-// lo demás sigue siendo de Jariel (compras calientes).
-export async function getReadyToBuyPendingProposalIdsByBuyer(): Promise<{ hot: string[]; cold: string[]; financeLeadId: string | null }> {
-  const [ids, financeLead] = await Promise.all([
+// propuso quien hace las compras frías le toca a esa lista; todo lo demás va
+// a compras calientes. Desde 2026-10-13 "compras frías" = el interruptor del
+// perfil (handlesColdPurchases), ya no el cargo de líder de Finanzas.
+export async function getReadyToBuyPendingProposalIdsByBuyer(): Promise<{ hot: string[]; cold: string[]; coldBuyerIds: string[] }> {
+  const [ids, coldBuyers] = await Promise.all([
     getReadyToBuyPendingProposalIds(),
-    prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "FIN" }, isActive: true }, select: { id: true } }),
+    prisma.user.findMany({ where: { isActive: true, handlesColdPurchases: true }, select: { id: true } }),
   ]);
-  if (!financeLead || ids.length === 0) return { hot: ids, cold: [], financeLeadId: financeLead?.id ?? null };
-  const coldRows = await prisma.marketProductProposal.findMany({ where: { id: { in: ids }, proposedById: financeLead.id }, select: { id: true } });
+  const coldBuyerIds = coldBuyers.map((u) => u.id);
+  if (coldBuyerIds.length === 0 || ids.length === 0) return { hot: ids, cold: [], coldBuyerIds };
+  const coldRows = await prisma.marketProductProposal.findMany({ where: { id: { in: ids }, proposedById: { in: coldBuyerIds } }, select: { id: true } });
   const cold = new Set(coldRows.map((r) => r.id));
-  return { hot: ids.filter((id) => !cold.has(id)), cold: [...cold], financeLeadId: financeLead.id };
+  return { hot: ids.filter((id) => !cold.has(id)), cold: [...cold], coldBuyerIds };
 }
 
 export async function getReadyToBuyPendingProposalIds(): Promise<string[]> {

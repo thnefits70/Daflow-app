@@ -1542,6 +1542,9 @@ export async function canProposeMarketProduct() {
   if (session.user.role === "admin") return true;
   const user = await getGuardUser(session.user.id);
   if (user?.department?.code === "MKT") return true;
+  // 2026-10-13: quien tenga el interruptor de compras calientes o frías
+  // propone y compra igual que antes Nairoby/Jariel.
+  if (user?.isActive && (user.handlesHotPurchases || user.handlesColdPurchases)) return true;
   return !!user?.isLeader && user.leadsDept?.code === "FIN";
 }
 

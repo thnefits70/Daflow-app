@@ -232,6 +232,14 @@ model User {
   // canCreateNewPurchaseRequests() en guards.ts.
   purchasingNewRequestsBlocked Boolean @default(false)
 
+  // Pedido del usuario 2026-10-13: "Qué comprar" con interruptores propios,
+  // para pasar la responsabilidad a otra persona sin tocar su departamento
+  // ni su cargo. Puede haber varias personas con cada uno; si nadie lo tiene,
+  // los avisos van al admin con un recordatorio diario. Solo el admin los
+  // cambia. Ver getHotBuyerIds/getColdBuyerIds en lib/purchaseSuggestions.ts.
+  handlesHotPurchases  Boolean @default(false)
+  handlesColdPurchases Boolean @default(false)
+
   // Confirmado 2026-09-02: pedido explícito del usuario — paso nuevo de
   // aprobación con un clic para alguien que no es admin (hoy Bryan, que deja
   // de solicitar y pasa a aprobar lo que solicite Jariel). Mismo patrón que

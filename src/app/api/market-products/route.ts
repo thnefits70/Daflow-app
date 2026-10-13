@@ -430,9 +430,18 @@ export async function GET(req: NextRequest) {
     // comprar, para ejecutar la solicitud real en Control de Compras.
     if (!(await canProposeMarketProduct())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
     // Pedido del usuario 2026-10-05: cada quien ve lo que le toca comprar —
-    // el líder de Finanzas (Nairoby) lo que propuso ella, los demás el resto.
-    const byBuyer = await getReadyToBuyPendingProposalIdsByBuyer();
-    const pendingIds = isAdmin ? [...byBuyer.hot, ...byBuyer.cold] : byBuyer.financeLeadId === session.user.id ? byBuyer.cold : byBuyer.hot;
+    // quien hace las compras frías lo que propuso esa lista, los demás el
+    // resto; con los dos interruptores (2026-10-13), todo.
+    const [byBuyer, me] = await Promise.all([
+      getReadyToBuyPendingProposalIdsByBuyer(),
+      isAdmin ? null : prisma.user.findUnique({ where: { id: session.user.id }, select: { handlesHotPurchases: true, handlesColdPurchases: true } }),
+    ]);
+    const pendingIds =
+      isAdmin || (me?.handlesHotPurchases && me.handlesColdPurchases)
+        ? [...byBuyer.hot, ...byBuyer.cold]
+        : me?.handlesColdPurchases
+          ? byBuyer.cold
+          : byBuyer.hot;
     const rows = await prisma.marketProductProposal.findMany({
       where: { id: { in: pendingIds } },
       include: includeFull,

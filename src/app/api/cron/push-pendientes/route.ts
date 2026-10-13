@@ -20,7 +20,7 @@ import { detectSuddenDemand, SUDDEN_DEMAND_PENDING_TYPE } from "@/lib/suddenDema
 
 // Estos tienen su propio aviso (Qué comprar a las 8:00; Producto que despierta
 // en el momento en que se detecta), no se repiten en el resumen diario.
-const PURCHASE_SUGGESTION_TYPES = new Set(["compras_calientes", "compras_frias", "compras_urgentes_sin_atender", SUDDEN_DEMAND_PENDING_TYPE, "recompras_por_aprobar", "recompras_sin_respuesta",
+const PURCHASE_SUGGESTION_TYPES = new Set(["compras_calientes", "compras_frias", "compras_urgentes_sin_atender", "compras_sin_encargado", SUDDEN_DEMAND_PENDING_TYPE, "recompras_por_aprobar", "recompras_sin_respuesta",
   // Reclamos al proveedor: aviso propio a quien compró (más abajo).
   "compras_urgentes_sin_resolver", "compras_reposicion_seguimiento"]);
 
@@ -96,8 +96,10 @@ export async function GET(req: NextRequest) {
   // Qué comprar (confirmado 2026-09-29, idea de Daniel): resumen diario de
   // compras calientes a Jariel, frías a Nairoby, y a Daniel los urgentes que
   // llevan 3+ días sin comprarse.
+  // Si nadie tiene el interruptor de una lista, el aviso va al admin, más un
+  // recordatorio diario que no se puede apagar (pedido del usuario 2026-10-13).
   for (const r of await getPurchaseSuggestionPushes()) {
-    if ((await getDisabledTypes(r.ownerId)).has(r.type)) continue;
+    if (!r.mandatory && (await getDisabledTypes(r.ownerId)).has(r.type)) continue;
     await sendPushToOwner(r.ownerId, { title: r.title, body: r.body, url: r.url });
     notified++;
   }

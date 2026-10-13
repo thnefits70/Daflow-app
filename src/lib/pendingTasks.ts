@@ -24,7 +24,7 @@ import { carrierLabel } from "@/lib/carriers";
 import { catalogMissingDropiIdWhere } from "@/lib/catalogMissingDropiId";
 import { getOpenPurchaseCodesByCatalogItem, getPurchaseLinesLeftBehind, getPurchaseLinesOverdue, getShortReceiptsUnclaimed, LEFT_BEHIND_HREF, OVERDUE_ORDERS_HREF } from "@/lib/purchases";
 import { getLinesToConfirm, INVENTORY_RECEIVING_HREF } from "@/lib/purchaseLeftBehind";
-import { getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
+import { getPurchaseSuggestionAdminPendingItems, getPurchaseSuggestionPendingItems } from "@/lib/purchaseSuggestions";
 import { getRepurchasePendingItems } from "@/lib/repurchaseReviews";
 import { getSuddenDemandPendingItems } from "@/lib/suddenDemand";
 import { autoResolveFoundMissingReports } from "@/lib/catalogMissingReports";
@@ -561,6 +561,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_calientes: "Compras calientes (30 unidades o menos)",
   compras_frias: "Compras frías (31 a 60 unidades)",
   compras_urgentes_sin_atender: "Compras urgentes sin atender (3+ días)",
+  compras_sin_encargado: "Compras calientes o frías sin nadie a cargo",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -4133,6 +4134,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // Pedido del usuario 2026-10-01: lo que no entra al Kardex porque alguien
     // no confirmó en 24 horas va arriba de todo (y sale en el aviso de las 8:00).
     items.unshift(...(await getKardexDelayAdminItems(deptIds)));
+    // Pedido del usuario 2026-10-13: si nadie tiene el interruptor de compras
+    // calientes o frías, esa lista le llega al admin — y el recordatorio de
+    // asignar a alguien va arriba de todo.
+    items.unshift(...(await getPurchaseSuggestionAdminPendingItems()));
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
   }
@@ -4151,6 +4156,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       canUploadRocketSku: true,
       canLinkStoreProducts: true,
       canMarkComboCreatedInDropi: true,
+      handlesHotPurchases: true,
+      handlesColdPurchases: true,
       leadsDept: { select: { code: true, name: true, trackWeeklyMetric: true } },
       department: { select: { code: true } },
     },
@@ -4202,12 +4209,15 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (replacementItem) teamItems.push(replacementItem);
     }
     // Confirmado 2026-09-18, pedido de Jariel: contraparte en Inicio de su
-    // propia bandeja "Listo para comprar" (Análisis de Mercado) — Jariel es
-    // miembro de MKT pero no su líder (Bryan lo es), así que cae acá igual
-    // que el bloque de INV arriba.
-    if (me.department?.code === "MKT") {
+    // propia bandeja "Listo para comprar" (Análisis de Mercado). Desde
+    // 2026-10-13 le sale a quien tenga el interruptor de cada lista.
+    if (me.handlesHotPurchases) {
       const marketProductReadyToBuyItem = await getMarketProductReadyToBuyPendingItem("/area/workspace?tab=analisis-mercado");
       if (marketProductReadyToBuyItem) teamItems.push(marketProductReadyToBuyItem);
+    }
+    if (me.handlesColdPurchases) {
+      const coldReadyToBuyItem = await getMarketProductReadyToBuyPendingItem("/area/workspace?tab=analisis-mercado&ptab=listoparacomprar", "cold");
+      if (coldReadyToBuyItem) teamItems.push(coldReadyToBuyItem);
     }
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) {
       const marketProductBrandItem = await getMarketProductBrandPendingItem("/area/workspace?tab=nuevos-ids");
@@ -4502,7 +4512,12 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   const purchaseRequesterItems = await getPurchaseRequesterPendingItems(actor.userId, "/area/workspace?tab=compras&ptab=mias");
   items.push(...purchaseRequesterItems);
   items.push(...(await getMarketProposerPendingItems(actor.userId)));
-  if (me.leadsDept.code === "FIN") {
+  // Desde 2026-10-13 por interruptor, no por liderar Finanzas.
+  if (me.handlesHotPurchases) {
+    const hotReadyToBuyItem = await getMarketProductReadyToBuyPendingItem("/area/workspace?tab=analisis-mercado&ptab=listoparacomprar");
+    if (hotReadyToBuyItem) items.push(hotReadyToBuyItem);
+  }
+  if (me.handlesColdPurchases) {
     const coldReadyToBuyItem = await getMarketProductReadyToBuyPendingItem("/area/workspace?tab=analisis-mercado&ptab=listoparacomprar", "cold");
     if (coldReadyToBuyItem) items.push(coldReadyToBuyItem);
   }
@@ -4616,6 +4631,8 @@ export async function getPossiblePendingTypesForActor(
         canUploadRocketSku: true,
         canLinkStoreProducts: true,
         canMarkComboCreatedInDropi: true,
+        handlesHotPurchases: true,
+        handlesColdPurchases: true,
         leadsDept: { select: { code: true, trackWeeklyMetric: true } },
         department: { select: { code: true } },
       },
@@ -4639,7 +4656,8 @@ export async function getPossiblePendingTypesForActor(
       if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca");
       if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
       if (me.department?.code === "INV") types.push("fulfillment_bloque_asignado");
-      if (me.canManagePurchases && me.department?.code === "MKT") types.push("compras_calientes");
+      if (me.handlesHotPurchases) types.push("compras_calientes", "analisis_mercado_listo_comprar");
+      if (me.handlesColdPurchases) types.push("compras_frias", "analisis_mercado_listo_comprar");
       if (me.canManagePurchases) types.push("recompras_sin_respuesta", "recompras_listas");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }
@@ -4649,7 +4667,9 @@ export async function getPossiblePendingTypesForActor(
     if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "precio_dropi_faltante");
       if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca");
     if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
-    if (me.leadsDept.code === "FIN") types.push("compras_frias", "analisis_mercado_listo_comprar", "analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");
+    if (me.leadsDept.code === "FIN") types.push("analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");
+    if (me.handlesHotPurchases) types.push("compras_calientes", "analisis_mercado_listo_comprar");
+    if (me.handlesColdPurchases) types.push("compras_frias", "analisis_mercado_listo_comprar");
     if (me.leadsDept.code === "INV") types.push("compras_urgentes_sin_atender");
     if (me.leadsDept.code === "FIN") {
       types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia", "reclamos_proveedor_atrasados");
@@ -4688,7 +4708,7 @@ export async function getAllPendingTasksActors(): Promise<{ ownerId: string; act
   // getPendingTasksForActor) — si no se incluye acá, el cron nunca lo
   // evalúa y nunca le llega el push aunque tenga algo pendiente.
   const purchaseDelegates = await prisma.user.findMany({
-    where: { isActive: true, OR: [{ canManagePurchases: true }, { canUploadRocketSku: true }], AND: [{ OR: [{ isLeader: false }, { leadsDeptId: null }] }] },
+    where: { isActive: true, OR: [{ canManagePurchases: true }, { canUploadRocketSku: true }, { handlesHotPurchases: true }, { handlesColdPurchases: true }], AND: [{ OR: [{ isLeader: false }, { leadsDeptId: null }] }] },
     select: { id: true },
   });
   return [

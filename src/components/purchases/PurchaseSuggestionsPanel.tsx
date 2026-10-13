@@ -29,7 +29,7 @@ type Row = {
   variants?: { label: string; units: number }[] | null;
 };
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
-type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; coldNewProducts?: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null; canUseCalculator?: boolean; canRepurchase?: boolean; repurchases?: Record<string, OpenRepurchase> };
+type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; coldNewProducts?: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null; canUseCalculator?: boolean; canRepurchase?: boolean; repurchases?: Record<string, OpenRepurchase>; buyerNames?: { hot: string[]; cold: string[] } };
 type OpenRepurchase = { code: string; state: "PENDING_APPROVAL" | "APPROVED"; byName: string | null };
 
 const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = [
@@ -87,6 +87,13 @@ function repurchaseUrl(catalogItemId: string) {
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" });
+}
+
+// Quién tiene encendido el interruptor de la lista (perfil, 2026-10-13).
+function whoText(names: string[] | undefined) {
+  if (!names) return "";
+  if (names.length === 0) return "sin encargado (le llega al administrador)";
+  return names.map((n) => n.split(" ")[0]).join(", ");
 }
 
 // Pedido del usuario 2026-10-02: motivos fijos + "Otro" con descripción.
@@ -485,8 +492,8 @@ export function PurchaseSuggestionsPanel({ onAnalyzeRepurchase }: { onAnalyzeRep
   const onlyCold = data.audiences.includes("cold") && !data.audiences.includes("hot");
   const onlyHot = data.audiences.includes("hot") && !data.audiences.includes("cold");
   const hotFirst = !onlyCold;
-  const hot = <List key="hot" title="🔥 Compras calientes" sub="30 unidades o menos · Jariel" rows={data.hot} newProducts={data.newProducts} open={!onlyCold} canReportStockout={data.canReportStockout} onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
-  const cold = <List key="cold" title="❄️ Compras frías" sub="31 a 60 unidades · Nairoby" rows={data.cold} newProducts={data.coldNewProducts} open={!onlyHot} canReportStockout={data.canReportStockout} canDiscard={data.canDiscard} isCold onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
+  const hot = <List key="hot" title="🔥 Compras calientes" sub={`30 unidades o menos · ${whoText(data.buyerNames?.hot)}`} rows={data.hot} newProducts={data.newProducts} open={!onlyCold} canReportStockout={data.canReportStockout} onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
+  const cold = <List key="cold" title="❄️ Compras frías" sub={`31 a 60 unidades · ${whoText(data.buyerNames?.cold)}`} rows={data.cold} newProducts={data.coldNewProducts} open={!onlyHot} canReportStockout={data.canReportStockout} canDiscard={data.canDiscard} isCold onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
 
   return (
     <OpenRepurchaseContext.Provider value={onAnalyzeRepurchase ?? null}>

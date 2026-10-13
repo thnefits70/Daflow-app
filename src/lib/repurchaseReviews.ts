@@ -84,14 +84,14 @@ export type RepurchaseAnalysis = {
   history: RepurchaseRow[];
 };
 
-// Quien hace las compras calientes (hoy Jariel): canManagePurchases + MKT,
+// Quien hace las compras calientes: el interruptor del perfil (2026-10-13),
 // mismo criterio que la tarjeta "Compras calientes" de Inicio. Pedido
 // 2026-10-08: sus recompras en Solicitar nunca esperan una RC de Bryan,
 // aunque el producto tenga más de HOT_MAX en stock — solo responde la
 // pregunta de la competencia al enviar.
 async function isHotBuyer(userId: string): Promise<boolean> {
-  const u = await prisma.user.findUnique({ where: { id: userId }, select: { canManagePurchases: true, department: { select: { code: true } } } });
-  return !!u?.canManagePurchases && u.department?.code === "MKT";
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { isActive: true, handlesHotPurchases: true } });
+  return !!u?.isActive && u.handlesHotPurchases;
 }
 
 async function latestStock(catalogItemId: string): Promise<number> {

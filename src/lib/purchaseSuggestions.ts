@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getFinanceLeadId, getInventoryLeadId } from "@/lib/guards";
+import { getInventoryLeadId } from "@/lib/guards";
 import { formatPurchaseRequestCode, OPEN_PURCHASE_STATUSES, openPurchaseWhere } from "@/lib/purchases";
 import { getReadyToBuyPendingProposalIdsByBuyer } from "@/lib/marketProduct";
 import { notifyOwner } from "@/lib/notifications";
@@ -406,24 +406,56 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
 
 export type SuggestionAudience = "hot" | "cold" | "escalation";
 
-// Jariel: hace las compras en Análisis de Mercado (mismo criterio que
-// purchaseDeciderIds en fulfillmentGuides.ts, sin quien solo aprueba).
+// Pedido del usuario 2026-10-13: quién hace cada lista lo deciden dos
+// interruptores del perfil (solo el admin los cambia), no el departamento ni
+// el cargo. Puede haber varias personas por lista. Si nadie tiene uno, los
+// avisos de esa lista le llegan al admin con un recordatorio diario de que
+// falta asignar a alguien (ver getBuyerGapReminders).
 export async function getHotBuyerIds(): Promise<string[]> {
-  const users = await prisma.user.findMany({
-    where: { isActive: true, canManagePurchases: true, purchasingNewRequestsBlocked: false, department: { code: "MKT" } },
-    select: { id: true },
-  });
+  const users = await prisma.user.findMany({ where: { isActive: true, handlesHotPurchases: true }, select: { id: true } });
   return users.map((u) => u.id);
 }
 
+export async function getColdBuyerIds(): Promise<string[]> {
+  const users = await prisma.user.findMany({ where: { isActive: true, handlesColdPurchases: true }, select: { id: true } });
+  return users.map((u) => u.id);
+}
+
+// Nombres para los títulos de la pestaña ("· JARIEL", "· sin encargado").
+export async function getBuyerNames(): Promise<{ hot: string[]; cold: string[] }> {
+  const users = await prisma.user.findMany({
+    where: { isActive: true, OR: [{ handlesHotPurchases: true }, { handlesColdPurchases: true }] },
+    select: { name: true, handlesHotPurchases: true, handlesColdPurchases: true },
+    orderBy: { name: "asc" },
+  });
+  return { hot: users.filter((u) => u.handlesHotPurchases).map((u) => u.name), cold: users.filter((u) => u.handlesColdPurchases).map((u) => u.name) };
+}
+
 export async function getSuggestionAudiencesForUser(userId: string): Promise<SuggestionAudience[]> {
-  const [hotIds, financeLeadId, inventoryLeadId] = await Promise.all([getHotBuyerIds(), getFinanceLeadId(), getInventoryLeadId()]);
+  const [hotIds, coldIds, inventoryLeadId] = await Promise.all([getHotBuyerIds(), getColdBuyerIds(), getInventoryLeadId()]);
   const out: SuggestionAudience[] = [];
   if (hotIds.includes(userId)) out.push("hot");
-  if (financeLeadId === userId) out.push("cold");
+  if (coldIds.includes(userId)) out.push("cold");
   if (inventoryLeadId === userId) out.push("escalation");
   return out;
 }
+
+export const BUYER_GAP_TYPE = "compras_sin_encargado";
+const BUYER_GAP_LABEL: Record<"hot" | "cold", string> = { hot: "compras calientes", cold: "compras frías" };
+
+// Recordatorio al admin mientras una lista no tenga a nadie con su interruptor.
+export function buyerGapNotice(audience: "hot" | "cold"): { type: string; icon: string; label: string; meta: string; body: string } {
+  const what = BUYER_GAP_LABEL[audience];
+  return {
+    type: BUYER_GAP_TYPE,
+    icon: "⚠️",
+    label: `Nadie tiene a cargo las ${what}`,
+    meta: `Mientras no asignes a alguien, los avisos de ${what} te llegan a ti`,
+    body: `Nadie tiene encendido el interruptor de ${what}, así que sus avisos te llegan a ti. Para que la cadena de suministro no se detenga, enciéndelo en el perfil de quien deba encargarse (Nómina → perfil → permisos).`,
+  };
+}
+
+const ADMIN_NOMINA_HREF = "/admin/nomina";
 
 function plural(n: number, one: string, many: string) {
   return `${n} ${n === 1 ? one : many}`;
@@ -507,23 +539,36 @@ export function buildSuggestionNotice(s: PurchaseSuggestions, audience: Suggesti
 export const PURCHASE_SUGGESTIONS_HREF = "/area/workspace?tab=compras&ptab=que-comprar";
 
 // Para el cron de las 8:00: un aviso por persona, con su resumen.
-export async function getPurchaseSuggestionPushes(): Promise<{ ownerId: string; type: string; title: string; body: string; url: string }[]> {
-  if (isPhysicalCountPause()) return [];
-  const [s, hotIds, financeLeadId, inventoryLeadId] = await Promise.all([getPurchaseSuggestions(), getHotBuyerIds(), getFinanceLeadId(), getInventoryLeadId()]);
-  const out: { ownerId: string; type: string; title: string; body: string; url: string }[] = [];
+export async function getPurchaseSuggestionPushes(): Promise<{ ownerId: string; type: string; title: string; body: string; url: string; mandatory?: boolean }[]> {
+  const [hotIds, coldIds, inventoryLeadId] = await Promise.all([getHotBuyerIds(), getColdBuyerIds(), getInventoryLeadId()]);
+  const out: { ownerId: string; type: string; title: string; body: string; url: string; mandatory?: boolean }[] = [];
+  // Pedido del usuario 2026-10-13: "siempre recordarme" — el recordatorio de
+  // lista sin encargado sale todos los días (también durante el conteo) y no
+  // se puede apagar desde las preferencias.
+  for (const audience of ["hot", "cold"] as const) {
+    if ((audience === "hot" ? hotIds : coldIds).length > 0) continue;
+    const g = buyerGapNotice(audience);
+    out.push({ ownerId: "admin", type: g.type, title: `DAFLOW · ${g.label}`, body: g.body, url: ADMIN_NOMINA_HREF, mandatory: true });
+  }
+  if (isPhysicalCountPause()) return out;
+  const [s, adminHref] = await Promise.all([getPurchaseSuggestions(), adminSuggestionsHref()]);
   const add = (ids: (string | null)[], audience: SuggestionAudience) => {
     const n = buildSuggestionNotice(s, audience);
     if (!n) return;
-    for (const id of ids) if (id) out.push({ ownerId: id, type: n.type, title: `DAFLOW · ${n.label}`, body: n.body, url: PURCHASE_SUGGESTIONS_HREF });
+    // Sin encargado: el aviso de la lista le llega al admin.
+    const owners = ids.filter((id): id is string => !!id);
+    if (owners.length === 0 && audience !== "escalation") owners.push("admin");
+    for (const id of owners) out.push({ ownerId: id, type: n.type, title: `DAFLOW · ${n.label}`, body: n.body, url: id === "admin" ? adminHref : PURCHASE_SUGGESTIONS_HREF });
   };
   add(hotIds, "hot");
   // Compras frías: el aviso sale solo los lunes (en Inicio se queda toda la semana).
-  if (new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: "America/Guayaquil" }) === "Mon") add([financeLeadId], "cold");
+  if (new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: "America/Guayaquil" }) === "Mon") add(coldIds, "cold");
   add([inventoryLeadId], "escalation");
   return out;
 }
 
-// Tarjetas de Inicio de esta persona (Jariel, Nairoby o Daniel).
+// Tarjetas de Inicio de esta persona (quien tenga el interruptor de calientes
+// o frías, o el líder de Inventario por los urgentes sin atender).
 export async function getPurchaseSuggestionPendingItems(userId: string, href: string = PURCHASE_SUGGESTIONS_HREF) {
   if (isPhysicalCountPause()) return [];
   const audiences = await getSuggestionAudiencesForUser(userId);
@@ -533,6 +578,25 @@ export async function getPurchaseSuggestionPendingItems(userId: string, href: st
     .map((a) => buildSuggestionNotice(s, a))
     .filter((n): n is SuggestionNotice => !!n)
     .map((n) => ({ type: n.type, icon: n.icon, label: n.label, meta: n.meta, overdue: n.overdue, href }));
+}
+
+// Inicio del admin: por cada lista sin encargado, el recordatorio (siempre
+// arriba) y la tarjeta de esa lista que le tocaría a esa persona.
+export async function getPurchaseSuggestionAdminPendingItems() {
+  const [hotIds, coldIds] = await Promise.all([getHotBuyerIds(), getColdBuyerIds()]);
+  const missing = (["hot", "cold"] as const).filter((a) => (a === "hot" ? hotIds : coldIds).length === 0);
+  if (missing.length === 0) return [];
+  const items: { type: string; icon: string; label: string; meta: string; overdue: boolean; href: string }[] = missing.map((a) => {
+    const g = buyerGapNotice(a);
+    return { type: g.type, icon: g.icon, label: g.label, meta: g.meta, overdue: true, href: ADMIN_NOMINA_HREF };
+  });
+  if (isPhysicalCountPause()) return items;
+  const [s, href] = await Promise.all([getPurchaseSuggestions(), adminSuggestionsHref()]);
+  for (const a of missing) {
+    const n = buildSuggestionNotice(s, a);
+    if (n) items.push({ type: n.type, icon: n.icon, label: n.label, meta: n.meta, overdue: n.overdue, href });
+  }
+  return items;
 }
 
 // ---- "No hace falta comprarlo" (pedido del usuario 2026-10-02) -----------
@@ -548,11 +612,11 @@ async function adminSuggestionsHref(): Promise<string> {
   return com ? `/admin/dept/${com.id}?tab=compras&ptab=que-comprar` : "/admin";
 }
 
-// Quién puede descartar: Nairoby (su lista son las compras frías) y el admin.
+// Quién puede descartar: quien tenga el interruptor de compras frías y el admin.
 export async function canDiscardSuggestions(userId: string | null, isAdmin: boolean): Promise<boolean> {
   if (isAdmin) return true;
   if (!userId) return false;
-  return (await getFinanceLeadId()) === userId;
+  return (await getColdBuyerIds()).includes(userId);
 }
 
 export async function discardSuggestion(params: {

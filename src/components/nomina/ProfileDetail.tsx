@@ -63,6 +63,8 @@ type UserProfile = {
   canUploadFulfillmentGuides: boolean;
   canUploadRocketSku: boolean;
   isReentryResponsible: boolean;
+  handlesHotPurchases: boolean;
+  handlesColdPurchases: boolean;
   canMarkComboCreatedInDropi: boolean;
   canLinkStoreProducts: boolean;
   canPublishMarketProduct: boolean;
@@ -1042,6 +1044,34 @@ export function ProfileDetail({
             </div>
             <PermToggle value={p.canManagePurchases} busy={busy} onChange={(v) => save({ canManagePurchases: v })} />
           </div>
+
+          {/* Pedido del usuario 2026-10-13: "Qué comprar" con interruptores propios. */}
+          {isAdmin && (
+            <>
+              <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+                <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+                  <Receipt size={11} /> ¿Se encarga de las compras calientes? 🔥
+                </label>
+                <div className="text-[11px] text-steel mb-2">
+                  Productos con 30 unidades o menos y productos nuevos listos para comprar: le llega el aviso diario de las 8:00 y la tarjeta en Inicio.
+                  Puede haber varias personas. Si nadie lo tiene, los avisos te llegan a ti con un recordatorio diario. Para poder comprar también
+                  necesita &quot;¿Puede solicitar/gestionar Control de Compras?&quot;.
+                </div>
+                <PermToggle value={p.handlesHotPurchases} busy={busy} onChange={(v) => save({ handlesHotPurchases: v })} />
+              </div>
+              <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+                <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+                  <Receipt size={11} /> ¿Se encarga de las compras frías? ❄️
+                </label>
+                <div className="text-[11px] text-steel mb-2">
+                  Productos con 31 a 60 unidades: lista semanal (aviso los lunes y tarjeta en Inicio toda la semana), botón &quot;No hace falta comprarlo&quot;
+                  y calculadora de precio. Puede haber varias personas. Si nadie lo tiene, los avisos te llegan a ti con un recordatorio diario. Para
+                  poder comprar también necesita &quot;¿Puede solicitar/gestionar Control de Compras?&quot;.
+                </div>
+                <PermToggle value={p.handlesColdPurchases} busy={busy} onChange={(v) => save({ handlesColdPurchases: v })} />
+              </div>
+            </>
+          )}
 
           <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
             <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
