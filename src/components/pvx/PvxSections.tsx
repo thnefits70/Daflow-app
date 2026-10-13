@@ -17,9 +17,10 @@ const CUTS = [
   { label: "Corte del mediodía", print: [11 * 60, 11 * 60 + 30], printText: "11:00 – 11:30", dispatchText: "11:30 – 14:00" },
   { label: "Corte de la tarde", print: [14 * 60, 14 * 60 + 30], printText: "14:00 – 14:30", dispatchText: "14:30 – 16:00" },
 ] as const;
-// Sábado se trabaja de 8:30 a 12:30 (horario de la empresa): solo entran los
-// cortes que empiezan antes de esa hora.
-const SATURDAY_END = 12 * 60 + 30;
+// Sábado (confirmado por el usuario 2026-10-13): se trabaja de 8:30 a 12:30
+// y hay UN solo corte, el de la mañana, solo con Veloces, Servientrega y
+// Gintracom.
+const SATURDAY_CARRIERS = "Veloces, Servientrega y Gintracom";
 
 const CARRIERS = ["Servientrega", "Gintracom", "LaarCourier", "Urbano", "Veloces"];
 
@@ -32,7 +33,7 @@ function ecuadorNow(): { day: string; minutes: number; dow: number } {
 }
 
 function cutsFor(dow: number) {
-  return dow === 6 ? CUTS.filter((c) => c.print[0] < SATURDAY_END) : CUTS;
+  return dow === 6 ? CUTS.slice(0, 1) : CUTS;
 }
 
 function waitText(min: number): string {
@@ -42,25 +43,29 @@ function waitText(min: number): string {
   return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
-type CutState = { active: number | null; title: string; detail: string };
+type CutState = { active: number | null; title: string; detail: string; saturday: boolean };
 
-function cutState(): CutState {
+export function cutState(): CutState {
   const { day, minutes, dow } = ecuadorNow();
+  const saturday = dow === 6;
+  // Próximo día de trabajo; si es sábado, se avisa que ese día hay un solo corte.
   const nextDay = () => {
     const n = nextWorkingDay(day);
     const ndow = new Date(`${n}T12:00:00Z`).getUTCDay();
-    return ndow === (dow + 1) % 7 ? "mañana" : `el ${WEEKDAY[ndow]}`;
+    const when = ndow === (dow + 1) % 7 ? "de mañana" : `del ${WEEKDAY[ndow]}`;
+    return ndow === 6 ? `${when}, a las 8:30 (el sábado hay un solo corte, con ${SATURDAY_CARRIERS})` : `${when}, a las 8:30`;
   };
   if (!isWorkingDay(day)) {
-    return { active: null, title: "Hoy no despachamos", detail: `Los pedidos que confirmes hoy salen en el primer corte de ${nextDay()}, a las 8:30.` };
+    return { active: null, saturday, title: "Hoy no despachamos", detail: `Los pedidos que confirmes hoy salen en el primer corte ${nextDay()}.` };
   }
+  const satNote = saturday ? ` Hoy sábado hay un solo corte, con ${SATURDAY_CARRIERS}.` : "";
   const cuts = cutsFor(dow);
   for (let i = 0; i < cuts.length; i++) {
     const [from, to] = cuts[i].print;
-    if (minutes < from) return { active: i, title: `Próximo corte en ${waitText(from - minutes)}`, detail: `${cuts[i].label}: imprimimos guías a las ${cuts[i].printText.split(" – ")[0]} y despachamos de ${cuts[i].dispatchText}.` };
-    if (minutes < to) return { active: i, title: "Imprimiendo guías ahora", detail: `${cuts[i].label}: lo que entra ahora sale de ${cuts[i].dispatchText}.` };
+    if (minutes < from) return { active: i, saturday, title: `Próximo corte en ${waitText(from - minutes)}`, detail: `${cuts[i].label}: imprimimos guías a las ${cuts[i].printText.split(" – ")[0]} y despachamos de ${cuts[i].dispatchText}.${satNote}` };
+    if (minutes < to) return { active: i, saturday, title: "Imprimiendo guías ahora", detail: `${cuts[i].label}: lo que entra ahora sale de ${cuts[i].dispatchText}.${satNote}` };
   }
-  return { active: null, title: "Los cortes de hoy ya terminaron", detail: `Lo que confirmes ahora sale en el primer corte de ${nextDay()}, a las 8:30.` };
+  return { active: null, saturday, title: saturday ? "El corte del sábado ya pasó" : "Los cortes de hoy ya terminaron", detail: `Lo que confirmes ahora sale en el primer corte ${nextDay()}.` };
 }
 
 function LiveCut() {
@@ -86,7 +91,7 @@ function LiveCut() {
         {CUTS.map((c, i) => (
           <li
             key={c.label}
-            className={`grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl px-4 py-3 transition-colors duration-300 ${state?.active === i ? "bg-[var(--pvx-orange)] text-white" : "bg-white/[.06] text-white"}`}
+            className={`grid grid-cols-[1fr_auto] items-center gap-3 rounded-2xl px-4 py-3 transition-colors duration-300 ${state?.active === i ? "bg-[var(--pvx-orange)] text-white" : "bg-white/[.06] text-white"} ${state?.saturday && i > 0 ? "opacity-40" : ""}`}
           >
             <span>
               <span className="block text-[15px] font-bold">{c.label}</span>
@@ -100,7 +105,7 @@ function LiveCut() {
         ))}
       </ol>
       <p className="mt-4 text-[13px] leading-relaxed text-white/60">
-        Con {CARRIERS.join(", ")}. Si la transportadora tiene mucho volumen sumamos un corte más. Los pedidos confirmados después del último corte salen el siguiente día hábil.
+        De lunes a viernes, con {CARRIERS.join(", ")}; si hay mucho volumen sumamos un corte más. Sábados: un solo corte (guías 8:30 – 9:00) con {SATURDAY_CARRIERS}. Los pedidos confirmados después del último corte salen el siguiente día hábil.
       </p>
     </div>
   );
