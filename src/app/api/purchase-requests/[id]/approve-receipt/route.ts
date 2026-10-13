@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { recordKardexEntry } from "@/lib/stockKardex";
-import { effectiveUnitCost } from "@/lib/purchases";
+import { effectiveUnitCost, formatPurchaseRequestCode } from "@/lib/purchases";
 import { isWarehouseArea } from "@/lib/warehouseAreas";
 
 // Confirmado 2026-08-18: pedido explícito del usuario — la aprobación FINAL
@@ -184,7 +184,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (existing.requestedById) {
     await notifyOwner(existing.requestedById, {
       title: "Mercadería recibida",
-      body: `${existing.catalogItem.name} — Inventario confirmó ${existing.receipt.receivedQuantity} un. recibidas.${differenceNote}`,
+      body: `${existing.requestNumber ? `${formatPurchaseRequestCode(existing.requestNumber)} · ` : ""}${existing.catalogItem.name} — Inventario confirmó ${existing.receipt.receivedQuantity} un. recibidas.${differenceNote}`,
       url: "/area/workspace",
     }).catch(() => null);
   }

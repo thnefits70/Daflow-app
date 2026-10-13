@@ -23,6 +23,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Este producto ya se registró o ya tiene un reporte." }, { status: 409 });
   }
 
+  // Pedido del usuario 2026-10-13 (SC-177, máquina de coser): el aviso no
+  // decía el código de la compra y Jariel no lo relacionó con su pedido.
+  const codePrefix = line.code ? `${line.code} · ` : "";
+
   const now = new Date();
   const report = await prisma.purchaseRequestUrgentReport.create({
     data: {
@@ -38,7 +42,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (line.requestedById) {
     await notifyOwner(line.requestedById, {
       title: "🚨 Mercadería no recibida — coordina con el proveedor",
-      body: `${line.name} (${line.quantity} un.) · ${line.supplierName} — Inventario confirmó que no llegó con el resto del pedido. Acuerda si llega otro día, crédito a favor o devolución del dinero.`,
+      body: `${codePrefix}${line.name} (${line.quantity} un.) · ${line.supplierName} — Inventario confirmó que no llegó con el resto del pedido. Acuerda si llega otro día, crédito a favor o devolución del dinero.`,
       url: LEFT_BEHIND_HREF,
     }).catch(() => null);
   }
@@ -48,7 +52,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     if (approverId === line.requestedById) continue;
     await notifyOwner(approverId, {
       title: "📦 Mercadería no recibida (solo aviso)",
-      body: `${line.name} (${line.quantity} un.) · ${line.supplierName} — Inventario confirmó que no llegó con el resto del pedido. ${line.requestedByName ?? "Compras"} lo coordina con el proveedor.`,
+      body: `${codePrefix}${line.name} (${line.quantity} un.) · ${line.supplierName} — Inventario confirmó que no llegó con el resto del pedido. ${line.requestedByName ?? "Compras"} lo coordina con el proveedor.`,
       url: LEFT_BEHIND_HREF,
     }).catch(() => null);
   }

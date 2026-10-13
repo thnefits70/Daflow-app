@@ -571,7 +571,7 @@ export async function getPurchaseLinesOverdue(requestedById?: string): Promise<(
         { status: "APPROVED", supplier: { paymentMode: "CREDITO" }, reviewedAt: { lt: cutoff } },
       ],
     },
-    select: { id: true, groupId: true, quantity: true, requestedById: true, requestedBy: { select: { name: true } }, paidAt: true, reviewedAt: true, catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
+    select: { id: true, groupId: true, requestNumber: true, quantity: true, requestedById: true, requestedBy: { select: { name: true } }, paidAt: true, reviewedAt: true, catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
   });
   if (rows.length === 0) return [];
   const groupsWithReceipt = new Set(
@@ -587,6 +587,7 @@ export async function getPurchaseLinesOverdue(requestedById?: string): Promise<(
       return {
         id: r.id,
         groupId: r.groupId,
+        code: r.requestNumber ? formatPurchaseRequestCode(r.requestNumber) : null,
         name: r.catalogItem.name,
         quantity: r.quantity,
         supplierName: r.supplier?.name ?? "proveedor",
@@ -607,7 +608,7 @@ export const LEFT_BEHIND_HREF = "/area/workspace?tab=compras&ptab=urgentes";
 // pasa a Jariel para que lo gestione con el proveedor.
 const LEFT_BEHIND_GRACE_MS = 24 * 60 * 60 * 1000;
 
-export type PurchaseLineLeftBehind = { id: string; groupId: string; name: string; quantity: number; supplierName: string; requestedById: string | null; requestedByName: string | null; since: Date };
+export type PurchaseLineLeftBehind = { id: string; groupId: string; code: string | null; name: string; quantity: number; supplierName: string; requestedById: string | null; requestedByName: string | null; since: Date };
 
 // Pedido del usuario 2026-10-05 (caso candado de Zheng wu, 2 oct): Inventario
 // recibió parte del pedido y el producto que no vino quedó "Pagada" sin
@@ -623,7 +624,7 @@ export async function getPurchaseLinesLeftBehind(requestedById?: string, graceMs
       urgentReports: { none: {} },
       OR: [{ status: "PAID" }, { status: "APPROVED", supplier: { paymentMode: "CREDITO" } }],
     },
-    select: { id: true, groupId: true, quantity: true, requestedById: true, requestedBy: { select: { name: true } }, catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
+    select: { id: true, groupId: true, requestNumber: true, quantity: true, requestedById: true, requestedBy: { select: { name: true } }, catalogItem: { select: { name: true } }, supplier: { select: { name: true } } },
   });
   if (waiting.length === 0) return [];
 
@@ -643,6 +644,7 @@ export async function getPurchaseLinesLeftBehind(requestedById?: string, graceMs
     .map((w) => ({
       id: w.id,
       groupId: w.groupId,
+      code: w.requestNumber ? formatPurchaseRequestCode(w.requestNumber) : null,
       name: w.catalogItem.name,
       quantity: w.quantity,
       supplierName: w.supplier?.name ?? "proveedor",

@@ -6,6 +6,7 @@ import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { isWithinCreditClaimWindow } from "@/lib/purchaseUrgent";
 import { registerGoodUnitsFromUrgentReport } from "@/lib/purchaseReceiptFromReport";
+import { formatPurchaseRequestCode } from "@/lib/purchases";
 
 const schema = z.object({
   // Confirmado 2026-08-27: pedido explícito del usuario — el equipo que
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const existing = await prisma.purchaseRequestUrgentReport.findUnique({
     where: { id },
-    include: { request: { select: { quantity: true, paidAt: true, requestedById: true, unitCost: true, catalogItem: { select: { name: true } } } } },
+    include: { request: { select: { requestNumber: true, quantity: true, paidAt: true, requestedById: true, unitCost: true, catalogItem: { select: { name: true } } } } },
   });
   if (!existing) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (existing.reviewedByLeadAt) return NextResponse.json({ error: "Ya fue revisado." }, { status: 409 });
@@ -55,6 +56,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const withinCreditWindow = existing.request.paidAt ? isWithinCreditClaimWindow(existing.request.paidAt) : true;
   const windowNote = withinCreditWindow ? "" : " · ⚠️ ya pasaron 7 días desde el pago, el proveedor puede no aprobar crédito";
 
+  // Pedido del usuario 2026-10-13 (SC-177): el código de la compra va en el
+  // aviso para que quien compró sepa de qué pedido se trata.
+  const codePrefix = existing.request.requestNumber ? `${formatPurchaseRequestCode(existing.request.requestNumber)} · ` : "";
+
   const notifyTargets = new Set<string>(["admin"]);
   if (existing.request.requestedById) notifyTargets.add(existing.request.requestedById);
   await Promise.all(
@@ -71,8 +76,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // Solo excedente (nada faltante/dañado): no decir "0 un. afectadas".
         body:
           totalAffected === 0 && existing.excessQty > 0
-            ? `${existing.request.catalogItem.name} — llegaron ${existing.excessQty} un. de más sobre lo pedido.`
-            : `${existing.request.catalogItem.name} — ${totalAffected} un. afectadas · $${disputedValue.toFixed(2)} en disputa${windowNote}`,
+            ? `${codePrefix}${existing.request.catalogItem.name} —llegaron ${existing.excessQty} un. de más sobre lo pedido.`
+            : `${codePrefix}${existing.request.catalogItem.name} —${totalAffected} un. afectadas · $${disputedValue.toFixed(2)} en disputa${windowNote}`,
         url: ownerId === "admin" ? "/admin" : "/area/workspace?tab=compras&ptab=urgentes",
       }).catch(() => null)
     )
@@ -88,7 +93,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (existing.excessQty > 0 && existing.request.requestedById) {
     await notifyOwner(existing.request.requestedById, {
       title: "📦 Excedente por gestionar con el proveedor",
-      body: `${existing.request.catalogItem.name} — llegaron ${existing.excessQty} un. de más sobre lo pedido.`,
+      body: `${codePrefix}${existing.request.catalogItem.name} —llegaron ${existing.excessQty} un. de más sobre lo pedido.`,
       url: "/area/workspace?tab=compras&ptab=urgentes",
     }).catch(() => null);
   }
