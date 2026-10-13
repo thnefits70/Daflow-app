@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { canReceivePurchasesTeam, canActOnPurchaseReceiving } from "@/lib/guards";
 import { notifyReceiptRegistered } from "@/lib/purchaseReceiptFromReport";
 import { notifyInventoryLinesToConfirm } from "@/lib/purchaseLeftBehind";
+import { needsOpenProductPhoto } from "@/lib/openProductPhoto";
 
 const schema = z.object({
   receivedQuantity: z.number().int().nonnegative(),
@@ -67,6 +68,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
+  // Pedido de Daniel 2026-10-13: producto con batería → 3.ª foto con el
+  // producto abierto (ver openProductPhoto.ts).
+  if (needsOpenProductPhoto(existing.catalogItem.name) && parsed.data.photoUrls.length < 3) {
+    return NextResponse.json({ error: "Es un producto con batería: falta la 3.ª foto con el producto abierto (fuera de su caja o maletín, con sus baterías a la vista)." }, { status: 400 });
+  }
   // Confirmado 2026-09-08 (Fase 1, proveedores con crédito): un proveedor de
   // crédito (hoy solo CHEN) nunca pasa por "PAID" antes de recibir — se
   // recibe primero, y el pago real ocurre después, agrupado en una tanda

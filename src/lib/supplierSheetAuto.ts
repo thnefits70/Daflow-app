@@ -14,8 +14,8 @@ import { SUPPLIER_PUBLIC_LINK_START, isReportBlockingDebtPayment, supplierReview
 //     Imagen · Producto · Unidades pedidas · Precio (el acordado en la
 //     solicitud de Jariel) · Fecha del pedido · Estado (en revisión 7 días
 //     tras la aprobación de Daniel / bien / dañadas / faltantes / por reponer / repuestas / de más / en camino) · Llegó a
-//     bodega (cuando los chicos la recibieron y revisaron, NO la aprobación
-//     de Daniel) · ¿Completo? · Unidades buenas · Total (buenas × precio,
+//     bodega (cuando los chicos la recibieron, pero recién se muestra con la
+//     aprobación de Daniel — 2026-10-13) · ¿Completo? · Unidades buenas · Total (buenas × precio,
 //     incluye las de más) · Pago (Pagado — Pago N / en proceso / Pendiente).
 //   Abajo — los pagos (tandas) de esos pedidos: una fila por comprobante con
 //     número, fecha, monto y la foto; y el total de CADA pago. Nunca la suma de
@@ -221,7 +221,11 @@ function summarize(r: RequestRow): OrderSummary {
   const onArrivalReports = reports.filter((u) => !u.isLateClaim);
   const blocking = reports.filter((u) => isReportBlockingDebtPayment(u));
   const firstReportAt = onArrivalReports[0]?.reportedAt ?? null;
-  const arrivedAt = [r.receipt?.confirmedAt ?? null, firstReportAt].filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
+  // Pedido de Daniel 2026-10-13 (caso hidrolavadoras de 1 batería que no
+  // llegaron): lo que recibió el equipo recién se refleja en la hoja cuando
+  // Daniel aprueba la recepción; antes, "Llegó — en revisión en bodega".
+  const receiptApproved = !!r.receipt?.approvedAt;
+  const arrivedAt = [receiptApproved ? (r.receipt?.confirmedAt ?? null) : null, firstReportAt].filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime())[0] ?? null;
 
   const replacementsDone = reports.flatMap((u) => u.resolutions).filter((res) => res.type === "REPLACEMENT" && res.status === "COMPLETED");
   const replacedQty = replacementsDone.reduce((s, res) => s + (res.replacementReceivedQty ?? res.quantity), 0);
@@ -233,7 +237,7 @@ function summarize(r: RequestRow): OrderSummary {
   // reporte dejó de retener el pago); antes, "pendiente de acordar".
   const stockoutQty = reports.filter((u) => u.supplierStockoutAt).reduce((s, u) => s + u.missingQty, 0);
   const stockoutText = stockoutQty ? `${stockoutQty} no llegaron (ustedes no tienen stock)` : "";
-  const receiptQty = Math.min(r.receipt?.receivedQuantity ?? 0, r.quantity);
+  const receiptQty = receiptApproved ? Math.min(r.receipt?.receivedQuantity ?? 0, r.quantity) : 0;
   const goodQty = arrivedAt ? receiptQty + replacedQty + excessQty : 0;
   const total = Math.round(goodQty * r.unitCost * 100) / 100;
 
@@ -257,7 +261,12 @@ function summarize(r: RequestRow): OrderSummary {
   let statusTone: OrderSummary["statusTone"];
   let stage: OrderStage;
   let complete: OrderSummary["complete"];
-  if (!arrivedAt) {
+  if (!arrivedAt && r.receipt?.confirmedAt) {
+    statusText = "Llegó — en revisión en bodega";
+    statusTone = "gray";
+    stage = "en_revision";
+    complete = "—";
+  } else if (!arrivedAt) {
     statusText = r.supplierShippingConfirmedAt ? `Enviado por ustedes el ${fmtDate(r.supplierShippingConfirmedAt)} — en camino` : "En camino";
     statusTone = "gray";
     stage = "en_camino";

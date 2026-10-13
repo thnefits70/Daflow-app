@@ -14,6 +14,7 @@ import { useFormDraft } from "@/lib/useFormDraft";
 import { isScreenPhotoNote } from "@/lib/receiptPhotoScreen";
 import { WAREHOUSE_AREAS, areaLabel, type WarehouseArea } from "@/lib/warehouseAreas";
 import { isFullyReportedNotArrived } from "@/lib/purchaseFullyReported";
+import { needsOpenProductPhoto, OPEN_PRODUCT_PHOTO_HINT } from "@/lib/openProductPhoto";
 
 type ReceiptVariantRow = { name: string; qty: string; added: boolean };
 type ReceiptDraftData ={ receivedQty: string; receivedPhotoUrls: string[]; receivedVideoUrls: string[]; comment: string; minorDifferenceConfirmed: boolean };
@@ -611,9 +612,13 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
     return receiptVariants ?? (r.variantNames ?? []).map((name) => ({ name, qty: "", added: false }));
   }
 
-  async function confirmReceipt(id: string, item: { hasExpiration: boolean; awaitingDropiId: boolean }, variantRows: ReceiptVariantRow[] | null = null) {
+  async function confirmReceipt(id: string, item: { name: string; hasExpiration: boolean; awaitingDropiId: boolean }, variantRows: ReceiptVariantRow[] | null = null) {
     if (receivedPhotoUrls.length < 2 || !receivedQty) {
       setErr("Falta la cantidad recibida y al menos 2 fotos.");
+      return;
+    }
+    if (needsOpenProductPhoto(item.name) && receivedPhotoUrls.length < 3) {
+      setErr("Es un producto con batería: falta la 3.ª foto con el producto abierto.");
       return;
     }
     const variants = variantRows?.map((v) => ({ name: v.name.trim(), qty: v.qty.trim() === "" ? 0 : Number(v.qty) })).filter((v) => v.qty > 0);
@@ -1757,12 +1762,15 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                           )}
 
                           <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">
-                            Fotos de lo recibido ({receivedPhotoUrls.length}/3, mínimo 2)
+                            Fotos de lo recibido ({receivedPhotoUrls.length}/3, mínimo {needsOpenProductPhoto(r.catalogItem.name) ? 3 : 2})
                           </label>
                           <div className="text-[11px] text-steel mb-2">
                             Foto 1: el producto encima o junto al cartón del bulto. Foto 2: el cartón abierto con una unidad de muestra encima, junto al bulto —
                             compáralas contra las de referencia de arriba antes de confirmar; la IA también las revisa apenas subas la 2da.
                           </div>
+                          {needsOpenProductPhoto(r.catalogItem.name) && (
+                            <div className="text-[11.5px] font-semibold mb-2" style={{ color: "#D9A441" }}>🔋 {OPEN_PRODUCT_PHOTO_HINT}</div>
+                          )}
 
                           {receivedPhotoUrls.length > 0 && (
                             <div className="grid grid-cols-3 gap-2 mb-2.5">
@@ -1903,7 +1911,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               disabled={
                                 busy ||
                                 aiChecking ||
-                                receivedPhotoUrls.length < 2 ||
+                                receivedPhotoUrls.length < (needsOpenProductPhoto(r.catalogItem.name) ? 3 : 2) ||
                                 !receivedQty ||
                                 (!r.catalogItem.awaitingDropiId && expirationLotMissing(r.id, r.catalogItem.hasExpiration, receivedQty)) ||
                                 Number(receivedQty) !== (r.urgentReports.length > 0 ? goodQuantity(r) : r.quantity) ||
