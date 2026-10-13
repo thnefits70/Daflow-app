@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2, Pencil, Search } from "lucide-react";
 import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
+import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
 
 export type WeeklyMetricDTO = {
   id: string;
@@ -115,7 +116,7 @@ export function WeeklyMetricPanel({
   // de una vez, antes de que intente guardar y le rebote el error.
   const oldestUnjustified = canJustify
     ? sorted
-        .filter((r) => r.prepared !== null && r.generated !== null && r.outOfStock !== null && !r.fillRateJustification && fillRateRuleAppliesTo(r.week))
+        .filter((r) => r.prepared !== null && r.generated !== null && r.outOfStock !== null && !r.fillRateJustification && fillRateRuleAppliesTo(r.week) && fillRateJustificationIsDue(r.week))
         .map((r) => {
           const t = r.value + (r.prepared ?? 0) + (r.generated ?? 0) + (r.outOfStock ?? 0);
           return { week: r.week, pct: t > 0 ? Math.round((r.value / t) * 100) : null };

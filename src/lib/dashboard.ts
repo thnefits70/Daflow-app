@@ -10,6 +10,7 @@ import { brandLabel, sortBrands } from "@/lib/brandLabels";
 import { guideBrandsOf } from "@/lib/guideBrands";
 import { NO_BRAND, ecuadorDay } from "@/lib/fulfillmentGuides";
 import { getLocalWarrantyReasonCounts, getWarrantyRate, previousMonth, warrantyReasonGroup, type WarrantyReasonGroup } from "@/lib/warrantyInsights";
+import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
 
 function pct(a: number, b: number) {
   return b === 0 ? 0 : Math.round((a / b) * 100);
@@ -336,7 +337,7 @@ export async function getLatestFillRateBreakdown(): Promise<FillRateBreakdown> {
     outOfStock,
     lateManifests,
     cancelledGuides,
-    needsJustification: fillRatePct < 95,
+    needsJustification: fillRatePct < 95 && fillRateJustificationIsDue(record.week),
     justification: record.fillRateJustification,
     justificationBy: record.fillRateJustificationBy,
     justificationAt: record.fillRateJustificationAt?.toISOString() ?? null,
@@ -437,6 +438,7 @@ export async function getOldestUnjustifiedFillRateWeek(deptId: string, excludeWe
   });
   for (const r of records) {
     if (mondayOfIsoWeek(r.week) < FILL_RATE_JUSTIFICATION_RULE_START) continue;
+    if (!fillRateJustificationIsDue(r.week)) continue;
     const total = r.value + (r.prepared ?? 0) + (r.generated ?? 0) + (r.outOfStock ?? 0);
     if (total === 0) continue;
     const fillRatePct = Math.round((r.value / total) * 100);

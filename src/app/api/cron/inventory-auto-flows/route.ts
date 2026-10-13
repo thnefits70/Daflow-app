@@ -3,6 +3,7 @@ import { runInventoryAutoFlows } from "@/lib/inventoryAutoFlows";
 import { backfillGuideMarketData } from "@/lib/localWarranty";
 import { saveProvedixSnapshot } from "@/lib/provedixSnapshot";
 import { refreshProvedixPublic } from "@/lib/provedixPublic";
+import { sendSaturdayFillRateJustificationPush } from "@/lib/fillRateJustificationPush";
 
 // Leer los PDF de cortes viejos toma tiempo (ver backfillGuideMarketData).
 export const maxDuration = 300;
@@ -19,6 +20,12 @@ export async function GET(req: NextRequest) {
   }
 
   await runInventoryAutoFlows();
+  // Pedido de Daniel 2026-10-13: único aviso de este barrido — los sábados a
+  // las 12:00, la explicación del Fill Rate de la semana.
+  const fillRatePushes = await sendSaturdayFillRateJustificationPush().catch((err) => {
+    console.error("[cron inventory-auto-flows] aviso Fill Rate:", err);
+    return 0;
+  });
   // Ciudad/valor/sexo/tienda de las guías que todavía no los tienen
   // (pedido del usuario 2026-10-10, provedix.com). Al final y con tope de
   // tiempo, para no frenar lo de arriba.
@@ -32,5 +39,5 @@ export async function GET(req: NextRequest) {
     return null;
   });
   if (snapshot) refreshProvedixPublic();
-  return NextResponse.json({ ok: true, marketBatches, provedixProducts: snapshot?.products.length ?? null });
+  return NextResponse.json({ ok: true, fillRatePushes, marketBatches, provedixProducts: snapshot?.products.length ?? null });
 }

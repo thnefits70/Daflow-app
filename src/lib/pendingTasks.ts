@@ -36,6 +36,7 @@ import { getDropiPriceChanges } from "@/lib/dropiPriceChanges";
 import { getMissingDropiPrices, PROVISIONAL_DROPI_PRICE_HELPERS } from "@/lib/dropiPriceMissing";
 import { getUnmatchedGuideVariants } from "@/lib/variantSales";
 import { COMBO_BRAND_HREF } from "@/lib/comboAlias";
+import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -699,10 +700,14 @@ const FILL_RATE_JUSTIFICATION_RULE_START = new Date(Date.UTC(2026, 8, 8));
 // que getLatestFillRateBreakdown — y solo avisa si esa semana quedó bajo 95%
 // y todavía no tiene justificación guardada.
 async function getFillRateJustificationPendingItem(deptId: string, href: string): Promise<PendingItem | null> {
-  const record = await prisma.weeklyMetricRecord.findFirst({
+  // 2026-10-13 (Daniel): la semana en curso recién se pide el sábado 12:00
+  // — mientras tanto se mira la última semana que ya venció.
+  const recent = await prisma.weeklyMetricRecord.findMany({
     where: { deptId, prepared: { not: null }, generated: { not: null }, outOfStock: { not: null } },
     orderBy: { week: "desc" },
+    take: 2,
   });
+  const record = recent.find((r) => fillRateJustificationIsDue(r.week));
   if (!record || record.fillRateJustification) return null;
   if (mondayOfIsoWeek(record.week) < FILL_RATE_JUSTIFICATION_RULE_START) return null;
 
