@@ -11,6 +11,7 @@ import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
 import { AdvisorPicker, WhatsAppButton } from "@/components/pvx/PvxContact";
 import { PvxRocketSku } from "@/components/pvx/PvxRocketSku";
 import { PvxCities, PvxOperation, PvxResources } from "@/components/pvx/PvxSections";
+import { IconFacebook, IconInstagram, IconTikTok } from "@/components/pvx/PvxIcons";
 import { IconArrow, IconBox, IconCheck, IconClock, IconCopy, IconFlame, IconImage, IconLock, IconSearch, IconSpark, IconTruck, IconWhatsApp } from "@/components/pvx/PvxIcons";
 
 const BRAND = { MKT_PROVEDIX: "Provedix", MKT_DAMIAN: "Importadora Damián" } as const;
@@ -571,6 +572,17 @@ function ProductCard({ c, index, registered, onOpen }: { c: PublicCard; index: n
 
 // ---- Pie -----------------------------------------------------------------------
 
+// Redes y canales de WhatsApp de Provedix (pasados por el usuario 2026-10-13).
+export const SOCIAL = [
+  { name: "Instagram", url: "https://www.instagram.com/provedix.ec/", icon: <IconInstagram className="w-5 h-5" /> },
+  { name: "TikTok", url: "https://www.tiktok.com/@provedix.ec", icon: <IconTikTok className="w-5 h-5" /> },
+  { name: "Facebook", url: "https://www.facebook.com/share/1FHzeG3XBR/", icon: <IconFacebook className="w-5 h-5" /> },
+];
+const WHATSAPP_CHANNELS = [
+  { name: "Canal de Provedix", url: "https://whatsapp.com/channel/0029VbCKi9o2P59fQXV5Hf30" },
+  { name: "Canal de Importadora Damián", url: "https://whatsapp.com/channel/0029Vb7M5b0FnSzGabyN9016" },
+];
+
 function Footer() {
   return (
     <footer className="bg-[var(--pvx-night)] text-white">
@@ -584,6 +596,43 @@ function Footer() {
             <AdvisorPicker up dark alignRight className="pvx-press inline-flex items-center gap-2 rounded-full bg-white/10 px-6 py-3.5 text-[15px] font-bold text-white hover:bg-white/15 cursor-pointer">
               <IconWhatsApp className="w-4.5 h-4.5 text-[#3ddc84]" /> Asesor
             </AdvisorPicker>
+          </div>
+        </div>
+        <div className="mt-16 grid gap-8 rounded-[28px] bg-white/[.05] p-6 sm:p-8 lg:grid-cols-2 lg:items-center">
+          <div>
+            <p className="pvx-heading text-[24px] sm:text-[28px]">Productos nuevos, primero en tu WhatsApp</p>
+            <p className="mt-2 text-[15px] leading-relaxed text-white/70">Únete a nuestros canales y entérate antes que nadie de lo que llega y de lo que se está vendiendo.</p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              {WHATSAPP_CHANNELS.map((c) => (
+                <a
+                  key={c.url}
+                  href={c.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="pvx-press inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-[#138a45] px-5 py-3 text-[14.5px] font-bold text-white hover:bg-[#0f7239]"
+                >
+                  <IconWhatsApp className="w-5 h-5" /> {c.name}
+                </a>
+              ))}
+            </div>
+          </div>
+          <div className="lg:justify-self-end">
+            <p className="text-[15px] font-semibold text-white/70">Síguenos</p>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {SOCIAL.map((s) => (
+                <li key={s.name}>
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="pvx-press inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-3 text-[14.5px] font-bold text-white hover:bg-[var(--pvx-orange)]"
+                  >
+                    {s.icon} {s.name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-[13.5px] text-white/50">@provedix.ec</p>
           </div>
         </div>
         <Image src="/pvx/brand/wordmark-tagline-white.png" alt="Provedix · Conectando productos y oportunidades" width={1600} height={374} className="mt-20 h-auto w-full" />
