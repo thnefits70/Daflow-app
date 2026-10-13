@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { PurchaseSupplierPicker } from "@/components/purchases/PurchaseSupplierPicker";
+import { useFormDraft } from "@/lib/useFormDraft";
 import { computeRepurchase, HOT_SELF_MAX_INCREASE_PERCENT, hotSelfConfirmBlock, repurchaseVerdictText, REPURCHASE_VERDICT_LABELS, type RepurchaseCalc, type RepurchaseVerdict } from "@/lib/repurchasePricing";
 
 // Recompras (pedido del usuario 2026-10-06). Toda recompra — calientes de
@@ -271,6 +272,74 @@ function OtherSupplierSearch({ onPick }: { onPick: (s: { id: string; name: strin
 
 // ---- Pasos 2 y 3: lo de hoy + resultado ------------------------------------------
 
+// Recompra en pausa (pedido de Nairoby 2026-10-13): mientras el proveedor
+// confirma un dato, quien compra deja el análisis guardado tal cual y sigue
+// con otro producto. Es un borrador por producto (FormDraft), así que también
+// aparece en Inicio si se olvida de volver.
+const PAUSE_PREFIX = "repurchase:";
+type PausedDraft = {
+  supplier: { id: string; name: string } | null;
+  unitCost: string;
+  quantity: string;
+  chargesFreight: boolean | null;
+  freight: string;
+  competitorId: string;
+  competitorPrice: string;
+  noCompetitor: boolean;
+  noCompetitorNote: string;
+  note: string;
+};
+function pausedIsEmpty(d: PausedDraft) {
+  // La cantidad sugerida y el ID de competencia los pone DAFLOW solo: no cuentan.
+  return !d.supplier && !d.unitCost && d.chargesFreight === null && !d.freight && !d.competitorPrice && !d.noCompetitor && !d.noCompetitorNote.trim() && !d.note.trim();
+}
+function pausedResumeUrl(itemId: string) {
+  const path = typeof window === "undefined" ? "/area/workspace" : window.location.pathname;
+  return `${path}?tab=compras&ptab=recompras&rcItem=${itemId}`;
+}
+
+type PausedRow = { id: string; formKey: string; label: string; updatedAt: string };
+
+function PausedRepurchases({ onPick }: { onPick: (itemId: string) => void }) {
+  const [rows, setRows] = useState<PausedRow[]>([]);
+  useEffect(() => {
+    fetch("/api/form-drafts/mine")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: PausedRow[]) => setRows(list.filter((d) => d.formKey.startsWith(PAUSE_PREFIX))))
+      .catch(() => {});
+  }, []);
+  if (rows.length === 0) return null;
+  return (
+    <div className="mb-3 bg-amber/10 border border-amber/40 rounded-md p-2.5">
+      <div className="text-[12.5px] font-bold text-amber mb-1">⏸ En pausa ({rows.length})</div>
+      <div className="flex flex-col gap-1">
+        {rows.map((d) => (
+          <div key={d.id} className="flex items-center gap-2 text-[12.5px]">
+            <span className="text-ink min-w-0 flex-1 truncate">
+              {d.label.replace(/^Recompra en pausa: /, "")}
+              <span className="text-steel"> · {fmtDateTime(d.updatedAt)}</span>
+            </span>
+            <button type="button" onClick={() => onPick(d.formKey.slice(PAUSE_PREFIX.length))} className="text-teal font-semibold cursor-pointer shrink-0">
+              Continuar
+            </button>
+            <button
+              type="button"
+              title="Descartar"
+              onClick={() => {
+                fetch(`/api/form-drafts?key=${encodeURIComponent(d.formKey)}`, { method: "DELETE" }).catch(() => {});
+                setRows((rs) => rs.filter((x) => x.id !== d.id));
+              }}
+              className="text-steel cursor-pointer shrink-0"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export type RepurchaseSent = { code: string; selfConfirmed: boolean; supplierId: string; quantity: string; unitCost: number };
 
 // preset: viene de Solicitar (pedido de Jariel 2026-10-07), donde ya se
@@ -305,6 +374,43 @@ export function RepurchaseAnalyzer({
   const [selfConfirming, setSelfConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pausing, setPausing] = useState(false);
+
+  // Solo en la pantalla de Recompras (con onBack); dentro de Solicitar no.
+  const draftKey = onBack ? `${PAUSE_PREFIX}${itemId}` : null;
+  const draftValue: PausedDraft = { supplier, unitCost, quantity, chargesFreight, freight, competitorId, competitorPrice, noCompetitor, noCompetitorNote, note };
+  const { clearDraft } = useFormDraft<PausedDraft>(
+    draftKey,
+    draftValue,
+    (d) => {
+      setSupplier(d.supplier ?? null);
+      setUnitCost(d.unitCost ?? "");
+      if (d.quantity) setQuantity(d.quantity);
+      setChargesFreight(d.chargesFreight ?? null);
+      setFreight(d.freight ?? "");
+      if (d.competitorId) setCompetitorId(d.competitorId);
+      setCompetitorPrice(d.competitorPrice ?? "");
+      setNoCompetitor(!!d.noCompetitor);
+      setNoCompetitorNote(d.noCompetitorNote ?? "");
+      setNote(d.note ?? "");
+    },
+    pausedIsEmpty,
+    a ? `Recompra en pausa: ${a.item.name}` : undefined,
+    onBack ? pausedResumeUrl(itemId) : undefined,
+  );
+
+  // Guarda ya (sin esperar el autoguardado) y vuelve a elegir otro producto.
+  function pause() {
+    if (!draftKey || !onBack || !a) return;
+    setPausing(true);
+    fetch("/api/form-drafts", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: draftKey, data: draftValue, label: `Recompra en pausa: ${a.item.name}`, resumeUrl: pausedResumeUrl(itemId) }),
+    })
+      .catch(() => {})
+      .finally(() => onBack());
+  }
 
   useEffect(() => {
     fetch(`/api/repurchase-reviews/analysis?catalogItemId=${encodeURIComponent(itemId)}`)
@@ -316,8 +422,10 @@ export function RepurchaseAnalyzer({
         }
         const an = j as Analysis;
         setA(an);
-        if (an.suggestedQty && !preset?.quantity) setQuantity(String(an.suggestedQty));
-        if (an.competitor?.id) setCompetitorId(an.competitor.id);
+        // Funcional: si ya se restauró una recompra en pausa, no se pisa.
+        if (an.suggestedQty && !preset?.quantity) setQuantity((q) => q || String(an.suggestedQty));
+        const compId = an.competitor?.id;
+        if (compId) setCompetitorId((c) => c || compId);
       })
       .catch(() => setLoadError("No se pudo cargar."));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -387,6 +495,7 @@ export function RepurchaseAnalyzer({
           setConfirming(false);
           setSelfConfirming(false);
         } else {
+          clearDraft();
           onSent({ code: j.code, selfConfirmed: !!j.selfConfirmed, supplierId: supplier.id, quantity, unitCost: Number(unitCost) });
         }
       })
@@ -415,6 +524,20 @@ export function RepurchaseAnalyzer({
           </button>
         )}
       </div>
+
+      {onBack && (
+        <div className="flex flex-wrap items-center gap-2 bg-surface2 border border-rule rounded-md px-3 py-2 mb-3 text-[12px]">
+          <span className="text-steel flex-1 min-w-[200px]">¿Esperas que el proveedor te confirme un dato? Déjala en pausa: queda guardada tal cual y sigues con otro producto.</span>
+          <button
+            type="button"
+            disabled={pausing}
+            onClick={pause}
+            className="rounded border border-amber/60 text-amber px-3 py-1.5 font-bold cursor-pointer disabled:opacity-50 shrink-0"
+          >
+            {pausing ? "Guardando…" : "⏸ Dejar en pausa y analizar otro"}
+          </button>
+        </div>
+      )}
 
       {/* Lo que DAFLOW ya sabe */}
       <div className="bg-cloud border border-rule rounded-md p-3 mb-3 text-[12.5px]">
@@ -921,6 +1044,7 @@ export function RepurchasePanel({ initialItemId = null }: { initialItemId?: stri
             />
           ) : (
             <>
+              <PausedRepurchases onPick={(id) => setItemId(id)} />
               <div className="text-[13px] font-bold text-ink mb-1.5">Paso 1 · ¿Qué producto vas a recomprar?</div>
               <ItemSearch onPick={(i) => setItemId(i.id)} />
             </>
