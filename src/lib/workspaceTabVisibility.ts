@@ -10,6 +10,7 @@ export const WORKSPACE_TAB_DEFS = [
   { key: "semanal", label: "Pedidos despachados" },
   { key: "feedback", label: "Feedback semanal" },
   { key: "procesos", label: "Procesos" },
+  { key: "tareas", label: "Tareas" },
   { key: "compras", label: "Control de Compras" },
   { key: "proveedores", label: "Proveedores" },
   { key: "llegadas", label: "Mercadería recibida" },

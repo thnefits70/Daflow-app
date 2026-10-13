@@ -225,6 +225,12 @@ export async function POST(req: NextRequest) {
   if (!allowed && session?.user.role === "employee" && folder === "branded-photos") {
     allowed = await canBrandNewIds();
   }
+  // Tareas del equipo (2026-10-13): adjunto del líder y foto del
+  // colaborador al terminar. Quién puede tocar cada tarea se valida al
+  // guardar en /api/team-tasks; aquí basta estar logueado.
+  if (!allowed && session?.user.role === "employee" && folder === "team-task-files") {
+    allowed = true;
+  }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   if (size > MAX_BYTES) {

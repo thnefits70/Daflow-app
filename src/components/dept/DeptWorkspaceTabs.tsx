@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers, UserCog, Sparkles, Store } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers, UserCog, Sparkles, Store, ListChecks } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -41,6 +41,7 @@ import { ComboSuggestionsPanel } from "@/components/marketanalysis/ComboSuggesti
 import { StoreTrackingPanel } from "@/components/marketanalysis/StoreTrackingPanel";
 import { MarketProductPanel } from "@/components/marketanalysis/MarketProductPanel";
 import { ImprovementPlanTeamPanel } from "@/components/improvement-plan/ImprovementPlanTeamPanel";
+import { TeamTasksPanel } from "@/components/team-tasks/TeamTasksPanel";
 import { WeeklyCheckinLockGate } from "@/components/dept/WeeklyCheckinLockGate";
 import { useWorkspaceTabDots } from "@/components/dept/useWorkspaceTabDots";
 import { isWorkspaceTabVisible } from "@/lib/workspaceTabVisibility";
@@ -58,6 +59,7 @@ const ALL_TABS = [
   { key: "semanal", label: "Pedidos despachados", icon: TrendingUp },
   { key: "feedback", label: "Feedback semanal", icon: MessageSquare },
   { key: "procesos", label: "Procesos", icon: GitBranch },
+  { key: "tareas", label: "Tareas", icon: ListChecks },
   { key: "compras", label: "Control de Compras", icon: ShoppingCart },
   { key: "proveedores", label: "Proveedores", icon: Truck },
   { key: "llegadas", label: "Mercadería recibida", icon: PackageCheck },
@@ -844,6 +846,7 @@ export function DeptWorkspaceTabs({
       )}
       {tab === "seguimiento-tiendas" && canViewStoreTracking && <StoreTrackingPanel />}
       {tab === "plan-mejora" && canManageImprovementPlan && <ImprovementPlanTeamPanel deptId={deptId} isAdmin={isAdmin} />}
+      {tab === "tareas" && <TeamTasksPanel deptId={deptId} />}
       {tab === "documentos" && <DocumentsPanel deptId={deptId} documents={documents} editable={editable} />}
       {tab === "examenes" && <ExamsPanel deptId={deptId} exams={exams} editable={editable} />}
       {tab === "kpis" && trackKpis && financeKpiData && (

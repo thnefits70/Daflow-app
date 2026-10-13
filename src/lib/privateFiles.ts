@@ -41,6 +41,8 @@ export const PRIVATE_FOLDERS = new Set([
   "finance-kpis",
   "inventory-proofs",
   "mismanagement-evidence",
+  // Tareas del equipo (2026-10-13): pueden traer información interna.
+  "team-task-files",
 ]);
 
 // Siempre el dominio de producción: así el enlace guardado vale igual desde

@@ -37,6 +37,7 @@ import { getMissingDropiPrices, PROVISIONAL_DROPI_PRICE_HELPERS } from "@/lib/dr
 import { getUnmatchedGuideVariants } from "@/lib/variantSales";
 import { COMBO_BRAND_HREF } from "@/lib/comboAlias";
 import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
+import { getLeaderTeamTaskPendingItems, getMyTeamTaskPendingItem } from "@/lib/teamTasks";
 
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
@@ -560,6 +561,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_urgentes_sin_atender: "Compras urgentes sin atender (3+ días)",
   compras_sin_encargado: "Compras calientes o frías sin nadie a cargo",
   compras_falta_contar: "Productos por comprar que faltan contar",
+  tareas_por_revisar: "Tareas del equipo — terminadas, falta tu revisión",
+  tareas_vencidas_equipo: "Tareas del equipo — vencidas",
 };
 
 // "colaborador_del_mes" es obligatorio — confirmado 2026-08-05: a diferencia
@@ -4161,6 +4164,10 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (myPersonalPurchaseStatusItem) teamItems.push(myPersonalPurchaseStatusItem);
     teamItems.push(...myPettyCashConfirmationItems);
     if (myPayrollMessageItem) teamItems.push(myPayrollMessageItem);
+    // Tareas del equipo (pedido de Bryan Ríos 2026-10-13): lo que su líder
+    // le asignó, arriba de todo.
+    const myTeamTaskItem = await getMyTeamTaskPendingItem(actor.userId);
+    if (myTeamTaskItem) teamItems.unshift(myTeamTaskItem);
     teamItems.unshift(...(await getMyFulfillmentBlockPendingItems(actor.userId, "/area/workspace?tab=egresos&otab=solicitud")));
     teamItems.unshift(...(await getMyLocalWarrantyPendingItems(actor.userId, "/area/workspace?tab=ventas-externas&etab=garantias")));
     if (me.department?.code === "INV") {
@@ -4491,6 +4498,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   const supplierExchangeGestorItem = await getSupplierExchangeGestorPendingItem(actor.userId, "/area/workspace?tab=egresos&otab=proveedor");
   if (supplierExchangeGestorItem) items.push(supplierExchangeGestorItem);
 
+  // Tareas del equipo (2026-10-13): lo terminado por revisar y lo vencido.
+  items.push(...(await getLeaderTeamTaskPendingItems(me.leadsDeptId)));
+
   const improvementPlanItems = await getImprovementPlanPendingItems(me.leadsDeptId, "/area/workspace?tab=plan-mejora");
   items.push(...improvementPlanItems);
 
@@ -4628,7 +4638,7 @@ export async function getPossiblePendingTypesForActor(
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }
 
-    types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida");
+    types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida", "tareas_por_revisar", "tareas_vencidas_equipo");
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
     if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "precio_dropi_faltante");
       if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca");

@@ -147,6 +147,7 @@ model Department {
   checkinConversations      CheckinConversation[]
   purchaseRequests          PurchaseRequest[]
   improvementPlans          ImprovementPlan[]
+  teamTasks                 TeamTask[]
 
   @@index([order])
 }
@@ -662,6 +663,11 @@ model User {
   improvementPlanClosuresApproved  ImprovementPlan[]       @relation("ImprovementPlanClosureApprovedBy")
   improvementPlanReviewsCreated    ImprovementPlanReview[] @relation("ImprovementPlanReviewCreatedBy")
   stockLabelPrints                 StockLabelPrint[]       @relation("StockLabelPrintBy")
+
+  teamTasksCreated        TeamTask[]           @relation("TeamTaskCreatedBy")
+  teamTaskAssignments     TeamTaskAssignment[] @relation("TeamTaskAssignee")
+  teamTaskAssignmentsReviewed TeamTaskAssignment[] @relation("TeamTaskReviewedBy")
+  teamTaskEvents          TeamTaskEvent[]      @relation("TeamTaskEventActor")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -8075,4 +8081,106 @@ model ProvedixEvent {
   @@index([createdAt])
   @@index([leadId])
   @@index([visitorId])
+}
+
+// ---------------- Tareas del equipo ----------------
+// Pedido de Bryan Ríos 2026-10-13, para todos los líderes: el líder asigna
+// una tarea a una o varias personas de SU área; cada persona la avanza por
+// su lado (una fila de TeamTaskAssignment por persona) y el líder aprueba o
+// devuelve a cada una por separado. El admin solo consulta.
+enum TeamTaskStatus {
+  POR_HACER
+  EN_PROCESO
+  HECHA
+  DEVUELTA
+  APROBADA
+  CANCELADA
+}
+
+enum TeamTaskEventKind {
+  CREADA
+  EMPEZADA
+  HECHA
+  DEVUELTA
+  APROBADA
+  CANCELADA
+}
+
+model TeamTask {
+  id          String  @id @default(cuid())
+  title       String
+  description String?
+  // Solo la fecha (día de Ecuador), sin hora.
+  dueDate     DateTime @db.Date
+  urgent      Boolean  @default(false)
+
+  attachmentUrl  String?
+  attachmentName String?
+
+  deptId String
+  dept   Department @relation(fields: [deptId], references: [id], onDelete: Cascade)
+
+  createdById String?
+  createdBy   User?   @relation("TeamTaskCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments TeamTaskAssignment[]
+
+  @@index([deptId])
+}
+
+model TeamTaskAssignment {
+  id     String   @id @default(cuid())
+  taskId String
+  task   TeamTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  assigneeId String
+  assignee   User   @relation("TeamTaskAssignee", fields: [assigneeId], references: [id], onDelete: Cascade)
+
+  status TeamTaskStatus @default(POR_HACER)
+
+  startedAt DateTime?
+  // Lo último que dejó el colaborador al marcarla "Hecha" (el historial
+  // completo queda en TeamTaskEvent).
+  doneAt        DateTime?
+  doneComment   String?
+  donePhotoUrl  String?
+  // Lo último que dijo el líder al devolverla.
+  returnedAt    DateTime?
+  returnComment String?
+
+  reviewedAt   DateTime?
+  reviewedById String?
+  reviewedBy   User?     @relation("TeamTaskReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  // Aviso al líder cuando se pasa la fecha — una sola vez.
+  overdueNotifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events TeamTaskEvent[]
+
+  @@unique([taskId, assigneeId])
+  @@index([assigneeId, status])
+  @@index([status])
+}
+
+model TeamTaskEvent {
+  id           String             @id @default(cuid())
+  assignmentId String
+  assignment   TeamTaskAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  kind     TeamTaskEventKind
+  comment  String?
+  photoUrl String?
+
+  actorId String?
+  actor   User?   @relation("TeamTaskEventActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([assignmentId])
 }
