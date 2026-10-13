@@ -314,7 +314,7 @@ function Stats({ stats }: { stats: PublicStats }) {
   const rows = [
     { value: String(stats.products), label: "productos con ventas reales" },
     stats.orders ? { value: stats.orders, label: "pedidos despachados en 30 días" } : null,
-    stats.cities ? { value: stats.cities, label: "ciudades de Ecuador con entregas" } : null,
+    stats.cities ? { value: stats.cities, label: "destinos de Ecuador con entregas" } : null,
     stats.newProducts > 0 ? { value: String(stats.newProducts), label: stats.newProducts === 1 ? "producto nuevo este mes" : "productos nuevos este mes" } : null,
   ].filter((r): r is { value: string; label: string } => !!r);
   if (!stats.products) return null;

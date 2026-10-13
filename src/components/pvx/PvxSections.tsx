@@ -184,7 +184,7 @@ export function PvxCities({ stats }: { stats: PublicStats }) {
           </h2>
           <p className="mt-6 max-w-[440px] text-[17px] leading-relaxed text-[var(--pvx-ink-2)]">
             Así se reparten los pedidos de los últimos 30 días entre las ciudades de Ecuador
-            {stats.cities ? `. Llegamos a ${stats.cities.replace("+", "más de ")} ciudades.` : "."} Úsalo para segmentar tus anuncios.
+            {stats.cities ? `. Llegamos a ${stats.cities.replace("+", "más de ")} destinos.` : "."} Úsalo para segmentar tus anuncios.
           </p>
         </div>
         <ol className="flex flex-col gap-3">

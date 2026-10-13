@@ -87,7 +87,8 @@ export async function getPublicCatalog(): Promise<{ windowTo: string | null; car
 
 // Números de la portada (rediseño 2026-10-13, elegidos por el usuario):
 // productos con ventas, pedidos despachados en 30 días (en RANGO, nunca la
-// cifra exacta), ciudades a las que llegaron y productos nuevos del mes
+// cifra exacta), destinos a los que llegaron (ciudades y parroquias tal como
+// salen en las guías — por eso "destinos" y no "ciudades") y productos nuevos del mes
 // (artículos del catálogo creados en los últimos 30 días que ya venden).
 // topCities: ciudades que más compran (% de pedidos, todos los productos) —
 // pedido 2026-10-13. Vacío hasta que el resumen se recalcule con ese dato.

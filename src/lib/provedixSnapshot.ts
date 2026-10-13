@@ -254,7 +254,8 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
     if (inWindow) {
       windowGuides++;
       if (g.city) {
-        const city = g.city.trim().toUpperCase();
+        // Sin tildes ni espacios dobles: "MACHALA" y "MÁCHALA" son el mismo destino.
+        const city = g.city.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim().toUpperCase();
         windowCities.set(city, (windowCities.get(city) ?? 0) + 1);
         windowCityGuides++;
       }
