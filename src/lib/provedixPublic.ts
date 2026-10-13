@@ -85,6 +85,39 @@ export async function getPublicCatalog(): Promise<{ windowTo: string | null; car
   };
 }
 
+// Números de la portada (rediseño 2026-10-13, elegidos por el usuario):
+// productos con ventas, pedidos despachados en 30 días (en RANGO, nunca la
+// cifra exacta), ciudades a las que llegaron y productos nuevos del mes
+// (artículos del catálogo creados en los últimos 30 días que ya venden).
+export type PublicStats = { products: number; orders: string | null; cities: string | null; newProducts: number };
+
+const ORDER_STEPS = [100, 250, 500, 1000, 2500, 5000, 7500, 10000, 15000, 20000, 30000, 50000];
+
+function ordersRange(n: number): string | null {
+  let best: number | null = null;
+  for (const s of ORDER_STEPS) if (n >= s) best = s;
+  return best == null ? null : `+${best.toLocaleString("es-EC")}`;
+}
+
+function citiesRange(n: number | undefined): string | null {
+  if (!n || n < 10) return null;
+  return `+${Math.floor(n / 10) * 10}`;
+}
+
+const cachedNewProducts = unstable_cache(
+  async (codes: string[]): Promise<number> =>
+    prisma.purchaseCatalogItem.count({ where: { justCode: { in: codes }, createdAt: { gte: new Date(Date.now() - 30 * 86_400_000) } } }),
+  ["provedix-public-new-products"],
+  { revalidate: 3600, tags: [PROVEDIX_SNAPSHOT_TAG] },
+);
+
+export async function getPublicStats(): Promise<PublicStats> {
+  const s = await cachedSnapshot();
+  if (!s) return { products: 0, orders: null, cities: null, newProducts: 0 };
+  const newProducts = await cachedNewProducts(s.products.map((p) => p.code)).catch(() => 0);
+  return { products: s.products.length, orders: ordersRange(s.guides), cities: citiesRange(s.cityCount), newProducts };
+}
+
 export async function getPublicProduct(code: string): Promise<SnapshotProduct | null> {
   const s = await cachedSnapshot();
   const p = s?.products.find((x) => x.code === code);

@@ -25,14 +25,14 @@ export function PvxRocketSku({ sku }: { sku: string }) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`inline-flex w-full items-center justify-center gap-1 rounded-md border px-2 py-[3px] text-[11px] font-semibold cursor-pointer ${open ? "border-[#16181d] bg-[#16181d] text-white" : "border-[#d9d6cf] bg-white text-[#16181d] hover:border-[#ff5a1f]"}`}
+        className={`pvx-press inline-flex w-full items-center justify-center gap-1 rounded-full px-2 py-1.5 text-[11.5px] font-bold cursor-pointer ${open ? "bg-[#111214] text-white" : "bg-white text-[#111214] hover:bg-[#FFF1E8]"}`}
       >
         Ver SKU de Rocket <span className="text-[9px]">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
-        <div className="absolute z-10 bottom-full mb-1.5 left-0 right-0 rounded-lg border border-[#e6e2da] bg-white p-2 shadow-lg">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-[#8a8f98]">SKU en Rocket</div>
-          <div className="mt-0.5 font-mono text-[12px] break-all text-[#16181d]">{sku}</div>
+        <div className="pvx-pop absolute z-10 bottom-full mb-1.5 left-0 right-0 rounded-2xl bg-white p-2.5 shadow-[0_16px_40px_-12px_rgb(0_0_0/0.35)]">
+          <div className="text-[11px] font-bold text-[#6B717B]">SKU en Rocket</div>
+          <div className="pvx-num mt-0.5 text-[12.5px] font-bold break-all text-[#111214]">{sku}</div>
           <button
             type="button"
             onClick={() => {
@@ -41,7 +41,7 @@ export function PvxRocketSku({ sku }: { sku: string }) {
                 setTimeout(() => setCopied(false), 1800);
               });
             }}
-            className="mt-1.5 w-full rounded-md bg-[#ff5a1f] text-white text-[11.5px] font-semibold py-1 cursor-pointer hover:bg-[#e64a12]"
+            className="pvx-press mt-2 w-full rounded-full bg-[#F95B02] text-white text-[12px] font-bold py-1.5 cursor-pointer hover:bg-[#DD4F00]"
           >
             {copied ? "¡Copiado!" : "Copiar SKU"}
           </button>

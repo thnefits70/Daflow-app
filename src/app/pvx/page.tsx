@@ -1,4 +1,4 @@
-import { getPublicCatalog } from "@/lib/provedixPublic";
+import { getPublicCatalog, getPublicStats } from "@/lib/provedixPublic";
 import { PvxCatalog } from "@/components/pvx/PvxCatalog";
 
 // Página pública de provedix.com (etapa 3, pedido del usuario 2026-10-12).
@@ -11,6 +11,6 @@ export const revalidate = 60;
 
 export default async function ProvedixPublicPage() {
   // Sin la fecha de corte: dejaría ver el retraso de los datos (pedido 2026-10-12).
-  const { cards } = await getPublicCatalog();
-  return <PvxCatalog cards={cards} />;
+  const [{ cards }, stats] = await Promise.all([getPublicCatalog(), getPublicStats()]);
+  return <PvxCatalog cards={cards} stats={stats} />;
 }

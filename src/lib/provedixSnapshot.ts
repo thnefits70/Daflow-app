@@ -90,6 +90,9 @@ export type ProvedixSnapshotData = {
   windowTo: string;
   products: SnapshotProduct[];
   guides: number;
+  // Ciudades distintas a las que llegaron los pedidos de la ventana (portada
+  // de provedix.com, 2026-10-13). Falta en resúmenes anteriores a ese día.
+  cityCount?: number;
 };
 
 function shiftDay(day: string, days: number): string {
@@ -235,12 +238,16 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
   const delivery = new Map<string, { sent: number; returned: number }>();
   const comboNames = new Map<string, string>();
   let windowGuides = 0;
+  const windowCities = new Set<string>();
 
   for (const g of guides) {
     const inWindow = g.day >= windowFrom && g.day <= windowTo;
     const inDelivery = g.day >= deliveryFrom && g.day <= deliveryTo;
     if (!inWindow && !inDelivery) continue;
-    if (inWindow) windowGuides++;
+    if (inWindow) {
+      windowGuides++;
+      if (g.city) windowCities.add(g.city.trim().toUpperCase());
+    }
     // Unidades por línea de la etiqueta y a qué productos sueltos llegan.
     const lines = g.products.map((p) => {
       const units = p.physical ? p.qty : labelLineUnits(p.name, p.qty);
@@ -425,7 +432,7 @@ export async function buildProvedixSnapshot(today = ecuadorDay(new Date())): Pro
   }
   const products = ranked.sort((x, y) => y.units - x.units).map((r, i) => ({ ...r.product, rank: i + 1 }));
 
-  return { day: today, windowFrom, windowTo, products, guides: windowGuides };
+  return { day: today, windowFrom, windowTo, products, guides: windowGuides, cityCount: windowCities.size };
 }
 
 // Lo corre el cron diario; también el botón "Recalcular ahora" del admin.

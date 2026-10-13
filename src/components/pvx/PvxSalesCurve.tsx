@@ -63,22 +63,22 @@ export function PvxSalesCurve({ values, height = 70, labels = true, tips }: { va
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full block" style={{ height: H }} aria-label="Curva de ventas" role="img">
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#ff5a1f" stopOpacity="0.28" />
-              <stop offset="100%" stopColor="#ff5a1f" stopOpacity="0" />
+              <stop offset="0%" stopColor="#F95B02" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="#F95B02" stopOpacity="0" />
             </linearGradient>
           </defs>
           <path d={area} fill={`url(#${gradientId})`} />
-          <path d={line} fill="none" stroke="#ff5a1f" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          <path d={line} fill="none" stroke="#F95B02" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
         </svg>
         {interactive && active != null && (
           <>
-            <div className="absolute top-0 bottom-0 w-px bg-[#ff5a1f]/40 pointer-events-none" style={{ left: `${leftPct}%` }} />
+            <div className="absolute top-0 bottom-0 w-px bg-[#F95B02]/40 pointer-events-none" style={{ left: `${leftPct}%` }} />
             <div
-              className="absolute w-2.5 h-2.5 -ml-[5px] -mt-[5px] rounded-full bg-white border-2 border-[#ff5a1f] pointer-events-none"
+              className="absolute w-2.5 h-2.5 -ml-[5px] -mt-[5px] rounded-full bg-white border-2 border-[#F95B02] pointer-events-none"
               style={{ left: `${leftPct}%`, top: pts[active][1] }}
             />
             <div
-              className="absolute -top-1 whitespace-nowrap rounded-md bg-[#16181d] text-white text-[11px] font-semibold px-2 py-0.5 pointer-events-none"
+              className="absolute -top-1 whitespace-nowrap rounded-md bg-[#111214] text-white text-[11px] font-semibold px-2 py-0.5 pointer-events-none"
               style={{ left: `${leftPct}%`, transform: `translate(${leftPct > 70 ? "-100%" : leftPct < 30 ? "0" : "-50%"}, -100%)` }}
             >
               {tips![active]}
@@ -87,7 +87,7 @@ export function PvxSalesCurve({ values, height = 70, labels = true, tips }: { va
         )}
       </div>
       {labels && (
-        <div className="flex justify-between text-[10px] text-[#8a8f98] mt-0.5">
+        <div className="flex justify-between text-[10px] text-[#6B717B] mt-0.5">
           <span>Antes</span>
           <span>{interactive ? "Toca la curva para ver cada día" : "Reciente"}</span>
         </div>

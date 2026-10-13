@@ -5,6 +5,7 @@ import type { SnapshotProduct } from "@/lib/provedixSnapshot";
 import { PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
 import { WhatsAppButton } from "@/components/pvx/PvxContact";
+import { IconCheck, IconClock, IconClose, IconCopy, IconExternal, IconFlame, IconSpark } from "@/components/pvx/PvxIcons";
 
 const BRAND = { MKT_PROVEDIX: "Provedix", MKT_DAMIAN: "Importadora Damián" } as const;
 
@@ -22,9 +23,9 @@ export function DropiLink({ code, compact = false, block = false }: { code: stri
       target="_blank"
       rel="noopener noreferrer"
       onClick={(e) => e.stopPropagation()}
-      className={`inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-md bg-[#ff5a1f] text-white font-semibold hover:bg-[#e64a12] ${block ? "w-full" : ""} ${compact ? "px-2 py-1 text-[11px]" : "px-2.5 py-1 text-[12px]"}`}
+      className={`pvx-press inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-full bg-[#F95B02] text-white font-bold hover:bg-[#DD4F00] ${block ? "w-full" : ""} ${compact ? "px-2.5 py-1.5 text-[12px]" : "px-4 py-2 text-[13.5px]"}`}
     >
-      {block ? "Dropi ↗" : "Ver en Dropi ↗"}
+      {block ? "Dropi" : "Ver en Dropi"} <IconExternal className={compact ? "w-3 h-3" : "w-3.5 h-3.5"} />
     </a>
   );
 }
@@ -43,18 +44,18 @@ export function CopyId({ code, label, kind = "ID" }: { code: string; label?: str
           setTimeout(() => setCopied(false), 1800);
         });
       }}
-      className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-[#d9d6cf] bg-white px-2.5 py-1 font-mono text-[12.5px] hover:border-[#ff5a1f] cursor-pointer"
+      className="pvx-press inline-flex max-w-full items-center gap-1.5 rounded-full bg-[#F4F4F2] px-3.5 py-2 text-[13px] font-bold hover:bg-[#FFF1E8] cursor-pointer"
     >
-      {label && <span className="shrink-0 font-sans text-[10.5px] font-bold text-[#8a8f98] uppercase">{label}</span>}
-      <span className={kind === "SKU" ? "break-all text-left" : ""}>{kind} {code}</span> <span className="shrink-0 text-[11px] font-sans text-[#ff5a1f] font-semibold">{copied ? "¡Copiado!" : "Copiar"}</span>
+      {label && <span className="shrink-0 text-[11.5px] font-bold text-[#6B717B]">{label}</span>}
+      <span className={`pvx-num tracking-wide ${kind === "SKU" ? "break-all text-left" : ""}`}>{code}</span> <span className="inline-flex shrink-0 items-center gap-1 text-[11.5px] text-[#C24400]">{copied ? <><IconCheck className="w-3.5 h-3.5" /> Copiado</> : <IconCopy className="w-3.5 h-3.5" />}</span>
     </button>
   );
 }
 
 function Stat({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="h-full rounded-lg bg-white border border-[#ebe8e1] p-3">
-      <div className="text-[10.5px] font-bold uppercase tracking-wide text-[#8a8f98]">{label}</div>
+    <div className="h-full rounded-2xl bg-[#F4F4F2] p-3.5">
+      <div className="text-[12.5px] font-bold text-[#4A4F58]">{label}</div>
       <div className="mt-1 text-[14px]">{children}</div>
     </div>
   );
@@ -66,10 +67,10 @@ function Bars({ rows }: { rows: { label: string; pct: number; muted?: boolean }[
     <div className="mt-1.5 flex flex-col gap-1">
       {rows.map((r) => (
         <div key={r.label} className="grid grid-cols-[76px_1fr_34px] items-center gap-2 text-[12px]">
-          <span className={`truncate ${r.muted ? "text-[#8a8f98]" : "font-semibold"}`}>{r.label}</span>
-          <div className="h-2 rounded-full bg-[#f1efea] overflow-hidden">
+          <span className={`truncate ${r.muted ? "text-[#6B717B]" : "font-semibold"}`}>{r.label}</span>
+          <div className="h-2 rounded-full bg-white overflow-hidden">
             <div
-              className={`h-full rounded-full ${r.muted ? "bg-[#c9c5bc]" : "bg-[#ff5a1f]"}`}
+              className={`h-full rounded-full ${r.muted ? "bg-[#c9c5bc]" : "bg-[#F95B02]"}`}
               style={{ width: `${(r.pct / max) * 100}%` }}
             />
           </div>
@@ -92,30 +93,31 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
         type="button"
         onClick={onClose}
         aria-label="Cerrar"
-        className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-black/60 text-white text-[20px] leading-none cursor-pointer"
+        className="pvx-press absolute top-3 right-3 z-10 grid w-10 h-10 place-items-center rounded-full bg-[#111214]/75 text-white hover:bg-[#111214] cursor-pointer"
       >
-        ×
+        <IconClose className="w-5 h-5" />
       </button>
 
-      <div className="md:border-r md:border-[#ebe8e1]">
+      <div className="md:bg-[#F4F4F2]">
         {/* En computadora la foto se achica según el alto de la pantalla, para que la ficha entre completa. */}
-        <div className="relative aspect-[16/9] md:aspect-auto md:h-[min(36vh,340px)] bg-[#ebe8e1]">
+        <div className="relative aspect-[16/9] md:aspect-auto md:h-[min(36vh,340px)] bg-[#E9E9E6]">
           <PvxPhoto src={p.photo} alt={p.name} sizes="(max-width: 768px) 100vw, 420px" priority />
         </div>
         <div className="p-4">
           {/* "En subida" va acá y no sobre la foto: tapaba datos de la imagen (pedido 2026-10-12). */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-[.12em] text-[#ff5a1f]">{BRAND[p.brand]} · #{p.rank} más vendido</span>
-            {p.trend === "up" && <span className="rounded-full bg-[#ff5a1f] text-white text-[11px] font-bold px-2.5 py-0.5">🔥 En subida</span>}
+            <span className="pvx-num text-[13px] font-black italic text-[#C24400]">#{p.rank} más vendido</span>
+            <span className="text-[12px] font-semibold text-[#6B717B]">{BRAND[p.brand]}</span>
+            {p.trend === "up" && <span className="inline-flex items-center gap-1 rounded-full bg-[#F95B02] text-white text-[11px] font-bold px-2.5 py-0.5"><IconFlame className="w-3 h-3" /> En subida</span>}
           </div>
-          <h2 className="text-[19px] font-bold leading-snug mt-0.5">{p.name}</h2>
+          <h2 className="pvx-heading text-[24px] mt-1.5">{p.name}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <CopyId code={p.code} label="Dropi" />
             <DropiLink code={p.code} />
             {(p.rocketSkus ?? []).map((r) => (
               <CopyId key={r} code={r} label="Rocket" kind="SKU" />
             ))}
-            <span className="text-[11.5px] text-[#5b616b]">
+            <span className="text-[11.5px] text-[#4A4F58]">
               {(p.rocketSkus ?? []).length > 0 ? "Es el mismo producto: búscalo con su ID en Dropi o con su SKU en Rocket." : "Búscalo con este ID en Dropi para venderlo."}
             </span>
           </div>
@@ -123,31 +125,31 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
           {/* Stock de nuestra bodega (sí/no, nunca cantidades) + asesor por WhatsApp — pedido 2026-10-12. */}
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             {p.stock === "out" ? (
-              <span className="rounded-md bg-[#fff4e5] border border-[#ffd8a8] text-[#a35a00] text-[12px] font-semibold px-2.5 py-1">⏳ Agotado por ahora · llega más stock</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#fff4e0] text-[#8a4b00] text-[12.5px] font-bold px-3 py-1.5"><IconClock className="w-3.5 h-3.5" /> Agotado por ahora · llega más stock</span>
             ) : p.stock === "new" ? (
-              <span className="rounded-md bg-[#e8f7ee] border border-[#b7e4c7] text-[#1f7a43] text-[12px] font-semibold px-2.5 py-1">🆕 ¡Llegó nuevo stock!</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f6ed] text-[#0f6b35] text-[12.5px] font-bold px-3 py-1.5"><IconSpark className="w-3.5 h-3.5" /> ¡Llegó nuevo stock!</span>
             ) : (
-              <span className="rounded-md bg-[#e8f7ee] border border-[#b7e4c7] text-[#1f7a43] text-[12px] font-semibold px-2.5 py-1">✅ Hay stock disponible</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#e7f6ed] text-[#0f6b35] text-[12.5px] font-bold px-3 py-1.5"><IconCheck className="w-3.5 h-3.5" /> Hay stock disponible</span>
             )}
             <WhatsAppButton p={p} outOfStock={p.stock === "out"} />
           </div>
 
-          <div className="mt-3 rounded-xl bg-[#16181d] text-white p-3.5">
+          <div className="mt-4 rounded-[22px] bg-[#0d0e11] text-white p-4">
             <div className="text-[11.5px] text-white/70">Últimos 30 días</div>
-            <div className="text-[21px] font-bold leading-tight">🔥 {p.soldRange} vendidos</div>
+            <div className="pvx-heading mt-1 text-[26px]">{p.soldRange} <span className="text-[16px] not-italic font-semibold text-white/80">vendidos</span></div>
             <div className="text-[12.5px] text-white/80">{p.unitsRange} unidades</div>
             {offer && (
               <div className="mt-2.5 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-lg bg-white/10 p-1.5">
+                <div className="rounded-xl bg-white/10 p-2">
                   <div className="text-[10.5px] text-white/70">Se vende a</div>
                   <div className="text-[16px] font-bold">{money(offer.price)}</div>
                   {offer.units > 1 && <div className="text-[10.5px] text-white/70">{offer.units} unidades</div>}
                 </div>
-                <div className="rounded-lg bg-white/10 p-1.5">
+                <div className="rounded-xl bg-white/10 p-2">
                   <div className="text-[10.5px] text-white/70">Te cuesta</div>
                   <div className="text-[16px] font-bold">{p.dropiPrice != null ? money(p.dropiPrice * offer.units) : "—"}</div>
                 </div>
-                <div className="rounded-lg bg-[#ff5a1f] p-1.5">
+                <div className="rounded-xl bg-[#F95B02] p-2">
                   <div className="text-[10.5px] text-white/85">Ganas aprox.</div>
                   <div className="text-[16px] font-bold">{p.marginApprox != null ? money(p.marginApprox) : "—"}</div>
                 </div>
@@ -195,23 +197,23 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
           {p.women != null && (
             <Stat label="Quién lo compra">
               <div className="flex items-baseline justify-between gap-2 text-[12px] mt-0.5">
-                <span className="font-bold text-[#ff5a1f]">👩 {p.women}% mujeres</span>
-                <span className="font-bold text-[#2f6fd6]">{100 - p.women}% hombres 👨</span>
+                <span className="font-bold text-[#C24400]">{p.women}% mujeres</span>
+                <span className="font-bold text-[#2f6fd6]">{100 - p.women}% hombres</span>
               </div>
-              <div className="mt-1.5 flex h-2.5 rounded-full overflow-hidden bg-[#f1efea]">
-                <div className="bg-[#ff5a1f]" style={{ width: `${p.women}%` }} />
+              <div className="mt-1.5 flex h-2.5 rounded-full overflow-hidden bg-white">
+                <div className="bg-[#F95B02]" style={{ width: `${p.women}%` }} />
                 <div className="bg-[#2f6fd6]" style={{ width: `${100 - p.women}%` }} />
               </div>
-              <div className="mt-1 text-[10.5px] text-[#8a8f98]">Aproximado</div>
+              <div className="mt-1 text-[10.5px] text-[#6B717B]">Aproximado</div>
             </Stat>
           )}
           {p.deliveryRate != null && (
             <Stat label="Se entrega">
               <div className="flex items-baseline gap-1.5">
                 <span className="text-[20px] font-bold text-[#1f9d55] leading-none">{p.deliveryRate}%</span>
-                <span className="text-[12px] text-[#5b616b]">de los pedidos</span>
+                <span className="text-[12px] text-[#4A4F58]">de los pedidos</span>
               </div>
-              <div className="mt-2 h-2.5 rounded-full bg-[#f1efea] overflow-hidden">
+              <div className="mt-2 h-2.5 rounded-full bg-white overflow-hidden">
                 <div className="h-full rounded-full bg-[#1f9d55]" style={{ width: `${p.deliveryRate}%` }} />
               </div>
             </Stat>
@@ -225,19 +227,19 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
 
         {p.combos.length > 0 && (
           <div className="mt-3">
-            <div className="text-[12.5px] font-bold">{p.combos.every((c) => c.sold !== false) ? "Combos que más se venden con este producto" : "Combos con este producto"}</div>
+            <div className="text-[14px] font-bold">{p.combos.every((c) => c.sold !== false) ? "Combos que más se venden con este producto" : "Combos con este producto"}</div>
             <div className="mt-1.5 flex flex-col gap-1">
               {p.combos.map((c) => (
-                <div key={c.code} className="flex items-center gap-2.5 rounded-lg bg-white border border-[#ebe8e1] px-2 py-1.5">
-                  <div className="relative w-9 h-9 rounded-md overflow-hidden bg-[#ebe8e1] shrink-0">
-                    <PvxPhoto src={c.photos[0] ?? null} alt={c.name} sizes="36px" />
+                <div key={c.code} className="flex items-center gap-2.5 rounded-2xl bg-[#F4F4F2] px-2.5 py-2">
+                  <div className="relative w-10 h-10 rounded-xl overflow-hidden bg-white shrink-0">
+                    <PvxPhoto src={c.photos[0] ?? null} alt={c.name} sizes="40px" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="text-[12.5px] font-semibold leading-snug line-clamp-1">{c.name}</div>
                     {c.sold === false ? (
-                      <div className="text-[11px] font-semibold text-[#ff5a1f]">Nuevo · listo para vender</div>
+                      <div className="text-[11px] font-semibold text-[#C24400]">Nuevo · listo para vender</div>
                     ) : (
-                      <div className="text-[11px] text-[#5b616b]">
+                      <div className="text-[11px] text-[#4A4F58]">
                         {c.unitsRange} vendidos{c.price != null ? ` · se vende a ${money(c.price)}` : ""}
                       </div>
                     )}
@@ -256,7 +258,7 @@ export function PvxProductDetail({ p, onClose }: { p: SnapshotProduct; onClose: 
             </div>
           </div>
         )}
-        <div className="mt-3 text-[10.5px] text-[#8a8f98]">Datos reales de despacho de nuestras bodegas, en rangos.</div>
+        <div className="mt-3 text-[10.5px] text-[#6B717B]">Datos reales de despacho de nuestras bodegas, en rangos.</div>
       </div>
     </div>
   );

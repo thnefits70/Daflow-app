@@ -1,0 +1,241 @@
+/* provedix.com — rediseño completo (opción A, pedido del usuario 2026-10-13).
+   Marca: naranja corporativo #F95B02 sobre blanco (ficha técnica del logo).
+   Portada oscura grafito + catálogo blanco ("mixto", elegido por el usuario).
+   Todo vive bajo .pvx para no tocar el resto de la app. */
+
+.pvx {
+  --pvx-orange: #f95b02;
+  --pvx-orange-press: #dd4f00;
+  /* Naranja para TEXTO chico sobre blanco: #F95B02 no llega a 4.5:1. */
+  --pvx-orange-text: #c24400;
+  --pvx-orange-soft: #fff1e8;
+  --pvx-night: #0d0e11;
+  --pvx-night-2: #16181d;
+  --pvx-night-3: #22252c;
+  --pvx-ink: #111214;
+  --pvx-ink-2: #4a4f58;
+  --pvx-ink-3: #6b717b;
+  --pvx-paper: #ffffff;
+  --pvx-paper-2: #f4f4f2;
+  --pvx-paper-3: #e9e9e6;
+  --pvx-green: #138a45;
+  --pvx-green-soft: #e7f6ed;
+  --pvx-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --pvx-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  color-scheme: light;
+  font-family: var(--font-pvx), system-ui, sans-serif;
+  font-feature-settings: "tnum" 0;
+  background: var(--pvx-paper);
+  color: var(--pvx-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+.pvx ::selection {
+  background: var(--pvx-orange);
+  color: #fff;
+}
+.pvx input {
+  caret-color: var(--pvx-orange);
+}
+.pvx :focus-visible {
+  outline: 2px solid var(--pvx-orange);
+  outline-offset: 2px;
+}
+.pvx .pvx-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Voz de la marca: la misma letra ancha, gruesa e inclinada del logo. */
+.pvx .pvx-display {
+  font-style: italic;
+  font-weight: 900;
+  font-stretch: 118%;
+  letter-spacing: -0.02em;
+  line-height: 0.92;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+.pvx .pvx-heading {
+  font-style: italic;
+  font-weight: 800;
+  font-stretch: 112%;
+  letter-spacing: -0.015em;
+  line-height: 1;
+  text-wrap: balance;
+}
+
+/* Botones: respuesta inmediata al tocar. */
+.pvx .pvx-press {
+  transition:
+    transform 160ms var(--pvx-ease-out),
+    background-color 160ms var(--pvx-ease-out),
+    color 160ms var(--pvx-ease-out),
+    border-color 160ms var(--pvx-ease-out);
+}
+.pvx .pvx-press:active {
+  transform: scale(0.97);
+}
+
+/* Cinta de productos de la portada: dos filas que avanzan en sentidos
+   contrarios. Se detiene al pasar el mouse. */
+@keyframes pvx-marquee-left {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+@keyframes pvx-marquee-right {
+  from {
+    transform: translate3d(-50%, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+.pvx .pvx-marquee {
+  mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
+}
+.pvx .pvx-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: pvx-marquee-left 70s linear infinite;
+}
+.pvx .pvx-marquee-track[data-dir="right"] {
+  animation-name: pvx-marquee-right;
+  animation-duration: 80s;
+}
+.pvx .pvx-marquee:hover .pvx-marquee-track {
+  animation-play-state: paused;
+}
+
+/* Entrada de cada sección: se ve aunque el script falle (solo se esconde
+   cuando el script ya marcó la página con data-reveal="on"). */
+.pvx[data-reveal="on"] [data-r] {
+  opacity: 0;
+  transform: translate3d(0, 24px, 0);
+  transition:
+    opacity 700ms var(--pvx-ease-out),
+    transform 700ms var(--pvx-ease-out);
+  transition-delay: calc(var(--d, 0) * 80ms);
+}
+.pvx[data-reveal="on"] [data-r].is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Titular de la portada: las palabras suben una por una al cargar. */
+@keyframes pvx-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.35em, 0);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+.pvx .pvx-rise {
+  display: inline-block;
+  animation: pvx-rise 800ms var(--pvx-ease-out) both;
+  animation-delay: calc(var(--i, 0) * 70ms + 120ms);
+}
+
+/* El cubo del logo "cae" en su lugar una vez. */
+@keyframes pvx-drop {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -40%, 0) rotate(-8deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translate3d(0, 4%, 0) rotate(1deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+.pvx .pvx-drop {
+  animation: pvx-drop 900ms var(--pvx-ease-out) both 500ms;
+}
+
+/* Ventanas (registro y ficha). */
+@keyframes pvx-sheet-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 24px, 0) scale(0.98);
+  }
+}
+@keyframes pvx-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.pvx .pvx-overlay {
+  animation: pvx-fade-in 200ms var(--pvx-ease-out);
+}
+.pvx .pvx-sheet {
+  animation: pvx-sheet-in 320ms var(--pvx-ease-out);
+}
+
+/* Resultados del buscador de la portada. */
+@keyframes pvx-pop {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0) scale(0.98);
+  }
+}
+.pvx .pvx-pop {
+  transform-origin: top center;
+  animation: pvx-pop 180ms var(--pvx-ease-out);
+}
+
+/* Tarjetas del catálogo. */
+.pvx .pvx-card {
+  transition:
+    transform 260ms var(--pvx-ease-out),
+    box-shadow 260ms var(--pvx-ease-out);
+}
+.pvx .pvx-card .pvx-card-photo {
+  transition: transform 600ms var(--pvx-ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .pvx .pvx-card:hover {
+    transform: translate3d(0, -4px, 0);
+    box-shadow: 0 18px 40px -18px rgb(17 18 20 / 0.28);
+  }
+  .pvx .pvx-card:hover .pvx-card-photo {
+    transform: scale(1.04);
+  }
+}
+
+.pvx .pvx-scroll-x {
+  scrollbar-width: none;
+}
+.pvx .pvx-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pvx .pvx-marquee-track,
+  .pvx .pvx-rise,
+  .pvx .pvx-drop,
+  .pvx .pvx-sheet,
+  .pvx .pvx-overlay,
+  .pvx .pvx-pop {
+    animation: none;
+  }
+  .pvx .pvx-marquee {
+    overflow-x: auto;
+  }
+  .pvx[data-reveal="on"] [data-r] {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .pvx .pvx-card,
+  .pvx .pvx-card .pvx-card-photo {
+    transition: none;
+  }
+}

@@ -6,7 +6,7 @@ import Image from "next/image";
 const SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 
 export function PvxPhoto({ src, alt, sizes, priority = false }: { src: string | null; alt: string; sizes: string; priority?: boolean }) {
-  if (!src) return <div className="absolute inset-0 grid place-items-center text-[12px] text-[#8a8f98]">Sin foto</div>;
+  if (!src) return <div className="absolute inset-0 grid place-items-center bg-[#F4F4F2]"><Image src="/pvx/brand/mark-ink.png" alt="" width={360} height={403} className="w-[28%] max-w-[72px] h-auto opacity-[0.12]" /></div>;
   if (src.startsWith("/pvx/f/") || (SUPABASE && src.startsWith(`${SUPABASE}/storage/v1/object/public/`))) {
     return <Image src={src} alt={alt} fill sizes={sizes} priority={priority} className="object-cover" />;
   }

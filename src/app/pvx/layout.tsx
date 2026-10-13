@@ -1,4 +1,17 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { Saira } from "next/font/google";
+import "./pvx.css";
+
+// Letra de provedix.com (rediseño 2026-10-13): Saira, ancha, gruesa e
+// inclinada como las letras del logo de Provedix (ficha técnica: sans serif
+// geométrica, extendida, Black, oblicua ~10°). Variable en ancho y peso.
+const saira = Saira({
+  subsets: ["latin", "latin-ext"],
+  style: ["normal", "italic"],
+  axes: ["wdth"],
+  variable: "--font-pvx",
+  display: "swap",
+});
 
 // provedix.com (etapa 3, 2026-10-12): título e ícono propios — nada de DAFLOW.
 export const metadata: Metadata = {
@@ -15,8 +28,15 @@ export const metadata: Metadata = {
     shortcut: "/pvx/icon.png",
     apple: "/pvx/apple-icon.png",
   },
+  openGraph: {
+    title: "Provedix · Productos ganadores con datos reales de venta",
+    description: "Mira gratis qué se está vendiendo en Ecuador y véndelo en Dropi.",
+    images: [{ url: "/pvx/brand/stacked-orange.png", width: 900, height: 581 }],
+  },
 };
 
+export const viewport: Viewport = { themeColor: "#0d0e11" };
+
 export default function PvxLayout({ children }: { children: React.ReactNode }) {
-  return <div className="min-h-screen bg-[#f6f5f2] text-[#16181d]">{children}</div>;
+  return <div className={`pvx ${saira.variable} min-h-screen`}>{children}</div>;
 }
