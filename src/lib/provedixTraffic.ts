@@ -251,7 +251,7 @@ export async function getProvedixChats(): Promise<ProvedixChatRow[]> {
       updatedAt: true,
       lead: { select: { name: true, whatsapp: true } },
       _count: { select: { messages: { where: { role: { in: ["user", "assistant"] } } } } },
-      messages: { where: { role: { in: ["user", "blocked", "unblocked", "flag", "guide_fail", "reviewed"] } }, orderBy: { createdAt: "desc" }, select: { role: true, content: true, createdAt: true } },
+      messages: { where: { role: { in: ["user", "blocked", "blocked_24h", "unblocked", "flag", "guide_fail", "reviewed"] } }, orderBy: { createdAt: "desc" }, select: { role: true, content: true, createdAt: true } },
     },
   });
   return chats
@@ -264,7 +264,7 @@ export async function getProvedixChats(): Promise<ProvedixChatRow[]> {
         whatsapp: c.lead?.whatsapp ?? null,
         messages: c._count.messages,
         lastQuestion: c.messages.find((m) => m.role === "user")?.content ?? null,
-        blocked: c.messages.some((m) => m.role === "blocked"),
+        blocked: c.messages.some((m) => m.role === "blocked" || (m.role === "blocked_24h" && m.createdAt.getTime() > Date.now() - 86_400_000)),
         suspicious: s.suspicious,
         reasons: s.reasons,
         pendingReview: s.pending,
@@ -285,7 +285,7 @@ export async function unblockProvedixChat(chatId: string): Promise<void> {
   const chat = await prisma.provedixChat.findUnique({ where: { id: chatId }, select: { visitorId: true, leadId: true } });
   if (!chat) return;
   await prisma.provedixChatMessage.updateMany({
-    where: { role: "blocked", chat: chat.leadId ? { OR: [{ visitorId: chat.visitorId }, { leadId: chat.leadId }] } : { visitorId: chat.visitorId } },
+    where: { role: { in: ["blocked", "blocked_24h"] }, chat: chat.leadId ? { OR: [{ visitorId: chat.visitorId }, { leadId: chat.leadId }] } : { visitorId: chat.visitorId } },
     data: { role: "unblocked", content: "El admin desbloqueó a esta persona." },
   });
 }

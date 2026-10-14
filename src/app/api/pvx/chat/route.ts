@@ -65,14 +65,26 @@ async function usedToday(visitorId: string, leadId: string | null): Promise<numb
 // role "blocked" — el admin lo ve y puede desbloquear.
 const BLOCK_MARK = "[[BLOQUEAR]]";
 
-async function isBlocked(visitorId: string, leadId: string | null): Promise<boolean> {
-  const n = await prisma.provedixChatMessage.count({
-    where: { role: "blocked", chat: leadId ? { OR: [{ visitorId }, { leadId }] } : { visitorId } },
-  });
-  return n > 0;
+// Bloqueo de 24 h (pedido 2026-10-14): 3 veces datos de guía que no coinciden
+// → role "blocked_24h"; se abre solo 24 h después. Devuelve el texto a mostrar
+// o null si puede escribir.
+async function blockedText(visitorId: string, leadId: string | null): Promise<string | null> {
+  const chat = leadId ? { OR: [{ visitorId }, { leadId }] } : { visitorId };
+  const since = new Date(Date.now() - DAY);
+  const [perm, temp] = await Promise.all([
+    prisma.provedixChatMessage.count({ where: { role: "blocked", chat } }),
+    prisma.provedixChatMessage.findFirst({ where: { role: "blocked_24h", createdAt: { gte: since }, chat }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
+  ]);
+  if (perm > 0) return BLOCKED_TEXT;
+  if (temp) {
+    const until = new Date(temp.createdAt.getTime() + DAY).toLocaleString("es-EC", { timeZone: "America/Guayaquil", weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+    return `${BLOCKED_24H_TEXT} Podrás volver a escribirme el ${until} 💛`;
+  }
+  return null;
 }
 
 const BLOCKED_TEXT = "Por seguridad, esta conversación quedó cerrada 🔒";
+const BLOCKED_24H_TEXT = "Por seguridad, este chat quedó bloqueado durante 24 horas porque la información de la guía no coincide 🔒";
 const REGISTER_TEXT = "Para conversar conmigo primero regístrate gratis 😊 Así puedo darte toda la información de los productos.";
 
 async function findChat(chatId: string | undefined, visitorId: string, leadId: string | null) {
@@ -87,8 +99,8 @@ export async function GET(req: NextRequest) {
   const messages = chat
     ? await prisma.provedixChatMessage.findMany({ where: { chatId: chat.id, role: { in: ["user", "assistant"] } }, orderBy: { createdAt: "asc" }, take: 60, select: { role: true, content: true } })
     : [];
-  const [used, blocked] = await Promise.all([usedToday(visitorId, leadId), isBlocked(visitorId, leadId)]);
-  const res = NextResponse.json({ chatId: chat?.id ?? null, messages, remaining: Math.max(0, MICHELLE_DAILY_LIMIT - used), registered: !!leadId, blocked });
+  const [used, blockMsg] = await Promise.all([usedToday(visitorId, leadId), blockedText(visitorId, leadId)]);
+  const res = NextResponse.json({ chatId: chat?.id ?? null, messages, remaining: Math.max(0, MICHELLE_DAILY_LIMIT - used), registered: !!leadId, blocked: !!blockMsg, blockedText: blockMsg });
   setVisitorCookies(res, visitorId);
   return res;
 }
@@ -107,7 +119,8 @@ export async function POST(req: NextRequest) {
   const { visitorId, leadId } = await readVisitor(req);
   // Sin registro no se habla con la IA (pedido 2026-10-14): ni un dato, ni costo.
   if (!leadId) return NextResponse.json({ error: REGISTER_TEXT, needsRegister: true }, { status: 401 });
-  if (await isBlocked(visitorId, leadId)) return NextResponse.json({ error: BLOCKED_TEXT, blocked: true }, { status: 403 });
+  const blockMsg = await blockedText(visitorId, leadId);
+  if (blockMsg) return NextResponse.json({ error: blockMsg, blocked: true, blockedText: blockMsg }, { status: 403 });
   const used = await usedToday(visitorId, leadId);
   if (used >= MICHELLE_DAILY_LIMIT || !ipAllowed(req)) {
     return NextResponse.json({ error: "Llegaste al límite de mensajes de hoy 🙈 Mañana sigo ayudándote encantada. 💛", remaining: 0 }, { status: 429 });
@@ -196,7 +209,7 @@ export async function POST(req: NextRequest) {
           await logAiUsage({ feature: "provedix_michelle", model: MICHELLE_MODEL, actorId: `provedix:${leadId ?? visitorId}`, inputTokens: usage.input, outputTokens: usage.output });
         }
         // Si la verificación de guías llegó al límite, el chat se cierra aunque la IA no ponga la marca.
-        if (guideBlocked && !acc.includes(BLOCK_MARK)) emit(`\n\n${BLOCKED_TEXT}\n${BLOCK_MARK}`);
+        if (guideBlocked && !acc.includes(BLOCK_MARK)) emit(`\n\n${BLOCKED_24H_TEXT}\n${BLOCK_MARK}`);
       } catch (err) {
         console.error("[michelle]", err);
         emit("\n\nUy, se me cortó la conexión 🙏 Intenta de nuevo en un momento, porfa.");

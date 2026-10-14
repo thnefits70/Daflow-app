@@ -13,7 +13,8 @@ import { labelMarketData } from "@/lib/guideMarketData";
 //   "no coincide" (y nunca cuál dato falló).
 // - El nombre del cliente se lee del PDF solo en este momento para comparar y
 //   se descarta: no se guarda (Ley de Protección de Datos, decisión 2026-10-10).
-// - 3 intentos fallidos en 24 h → se cierra el chat y se bloquea (role "blocked").
+// - 3 intentos fallidos en 24 h → el chat se bloquea 24 horas (role "blocked_24h").
+//   Con 1 o 2 fallos Michelle avisa que está a punto de bloquearse.
 
 export const GUIDE_FAIL_LIMIT = 3;
 
@@ -80,7 +81,7 @@ export type GuideCheckResult =
       enlace_rastreo: string | null;
     }
   | { resultado: "no_coincide"; intentos_restantes: number }
-  | { resultado: "no_encontrada" }
+  | { resultado: "no_encontrada"; intentos_restantes: number }
   | { resultado: "bloquear" };
 
 export async function checkGuideForDropshipper(
@@ -114,9 +115,9 @@ export async function checkGuideForDropshipper(
       await prisma.provedixChatMessage.create({
         data: {
           chatId,
-          role: "blocked",
+          role: "blocked_24h",
           content:
-            "Falló 3 veces la verificación de guías: Michelle cerró el chat.",
+            "Falló 3 veces la verificación de guías: chat bloqueado 24 horas.",
         },
       });
       return { resultado: "bloquear" };
@@ -144,7 +145,9 @@ export async function checkGuideForDropshipper(
   // probar números al azar sin límite.
   if (!row) {
     const r = await fail();
-    return r.resultado === "no_coincide" ? { resultado: "no_encontrada" } : r;
+    return r.resultado === "no_coincide"
+      ? { resultado: "no_encontrada", intentos_restantes: r.intentos_restantes }
+      : r;
   }
 
   const { label } = await findGuideInPdfs(row.batch.fileUrls, row.guideNumber);

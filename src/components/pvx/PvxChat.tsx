@@ -124,6 +124,10 @@ export function PvxChat({
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  // Texto del bloqueo: permanente o de 24 h por datos de guía (lo manda el servidor).
+  const [blockedMsg, setBlockedMsg] = useState(
+    "Por seguridad, esta conversación quedó cerrada 🔒",
+  );
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -136,7 +140,10 @@ export function PvxChat({
       .then((d) => {
         if (d?.chatId) setChatId(d.chatId);
         if (Array.isArray(d?.messages)) setMessages(d.messages);
-        if (d?.blocked) setBlocked(true);
+        if (d?.blocked) {
+          setBlocked(true);
+          if (d.blockedText) setBlockedMsg(d.blockedText);
+        }
         if (typeof d?.remaining === "number") setRemaining(d.remaining);
       })
       .catch(() => null)
@@ -180,7 +187,10 @@ export function PvxChat({
               "No pude responder ahora. Intenta de nuevo en un momento.",
           );
           if (typeof d?.remaining === "number") setRemaining(d.remaining);
-          if (d?.blocked) setBlocked(true);
+          if (d?.blocked) {
+            setBlocked(true);
+            if (d.blockedText) setBlockedMsg(d.blockedText);
+          }
           setInput(text);
           return;
         }
@@ -202,7 +212,13 @@ export function PvxChat({
             ...m.slice(0, -1),
             { role: "assistant", content: acc },
           ]);
-          if (acc.includes(BLOCK_MARK)) setBlocked(true);
+          if (acc.includes(BLOCK_MARK)) {
+            setBlocked(true);
+            if (/24 horas/.test(acc))
+              setBlockedMsg(
+                "Por seguridad, este chat quedó bloqueado durante 24 horas 🔒",
+              );
+          }
         }
       } catch {
         setError("Se perdió la conexión. Intenta de nuevo.");
@@ -394,7 +410,7 @@ export function PvxChat({
             ) : blocked ? (
               // Intento de sacar información confidencial: chat cerrado (pedido 2026-10-14).
               <p className="mt-1 rounded-xl bg-[var(--pvx-paper-2)] px-3 py-3 text-center text-[13.5px] font-semibold text-[var(--pvx-ink-2)]">
-                Por seguridad, esta conversación quedó cerrada 🔒
+                {blockedMsg}
               </p>
             ) : (
               <>

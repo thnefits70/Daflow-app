@@ -30,6 +30,7 @@ const tidy = (t: string) =>
 const SYSTEM_ICON: Record<string, string> = {
   blocked: "🔒",
   unblocked: "🔓",
+  blocked_24h: "⏳",
   guide_fail: "❌",
   flag: "⚠️",
   reviewed: "✓",

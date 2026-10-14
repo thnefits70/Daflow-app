@@ -68,6 +68,8 @@ export function chatSuspicion(messages: Msg[]): ChatSuspicion {
   for (const m of messages) {
     if (m.role === "blocked" || m.role === "unblocked")
       hit(m, "Michelle cerró el chat");
+    else if (m.role === "blocked_24h")
+      hit(m, "Bloqueado 24 h por datos de guía");
     else if (m.role === "flag") hit(m, "Michelle lo marcó como raro");
     else if (m.role === "guide_fail") hit(m, "Datos de guía que no coinciden");
     else if (m.role === "user")
@@ -91,7 +93,17 @@ export async function getProvedixSuspiciousChatsPendingItem(
     select: {
       messages: {
         where: {
-          role: { in: ["user", "blocked", "unblocked", "flag", "guide_fail", "reviewed"] },
+          role: {
+            in: [
+              "user",
+              "blocked",
+              "blocked_24h",
+              "unblocked",
+              "flag",
+              "guide_fail",
+              "reviewed",
+            ],
+          },
         },
         select: { role: true, content: true, createdAt: true },
       },
