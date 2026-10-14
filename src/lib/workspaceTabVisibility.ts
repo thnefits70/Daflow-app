@@ -65,6 +65,7 @@ export type WorkspaceTabFlags = {
   canAssignCancelledGuideItems: boolean;
   canSubmitFulfillmentRequest: boolean;
   canViewFulfillmentRequests: boolean;
+  canSeeWarrantyDispatch?: boolean;
   supplierExchangeMineCount: number;
   financeWriteOffPendingCount: number;
   canConfirmFinanceWriteOff: boolean;
@@ -109,6 +110,7 @@ export function isWorkspaceTabVisible(key: WorkspaceTabKey, f: WorkspaceTabFlags
       f.canAssignCancelledGuideItems ||
       f.canSubmitFulfillmentRequest ||
       f.canViewFulfillmentRequests ||
+      !!f.canSeeWarrantyDispatch ||
       f.supplierExchangeMineCount > 0 ||
       f.financeWriteOffPendingCount > 0 ||
       f.canConfirmFinanceWriteOff

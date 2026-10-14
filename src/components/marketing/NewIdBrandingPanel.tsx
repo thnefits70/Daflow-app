@@ -10,7 +10,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 
 type Mark = { at: string; by: string | null };
-type StepKey = "dropiImages" | "dropiInfo" | "driveVideo" | "realPhotos" | "channel";
+type StepKey = "dropiImages" | "dropiInfo" | "driveVideo" | "realPhotos" | "channel" | "private";
 type Board = { pending: Entry[]; realPhotos: Entry[]; done: Entry[]; canAct: boolean; finishedOnly?: boolean };
 type View = "pending" | "realPhotos" | "done";
 
@@ -31,6 +31,7 @@ type Entry = {
   branded: { at: string | null; by: string | null; legacy: boolean } | null;
   realPhotos: Mark | null;
   channel: Mark | null;
+  private: Mark | null;
 };
 
 // El brandeo se hace fuera de DAFLOW; acá solo se marca cada paso.
@@ -205,6 +206,7 @@ export function NewIdBrandingPanel() {
     (e) => !query || e.name.toLowerCase().includes(query) || e.code?.toLowerCase().includes(query)
   );
   const notOnChannel = data.done.filter((e) => !e.channel).length;
+  const privateCount = data.done.filter((e) => e.private).length;
   const arrivedForPhotos = data.realPhotos.filter((e) => e.arrivedAt).length;
 
   const pill = (active: boolean) =>
@@ -234,7 +236,7 @@ export function NewIdBrandingPanel() {
               Imágenes reales ({data.realPhotos.length}){arrivedForPhotos > 0 ? ` · ${arrivedForPhotos} ya en bodega` : ""}
             </button>
             <button type="button" className={pill(view === "done")} onClick={() => setView("done")}>
-              Historial ({data.done.length}){notOnChannel > 0 ? ` · ${notOnChannel} sin subir al canal` : ""}
+              Historial ({data.done.length}){notOnChannel > 0 ? ` · ${notOnChannel} sin subir al canal` : ""}{privateCount > 0 ? ` · ${privateCount} en privado` : ""}
             </button>
           </>
         )}
@@ -344,6 +346,9 @@ export function NewIdBrandingPanel() {
                 )}
                 <div className="pt-2.5 border-t border-rule">
                   <StepCheck label="Subido al canal de la marca" mark={e.channel} canToggle={data.canAct} onToggle={(done) => toggle(e, "channel", done)} />
+                  {/* Pedido de Robert 2026-10-14: ID privatizado para un
+                      dropshipper; se desmarca cuando vuelve a ser público. */}
+                  <StepCheck label="En privado" mark={e.private} canToggle={data.canAct} onToggle={(done) => toggle(e, "private", done)} />
                 </div>
               </div>
             )}

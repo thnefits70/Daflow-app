@@ -29,6 +29,7 @@ import {
   canManageOutflowPurchaseGestion,
 } from "@/lib/guards";
 import { canBrandNewIds } from "@/lib/newIdBranding";
+import { getWarrantyDispatchRole } from "@/lib/warrantyDispatch";
 import { ensurePrivateBucket, privateFileUrl, PRIVATE_BUCKET, PRIVATE_FOLDERS } from "@/lib/privateFiles";
 import { PERSONAL_PRIVATE_FOLDERS } from "@/lib/privateFileAccess";
 
@@ -170,6 +171,10 @@ export async function POST(req: NextRequest) {
   // aceptar una garantía local (GL-000X).
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-warranty-evidence") {
     allowed = await canManageLocalWarranties();
+  }
+  // Garantías por despachar (2026-10-14): Michelle y Yair suben la guía.
+  if (!allowed && session?.user.role === "employee" && folder === "warranty-dispatch-guides") {
+    allowed = !!(await getWarrantyDispatchRole())?.canUpload;
   }
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-invoices") {
     allowed = await canInvoiceExternalSale();

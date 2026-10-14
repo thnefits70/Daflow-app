@@ -11,8 +11,9 @@ import { HistoryList } from "./HistoryList";
 import { CancelledGuidesPanel } from "@/components/cancelled-guides/CancelledGuidesPanel";
 import { FulfillmentRequestPanel } from "./FulfillmentRequestPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { WarrantyDispatchPanel } from "./WarrantyDispatchPanel";
 
-type Tab = "deterioro" | "seguimiento" | "proveedor" | "guias" | "solicitud" | "historial";
+type Tab = "deterioro" | "seguimiento" | "proveedor" | "guias" | "garantias" | "solicitud" | "historial";
 
 export function MerchandiseOutflowPanel({
   canCapture,
@@ -29,6 +30,7 @@ export function MerchandiseOutflowPanel({
   canAssignCancelledGuideItems = false,
   canSubmitFulfillmentRequest = false,
   canViewFulfillmentRequests = false,
+  canSeeWarrantyDispatch = false,
   isAdmin = false,
   viewerDeptCode = null,
 }: {
@@ -95,6 +97,9 @@ export function MerchandiseOutflowPanel({
   // Daniel/admin.
   canSubmitFulfillmentRequest?: boolean;
   canViewFulfillmentRequests?: boolean;
+  // Garantías por despachar (2026-10-14): Michelle/Yair suben, Joao marca,
+  // Daniel/Allan revisan — ver src/lib/warrantyDispatch.ts.
+  canSeeWarrantyDispatch?: boolean;
   // Confirmado 2026-08-28, pedido explícito del usuario: el admin puede
   // revisar/comentar (opcional) un rechazo total del proveedor — puro
   // historial, no gatea a Nairoby ni a Daniel. Ver canReviewAsAdmin en
@@ -124,7 +129,9 @@ export function MerchandiseOutflowPanel({
           ? "proveedor"
           : canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems
             ? "guias"
-            : "historial";
+            : canSeeWarrantyDispatch
+              ? "garantias"
+              : "historial";
   // Confirmado 2026-08-25: pedido explícito del usuario — todos los
   // motivos de egreso viven en una sola sesión para que Daniel no salte
   // entre módulos. Los atajos de Inicio/notificaciones llegan con
@@ -137,6 +144,7 @@ export function MerchandiseOutflowPanel({
     if (t === "deterioro" || t === "seguimiento" || t === "proveedor" || t === "guias") return t;
     // Avisos de cortes (Yair envió / faltaron productos) llegan con otab=solicitud.
     if (t === "solicitud" && (canSubmitFulfillmentRequest || canViewFulfillmentRequests)) return t;
+    if (t === "garantias" && canSeeWarrantyDispatch) return t;
     return defaultTab;
   });
 
@@ -167,6 +175,7 @@ export function MerchandiseOutflowPanel({
     ...(canSeeSeguimientoTab ? [{ id: "seguimiento" as const, label: "Seguimiento de deterioro" }] : []),
     ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Mercadería devuelta al proveedor" }] : []),
     ...(canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
+    ...(canSeeWarrantyDispatch ? [{ id: "garantias" as const, label: "Garantías" }] : []),
     // Confirmado 2026-09-23: ya no existe "Dar de baja en Just" — cada
     // salida se descuenta sola de INVESTOCK en el momento en que se envía.
     ...(canView ? [{ id: "historial" as const, label: "Historial" }] : []),
@@ -250,6 +259,14 @@ export function MerchandiseOutflowPanel({
             Aunque el resultado final sea que la mercadería vuelve al inventario (no se da de baja), las guías canceladas viven acá junto a los demás motivos para no saltar entre módulos. Cuando los tres pasos están listos, vuelve sola a INVESTOCK.
           </TabGuide>
           <CancelledGuidesPanel canSubmit={canSubmitCancelledGuide} canManageBatches={canManageCancelledGuideBatches} canConfirmFulfillmentRemoval={canConfirmCancelledGuideFulfillmentRemoval} canAssignItems={canAssignCancelledGuideItems} viewerDeptCode={viewerDeptCode} />
+        </>
+      )}
+      {tab === "garantias" && canSeeWarrantyDispatch && (
+        <>
+          <TabGuide storageKey="merchoutflow-garantias">
+            Michelle y Yair suben aquí la guía de cada garantía ya autorizada, con un comentario de qué se envía y qué debe verse en el video. Joao marca el recuadro de la derecha cuando la toma y saca la guía físicamente; luego Daniel o Allan revisan y pulsan &quot;Correcto&quot;. Esta pantalla no mueve stock: eso sigue saliendo del corte.
+          </TabGuide>
+          <WarrantyDispatchPanel />
         </>
       )}
       {tab === "solicitud" && (canSubmitFulfillmentRequest || canViewFulfillmentRequests) && (

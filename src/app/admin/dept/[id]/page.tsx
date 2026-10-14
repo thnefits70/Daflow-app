@@ -184,6 +184,7 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         // Daniel lo sube y lo confirma desde 2026-10-01).
         canSubmitFulfillmentRequest={false}
         canViewFulfillmentRequests={dept.code === "INV"}
+        canSeeWarrantyDispatch={dept.code === "INV"}
         // Guías Canceladas (Fase 4), rediseñado 2026-09-02 — admin nunca
         // reporta ni carga productos (canAssignCancelledGuideItems es
         // EXCLUSIVO de quien tiene el flag, ni siquiera admin, mismo

@@ -96,6 +96,8 @@ export type NewIdEntry = {
   // el brandeo y el canal de la marca).
   realPhotos: Mark | null;
   channel: { at: string; by: string | null } | null;
+  // Pedido de Robert 2026-10-14: ID privatizado para un dropshipper.
+  private: Mark | null;
 };
 
 const ARRIVED = ["RECEIVED_PENDING_REVIEW", "RECEIVED"] as const;
@@ -139,7 +141,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
     }),
   ]);
 
-  const stepUserIds = [...new Set(rows.flatMap((r) => [r.dropiImagesById, r.dropiInfoById, r.driveVideoById, r.realPhotosById]).filter((x): x is string => !!x))];
+  const stepUserIds = [...new Set(rows.flatMap((r) => [r.dropiImagesById, r.dropiInfoById, r.driveVideoById, r.realPhotosById, r.privateById]).filter((x): x is string => !!x))];
   const userNames = new Map(
     (stepUserIds.length ? await prisma.user.findMany({ where: { id: { in: stepUserIds } }, select: { id: true, name: true } }) : []).map((u) => [u.id, u.name])
   );
@@ -174,6 +176,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
         branded: null,
         realPhotos: null,
         channel: null,
+        private: null,
       };
       entries.set(key, e);
     }
@@ -226,6 +229,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
         branded: null,
         realPhotos: null,
         channel: null,
+        private: null,
       };
       entries.set(key, e);
     }
@@ -257,6 +261,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
       branded: null,
       realPhotos: null,
       channel: null,
+      private: null,
     });
   }
 
@@ -270,6 +275,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
       null;
     if (row) {
       e.realPhotos = mark(row.realPhotosAt, row.realPhotosById);
+      e.private = mark(row.privateAt, row.privateById);
       e.steps = {
         dropiImages: mark(row.dropiImagesAt, row.dropiImagesById),
         dropiInfo: mark(row.dropiInfoAt, row.dropiInfoById),

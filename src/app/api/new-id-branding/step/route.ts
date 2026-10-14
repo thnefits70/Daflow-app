@@ -11,7 +11,7 @@ const schema = z
     catalogItemId: z.string().min(1).nullable().optional(),
     proposalId: z.string().min(1).nullable().optional(),
     dropiComboId: z.string().min(1).nullable().optional(),
-    step: z.enum(["dropiImages", "dropiInfo", "driveVideo", "realPhotos", "channel"]),
+    step: z.enum(["dropiImages", "dropiInfo", "driveVideo", "realPhotos", "channel", "private"]),
     done: z.boolean(),
     // Obligatoria al marcar "Imágenes brandeadas subidas a Dropi" (2026-10-10).
     brandedPhotoUrl: z.string().url().optional(),
@@ -24,6 +24,7 @@ const STEP_FIELDS = {
   driveVideo: ["driveVideoAt", "driveVideoById"],
   realPhotos: ["realPhotosAt", "realPhotosById"],
   channel: ["channelUploadedAt", "channelUploadedById"],
+  private: ["privateAt", "privateById"],
 } as const;
 
 // Confirmado 2026-09-23, pedido de Robert (corregido el mismo día): el
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest) {
     : false;
   const alreadyBranded = !!row?.brandedAt || legacyDone || !!proposal?.brandedAt;
 
-  const afterBranding = step === "realPhotos" || step === "channel";
+  const afterBranding = step === "realPhotos" || step === "channel" || step === "private";
   if (afterBranding && !alreadyBranded) return NextResponse.json({ error: "Primero termina los pasos del brandeo." }, { status: 409 });
   if (!afterBranding && alreadyBranded) return NextResponse.json({ error: "Este producto ya está brandeado." }, { status: 409 });
 

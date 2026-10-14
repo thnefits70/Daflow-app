@@ -199,6 +199,7 @@ export function DeptWorkspaceTabs({
   canAssignCancelledGuideItems = false,
   canSubmitFulfillmentRequest = false,
   canViewFulfillmentRequests = false,
+  canSeeWarrantyDispatch = false,
   canDeclareExternalSales = false,
   canManageLocalWarranties = false,
   canReviewExternalSales = false,
@@ -414,6 +415,8 @@ export function DeptWorkspaceTabs({
   // pestaña "egresos" (Registro de Egresos), igual que Guías Canceladas.
   canSubmitFulfillmentRequest?: boolean;
   canViewFulfillmentRequests?: boolean;
+  // Garantías por despachar (2026-10-14) — también vive dentro de "egresos".
+  canSeeWarrantyDispatch?: boolean;
   // Ventas Externas (Fase 3) — declarar/revisión/pagos/cierre viven en la
   // misma pestaña sin dept.code (Bryan revisa, admin confirma pago, Nairoby
   // cierra); despacho/entregas reusan las guards de Registro de Egresos.
@@ -505,6 +508,7 @@ export function DeptWorkspaceTabs({
       canAssignCancelledGuideItems,
       canSubmitFulfillmentRequest,
       canViewFulfillmentRequests,
+      canSeeWarrantyDispatch,
       supplierExchangeMineCount,
       financeWriteOffPendingCount,
       canConfirmFinanceWriteOff,
@@ -739,7 +743,7 @@ export function DeptWorkspaceTabs({
           canManageJustCatalog={canManageJustCatalog}
         />
       )}
-      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canSubmitFulfillmentRequest || canViewFulfillmentRequests || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canConfirmFinanceWriteOff) && (
+      {tab === "egresos" && (canViewMerchandiseOutflow || canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canSubmitFulfillmentRequest || canViewFulfillmentRequests || canSeeWarrantyDispatch || supplierExchangeMineCount > 0 || financeWriteOffPendingCount > 0 || canConfirmFinanceWriteOff) && (
         <MerchandiseOutflowPanel
           canCapture={canCaptureMerchandiseOutflow}
           canAct={canActOnMerchandiseOutflow}
@@ -756,6 +760,7 @@ export function DeptWorkspaceTabs({
           canAssignCancelledGuideItems={canAssignCancelledGuideItems}
           canSubmitFulfillmentRequest={canSubmitFulfillmentRequest}
           canViewFulfillmentRequests={canViewFulfillmentRequests}
+          canSeeWarrantyDispatch={canSeeWarrantyDispatch}
           isAdmin={isAdmin}
           viewerDeptCode={viewerDeptCode}
         />
