@@ -829,8 +829,12 @@ function GroupCard({
       {/* Confirmado 2026-08-13: pedido explícito del usuario — apenas queda
           Pagada, quien la pidió (hoy Bryan, a cargo provisional de Compras)
           puede ver y descargar los comprobantes ya subidos, para poder
-          enviárselos al proveedor — solo lectura, nunca editar ni borrar. */}
-      {!rejected && groupIdx >= 2 && <PurchaseOperationDocuments rows={g} />}
+          enviárselos al proveedor — solo lectura, nunca editar ni borrar.
+          Pedido del usuario 2026-10-14 (caso SC-188): se muestra desde
+          "Enviado" — los documentos van apareciendo según avanza cada paso
+          (cotización ya al enviar), antes no se podía revisar la cotización
+          de una solicitud aprobada sin pagar. */}
+      {!rejected && <div className="mt-2"><PurchaseOperationDocuments rows={g} /></div>}
     </div>
   );
 }
