@@ -35,7 +35,23 @@ type QuoteReadResult = {
 // se guardaba en cada producto aunque solo uno hubiera superado su propio
 // historial de precio — un producto sin nada raro terminaba con la
 // explicación de OTRO pegada encima.
-type QtySuggestion = { qty: number | null; perDay: number; stock: number; daysLeft: number; urgentDays: number; supplierName: string | null; windowDays: number };
+type QtySuggestion = { qty: number | null; perDay: number; stock: number; daysLeft: number; urgentDays: number; supplierName: string | null; windowDays: number; lastPurchase?: { quantity: number; at: string } | null };
+// Pedido de Jariel 2026-10-14 (idea de Bryan Ríos): cuánto va a durar lo que
+// se está comprando y cómo se compara con la compra anterior. Solo informa.
+// Llega en leadDays; lo que quede ese día se suma a lo nuevo.
+function forecastPurchase(sug: QtySuggestion, qty: number) {
+  const atArrival = Math.max(0, sug.stock - sug.perDay * sug.urgentDays);
+  const lastsAfter = (qty + atArrival) / sug.perDay;
+  const until = new Date(Date.now() + (sug.urgentDays + lastsAfter) * 24 * 60 * 60 * 1000);
+  return {
+    lastsAfter: Math.floor(lastsAfter),
+    untilLabel: until.toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" }),
+    runsOutBefore: sug.daysLeft < sug.urgentDays,
+  };
+}
+function fmtShortDate(iso: string) {
+  return new Date(iso).toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" });
+}
 function fmtPerDaySug(n: number) {
   if (n < 1) return `~${Math.round(n * 7)} por semana`;
   return `~${n < 10 ? n.toFixed(1).replace(".0", "") : Math.round(n)} por día`;
@@ -1424,6 +1440,28 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                       Usar {sug.qty}
                     </button>
                   )}
+                  {(() => {
+                    const q = Number(line.quantity);
+                    if (!Number.isInteger(q) || q <= 0) return null;
+                    const f = forecastPurchase(sug, q);
+                    const last = sug.lastPurchase;
+                    const pct = last && last.quantity > 0 ? Math.round(((q - last.quantity) / last.quantity) * 100) : null;
+                    return (
+                      <div className="basis-full text-ink">
+                        📦 Con <b>{q} u.</b> esta compra duraría <b className="text-teal">~{f.lastsAfter} día{f.lastsAfter === 1 ? "" : "s"}</b> después de llegar (hasta el ~{f.untilLabel}).
+                        {last ? (
+                          <>
+                            {" "}Tu compra anterior fue de {last.quantity} u. ({fmtShortDate(last.at)}):{" "}
+                            <b className={pct !== null && Math.abs(pct) >= 50 ? "text-amber" : "text-ink"}>
+                              {pct === null || pct === 0 ? "la misma cantidad" : (pct > 0 ? "+" : "") + pct + " %"}
+                            </b>
+                            .
+                          </>
+                        ) : null}
+                        {f.runsOutBefore && <span className="text-amber"> Ojo: lo que queda se acaba antes de que llegue el pedido.</span>}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })()}

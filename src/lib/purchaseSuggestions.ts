@@ -292,7 +292,8 @@ export async function findItemsWithStockCover(catalogItemIds: string[]): Promise
 // obligatoria) con el mismo cálculo que Qué comprar — venta diaria promedio
 // de los últimos HOT_SALES_WINDOW_DAYS días × (días del proveedor + 1 mes) −
 // stock (contado si ya se contó). null = suministro, sin Kardex o no se vende.
-export type QuantitySuggestion = { qty: number | null; perDay: number; stock: number; daysLeft: number; urgentDays: number; supplierName: string | null; windowDays: number };
+// lastPurchase (Jariel 2026-10-14, idea de Bryan Ríos): la compra anterior, para comparar cuánto más o menos se pide.
+export type QuantitySuggestion = { qty: number | null; perDay: number; stock: number; daysLeft: number; urgentDays: number; supplierName: string | null; windowDays: number; lastPurchase: { quantity: number; at: string } | null };
 export async function getQuantitySuggestion(catalogItemId: string): Promise<QuantitySuggestion | null> {
   const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: catalogItemId }, select: { bodega: true, justCode: true } });
   if (!item || item.bodega === "MKT_SUMINISTROS" || item.justCode?.includes("-SUM-")) return null;
@@ -300,7 +301,7 @@ export async function getQuantitySuggestion(catalogItemId: string): Promise<Quan
   const [kardex, sold, last, gate] = await Promise.all([
     prisma.stockKardexEntry.findFirst({ where: { catalogItemId }, orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }], select: { balanceAfter: true } }),
     getSoldUnitsByItem(windowStart, [catalogItemId]),
-    prisma.purchaseRequest.findFirst({ where: { catalogItemId, status: { not: "REJECTED" } }, orderBy: { createdAt: "desc" }, select: { supplier: { select: { name: true, paymentMode: true } } } }),
+    prisma.purchaseRequest.findFirst({ where: { catalogItemId, status: { not: "REJECTED" } }, orderBy: { createdAt: "desc" }, select: { quantity: true, createdAt: true, supplier: { select: { name: true, paymentMode: true } } } }),
     getCountGate([catalogItemId]),
   ]);
   if (!kardex) return null;
@@ -308,7 +309,7 @@ export async function getQuantitySuggestion(catalogItemId: string): Promise<Quan
   if (perDay === 0) return null;
   const stock = countedBalance(gate, catalogItemId, kardex.balanceAfter);
   const urgentDays = urgentDaysForSupplier(last?.supplier.paymentMode);
-  return { qty: suggestedQuantity(perDay, urgentDays, stock), perDay, stock, daysLeft: Math.max(0, stock) / perDay, urgentDays, supplierName: last?.supplier.name ?? null, windowDays: Math.round(windowDays) };
+  return { qty: suggestedQuantity(perDay, urgentDays, stock), perDay, stock, daysLeft: Math.max(0, stock) / perDay, urgentDays, supplierName: last?.supplier.name ?? null, windowDays: Math.round(windowDays), lastPurchase: last ? { quantity: last.quantity, at: last.createdAt.toISOString() } : null };
 }
 
 export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
