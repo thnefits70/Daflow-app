@@ -5,7 +5,7 @@ import { getAllCurrentStock } from "@/lib/stockKardex";
 import { getUnconfirmedDispatchSummary } from "@/lib/fulfillmentPicking";
 import { getVariantStock } from "@/lib/variantStock";
 import { parseVariantCounts } from "@/lib/stockCount";
-import { countMarksFromLines } from "@/lib/countGate";
+import { countMarksFromLines, getCountAdjustments } from "@/lib/countGate";
 import {
   bodegaUnitCost,
   computeBenistockPrice,
@@ -35,7 +35,7 @@ import {
 export async function GET() {
   if (!(await canViewStockLevels())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
-  const [rows, pendingAdjustments, unconfirmedDispatch, countLines] = await Promise.all([
+  const [rows, pendingAdjustments, unconfirmedDispatch, countLines, countAdjustments] = await Promise.all([
     getAllCurrentStock(),
     // Confirmado 2026-09-22, pedido explícito del usuario: para que la fila
     // muestre "pendiente de aprobación" en vez del botón normal cuando
@@ -46,7 +46,9 @@ export async function GET() {
     getUnconfirmedDispatchSummary(),
     // PROVISIONAL (pedido de Daniel 2026-10-07, mientras dura el conteo
     // físico): franja verde en los productos ya recontados.
-    prisma.stockCountLine.findMany({ select: { catalogItemId: true, countedQty: true, expectedQty: true, decision: true, variantCounts: true }, orderBy: { countedAt: "asc" } }),
+    prisma.stockCountLine.findMany({ select: { catalogItemId: true, countedQty: true, expectedQty: true, decision: true, variantCounts: true, countedAt: true }, orderBy: { countedAt: "asc" } }),
+    // Pedido de Daniel 2026-10-14: "Ajustar (conteo)" ya aplicado también es verde.
+    getCountAdjustments(),
   ]);
   // "Recontado" = el número del sistema ya quedó igual a lo contado: coincidió
   // al contar, el admin aprobó la diferencia, o decidió dejarlo como está.
@@ -56,7 +58,7 @@ export async function GET() {
   // = ya es stock real; amarillo = contado pero falta aplicarlo a INVESTOCK
   // ("pending") o está en recuento por una diferencia grande ("recount").
   // Misma regla que Qué comprar (countMarksFromLines).
-  const countMarks = countMarksFromLines(countLines);
+  const countMarks = countMarksFromLines(countLines, countAdjustments);
   // Pedido del usuario 2026-10-08: al pulsar el nombre se ven las variantes
   // (color/talla) del último recuento de cada producto, apenas queda
   // recontado — la lista oficial recién se arma al cerrar todo el conteo.
