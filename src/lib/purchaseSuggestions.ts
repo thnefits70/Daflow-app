@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getInventoryLeadId } from "@/lib/guards";
-import { countedBalance, findUncountedItems, getCountGate, isUncounted } from "@/lib/countGate";
+import { countedBalance, findUncountedItems, getCountGate, getCountMarks, isUncounted, type CountMark } from "@/lib/countGate";
 import { formatPurchaseRequestCode, OPEN_PURCHASE_STATUSES, openPurchaseWhere } from "@/lib/purchases";
 import { getReadyToBuyPendingProposalIdsByBuyer } from "@/lib/marketProduct";
 import { notifyOwner } from "@/lib/notifications";
@@ -119,6 +119,11 @@ export type SuggestionRow = {
   countedUrgent: boolean;
   // Compra caliente que entró hoy a la lista (ayer alcanzaba para más de HOT_DAYS).
   newToday: boolean;
+  // Franja de Stock Actual (2026-10-14, pedido de Jariel): verde = recontado,
+  // stock real; amarillo = contado sin aplicar o en recuento; null = sin contar.
+  countMark: CountMark | null;
+  // "Pedir que lo cuenten" todavía abierto (2026-10-14).
+  countRequest: CountRequest | null;
 };
 
 export type NewProductRow = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
@@ -431,9 +436,18 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       counted: gate.active && !isSupply ? !uncounted : null,
       countedUrgent: status === "falta_contar" && baseStatus === "urgente",
       newToday,
+      countMark: null,
+      countRequest: null,
     };
     if (isHot) hot.push(row);
     else if (stock <= COLD_MAX) cold.push(row);
+  }
+
+  const [marks, countRequests] = await Promise.all([getCountMarks([...hot, ...cold].map((r) => r.catalogItemId)), getOpenCountRequests()]);
+  for (const r of [...hot, ...cold]) {
+    r.countMark = marks.get(r.catalogItemId) ?? null;
+    const req = countRequests.get(r.catalogItemId);
+    r.countRequest = req ? { at: req.at, byName: req.byName } : null;
   }
 
   // Reparto por color/talla (Ventas por variante): solo con 2 variantes o
@@ -679,6 +693,9 @@ export async function getPurchaseSuggestionPendingItems(userId: string, href: st
     .map((n) => ({ type: n.type, icon: n.icon, label: n.label, meta: n.meta, overdue: n.overdue, href }));
   const countFirst = audiences.includes("escalation") ? buildCountFirstNotice(s) : null;
   if (countFirst) items.unshift({ type: countFirst.type, icon: countFirst.icon, label: countFirst.label, meta: countFirst.meta, overdue: true, href: STOCK_COUNT_HREF });
+  // "Pedir que lo cuenten" (2026-10-14): se queda en su Inicio hasta contarlo.
+  const asked = audiences.includes("escalation") ? await getCountRequestPendingItem() : null;
+  if (asked) items.unshift(asked);
   return items;
 }
 
@@ -703,17 +720,85 @@ export async function getPurchaseSuggestionAdminPendingItems() {
 
 // ---- "Pedir que lo cuenten" (pedido del usuario 2026-10-13) ---------------
 
+// 2026-10-14 (pedido de Jariel): el aviso sí llegaba, pero Daniel lo leía en
+// la campanita y no quedaba nada — ni en su Inicio ni en la fila de Jariel
+// (al recargar, el botón volvía como si nunca se hubiera pedido). Ahora el
+// pedido se guarda en la misma notificación (el producto va en el enlace) y
+// sigue abierto hasta que el producto se vuelva a contar (conteo físico o
+// "Ajustar (conteo)" en Stock Actual), con un máximo de COUNT_REQUEST_DAYS.
+// También se puede pedir un producto ya contado (urgente con stock que no
+// cuadra): Daniel lo verifica.
+export const COUNT_REQUEST_TITLE = "🔢 Piden contar un producto";
+export const COUNT_REQUEST_TYPE = "compras_pedido_conteo";
+const COUNT_REQUEST_DAYS = 7;
+const COUNT_REQUEST_PARAM = "pedido=";
+
+export type CountRequest = { at: string; byName: string };
+
+// Pedidos abiertos por producto (el más reciente de cada uno).
+export async function getOpenCountRequests(): Promise<Map<string, CountRequest & { name: string }>> {
+  const leadId = await getInventoryLeadId();
+  if (!leadId) return new Map();
+  const notes = await prisma.notification.findMany({
+    where: { ownerId: leadId, title: COUNT_REQUEST_TITLE, url: { contains: COUNT_REQUEST_PARAM }, createdAt: { gte: new Date(Date.now() - COUNT_REQUEST_DAYS * DAY_MS) } },
+    select: { body: true, url: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  });
+  const latest = new Map<string, { at: Date; byName: string; name: string }>();
+  for (const n of notes) {
+    const id = n.url?.split(COUNT_REQUEST_PARAM)[1]?.split("&")[0];
+    if (!id || latest.has(id)) continue;
+    const m = /^(.+?) (?:necesita comprar|pide volver a contar) "(.+?)"/.exec(n.body);
+    latest.set(id, { at: n.createdAt, byName: m?.[1] ?? "Alguien", name: m?.[2] ?? "producto" });
+  }
+  if (latest.size === 0) return new Map();
+  const ids = [...latest.keys()];
+  const [lines, adjustments] = await Promise.all([
+    prisma.stockCountLine.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true, countedAt: true }, orderBy: { countedAt: "desc" }, distinct: ["catalogItemId"] }),
+    prisma.stockPhysicalCountAdjustmentRequest.findMany({ where: { catalogItemId: { in: ids } }, select: { catalogItemId: true, requestedAt: true } }),
+  ]);
+  const doneAt = new Map<string, Date>();
+  for (const x of [...lines.map((l) => ({ id: l.catalogItemId, at: l.countedAt })), ...adjustments.map((a) => ({ id: a.catalogItemId, at: a.requestedAt }))]) {
+    const cur = doneAt.get(x.id);
+    if (!cur || x.at > cur) doneAt.set(x.id, x.at);
+  }
+  const out = new Map<string, CountRequest & { name: string }>();
+  for (const [id, r] of latest) {
+    const done = doneAt.get(id);
+    if (done && done > r.at) continue;
+    out.set(id, { at: r.at.toISOString(), byName: r.byName, name: r.name });
+  }
+  return out;
+}
+
 export async function requestProductCount(catalogItemId: string, actorName: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const [uncounted] = await findUncountedItems([catalogItemId]);
-  if (!uncounted) return { ok: false, error: "Este producto ya se contó (o no hace falta contarlo) — recarga la lista." };
+  const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: catalogItemId }, select: { name: true } });
+  if (!item) return { ok: false, error: "Producto no encontrado." };
   const leadId = await getInventoryLeadId();
   if (!leadId) return { ok: false, error: "No hay líder de Inventario a quien avisarle." };
-  await notifyOwner(leadId, {
-    title: "🔢 Piden contar un producto",
-    body: `${actorName} necesita comprar "${uncounted.name}" y todavía no se cuenta en el conteo físico. Cuéntalo en el conteo general para que se pueda comprar.`,
-    url: STOCK_COUNT_HREF,
-  });
+  const open = (await getOpenCountRequests()).get(catalogItemId);
+  if (open) return { ok: false, error: `Ya se le pidió a Daniel (${open.byName}). Le sigue saliendo en su Inicio hasta que lo cuente.` };
+  const [uncounted] = await findUncountedItems([catalogItemId]);
+  const body = uncounted
+    ? `${actorName} necesita comprar "${item.name}" y todavía no se cuenta en el conteo físico. Cuéntalo en el conteo general para que se pueda comprar.`
+    : `${actorName} pide volver a contar "${item.name}" antes de comprarlo: el stock que dice el sistema puede no ser el real. Si ya se aplicó, corrígelo con «Ajustar (conteo)» en Stock Actual.`;
+  await notifyOwner(leadId, { title: COUNT_REQUEST_TITLE, body, url: `${STOCK_COUNT_HREF}?${COUNT_REQUEST_PARAM}${catalogItemId}` });
   return { ok: true };
+}
+
+// Inicio del líder de Inventario: los productos que le pidieron contar.
+export async function getCountRequestPendingItem(href: string = STOCK_COUNT_HREF) {
+  const open = [...(await getOpenCountRequests()).values()];
+  if (open.length === 0) return null;
+  const names = open.slice(0, 3).map((r) => `${r.name} (${r.byName.split(" ")[0]})`).join("; ");
+  return {
+    type: COUNT_REQUEST_TYPE,
+    icon: "🔢",
+    label: `Te pidieron contar ${plural(open.length, "producto", "productos")} para comprar`,
+    meta: `${names}${open.length > 3 ? ` y ${open.length - 3} más` : ""}`,
+    overdue: open.some((r) => Date.now() - new Date(r.at).getTime() > DAY_MS),
+    href,
+  };
 }
 
 // ---- "No hace falta comprarlo" (pedido del usuario 2026-10-02) -----------

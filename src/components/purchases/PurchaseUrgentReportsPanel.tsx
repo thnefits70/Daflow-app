@@ -1053,7 +1053,7 @@ export function PurchaseUrgentReportsPanel({
                                 {proofCheck ? "Cambiaste la cantidad — revisar la captura de nuevo" : "Revisar la captura con IA"}
                               </button>
                             ) : proofCheck.warnings.length === 0 ? (
-                              <div className="text-[11.5px] text-green mt-1.5 flex items-center gap-1"><CheckCircle2 size={12} /> 🤖 La captura cuadra con lo que se registra.</div>
+                              <div className="text-[11.5px] text-green mt-1.5 flex items-center gap-1"><CheckCircle2 size={12} /> 🤖 La captura cuadra con lo que se registra{typeof (proofCheck.read as { amountOnDoc?: unknown } | null)?.amountOnDoc === "number" ? ` (la nota dice ${money((proofCheck.read as { amountOnDoc: number }).amountOnDoc)}, igual al crédito)` : ""}.</div>
                             ) : (
                               <div className="bg-surface border border-red/40 rounded-md p-2.5 mt-2">
                                 <div className="text-[11.5px] font-semibold text-red mb-1">🤖 La captura no cuadra del todo:</div>

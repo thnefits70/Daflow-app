@@ -5,6 +5,7 @@ import { getAllCurrentStock } from "@/lib/stockKardex";
 import { getUnconfirmedDispatchSummary } from "@/lib/fulfillmentPicking";
 import { getVariantStock } from "@/lib/variantStock";
 import { parseVariantCounts } from "@/lib/stockCount";
+import { countMarksFromLines } from "@/lib/countGate";
 import {
   bodegaUnitCost,
   computeBenistockPrice,
@@ -51,16 +52,11 @@ export async function GET() {
   // al contar, el admin aprobó la diferencia, o decidió dejarlo como está.
   // No cuenta lo que espera aprobación del admin ni lo mandado a recontar.
   const recountedLines = countLines.filter((l) => l.decision === "APPROVED" || l.decision === "REJECTED" || (l.decision === null && l.countedQty === l.expectedQty));
-  const recountedIds = new Set(recountedLines.map((l) => l.catalogItemId));
   // PROVISIONAL (pedido del usuario 2026-10-13): todo lo contado se ve. Verde
   // = ya es stock real; amarillo = contado pero falta aplicarlo a INVESTOCK
   // ("pending") o está en recuento por una diferencia grande ("recount").
-  const countedStateById = new Map<string, "pending" | "recount">();
-  for (const l of countLines) {
-    if (l.decision === "RECOUNT") countedStateById.set(l.catalogItemId, "recount");
-    else if (l.decision === null && l.countedQty !== l.expectedQty) countedStateById.set(l.catalogItemId, "pending");
-    else countedStateById.delete(l.catalogItemId);
-  }
+  // Misma regla que Qué comprar (countMarksFromLines).
+  const countMarks = countMarksFromLines(countLines);
   // Pedido del usuario 2026-10-08: al pulsar el nombre se ven las variantes
   // (color/talla) del último recuento de cada producto, apenas queda
   // recontado — la lista oficial recién se arma al cerrar todo el conteo.
@@ -95,8 +91,9 @@ export async function GET() {
     // que "Precio proveedor" sale sin flete y "Puesto en bodega" con flete.
     const base = costBasisByItemId.get(r.catalogItemId) ?? null;
     const pendingAdjustmentQuantity = pendingAdjustmentByItem.get(r.catalogItemId) ?? null;
-    const recounted = recountedIds.has(r.catalogItemId);
-    const countPending = recounted ? null : (countedStateById.get(r.catalogItemId) ?? null);
+    const mark = countMarks.get(r.catalogItemId);
+    const recounted = mark === "real";
+    const countPending = mark === "pending" || mark === "recount" ? mark : null;
     if (!base) return { ...r, pendingAdjustmentQuantity, recounted, countPending };
     return {
       ...r,

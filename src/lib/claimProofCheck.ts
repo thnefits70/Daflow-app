@@ -26,7 +26,8 @@ const SUBMIT_TOOL = {
       productMatches: { type: "string", enum: ["si", "no", "no_se_ve"], description: "'si' si se habla del producto esperado (puede estar escrito a su manera, en otro idioma o con foto), 'no' si claramente es otro producto, 'no_se_ve' si no se menciona ningún producto." },
       quantityOnDoc: { type: "number", description: "Unidades que menciona el acuerdo, SOLO si aparecen. Nunca las inventes." },
       statesAgreement: { type: "string", enum: ["si", "no", "no_se_ve"], description: "SOLO para tipo no_envio: 'si' si el proveedor dice que no va a mandar esas unidades (se le acabó el stock, no tiene, no enviará) o que no las cobra / da crédito o descuento por ellas; 'no' si dice lo contrario (sí las va a mandar); 'no_se_ve' si no está claro. Para tipo precio, 'no_se_ve'." },
-      unitPriceOnDoc: { type: "number", description: "SOLO para tipo precio: precio por unidad acordado en dólares, SOLO si aparece escrito. Si hay varios precios, el último que ambos aceptan." },
+      unitPriceOnDoc: { type: "number", description: "Tipo precio: precio por unidad acordado en dólares. Tipo no_envio: precio por unidad del renglón de la nota de crédito/devolución. SOLO si aparece escrito. Si hay varios precios, el último que ambos aceptan." },
+      amountOnDoc: { type: "number", description: "SOLO para tipo no_envio: dólares que el proveedor acredita, devuelve o descuenta (nota de crédito, nota de devolución, saldo a favor). Si el documento tiene varios renglones, el del producto esperado; si tiene uno solo, ese total. SOLO si aparece escrito — nunca lo calcules ni lo inventes." },
       docDate: { type: "string", description: "Fecha visible en formato AAAA-MM-DD. Omite si no aparece." },
       notes: { type: "string", description: "Algo raro que convenga saber (captura cortada, parece editada, moneda distinta, texto en otro idioma resumido en español). Omite si no hay nada." },
     },
@@ -39,7 +40,7 @@ export async function readClaimProof(params: ClaimProofContext & { proofUrl: str
   const fileBlock = await fetchFileContentBlock(params.proofUrl);
   const what =
     params.kind === "no_envio"
-      ? `Tipo: no_envio. Se va a registrar que el proveedor NO manda (o no cobra) ${params.quantity} un. de "${params.productName}" — por ejemplo porque se le acabó el stock. La captura debería mostrar que el proveedor lo acepta.`
+      ? `Tipo: no_envio. Se va a registrar que el proveedor NO manda (o no cobra) ${params.quantity} un. de "${params.productName}" — por ejemplo porque se le acabó el stock. La captura debería mostrar que el proveedor lo acepta. Una nota de crédito, nota de devolución u hoja de "saldo a favor" hecha por el proveedor cuenta como acuerdo (statesAgreement 'si'). Lee el monto en dólares (amountOnDoc) tal como está escrito.`
       : `Tipo: precio. Se va a registrar que el precio acordado de "${params.productName}" (${params.quantity} un.) es $${(params.newUnitCost ?? 0).toFixed(2)} por unidad. La captura debería mostrar ese acuerdo de precio.`;
 
   const request = {
@@ -48,7 +49,9 @@ export async function readClaimProof(params: ClaimProofContext & { proofUrl: str
     system:
       "Revisas capturas (chats de WhatsApp/WeChat, correos, documentos) que el equipo de compras de Provedix " +
       "(Guayaquil, Ecuador) sube como prueba de un acuerdo con un proveedor. Los proveedores suelen ser chinos: " +
-      "pueden escribir en chino, inglés o español, y nombrar el producto a su manera o con una foto. Reporta SOLO " +
+      "pueden escribir en chino, inglés o español, y nombrar el producto a su manera, con su propio código o con una foto. " +
+      "Provedix (a veces a nombre de Damian) es el CLIENTE: un documento con «cliente: Damian/Provedix» y un vendedor " +
+      "o vendedora es un documento del proveedor, no uno interno. Reporta SOLO " +
       "lo que de verdad se ve — nunca inventes cantidades, precios ni nombres. Llama a submit_claim_proof con el " +
       "resultado — es la única forma de responder.",
     tools: [SUBMIT_TOOL],
@@ -90,7 +93,8 @@ export async function readClaimProof(params: ClaimProofContext & { proofUrl: str
     productMatches: yn(raw.productMatches),
     quantityOnDoc: num(raw.quantityOnDoc),
     statesAgreement: params.kind === "no_envio" ? yn(raw.statesAgreement) : "no_se_ve",
-    unitPriceOnDoc: params.kind === "precio" ? num(raw.unitPriceOnDoc) : null,
+    unitPriceOnDoc: num(raw.unitPriceOnDoc),
+    amountOnDoc: params.kind === "no_envio" ? num(raw.amountOnDoc) : null,
     docDate: str(raw.docDate),
     notes: str(raw.notes),
   };
@@ -132,10 +136,17 @@ export async function loadClaimProofContext(params: { kind: "no_envio"; reportId
   if (params.kind === "no_envio") {
     const report = await prisma.purchaseRequestUrgentReport.findUnique({
       where: { id: params.reportId },
-      select: { request: { select: { catalogItem: { select: { name: true } }, supplier: { select: { name: true } } } } },
+      select: {
+        isLateClaim: true,
+        originUncertain: true,
+        estimatedUnitCost: true,
+        request: { select: { unitCost: true, catalogItem: { select: { name: true } }, supplier: { select: { name: true } } } },
+      },
     });
     if (!report) return null;
-    return { kind: "no_envio", supplierName: report.request.supplier.name, productName: report.request.catalogItem.name, quantity: params.quantity };
+    // Mismo costo que usa el registro del crédito (resolutions/route.ts).
+    const unitCost = report.isLateClaim && report.originUncertain && report.estimatedUnitCost != null ? report.estimatedUnitCost : report.request.unitCost;
+    return { kind: "no_envio", supplierName: report.request.supplier.name, productName: report.request.catalogItem.name, quantity: params.quantity, expectedAmount: params.quantity * unitCost };
   }
   const request = await prisma.purchaseRequest.findUnique({
     where: { id: params.requestId },

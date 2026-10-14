@@ -561,6 +561,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   compras_urgentes_sin_atender: "Compras urgentes sin atender (3+ días)",
   compras_sin_encargado: "Compras calientes o frías sin nadie a cargo",
   compras_falta_contar: "Productos por comprar que faltan contar",
+  compras_pedido_conteo: "Productos que Compras pidió contar",
   tareas_por_revisar: "Tareas del equipo — terminadas, falta tu revisión",
   tareas_vencidas_equipo: "Tareas del equipo — vencidas",
 };
@@ -4646,7 +4647,7 @@ export async function getPossiblePendingTypesForActor(
     if (me.leadsDept.code === "FIN") types.push("analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");
     if (me.handlesHotPurchases) types.push("compras_calientes", "analisis_mercado_listo_comprar");
     if (me.handlesColdPurchases) types.push("compras_frias", "analisis_mercado_listo_comprar");
-    if (me.leadsDept.code === "INV") types.push("compras_urgentes_sin_atender", "compras_falta_contar");
+    if (me.leadsDept.code === "INV") types.push("compras_urgentes_sin_atender", "compras_falta_contar", "compras_pedido_conteo");
     if (me.leadsDept.code === "FIN") {
       types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia", "reclamos_proveedor_atrasados");
     }

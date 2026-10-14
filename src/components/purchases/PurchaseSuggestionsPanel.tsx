@@ -30,7 +30,23 @@ type Row = {
   counted?: boolean | null;
   countedUrgent?: boolean;
   newToday?: boolean;
+  countMark?: "real" | "pending" | "recount" | null;
+  countRequest?: { at: string; byName: string } | null;
 };
+
+// Misma franja que Stock Actual (pedido de Jariel 2026-10-14): verde = ya
+// recontado, stock real; amarillo = contado sin aplicar o en recuento.
+function countStripe(mark: Row["countMark"]) {
+  if (mark === "real") return "border-l-green bg-green/10";
+  if (mark) return "border-l-gold bg-gold/10";
+  return "border-l-transparent";
+}
+function countStripeTitle(mark: Row["countMark"]) {
+  if (mark === "real") return "Ya recontado en el conteo físico: stock real";
+  if (mark === "recount") return "Contado con una diferencia grande: lo vuelve a contar otra persona";
+  if (mark === "pending") return "Contado: falta que se aplique a INVESTOCK (aquí ya se usa lo contado)";
+  return "Todavía no se cuenta en el conteo físico";
+}
 type NewProduct = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
 type Data = { windowDays: number; hot: Row[]; cold: Row[]; newProducts: NewProduct[]; coldNewProducts?: NewProduct[]; audiences: ("hot" | "cold" | "escalation")[]; canReportStockout: boolean; canDiscard: boolean; countPausedUntil: string | null; canUseCalculator?: boolean; canRepurchase?: boolean; repurchases?: Record<string, OpenRepurchase>; buyerNames?: { hot: string[]; cold: string[] } };
 type OpenRepurchase = { code: string; state: "PENDING_APPROVAL" | "APPROVED"; byName: string | null };
@@ -92,6 +108,10 @@ const OpenRepurchaseContext = createContext<((catalogItemId: string) => void) | 
 
 function repurchaseUrl(catalogItemId: string) {
   return `${window.location.pathname}?tab=compras&ptab=recompras&rcItem=${catalogItemId}`;
+}
+
+function fmtDateTime(iso: string) {
+  return new Date(iso).toLocaleString("es-EC", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "America/Guayaquil" });
 }
 
 function fmtDate(iso: string) {
@@ -223,7 +243,10 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
       .then((res) => res.json().then((j) => ({ ok: res.ok, j })))
       .then(({ ok, j }) => {
         if (!ok) setError(j.error ?? "No se pudo avisar.");
-        else setCountAsked(true);
+        else {
+          setCountAsked(true);
+          onChanged();
+        }
       })
       .catch(() => setError("No se pudo avisar."))
       .finally(() => setBusy(false));
@@ -248,7 +271,7 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
       .finally(() => setBusy(false));
   }
   return (
-    <div className="flex items-center gap-3 px-3 py-2.5 border-b border-rule last:border-b-0">
+    <div title={countStripeTitle(r.countMark)} className={`flex items-center gap-3 px-3 py-2.5 border-b border-rule last:border-b-0 border-l-4 ${countStripe(r.countMark)}`}>
       {r.photo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img loading="lazy" decoding="async" src={r.photo} alt="" className="w-10 h-10 rounded object-cover bg-cloud shrink-0" />
@@ -339,10 +362,17 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
           </div>
         )}
         {r.countedUrgent && <div className="text-[11.5px] text-red font-semibold mt-0.5">Según el sistema ya estaría urgente — a Daniel le sale para contarlo primero</div>}
-        {countAsked && <div className="text-[11.5px] text-teal font-semibold mt-0.5">Listo: se le avisó a Daniel para que lo cuente.</div>}
+        {r.countRequest ? (
+          <div className="text-[11.5px] text-teal font-semibold mt-0.5">
+            🔢 Se le pidió a Daniel que lo cuente el {fmtDateTime(r.countRequest.at)} ({r.countRequest.byName.split(" ")[0]}) — le sale en su Inicio hasta que lo cuente.
+          </div>
+        ) : countAsked ? (
+          <div className="text-[11.5px] text-teal font-semibold mt-0.5">Listo: se le avisó a Daniel para que lo cuente.</div>
+        ) : null}
         {error && <div className="text-[11.5px] text-red mt-0.5">{error}</div>}
       </div>
-      {canRepurchase && r.status === "falta_contar" && !countAsked && (
+      {/* 2026-10-14 (pedido de Jariel): también en urgentes y pronto, para verificar el stock antes de comprar. */}
+      {canRepurchase && (r.status === "falta_contar" || r.status === "urgente" || r.status === "pronto") && !countAsked && !r.countRequest && (
         <button
           type="button"
           disabled={busy}
@@ -554,6 +584,10 @@ export function PurchaseSuggestionsPanel({ onAnalyzeRepurchase }: { onAnalyzeRep
         Cuánto se vende sale de los pedidos de Dropi que sube Daniel y de las ventas externas de los últimos{" "}
         <b className="text-ink">{days} día{days === 1 ? "" : "s"}</b>
         . Con ese promedio diario se calcula en cuántos días se acaba cada producto. Los combos cuentan como venta de cada producto que los forma.
+        <div className="mt-1">
+          <span className="inline-block w-2 h-2 rounded-sm bg-green align-middle" /> Franja verde: ya recontado, el stock es real ·{" "}
+          <span className="inline-block w-2 h-2 rounded-sm bg-gold align-middle" /> amarilla: contado pero falta aplicarlo o está en recuento · sin franja: todavía no se cuenta (antes de comprar, usa &quot;Pedir que lo cuenten&quot;).
+        </div>
       </div>
       {/* Pedido del usuario 2026-10-05: Nairoby necesita la calculadora de Análisis de Mercado para sus compras frías. */}
       {data.canUseCalculator && <PriceCalculator />}

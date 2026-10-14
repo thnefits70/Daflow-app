@@ -70,3 +70,31 @@ export async function findUncountedItems(catalogItemIds: string[]): Promise<{ ca
   });
   return items.map((i) => ({ catalogItemId: i.id, name: i.name, message: uncountedMessage(i.name) }));
 }
+
+// Franja de Stock Actual (pedido de Daniel 2026-10-07 / usuario 2026-10-13),
+// también en Qué comprar (pedido de Jariel 2026-10-14): verde = ya recontado,
+// el número del sistema es el real (coincidió, el admin aprobó la diferencia o
+// la dejó como está); amarillo = contado pero falta aplicarlo a INVESTOCK
+// ("pending") o está en recuento por una diferencia grande ("recount").
+export type CountMark = "real" | "pending" | "recount";
+
+export function countMarksFromLines(lines: { catalogItemId: string; countedQty: number; expectedQty: number; decision: string | null }[]): Map<string, CountMark> {
+  const real = new Set(lines.filter((l) => l.decision === "APPROVED" || l.decision === "REJECTED" || (l.decision === null && l.countedQty === l.expectedQty)).map((l) => l.catalogItemId));
+  const marks = new Map<string, CountMark>();
+  for (const l of lines) {
+    if (l.decision === "RECOUNT") marks.set(l.catalogItemId, "recount");
+    else if (l.decision === null && l.countedQty !== l.expectedQty) marks.set(l.catalogItemId, "pending");
+    else marks.delete(l.catalogItemId);
+  }
+  for (const id of real) marks.set(id, "real");
+  return marks;
+}
+
+export async function getCountMarks(catalogItemIds?: string[]): Promise<Map<string, CountMark>> {
+  const lines = await prisma.stockCountLine.findMany({
+    where: catalogItemIds ? { catalogItemId: { in: catalogItemIds } } : undefined,
+    select: { catalogItemId: true, countedQty: true, expectedQty: true, decision: true },
+    orderBy: { countedAt: "asc" },
+  });
+  return countMarksFromLines(lines);
+}
