@@ -40,6 +40,22 @@ async function usedToday(visitorId: string, leadId: string | null): Promise<numb
   });
 }
 
+// Bloqueo (pedido del usuario 2026-10-14): si alguien intenta sacarle
+// información confidencial, Michelle cierra el chat y esa persona (navegador
+// y registro) ya no puede escribir. Se guarda como un mensaje con
+// role "blocked" — el admin lo ve y puede desbloquear.
+const BLOCK_MARK = "[[BLOQUEAR]]";
+
+async function isBlocked(visitorId: string, leadId: string | null): Promise<boolean> {
+  const n = await prisma.provedixChatMessage.count({
+    where: { role: "blocked", chat: leadId ? { OR: [{ visitorId }, { leadId }] } : { visitorId } },
+  });
+  return n > 0;
+}
+
+const BLOCKED_TEXT = "Por seguridad, esta conversación quedó cerrada 🔒";
+const REGISTER_TEXT = "Para conversar conmigo primero regístrate gratis 😊 Así puedo darte toda la información de los productos.";
+
 async function findChat(chatId: string | undefined, visitorId: string, leadId: string | null) {
   if (!chatId) return null;
   return prisma.provedixChat.findFirst({ where: { id: chatId, OR: leadId ? [{ visitorId }, { leadId }] : [{ visitorId }] } });
@@ -50,10 +66,10 @@ export async function GET(req: NextRequest) {
   const chatId = req.nextUrl.searchParams.get("chatId") ?? undefined;
   const chat = await findChat(chatId, visitorId, leadId);
   const messages = chat
-    ? await prisma.provedixChatMessage.findMany({ where: { chatId: chat.id }, orderBy: { createdAt: "asc" }, take: 60, select: { role: true, content: true } })
+    ? await prisma.provedixChatMessage.findMany({ where: { chatId: chat.id, role: { in: ["user", "assistant"] } }, orderBy: { createdAt: "asc" }, take: 60, select: { role: true, content: true } })
     : [];
-  const used = await usedToday(visitorId, leadId);
-  const res = NextResponse.json({ chatId: chat?.id ?? null, messages, remaining: Math.max(0, MICHELLE_DAILY_LIMIT - used), registered: !!leadId });
+  const [used, blocked] = await Promise.all([usedToday(visitorId, leadId), isBlocked(visitorId, leadId)]);
+  const res = NextResponse.json({ chatId: chat?.id ?? null, messages, remaining: Math.max(0, MICHELLE_DAILY_LIMIT - used), registered: !!leadId, blocked });
   setVisitorCookies(res, visitorId);
   return res;
 }
@@ -70,6 +86,9 @@ export async function POST(req: NextRequest) {
   if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "Michelle no está disponible en este momento." }, { status: 503 });
 
   const { visitorId, leadId } = await readVisitor(req);
+  // Sin registro no se habla con la IA (pedido 2026-10-14): ni un dato, ni costo.
+  if (!leadId) return NextResponse.json({ error: REGISTER_TEXT, needsRegister: true }, { status: 401 });
+  if (await isBlocked(visitorId, leadId)) return NextResponse.json({ error: BLOCKED_TEXT, blocked: true }, { status: 403 });
   const used = await usedToday(visitorId, leadId);
   if (used >= MICHELLE_DAILY_LIMIT || !ipAllowed(req)) {
     return NextResponse.json({ error: "Llegaste al límite de mensajes de hoy 🙈 Mañana sigo ayudándote encantada. 💛", remaining: 0 }, { status: 429 });
@@ -85,7 +104,7 @@ export async function POST(req: NextRequest) {
   const chatId = chat.id;
 
   const history = await prisma.provedixChatMessage.findMany({
-    where: { chatId },
+    where: { chatId, role: { in: ["user", "assistant"] } },
     orderBy: { createdAt: "desc" },
     take: MAX_HISTORY,
     select: { role: true, content: true },
@@ -100,7 +119,7 @@ export async function POST(req: NextRequest) {
     { role: "user", content: parsed.data.message },
   ];
 
-  const system = await michelleSystem(!!leadId);
+  const system = await michelleSystem(true);
   const client = getAnthropicClient();
   const stream = client.beta.messages.stream({
     model: MICHELLE_MODEL,
@@ -146,6 +165,9 @@ export async function POST(req: NextRequest) {
       } finally {
         controller.close();
         if (acc.trim()) await prisma.provedixChatMessage.create({ data: { chatId, role: "assistant", content: acc.trim() } }).catch(() => null);
+        if (acc.includes(BLOCK_MARK)) {
+          await prisma.provedixChatMessage.create({ data: { chatId, role: "blocked", content: "Intentó sacar información confidencial: Michelle cerró el chat." } }).catch(() => null);
+        }
         await prisma.provedixChat.update({ where: { id: chatId }, data: { updatedAt: new Date() } }).catch(() => null);
       }
     },

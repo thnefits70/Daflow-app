@@ -233,6 +233,7 @@ export type ProvedixChatRow = {
   whatsapp: string | null;
   messages: number;
   lastQuestion: string | null;
+  blocked: boolean;
   updatedAt: string;
 };
 
@@ -244,8 +245,8 @@ export async function getProvedixChats(): Promise<ProvedixChatRow[]> {
       id: true,
       updatedAt: true,
       lead: { select: { name: true, whatsapp: true } },
-      _count: { select: { messages: true } },
-      messages: { where: { role: "user" }, orderBy: { createdAt: "desc" }, take: 1, select: { content: true } },
+      _count: { select: { messages: { where: { role: { in: ["user", "assistant"] } } } } },
+      messages: { where: { role: { in: ["user", "blocked"] } }, orderBy: { createdAt: "desc" }, take: 20, select: { role: true, content: true } },
     },
   });
   return chats
@@ -255,7 +256,8 @@ export async function getProvedixChats(): Promise<ProvedixChatRow[]> {
       who: c.lead?.name ?? "Visitante sin registro",
       whatsapp: c.lead?.whatsapp ?? null,
       messages: c._count.messages,
-      lastQuestion: c.messages[0]?.content ?? null,
+      lastQuestion: c.messages.find((m) => m.role === "user")?.content ?? null,
+      blocked: c.messages.some((m) => m.role === "blocked"),
       updatedAt: c.updatedAt.toISOString(),
     }));
 }
@@ -263,4 +265,14 @@ export async function getProvedixChats(): Promise<ProvedixChatRow[]> {
 export async function getProvedixChatMessages(chatId: string): Promise<{ role: string; content: string; at: string }[]> {
   const rows = await prisma.provedixChatMessage.findMany({ where: { chatId }, orderBy: { createdAt: "asc" }, take: 300, select: { role: true, content: true, createdAt: true } });
   return rows.map((m) => ({ role: m.role, content: m.content, at: m.createdAt.toISOString() }));
+}
+
+// Desbloquear a quien Michelle cerró el chat (el admin decide). Quita el
+// bloqueo de esa persona en todas sus conversaciones (mismo navegador o registro).
+export async function unblockProvedixChat(chatId: string): Promise<void> {
+  const chat = await prisma.provedixChat.findUnique({ where: { id: chatId }, select: { visitorId: true, leadId: true } });
+  if (!chat) return;
+  await prisma.provedixChatMessage.deleteMany({
+    where: { role: "blocked", chat: chat.leadId ? { OR: [{ visitorId: chat.visitorId }, { leadId: chat.leadId }] } : { visitorId: chat.visitorId } },
+  });
 }

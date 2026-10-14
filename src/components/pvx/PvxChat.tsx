@@ -2,7 +2,12 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { ADVISORS } from "@/components/pvx/PvxContact";
-import { IconArrow, IconClose, IconLock, IconWhatsApp } from "@/components/pvx/PvxIcons";
+import {
+  IconArrow,
+  IconClose,
+  IconLock,
+  IconWhatsApp,
+} from "@/components/pvx/PvxIcons";
 
 // Chat con Michelle, la asistente virtual de provedix.com (2026-10-15).
 // Se presenta siempre como asistente virtual con IA. El botón para seguir con
@@ -13,8 +18,20 @@ const CHAT_KEY = "pvx-chat-id";
 // Marca que pone la IA al final cuando ya no puede resolver el caso (ver provedixMichelle.ts).
 const HANDOFF_MARK = "[[ASESORA]]";
 // Quita la marca (también a medio llegar mientras se escribe la respuesta).
-const cleanReply = (t: string) => t.replace(HANDOFF_MARK, "").replace(/\[\[?[A-Z]*\]?$/, "").trim();
-const SUGGESTIONS = ["¿Qué productos van en subida?", "¿Cómo empiezo a vender con Provedix?", "¿A qué hora es el próximo corte?", "Recomiéndame algo para el hogar"];
+// [[BLOQUEAR]]: la IA cerró el chat por un intento de sacar información confidencial.
+const BLOCK_MARK = "[[BLOQUEAR]]";
+const cleanReply = (t: string) =>
+  t
+    .replace(HANDOFF_MARK, "")
+    .replace(BLOCK_MARK, "")
+    .replace(/\[\[?[A-Z]*\]?$/, "")
+    .trim();
+const SUGGESTIONS = [
+  "¿Qué productos van en subida?",
+  "¿Cómo empiezo a vender con Provedix?",
+  "¿A qué hora es el próximo corte?",
+  "Recomiéndame algo para el hogar",
+];
 
 function readChatId(): string | null {
   try {
@@ -38,7 +55,15 @@ function Rich({ text }: { text: string }) {
       {text.split("\n").map((line, i) => (
         <Fragment key={i}>
           {i > 0 && <br />}
-          {line.split(/(\*\*[^*]+\*\*)/g).map((part, k) => (part.startsWith("**") && part.endsWith("**") ? <b key={k}>{part.slice(2, -2)}</b> : <Fragment key={k}>{part}</Fragment>))}
+          {line
+            .split(/(\*\*[^*]+\*\*)/g)
+            .map((part, k) =>
+              part.startsWith("**") && part.endsWith("**") ? (
+                <b key={k}>{part.slice(2, -2)}</b>
+              ) : (
+                <Fragment key={k}>{part}</Fragment>
+              ),
+            )}
         </Fragment>
       ))}
     </>
@@ -47,7 +72,11 @@ function Rich({ text }: { text: string }) {
 
 function Avatar({ size = 36 }: { size?: number }) {
   return (
-    <span className="grid shrink-0 place-items-center rounded-full bg-[var(--pvx-orange)] font-black italic text-white" style={{ width: size, height: size, fontSize: size * 0.45 }} aria-hidden>
+    <span
+      className="grid shrink-0 place-items-center rounded-full bg-[var(--pvx-orange)] font-black italic text-white"
+      style={{ width: size, height: size, fontSize: size * 0.45 }}
+      aria-hidden
+    >
       M
     </span>
   );
@@ -60,7 +89,13 @@ function handoffUrl(phone: string, lastQuestion: string): string {
   return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 }
 
-export function PvxChat({ registered, onRegister }: { registered: boolean; onRegister: () => void }) {
+export function PvxChat({
+  registered,
+  onRegister,
+}: {
+  registered: boolean;
+  onRegister: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
@@ -69,6 +104,7 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -81,6 +117,7 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
       .then((d) => {
         if (d?.chatId) setChatId(d.chatId);
         if (Array.isArray(d?.messages)) setMessages(d.messages);
+        if (d?.blocked) setBlocked(true);
         if (typeof d?.remaining === "number") setRemaining(d.remaining);
       })
       .catch(() => null)
@@ -105,14 +142,26 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
       setError("");
       setInput("");
       setBusy(true);
-      setMessages((m) => [...m, { role: "user", content: text }, { role: "assistant", content: "" }]);
+      setMessages((m) => [
+        ...m,
+        { role: "user", content: text },
+        { role: "assistant", content: "" },
+      ]);
       try {
-        const res = await fetch("/api/pvx/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text, chatId: chatId ?? undefined }) });
+        const res = await fetch("/api/pvx/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text, chatId: chatId ?? undefined }),
+        });
         if (!res.ok || !res.body) {
           const d = await res.json().catch(() => null);
           setMessages((m) => m.slice(0, -2));
-          setError(d?.error ?? "No pude responder ahora. Intenta de nuevo en un momento.");
+          setError(
+            d?.error ??
+              "No pude responder ahora. Intenta de nuevo en un momento.",
+          );
           if (typeof d?.remaining === "number") setRemaining(d.remaining);
+          if (d?.blocked) setBlocked(true);
           setInput(text);
           return;
         }
@@ -130,7 +179,11 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
           const { done, value } = await reader.read();
           if (done) break;
           acc += decoder.decode(value, { stream: true });
-          setMessages((m) => [...m.slice(0, -1), { role: "assistant", content: acc }]);
+          setMessages((m) => [
+            ...m.slice(0, -1),
+            { role: "assistant", content: acc },
+          ]);
+          if (acc.includes(BLOCK_MARK)) setBlocked(true);
         }
       } catch {
         setError("Se perdió la conexión. Intenta de nuevo.");
@@ -151,13 +204,21 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
         data-tour="chat"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
-        aria-label={open ? "Cerrar el chat con Michelle" : "Abrir el chat con Michelle, asistente virtual"}
+        aria-label={
+          open
+            ? "Cerrar el chat con Michelle"
+            : "Abrir el chat con Michelle, asistente virtual"
+        }
         className="pvx-press fixed bottom-4 right-4 z-[46] inline-flex items-center gap-2.5 rounded-full bg-[var(--pvx-ink)] py-2 pl-2 pr-4 text-left text-white shadow-[0_14px_34px_-12px_rgb(0_0_0/0.65)] ring-1 ring-white/15 hover:bg-[#25282f] cursor-pointer sm:bottom-6 sm:right-6"
       >
         <Avatar size={34} />
         <span className="leading-tight">
-          <span className="block text-[14px] font-bold">{open ? "Cerrar chat" : "Pregúntale a Michelle"}</span>
-          <span className="block text-[11px] font-semibold text-white/60">Asistente virtual · IA</span>
+          <span className="block text-[14px] font-bold">
+            {open ? "Cerrar chat" : "Pregúntale a Michelle"}
+          </span>
+          <span className="block text-[11px] font-semibold text-white/60">
+            Asistente virtual · IA
+          </span>
         </span>
       </button>
 
@@ -171,25 +232,56 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
             <Avatar />
             <div className="min-w-0 flex-1">
               <div className="text-[15px] font-bold">Michelle</div>
-              <div className="text-[12px] text-white/65">Asistente virtual de Provedix · responde con IA</div>
+              <div className="text-[12px] text-white/65">
+                Asistente virtual de Provedix · responde con IA
+              </div>
             </div>
-            <button type="button" onClick={() => setOpen(false)} aria-label="Cerrar chat" className="pvx-press grid h-9 w-9 place-items-center rounded-full bg-white/10 hover:bg-white/20 cursor-pointer">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Cerrar chat"
+              className="pvx-press grid h-9 w-9 place-items-center rounded-full bg-white/10 hover:bg-white/20 cursor-pointer"
+            >
               <IconClose className="w-5 h-5" />
             </button>
           </div>
 
-          <div ref={listRef} className="flex-1 overflow-y-auto overscroll-contain bg-[var(--pvx-paper-2)] px-3 py-4" aria-live="polite">
+          <div
+            ref={listRef}
+            className="flex-1 overflow-y-auto overscroll-contain bg-[var(--pvx-paper-2)] px-3 py-4"
+            aria-live="polite"
+          >
             <div className="flex gap-2">
               <Avatar size={28} />
               <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[14.5px] leading-relaxed">
-¡Hola! 👋 Soy <b>Michelle</b>, tu asistente virtual de Provedix 😊 Estoy aquí para ayudarte a encontrar productos ganadores, ver cuánto se venden y resolver tus dudas. Cuéntame, ¿en qué te ayudo hoy? 💛
+                {registered ? (
+                  <>
+                    ¡Hola! 👋 Soy <b>Michelle</b>, tu asistente virtual de
+                    Provedix 😊 Estoy aquí para ayudarte a encontrar productos
+                    ganadores, ver cuánto se venden y resolver tus dudas.
+                    Cuéntame, ¿en qué te ayudo hoy? 💛
+                  </>
+                ) : (
+                  // Sin registro no hay conversación ni datos (pedido 2026-10-14).
+                  <>
+                    ¡Hola! 👋 Soy <b>Michelle</b>, tu asistente virtual de
+                    Provedix 😊 Para conversar conmigo y darte toda la
+                    información de los productos, primero{" "}
+                    <b>regístrate gratis</b>. ¡Solo toma un minuto! 💛
+                  </>
+                )}
               </div>
             </div>
 
-            {messages.length === 0 && loaded && (
+            {registered && !blocked && messages.length === 0 && loaded && (
               <div className="mt-3 flex flex-wrap gap-1.5 pl-9">
                 {SUGGESTIONS.map((s) => (
-                  <button key={s} type="button" onClick={() => send(s)} className="pvx-press rounded-full border border-[var(--pvx-paper-3)] bg-white px-3 py-1.5 text-[13px] font-semibold hover:border-[var(--pvx-orange)] cursor-pointer">
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => send(s)}
+                    className="pvx-press rounded-full border border-[var(--pvx-paper-3)] bg-white px-3 py-1.5 text-[13px] font-semibold hover:border-[var(--pvx-orange)] cursor-pointer"
+                  >
                     {s}
                   </button>
                 ))}
@@ -199,7 +291,9 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
             {messages.map((m, i) =>
               m.role === "user" ? (
                 <div key={i} className="mt-3 flex justify-end">
-                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tr-md bg-[var(--pvx-ink)] px-3.5 py-2.5 text-[14.5px] leading-relaxed text-white">{m.content}</div>
+                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tr-md bg-[var(--pvx-ink)] px-3.5 py-2.5 text-[14.5px] leading-relaxed text-white">
+                    {m.content}
+                  </div>
                 </div>
               ) : (
                 <div key={i} className="mt-3 flex gap-2">
@@ -212,17 +306,27 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
                             recién ahí aparece el botón a Michelle, la asesora, con la consulta ya escrita. */}
                         {m.content.includes(HANDOFF_MARK) && (
                           <a
-                            href={handoffUrl(ADVISORS.dropi.phone, messages.slice(0, i).findLast((x) => x.role === "user")?.content ?? "")}
+                            href={handoffUrl(
+                              ADVISORS.dropi.phone,
+                              messages
+                                .slice(0, i)
+                                .findLast((x) => x.role === "user")?.content ??
+                                "",
+                            )}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="pvx-press mt-2.5 flex items-center justify-center gap-2 rounded-full bg-[#138a45] px-4 py-2.5 text-[14px] font-bold text-white hover:bg-[#0f7239]"
                           >
-                            <IconWhatsApp className="w-4 h-4" /> Continuar con Michelle por WhatsApp
+                            <IconWhatsApp className="w-4 h-4" /> Continuar con
+                            Michelle por WhatsApp
                           </a>
                         )}
                       </>
                     ) : (
-                      <span className="inline-flex gap-1 py-1" aria-label="Michelle está escribiendo">
+                      <span
+                        className="inline-flex gap-1 py-1"
+                        aria-label="Michelle está escribiendo"
+                      >
                         <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)] [animation-delay:-0.3s]" />
                         <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)] [animation-delay:-0.15s]" />
                         <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)]" />
@@ -233,61 +337,83 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
               ),
             )}
             {error && (
-              <p role="alert" className="mt-3 rounded-xl bg-[#fde8e6] px-3 py-2 text-[13px] text-[#a12a1f]">
+              <p
+                role="alert"
+                className="mt-3 rounded-xl bg-[#fde8e6] px-3 py-2 text-[13px] text-[#a12a1f]"
+              >
                 {error}
               </p>
             )}
           </div>
 
-          {!registered && (
-            <button type="button" onClick={onRegister} className="flex items-center gap-2 bg-[var(--pvx-orange-soft)] px-4 py-2 text-left text-[12.5px] font-semibold hover:bg-[#ffe5d4] cursor-pointer">
-              <IconLock className="w-4 h-4 shrink-0 text-[var(--pvx-orange-text)]" />
-              <span className="flex-1">Regístrate gratis y Michelle te dará precio, ganancia, ciudades y combos.</span>
-              <IconArrow className="w-4 h-4 shrink-0" />
-            </button>
-          )}
-
           <div className="border-t border-[var(--pvx-paper-3)] px-3 pb-3 pt-2">
-            {/* Casos críticos → WhatsApp de Michelle (la asesora). Pedido 2026-10-14: la asistente resuelve
-                lo normal para no sobrecargarla; ella atiende solo lo que requiere un análisis más complejo. */}
-            {remaining != null && <div className="mb-1.5 text-right text-[11.5px] text-[var(--pvx-ink-3)]">{remaining} mensajes hoy</div>}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                send(input);
-              }}
-              className="flex items-end gap-2"
-            >
-              <label htmlFor="pvx-chat-input" className="sr-only">
-                Escribe tu pregunta para Michelle
-              </label>
-              <textarea
-                id="pvx-chat-input"
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
+            {!registered ? (
+              <button
+                type="button"
+                onClick={onRegister}
+                className="pvx-press mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-[var(--pvx-orange)] px-4 py-3 text-[15px] font-bold text-white hover:bg-[var(--pvx-orange-press)] cursor-pointer"
+              >
+                <IconLock className="w-4 h-4" /> Regístrate gratis para
+                conversar
+              </button>
+            ) : blocked ? (
+              // Intento de sacar información confidencial: chat cerrado (pedido 2026-10-14).
+              <p className="mt-1 rounded-xl bg-[var(--pvx-paper-2)] px-3 py-3 text-center text-[13.5px] font-semibold text-[var(--pvx-ink-2)]">
+                Por seguridad, esta conversación quedó cerrada 🔒
+              </p>
+            ) : (
+              <>
+                {remaining != null && (
+                  <div className="mb-1.5 text-right text-[11.5px] text-[var(--pvx-ink-3)]">
+                    {remaining} mensajes hoy
+                  </div>
+                )}
+                <form
+                  onSubmit={(e) => {
                     e.preventDefault();
                     send(input);
-                  }
-                }}
-                rows={1}
-                maxLength={800}
-                disabled={outOfMessages}
-                placeholder={outOfMessages ? "Llegaste al límite de hoy…" : "Escribe tu pregunta…"}
-                className="max-h-28 min-h-[44px] flex-1 resize-none rounded-2xl bg-[var(--pvx-paper-2)] px-3.5 py-2.5 text-[16px] outline-none focus:bg-white focus:shadow-[0_0_0_2px_var(--pvx-orange)] disabled:opacity-60"
-              />
-              <button
-                type="submit"
-                disabled={busy || !input.trim() || outOfMessages}
-                aria-label="Enviar"
-                className="pvx-press grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--pvx-orange)] text-white hover:bg-[var(--pvx-orange-press)] disabled:opacity-40 cursor-pointer"
-              >
-                <IconArrow className="w-5 h-5" />
-              </button>
-            </form>
-            <p className="mt-1.5 text-center text-[10.5px] text-[var(--pvx-ink-3)]">Michelle es una IA y puede equivocarse. Guardamos la conversación para atenderte mejor.</p>
+                  }}
+                  className="flex items-end gap-2"
+                >
+                  <label htmlFor="pvx-chat-input" className="sr-only">
+                    Escribe tu pregunta para Michelle
+                  </label>
+                  <textarea
+                    id="pvx-chat-input"
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        send(input);
+                      }
+                    }}
+                    rows={1}
+                    maxLength={800}
+                    disabled={outOfMessages}
+                    placeholder={
+                      outOfMessages
+                        ? "Llegaste al límite de hoy…"
+                        : "Escribe tu pregunta…"
+                    }
+                    className="max-h-28 min-h-[44px] flex-1 resize-none rounded-2xl bg-[var(--pvx-paper-2)] px-3.5 py-2.5 text-[16px] outline-none focus:bg-white focus:shadow-[0_0_0_2px_var(--pvx-orange)] disabled:opacity-60"
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy || !input.trim() || outOfMessages}
+                    aria-label="Enviar"
+                    className="pvx-press grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--pvx-orange)] text-white hover:bg-[var(--pvx-orange-press)] disabled:opacity-40 cursor-pointer"
+                  >
+                    <IconArrow className="w-5 h-5" />
+                  </button>
+                </form>
+              </>
+            )}
+            <p className="mt-1.5 text-center text-[10.5px] text-[var(--pvx-ink-3)]">
+              Michelle es una IA y puede equivocarse. Guardamos la conversación
+              para atenderte mejor.
+            </p>
           </div>
         </div>
       )}
