@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getCompiledLot, ecuadorDay, NO_BRAND } from "@/lib/fulfillmentGuides";
 import { guideBrandsOf } from "@/lib/guideBrands";
 import { brandLabel, sortBrands } from "@/lib/brandLabels";
-import { daysOfIsoWeek, isAutoFillRateWeek, FILL_RATE_DEPT_CODE, retainedGuideNumbers } from "@/lib/autoFillRate";
+import { daysOfIsoWeek, isAutoFillRateWeek, FILL_RATE_DEPT_CODE, retainedGuideNumbers, guideDispatchDay, lotDaysFeeding, outOfStockSubtracted } from "@/lib/autoFillRate";
 
 // Pedido de Daniel 2026-10-13: al hacer clic en una semana de "Pedidos
 // despachados", el mismo número desglosado por día — guías de los cortes por
@@ -18,6 +18,9 @@ export type DispatchedDay = {
   // Guías del corte que Daniel/Allan confirmaron retenidas (2026-10-14) — se restan.
   retained: number;
   outOfStock: number;
+  // Guías de un corte del día anterior subido cuando su transportadora ya se
+  // había ido (2026-10-14): salen este día y cuentan aquí.
+  movedIn: number;
   externalSales: number;
   dispatched: number;
   cancelledInCut: number;
@@ -31,6 +34,8 @@ export type DispatchedDailyBreakdown = {
   // a mano: se restan del total de la semana, no se pueden repartir por día.
   manualWeekly: number;
   weekTotal: number | null;
+  // Desde la S42 la falta de stock se muestra pero no se resta (autoFillRate.ts).
+  subtractOutOfStock: boolean;
 };
 
 export async function getDispatchedDailyBreakdown(week: string): Promise<DispatchedDailyBreakdown | null> {
@@ -41,11 +46,12 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
 
   const [batches, lots, sales, cancelled, dept] = await Promise.all([
     prisma.fulfillmentRequestBatch.findMany({
-      where: { lot: { day: { in: days }, status: { in: ["SENT", "CLOSED"] } } },
+      where: { lot: { day: { in: lotDaysFeeding(week) }, status: { in: ["SENT", "CLOSED"] } } },
       select: {
         source: true,
+        requestedAt: true,
         lot: { select: { day: true } },
-        guides: { select: { guideNumber: true, codes: true, manifestFile: true } },
+        guides: { select: { guideNumber: true, codes: true, manifestFile: true, carrier: true } },
         items: { select: { sourceCode: true, fromComboCode: true, catalogItem: { select: { bodega: true } } } },
       },
     }),
@@ -66,17 +72,20 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
   const byDay = new Map<string, { day: DispatchedDay; brandCounts: Record<string, number> }>();
   for (const day of days) {
     byDay.set(day, {
-      day: { day, brands: [], guides: 0, retained: 0, outOfStock: 0, externalSales: 0, dispatched: 0, cancelledInCut: 0, cancelledReported: 0 },
+      day: { day, brands: [], guides: 0, retained: 0, outOfStock: 0, movedIn: 0, externalSales: 0, dispatched: 0, cancelledInCut: 0, cancelledReported: 0 },
       brandCounts: {},
     });
   }
 
-  // Guía → día del corte, para saber si una guía cancelada estaba sumando.
+  // Guía → día en que sale, para saber si una guía cancelada estaba sumando.
   const guideDay = new Map<string, string>();
   for (const b of batches) {
-    const entry = b.lot ? byDay.get(b.lot.day) : undefined;
-    if (!entry) continue;
+    if (!b.lot) continue;
     for (const g of b.guides) {
+      const outDay = guideDispatchDay(b.lot.day, b.requestedAt, g.carrier);
+      const entry = byDay.get(outDay);
+      if (!entry) continue;
+      if (outDay !== b.lot.day) entry.day.movedIn++;
       const brand = brandOf.get(g.guideNumber) ?? NO_BRAND;
       entry.brandCounts[brand] = (entry.brandCounts[brand] ?? 0) + 1;
       entry.day.guides++;
@@ -107,11 +116,12 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
     if (cutDay) byDay.get(cutDay)!.day.cancelledInCut++;
   }
 
+  const subtractOutOfStock = outOfStockSubtracted(week);
   const out: DispatchedDay[] = [];
   for (const { day: d, brandCounts } of byDay.values()) {
     d.brands = sortBrands(Object.keys(brandCounts)).map((b) => ({ label: brandLabel(b), value: brandCounts[b] }));
     d.outOfStock = Math.min(d.outOfStock, d.guides - d.retained);
-    d.dispatched = d.guides - d.retained - d.outOfStock + d.externalSales;
+    d.dispatched = d.guides - d.retained - (subtractOutOfStock ? d.outOfStock : 0) + d.externalSales;
     out.push(d);
   }
 
@@ -126,5 +136,6 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
     days: out,
     manualWeekly: (record?.prepared ?? 0) + (record?.generated ?? 0),
     weekTotal: record?.value ?? null,
+    subtractOutOfStock,
   };
 }

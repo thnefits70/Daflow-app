@@ -4,7 +4,7 @@ import { isAutoReturnRateMonth } from "@/lib/returnRateConstants";
 import { getMonthDispatchSummary } from "@/lib/commissionTiers";
 import { prevMonthStr } from "@/lib/pendingTasks";
 import { computeAutoStockoutWeeks, isAutoStockoutWeek } from "@/lib/autoStockout";
-import { isAutoFillRateWeek, isoWeekOf, daysOfIsoWeek } from "@/lib/autoFillRate";
+import { isAutoFillRateWeek, isoWeekOf, daysOfIsoWeek, guideDispatchDay } from "@/lib/autoFillRate";
 import { isManifestLate, manifestDeadline } from "@/lib/ecuadorHolidays";
 import { brandLabel, sortBrands } from "@/lib/brandLabels";
 import { guideBrandsOf } from "@/lib/guideBrands";
@@ -215,8 +215,9 @@ async function guidesByBrandPerWeek(fromWeek: string): Promise<Map<string, Recor
     where: { lot: { status: { in: ["SENT", "CLOSED"] } } },
     select: {
       source: true,
+      requestedAt: true,
       lot: { select: { day: true } },
-      guides: { select: { guideNumber: true, codes: true, manifestFile: true } },
+      guides: { select: { guideNumber: true, codes: true, manifestFile: true, carrier: true } },
       items: { select: { sourceCode: true, fromComboCode: true, catalogItem: { select: { bodega: true } } } },
     },
   });
@@ -225,10 +226,11 @@ async function guidesByBrandPerWeek(fromWeek: string): Promise<Map<string, Recor
 
   const byWeek = new Map<string, Record<string, number>>();
   for (const b of inRange) {
-    const week = isoWeekOf(b.lot!.day);
-    const counts = byWeek.get(week) ?? {};
-    byWeek.set(week, counts);
     for (const g of b.guides) {
+      // Semana en que la guía sale de verdad (2026-10-14, guideDispatchDay).
+      const week = isoWeekOf(guideDispatchDay(b.lot!.day, b.requestedAt, g.carrier));
+      const counts = byWeek.get(week) ?? {};
+      byWeek.set(week, counts);
       const brand = brandOf.get(g.guideNumber) ?? NO_BRAND;
       counts[brand] = (counts[brand] ?? 0) + 1;
     }

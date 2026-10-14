@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getCompiledLot, ecuadorDay } from "@/lib/fulfillmentGuides";
+import { nextWorkingDay } from "@/lib/ecuadorHolidays";
 
 // Confirmado 2026-09-25 con el usuario (punto por punto):
 //   1. Desde la semana 2026-W40 (lunes 28 sept) el Fill Rate de Fulfillment
@@ -57,29 +58,95 @@ export async function retainedGuideNumbers(): Promise<Set<string>> {
   return new Set(rows.map((r) => r.guideNumber.trim().toUpperCase()));
 }
 
-// Lo que DAFLOW sabe solo de la semana: guías totales, falta de stock y
-// guías retenidas que estaban en esos cortes.
-export async function computeAutoCounts(week: string): Promise<{ guides: number; outOfStock: number; externalSales: number; retained: number }> {
+// Pedido del usuario 2026-10-14 (lo explicó Daniel con el lunes 12/10: DAFLOW
+// decía 961, salieron 933). Dos cambios desde la S42:
+//   1. La "falta de stock" (lo que Daniel confirmó que no salió del corte)
+//      ya NO se resta de Pedidos despachados: mientras no termine el
+//      inventario el stock del sistema no es confiable (restaba 117 cuando
+//      en realidad faltaron 14). Se vuelve a restar cuando Daniel diga
+//      (poner SUBTRACT_OUT_OF_STOCK en true). El Fill Rate la sigue usando.
+//   2. Si se sube un corte cuando la transportadora de esa guía ya se fue
+//      (ej. guías de Gintracom subidas a las 4 pm, Gintracom sale a las 3 pm),
+//      la guía sale el siguiente día de trabajo y cuenta ese día.
+export const SUBTRACT_OUT_OF_STOCK = false;
+export const DISPATCH_RULES_FROM_WEEK = "2026-W42";
+
+// Hora (Ecuador) en que se va cada transportadora — horario de despachos
+// del 2026-09-23, Gintracom 15:00 según Daniel. El sábado todas a las 12:00.
+const CARRIER_LEAVES_AT: Record<string, string> = {
+  VELOCES: "13:30",
+  URBANO: "13:30",
+  GINTRACOM: "15:00",
+  LAAR: "17:00",
+  SERVIENTREGA: "17:00",
+};
+const SATURDAY_LEAVES_AT = "12:00";
+
+// Día en que la guía realmente sale. Solo se mueve si el PDF se subió el
+// mismo día del corte (un manifiesto atrasado se queda en su día) y después
+// de la hora en que se fue su transportadora.
+export function guideDispatchDay(lotDay: string, uploadedAt: Date, carrier: string): string {
+  if (isoWeekOf(lotDay) < DISPATCH_RULES_FROM_WEEK) return lotDay;
+  if (ecuadorDay(uploadedAt) !== lotDay) return lotDay;
+  const saturday = new Date(`${lotDay}T12:00:00Z`).getUTCDay() === 6;
+  const leavesAt = saturday ? SATURDAY_LEAVES_AT : CARRIER_LEAVES_AT[carrier.trim().toUpperCase()];
+  if (!leavesAt) return lotDay;
+  const uploadedTime = new Date(uploadedAt.getTime() - 5 * 3600000).toISOString().slice(11, 16);
+  return uploadedTime > leavesAt ? nextWorkingDay(lotDay) : lotDay;
+}
+
+// Días de corte que pueden aportar guías a la semana: la semana y los 7
+// días anteriores (un sábado por la tarde pasa al lunes; feriados largos).
+export function lotDaysFeeding(week: string): string[] {
   const days = daysOfIsoWeek(week);
+  const monday = new Date(`${days[0]}T12:00:00Z`).getTime();
+  const before = Array.from({ length: 7 }, (_, i) => new Date(monday - (7 - i) * 86400000).toISOString().slice(0, 10));
+  return [...before, ...days];
+}
+
+export function outOfStockSubtracted(week: string): boolean {
+  return SUBTRACT_OUT_OF_STOCK || week < DISPATCH_RULES_FROM_WEEK;
+}
+
+// Lo que DAFLOW sabe solo de la semana: guías totales (por el día en que
+// salen), falta de stock y guías retenidas que estaban en esos cortes.
+export async function computeAutoCounts(week: string): Promise<{ guides: number; outOfStock: number; externalSales: number; retained: number; subtractOutOfStock: boolean }> {
+  const days = daysOfIsoWeek(week);
+  const daySet = new Set(days);
+  const batches = await prisma.fulfillmentRequestBatch.findMany({
+    where: { lot: { day: { in: lotDaysFeeding(week) }, status: { in: ["SENT", "CLOSED"] } } },
+    select: { requestedAt: true, lot: { select: { day: true } }, guides: { select: { guideNumber: true, carrier: true } } },
+  });
+  const retainedSet = await retainedGuideNumbers();
+  let guides = 0;
+  let retained = 0;
+  for (const b of batches) {
+    if (!b.lot) continue;
+    for (const g of b.guides) {
+      if (!daySet.has(guideDispatchDay(b.lot.day, b.requestedAt, g.carrier))) continue;
+      guides++;
+      if (retainedSet.has(g.guideNumber.trim().toUpperCase())) retained++;
+    }
+  }
   const lots = await prisma.fulfillmentLot.findMany({
     where: { day: { in: days }, status: { in: ["SENT", "CLOSED"] } },
     select: { id: true },
   });
-  const retainedSet = await retainedGuideNumbers();
-  let guides = 0;
   let outOfStock = 0;
-  let retained = 0;
   for (const { id } of lots) {
     const lot = await getCompiledLot(id);
     if (!lot) continue;
-    const lotGuides = await prisma.fulfillmentRequestGuide.findMany({ where: { batch: { lotId: id } }, select: { guideNumber: true } });
-    guides += lotGuides.length;
-    retained += lotGuides.filter((g) => retainedSet.has(g.guideNumber.trim().toUpperCase())).length;
     for (const p of lot.picking) {
       if (p.confirmedAt && p.confirmedQty !== null && p.confirmedQty < p.needed) outOfStock += p.needed - p.confirmedQty;
     }
   }
-  return { guides, outOfStock: Math.min(outOfStock, guides), externalSales: await countDeliveredExternalSales(days), retained };
+  return {
+    guides,
+    outOfStock: Math.min(outOfStock, guides),
+    externalSales: await countDeliveredExternalSales(days),
+    retained,
+    subtractOutOfStock: outOfStockSubtracted(week),
+  };
 }
 
 // Ventas externas entregadas al motorizado en esos días (hora de Ecuador).
@@ -93,8 +160,10 @@ async function countDeliveredExternalSales(days: string[]): Promise<number> {
 
 // Despachadas y no despachadas a partir de lo automático + lo que escribió Yair.
 // Las retenidas se quitan del todo (no son despachadas ni fallas del Fill Rate).
-export function fillRateNumbers(counts: { guides: number; outOfStock: number; externalSales: number; retained?: number }, prepared: number, generated: number) {
-  const value = Math.max(0, counts.guides - (counts.retained ?? 0) - counts.outOfStock - prepared - generated) + counts.externalSales;
+// Desde la S42 la falta de stock no se resta (ver SUBTRACT_OUT_OF_STOCK).
+export function fillRateNumbers(counts: { guides: number; outOfStock: number; externalSales: number; retained?: number; subtractOutOfStock?: boolean }, prepared: number, generated: number) {
+  const subtracted = counts.subtractOutOfStock === false ? 0 : counts.outOfStock;
+  const value = Math.max(0, counts.guides - (counts.retained ?? 0) - subtracted - prepared - generated) + counts.externalSales;
   return { value, outOfStock: counts.outOfStock, notDispatched: counts.outOfStock + prepared + generated };
 }
 
