@@ -60,7 +60,7 @@ const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = 
     hint: "Hace 15 días marcaste que ningún proveedor lo tenía. Pregúntale y responde aquí",
     tone: "text-amber",
   },
-  { status: "urgente", title: "🔴 Urgente", hint: "Se acaba antes de que el proveedor pueda traerlo: 15 días o menos si es de CHEN, 7 días o menos con los demás", tone: "text-red" },
+  { status: "urgente", title: "🔴 Urgente", hint: "Se acaba antes de que el proveedor pueda traerlo: 7 días o menos (CHEN lo trae el mismo día o al siguiente, así que sus productos casi nunca están aquí: pasan directo a compra caliente)", tone: "text-red" },
   { status: "pronto", title: "🟡 Pronto", hint: "Se vende, pero todavía alcanza para más tiempo del que tarda el proveedor", tone: "text-amber" },
   {
     status: "falta_contar",
@@ -169,7 +169,7 @@ function DiscardForm({ r, onDone, onCancel }: { r: Row; onDone: () => void; onCa
       <div className="mt-2 bg-red/10 border border-red/40 rounded-md p-2.5">
         <div className="text-[12.5px] font-bold text-red">¿Estás seguro de que NO hace falta comprar {r.name}?</div>
         <div className="text-[12px] text-steel mt-1">
-          Quedan {r.stock}
+          Quedan {r.stock} unidad{r.stock === 1 ? "" : "es"}
           {daysTxt}
           {r.status === "urgente" ? " — está URGENTE" : ""}. Motivo: <b className="text-ink">{label}</b>
           {note.trim() ? ` — ${note.trim()}` : ""}. Le llega al líder de Análisis de Mercado y al administrador.
@@ -296,7 +296,7 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
           </div>
         )}
         <div className="text-[12px] text-steel">
-          {r.status === "falta_contar" ? "El sistema dice" : "Quedan"} <b className="text-ink">{r.stock}</b>
+          {r.status === "falta_contar" ? "El sistema dice" : "Quedan"} <b className="text-ink">{r.stock} unidad{r.stock === 1 ? "" : "es"}</b>
           {r.counted ? <span className="text-teal font-semibold"> (contado)</span> : null} · {fmtPerDay(r.perDay)}
           {days && r.status !== "en_compra" ? (
             <>
@@ -310,7 +310,7 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
           <div className="text-[12px] text-steel">
             {r.suggestedQty ? (
               <>
-                Sugerencia (no obligatoria): comprar <b className="text-teal">~{r.suggestedQty} u.</b> (para {r.urgentDays} días mientras llega + 1 mes)
+                Sugerencia (no obligatoria): comprar <b className="text-teal">~{r.suggestedQty} u.</b> (para {r.urgentDays} día{r.urgentDays === 1 ? "" : "s"} mientras llega + 1 mes)
               </>
             ) : null}
             {r.suggestedQty && r.supplierName ? " · " : ""}

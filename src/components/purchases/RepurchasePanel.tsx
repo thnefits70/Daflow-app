@@ -545,7 +545,7 @@ export function RepurchaseAnalyzer({
       <div className="bg-cloud border border-rule rounded-md p-3 mb-3 text-[12.5px]">
         <div className="text-[12px] font-bold text-steel uppercase tracking-wide mb-1.5">Lo que ya sabemos</div>
         <div className="text-ink">
-          Quedan <b>{a.stock}</b> · se vendieron <b>{a.sold}</b> en {Math.round(a.windowDays)} días · {daysLeftText(a.daysLeft)} ·{" "}
+          Quedan <b>{a.stock} unidad{a.stock === 1 ? "" : "es"}</b> · se vendieron <b>{a.sold}</b> en {Math.round(a.windowDays)} días · {daysLeftText(a.daysLeft)} ·{" "}
           {a.audience === "HOT" ? "🔥 compra caliente" : "❄️ compra fría"}
         </div>
         {a.suggestedQty ? (

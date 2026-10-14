@@ -13,7 +13,8 @@ export const EXPLAIN_TOPICS = {
 - "Quedan X": unidades que hay en bodega ahora. "(contado)" = ese número salió del conteo físico, es real.
 - "sale ~N por día / por semana": promedio de lo que se vendió (pedidos de Dropi + ventas externas; los combos cuentan como venta de cada producto). Compras frías usan los últimos 30 días; compras calientes, los últimos ${HOT_SALES_WINDOW_DAYS} días.
 - "alcanza para N días": Quedan ÷ lo que sale por día. Es en cuántos días se queda sin stock si se sigue vendiendo igual.
-- Tiempo que tarda el proveedor en traerlo: ${URGENT_DAYS_CREDIT_SUPPLIER} días si la última compra fue a CHEN (proveedor a crédito), ${URGENT_DAYS} días con los demás.
+- Tiempo que tarda el proveedor en traerlo: CHEN (proveedor a crédito) lo trae el mismo día o máximo al día siguiente, por eso con CHEN se cuenta ${URGENT_DAYS_CREDIT_SUPPLIER} día; con los demás proveedores, ${URGENT_DAYS} días. Si la última compra fue a CHEN, el producto casi nunca sale como urgente en compras frías: cuando ya se acaba en ${HOT_DAYS} días pasa a compras calientes.
+- Las cantidades son unidades (piezas) del producto.
 - "Urgente": alcanza para ese tiempo o menos, o sea que si no se pide ya, se queda sin stock antes de que llegue lo nuevo. "Pronto": todavía alcanza para más tiempo del que tarda el proveedor.
 - "Comprar ~N u. (para X días mientras llega + 1 mes)": cantidad sugerida = lo que se vende por día × (días que tarda el proveedor + ${COVER_DAYS_AFTER_ARRIVAL} días) − lo que queda. Es una guía, no una orden.
 - Compras calientes: se acaban en ${HOT_DAYS} días o menos (las compra quien tenga la lista caliente). Compras frías: ${COLD_MAX} unidades o menos, o se acaban en ${COLD_SOON_DAYS} días, pero todavía alcanzan más de ${HOT_DAYS} días (lista semanal).

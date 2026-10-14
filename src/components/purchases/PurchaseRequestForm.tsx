@@ -1416,8 +1416,8 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                     ) : (
                       <>Sugerencia: con lo que hay <b className="text-ink">todavía alcanza</b>, no hace falta comprar más por ahora</>
                     )}
-                    {" "}— se venden {fmtPerDaySug(sug.perDay)} (últimos {sug.windowDays} días), quedan {sug.stock} y alcanzan {days < 1 ? "menos de 1 día" : `${days} día${days === 1 ? "" : "s"}`}
-                    {sug.qty ? `. Cubre ${sug.urgentDays} días mientras llega + 1 mes` : ""}.
+                    {" "}— se venden {fmtPerDaySug(sug.perDay)} (últimos {sug.windowDays} días), quedan {sug.stock} unidad{sug.stock === 1 ? "" : "es"} y alcanzan {days < 1 ? "menos de 1 día" : `${days} día${days === 1 ? "" : "s"}`}
+                    {sug.qty ? `. Cubre ${sug.urgentDays} día${sug.urgentDays === 1 ? "" : "s"} mientras llega + 1 mes` : ""}.
                   </span>
                   {sug.qty && line.quantity !== String(sug.qty) && (
                     <button type="button" className="text-[11.5px] font-semibold text-teal underline cursor-pointer" onClick={() => updateLine(idx, { quantity: String(sug.qty) })}>

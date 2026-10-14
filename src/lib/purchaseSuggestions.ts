@@ -29,11 +29,13 @@ export const HOT_SALES_WINDOW_DAYS = 10;
 export const HOT_MAX = 30;
 export const COLD_MAX = 60;
 // Confirmado 2026-10-01 por Daniel: "urgente" = lo que tarda el proveedor en
-// traerlo + días de seguridad. 15 días con CHEN (proveedor a crédito,
-// importa) y 7 con los demás. El proveedor es el de la última compra del
+// traerlo + días de seguridad. 7 con los demás. CHEN (proveedor a crédito)
+// corregido por el usuario 2026-10-14: lo trae el mismo día o máximo al día
+// siguiente (los 7 días de su hoja eran solo para revisar el estado de la
+// mercadería, no lo que tarda) → 1 día. El proveedor es el de la última compra del
 // producto; sin compra en DAFLOW, 7.
 export const URGENT_DAYS = 7;
-export const URGENT_DAYS_CREDIT_SUPPLIER = 15;
+export const URGENT_DAYS_CREDIT_SUPPLIER = 1;
 // Confirmado 2026-10-01 por Daniel: sugerir cuánto comprar — lo que se vende
 // mientras llega + un mes más después de que llegue, menos lo que hay.
 export const COVER_DAYS_AFTER_ARRIVAL = 30;
@@ -353,7 +355,7 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   // aunque el sistema diga que sobra o esté en negativo — el número no es real
   // y sin esto no había desde dónde pedir que lo cuenten.
   const uncountedSelling = (id: string, bal: number) =>
-    gate.active && !gate.counted.has(id) && perDayOf(id) > 0 && (bal < 0 || bal / perDayOf(id) <= URGENT_DAYS_CREDIT_SUPPLIER + COLD_WEEK_AHEAD_DAYS);
+    gate.active && !gate.counted.has(id) && perDayOf(id) > 0 && (bal < 0 || bal / perDayOf(id) <= Math.max(URGENT_DAYS, URGENT_DAYS_CREDIT_SUPPLIER) + COLD_WEEK_AHEAD_DAYS);
   const isColdSoonStock = (id: string, bal: number) => perDayOf(id) > 0 && Math.max(0, bal) / perDayOf(id) <= COLD_SOON_DAYS;
   const candidateIds = [...balances.entries()].filter(([id, bal]) => (bal >= 0 && (bal <= COLD_MAX || isColdSoonStock(id, bal))) || uncountedSelling(id, bal)).map(([id]) => id);
   const [items, lastPurchases, stockoutReports, discards] = await Promise.all([
@@ -403,6 +405,11 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
     const supplier = supplierByItem.get(item.id) ?? null;
     const urgentDays = urgentDaysForSupplier(supplier?.paymentMode);
     const supplierOut = supplierOutByItem.get(item.id) ?? null;
+    const isHot = isHotStock(item.id, stock);
+    const isCold = !isHot;
+    // CHEN lo trae en 1 día (2026-10-14): igual, todo lo que ya se acaba en
+    // HOT_DAYS es compra caliente y cuenta como urgente.
+    const urgentLimit = Math.max(urgentDays, HOT_DAYS);
     const baseStatus: SuggestionStatus = openPurchase
       ? "en_compra"
       : perDay === 0
@@ -411,12 +418,10 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
           ? supplierOut.askAt <= now
             ? "preguntar_proveedor"
             : "sin_proveedor"
-          : daysLeft! <= urgentDays
+          : daysLeft! <= urgentLimit
             ? "urgente"
             : "pronto";
     // Descarte de Nairoby: solo en compras frías y solo sobre urgente/pronto.
-    const isHot = isHotStock(item.id, stock);
-    const isCold = !isHot;
     const d = discardByItem.get(item.id);
     let discard: DiscardInfo | null = null;
     let discardReturned: SuggestionRow["discardReturned"] = null;
