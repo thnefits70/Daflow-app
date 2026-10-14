@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { normalizeWhatsapp, signLead } from "@/lib/provedixPublic";
-import { readVisitor, registerAllowed, setVisitorCookies } from "@/lib/provedixVisitor";
+import { readVisitor, registerAllowed, sameOriginRequest, setVisitorCookies } from "@/lib/provedixVisitor";
 import { checkWhatsapp } from "@/lib/pvxPhone";
 
 // Registro en provedix.com: nombre + WhatsApp + aceptación (obligatoria).
@@ -22,6 +22,7 @@ const schema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  if (!sameOriginRequest(req)) return NextResponse.json({ error: "Solicitud no permitida." }, { status: 403 });
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Revisa tus datos." }, { status: 400 });
   if (parsed.data.website) return NextResponse.json({ ok: true });
@@ -40,19 +41,29 @@ export async function POST(req: NextRequest) {
 
   const { visitorId } = await readVisitor(req);
   const now = new Date();
-  // Mismo WhatsApp otra vez (otro celular, borró las cookies): es la misma
-  // persona, se actualiza su nombre y se le vuelve a abrir la página.
-  const lead = await prisma.provedixLead.upsert({
-    where: { whatsapp },
-    create: { name, whatsapp, storeName, platform, platformEmail, consentAt: now },
-    // El correo solo se reemplaza si escribió uno (no se borra uno que ya dio).
-    update: { name, storeName, platform, ...(platformEmail ? { platformEmail } : {}), consentAt: now, lastSeenAt: now },
-    select: { id: true, name: true },
-  });
+  // Mismo WhatsApp otra vez (otro celular, borró las cookies): se le vuelve
+  // a abrir la página. Seguridad (2026-10-14): NO se cambian los datos que ya
+  // dio (nombre, tienda, plataforma, correo) — alguien que solo conoce su
+  // número no puede reemplazarlos; solo se completan los que faltaban.
+  const prev = await prisma.provedixLead.findUnique({ where: { whatsapp }, select: { id: true, storeName: true, platform: true, platformEmail: true } });
+  const lead = prev
+    ? await prisma.provedixLead.update({
+        where: { id: prev.id },
+        data: {
+          ...(prev.storeName ? {} : { storeName }),
+          ...(prev.platform ? {} : { platform }),
+          ...(prev.platformEmail || !platformEmail ? {} : { platformEmail }),
+          consentAt: now,
+          lastSeenAt: now,
+        },
+        select: { id: true, name: true },
+      })
+    : await prisma.provedixLead.create({ data: { name, whatsapp, storeName, platform, platformEmail, consentAt: now }, select: { id: true, name: true } });
   // Lo que miró antes de registrarse también queda a su nombre.
   await prisma.provedixEvent.updateMany({ where: { visitorId, leadId: null }, data: { leadId: lead.id } }).catch(() => null);
 
-  const res = NextResponse.json({ ok: true, name: lead.name });
-  setVisitorCookies(res, visitorId, signLead(lead.id));
+  // Se responde con el nombre que escribió ahora, no con el guardado.
+  const res = NextResponse.json({ ok: true, name });
+  setVisitorCookies(res, visitorId, signLead(lead.id), name);
   return res;
 }

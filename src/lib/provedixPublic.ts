@@ -143,19 +143,26 @@ export const LEAD_COOKIE = "pvx_lead";
 export const VISITOR_COOKIE = "pvx_vid";
 export const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
-function sign(value: string): string {
-  return createHmac("sha256", process.env.AUTH_SECRET ?? "pvx").update(`pvx:${value}`).digest("base64url").slice(0, 32);
+// Seguridad (2026-10-14): sin AUTH_SECRET no se firma ni se acepta ninguna
+// cookie (antes usaba una clave fija de respaldo que cualquiera podía adivinar).
+function sign(value: string): string | null {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret || secret.length < 16) return null;
+  return createHmac("sha256", secret).update(`pvx:${value}`).digest("base64url").slice(0, 32);
 }
 
 export function signLead(leadId: string): string {
-  return `${leadId}.${sign(leadId)}`;
+  const sig = sign(leadId);
+  if (!sig) throw new Error("AUTH_SECRET no configurado: no se puede firmar la cookie de provedix.com");
+  return `${leadId}.${sig}`;
 }
 
 export function verifyLead(cookie: string | undefined | null): string | null {
-  if (!cookie) return null;
+  if (!cookie || cookie.length > 200) return null;
   const [id, sig] = cookie.split(".");
-  if (!id || !sig) return null;
+  if (!id || !sig || !/^[a-z0-9]{10,40}$/i.test(id)) return null;
   const expected = sign(id);
+  if (!expected) return null;
   if (sig.length !== expected.length) return null;
   return timingSafeEqual(Buffer.from(sig), Buffer.from(expected)) ? id : null;
 }

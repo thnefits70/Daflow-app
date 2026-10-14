@@ -22,6 +22,8 @@ const nextConfig: NextConfig = {
   // falsa"); el navegador no adivina tipos de archivo; al salir a otra web no
   // se manda la dirección completa. Cámara (escáner) y micrófono (dictado)
   // solo para la propia app.
+  // Sin el encabezado "X-Powered-By: Next.js" (no anunciar con qué está hecha la página).
+  poweredByHeader: false,
   async headers() {
     return [
       {

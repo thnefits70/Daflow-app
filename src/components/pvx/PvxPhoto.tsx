@@ -1,15 +1,15 @@
 import Image from "next/image";
 
 // Fotos de Supabase: optimizadas y en caché de Vercel (ver next.config.ts).
-// Llegan como /pvx/f/… (publicPhotoUrl) para que no se vea "daflow".
-// Cualquier otra dirección se muestra tal cual.
-const SUPABASE = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+// Llegan como /pvx/f/… (publicPhotoUrl) para que no se vea "daflow" ni la
+// dirección del almacenamiento (2026-10-14: ya no va en el código que baja el
+// visitante). Cualquier otra dirección se muestra tal cual.
 
 // fit="contain": la foto completa, sin recortar (ficha del producto, 2026-10-14).
 export function PvxPhoto({ src, alt, sizes, priority = false, fit = "cover" }: { src: string | null; alt: string; sizes: string; priority?: boolean; fit?: "cover" | "contain" }) {
   const fitClass = fit === "contain" ? "object-contain" : "object-cover";
   if (!src) return <div className="absolute inset-0 grid place-items-center bg-[#F4F4F2]"><Image src="/pvx/brand/mark-ink.png" alt="" width={360} height={403} className="w-[28%] max-w-[72px] h-auto opacity-[0.12]" /></div>;
-  if (src.startsWith("/pvx/f/") || (SUPABASE && src.startsWith(`${SUPABASE}/storage/v1/object/public/`))) {
+  if (src.startsWith("/pvx/f/")) {
     return <Image src={src} alt={alt} fill sizes={sizes} priority={priority} className={fitClass} />;
   }
   // eslint-disable-next-line @next/next/no-img-element

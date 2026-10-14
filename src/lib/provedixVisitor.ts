@@ -14,10 +14,26 @@ export async function readVisitor(req: NextRequest): Promise<{ visitorId: string
   return { visitorId, isNew: visitorId !== existing, leadId };
 }
 
-export function setVisitorCookies(res: NextResponse, visitorId: string, leadCookie?: string) {
+// Nombre para el saludo "Hola, …" (2026-10-14): el que escribió quien usa
+// ESTE navegador, nunca el guardado en la base — si alguien se registra con
+// el número de otra persona no puede ver su nombre real.
+export const NAME_COOKIE = "pvx_nm";
+
+export function setVisitorCookies(res: NextResponse, visitorId: string, leadCookie?: string, displayName?: string) {
   const base = { httpOnly: true, sameSite: "lax" as const, secure: process.env.NODE_ENV === "production", path: "/", maxAge: COOKIE_MAX_AGE };
   res.cookies.set(VISITOR_COOKIE, visitorId, base);
   if (leadCookie) res.cookies.set(LEAD_COOKIE, leadCookie, base);
+  if (displayName) res.cookies.set(NAME_COOKIE, encodeURIComponent(displayName.slice(0, 40)), base);
+}
+
+export function readDisplayName(req: NextRequest): string | null {
+  const v = req.cookies.get(NAME_COOKIE)?.value;
+  if (!v) return null;
+  try {
+    return decodeURIComponent(v).slice(0, 40) || null;
+  } catch {
+    return null;
+  }
 }
 
 // Límite de intentos (seguridad, 2026-10-12): un robot que abre la página
@@ -51,6 +67,42 @@ export async function registerAllowed(req: NextRequest): Promise<boolean> {
   if (hits.length > 5) return false;
   const recent = await prisma.provedixLead.count({ where: { createdAt: { gte: new Date(now - 10 * MINUTE) } } });
   return recent < 60;
+}
+
+// Seguridad (2026-10-14): las acciones (registro, visitas, búsquedas, clics)
+// solo se aceptan si vienen de la misma página — otra web no puede hacer que
+// el navegador de un visitante las envíe por él.
+export function sameOriginRequest(req: NextRequest): boolean {
+  const from = req.headers.get("origin") ?? req.headers.get("referer");
+  if (!from) return false;
+  try {
+    const host = new URL(from).host.toLowerCase();
+    const own = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "").toLowerCase();
+    return host === own || host === "provedix.com" || host === "www.provedix.com";
+  } catch {
+    return false;
+  }
+}
+
+// Fichas completas: máximo 40 cada 10 minutos por persona registrada y por
+// conexión (en cada servidor), y 300 por hora por registrado según lo
+// anotado — un robot registrado no puede bajarse todo el catálogo de golpe.
+const productHits = new Map<string, number[]>();
+const PRODUCT_WINDOW = 10 * MINUTE;
+const MAX_PRODUCTS_WINDOW = 40;
+
+export async function productViewAllowed(req: NextRequest, leadId: string): Promise<boolean> {
+  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "?";
+  const now = Date.now();
+  for (const key of [`l:${leadId}`, `i:${ip}`]) {
+    const hits = (productHits.get(key) ?? []).filter((t) => now - t < PRODUCT_WINDOW);
+    hits.push(now);
+    productHits.set(key, hits);
+    if (hits.length > MAX_PRODUCTS_WINDOW) return false;
+  }
+  if (productHits.size > 5000) productHits.clear();
+  const lastHour = await prisma.provedixEvent.count({ where: { leadId, type: "product", createdAt: { gte: new Date(now - 60 * MINUTE) } } });
+  return lastHour < 300;
 }
 
 export async function logProvedixEvent(data: { visitorId: string; leadId: string | null; type: "visit" | "search" | "product" | "whatsapp"; query?: string; productCode?: string }) {

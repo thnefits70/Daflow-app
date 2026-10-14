@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { isProvedixHost, PROVEDIX_PUBLIC_PREFIXES } from "@/lib/provedixHosts";
 
@@ -16,27 +16,62 @@ const SUPPLIER_LEDGER_ALLOWED_PREFIXES = ["/proveedor-ledger", "/api/proveedor-l
 
 // provedix.com (etapa 3, 2026-10-12): mismo criterio — la raíz muestra la
 // página pública (/pvx) y solo pasan sus rutas; todo lo demás, 404 liso.
-// /api/auth/session y /api/app-version los piden componentes globales del
-// layout; no revelan nada (sin sesión en ese dominio).
 // Archivo de verificación de Google Search Console (2026-10-13): no borrar,
 // Google lo revisa de vez en cuando para confirmar que la página es nuestra.
-const PROVEDIX_EXTRA_PATHS = ["/api/auth/session", "/api/app-version", "/robots.txt", "/sitemap.xml", "/googleb11466063347423e.html"];
+// (2026-10-14: /api/auth/session y /api/app-version ya no pasan — la página
+// pública no carga la sesión ni el aviso de versión de DAFLOW.)
+const PROVEDIX_EXTRA_PATHS = ["/robots.txt", "/sitemap.xml", "/googleb11466063347423e.html"];
 
-export default auth((req) => {
+// Seguridad de provedix.com (pedido del usuario 2026-10-14): la página solo
+// puede cargar cosas de su propio dominio (nada de scripts de otros sitios),
+// no se puede meter dentro de otra página (contra engaños por "marco") y el
+// navegador siempre usa https.
+const PROVEDIX_CSP = [
+  "default-src 'self'",
+  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"}`,
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "media-src 'self'",
+  "frame-ancestors 'none'",
+  "frame-src 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "upgrade-insecure-requests",
+].join("; ");
+
+function withProvedixSecurity(res: NextResponse): NextResponse {
+  res.headers.set("Content-Security-Policy", PROVEDIX_CSP);
+  res.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+  res.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  return res;
+}
+
+// provedix.com no pasa por el sistema de sesión de DAFLOW (2026-10-14): así
+// no recibe sus cookies ni deja rastro de él en el navegador del visitante.
+function provedixProxy(req: NextRequest): NextResponse {
   const { pathname } = req.nextUrl;
-
-  if (isProvedixHost(req.nextUrl.hostname)) {
-    // Una sola dirección para Google (2026-10-13): www.provedix.com → provedix.com.
-    if (req.nextUrl.hostname.toLowerCase().startsWith("www.")) {
-      const url = req.nextUrl.clone();
-      url.hostname = req.nextUrl.hostname.slice(4);
-      url.port = "";
-      return NextResponse.redirect(url, 308);
-    }
-    if (pathname === "/") return NextResponse.rewrite(new URL("/pvx", req.nextUrl));
-    const allowed = PROVEDIX_PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) || PROVEDIX_EXTRA_PATHS.includes(pathname);
-    return allowed ? NextResponse.next() : new NextResponse(null, { status: 404 });
+  // Una sola dirección para Google (2026-10-13): www.provedix.com → provedix.com.
+  if (req.nextUrl.hostname.toLowerCase().startsWith("www.")) {
+    const url = req.nextUrl.clone();
+    url.hostname = req.nextUrl.hostname.slice(4);
+    url.port = "";
+    return NextResponse.redirect(url, 308);
   }
+  if (pathname === "/") return withProvedixSecurity(NextResponse.rewrite(new URL("/pvx", req.nextUrl)));
+  const allowed = PROVEDIX_PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) || PROVEDIX_EXTRA_PATHS.includes(pathname);
+  return allowed ? withProvedixSecurity(NextResponse.next()) : new NextResponse(null, { status: 404 });
+}
+
+export default function proxy(req: NextRequest, ctx: NextFetchEvent) {
+  if (isProvedixHost(req.nextUrl.hostname)) return provedixProxy(req);
+  return daflowProxy(req, ctx as never);
+}
+
+const daflowProxy = auth((req) => {
+  const { pathname } = req.nextUrl;
 
   if (SUPPLIER_LEDGER_DOMAIN && req.nextUrl.hostname === SUPPLIER_LEDGER_DOMAIN) {
     const allowed = SUPPLIER_LEDGER_ALLOWED_PREFIXES.some((p) => pathname.startsWith(p));
