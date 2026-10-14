@@ -217,14 +217,84 @@
   display: none;
 }
 
+/* Celular: sin demora de doble toque y sin el destello azul al tocar. */
+.pvx a,
+.pvx button,
+.pvx [role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Brillo metálico que cruza el botón naranja principal (2026-10-14). */
+@keyframes pvx-shine {
+  0%,
+  70% {
+    transform: translateX(-120%) skewX(-20deg);
+  }
+  100% {
+    transform: translateX(220%) skewX(-20deg);
+  }
+}
+.pvx .pvx-shine {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.pvx .pvx-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.45), transparent);
+  transform: translateX(-120%) skewX(-20deg);
+  animation: pvx-shine 4.5s var(--pvx-ease-in-out) infinite 1.2s;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Ciudad que cambia en la portada. */
+@keyframes pvx-swap {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.6em, 0);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+.pvx .pvx-swap {
+  animation: pvx-swap 520ms var(--pvx-ease-out) both;
+}
+
+/* Barra superior de vidrio. */
+.pvx .pvx-glass {
+  background: rgb(13 14 17 / 0.72);
+  -webkit-backdrop-filter: saturate(160%) blur(16px);
+  backdrop-filter: saturate(160%) blur(16px);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.08);
+}
+
+/* Cinta de productos detenida con el botón "Pausar". */
+.pvx [data-paused] .pvx-marquee-track {
+  animation-play-state: paused;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pvx .pvx-marquee-track,
   .pvx .pvx-rise,
   .pvx .pvx-drop,
   .pvx .pvx-sheet,
   .pvx .pvx-overlay,
-  .pvx .pvx-pop {
+  .pvx .pvx-pop,
+  .pvx .pvx-swap,
+  .pvx .pvx-shine::after {
     animation: none;
+  }
+  .pvx .pvx-shine::after {
+    display: none;
   }
   .pvx .pvx-marquee {
     overflow-x: auto;

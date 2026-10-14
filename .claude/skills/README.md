@@ -9,6 +9,7 @@ abrir Claude Code dentro de `daflow-app`.
 | `emil-design-eng/` | github.com/emilkowalski/skill | MIT |
 | `impeccable/` | github.com/pbakaus/impeccable | Apache 2.0 |
 | `taste-skill/` | github.com/Leonxlnx/taste-skill | MIT |
+| `web-design-guidelines/` | github.com/vercel-labs/agent-skills (reglas en `rules.md`, copia del 2026-10-14) | MIT |
 
 Solo se copiaron los textos (.md). A propósito NO se incluyeron sus programas
 (scripts y binarios descargables): no se ejecuta código de terceros.

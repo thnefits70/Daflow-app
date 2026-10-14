@@ -10,7 +10,8 @@ import { DropiLink, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
 import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
 import { AdvisorPicker, WhatsAppButton } from "@/components/pvx/PvxContact";
 import { PvxRocketSku } from "@/components/pvx/PvxRocketSku";
-import { PvxCities, PvxOperation, PvxResources } from "@/components/pvx/PvxSections";
+import { PvxCities, PvxOperation, PvxResources, titleCase } from "@/components/pvx/PvxSections";
+import { CountUp, GlassBar, RotatingCity, useMarqueePause } from "@/components/pvx/PvxEffects";
 import { IconFacebook, IconInstagram, IconTikTok } from "@/components/pvx/PvxIcons";
 import { IconArrow, IconBox, IconCheck, IconClock, IconCopy, IconFlame, IconImage, IconLock, IconSearch, IconSpark, IconTruck, IconWhatsApp } from "@/components/pvx/PvxIcons";
 
@@ -102,7 +103,7 @@ function CardDropiId({ code }: { code: string }) {
       className="pvx-press flex w-full items-center justify-between gap-1 whitespace-nowrap rounded-full bg-white px-3 py-1.5 hover:bg-[var(--pvx-orange-soft)] cursor-pointer"
     >
       <span className="text-[11px] font-bold text-[var(--pvx-ink-3)]">Dropi</span>
-      <span className="pvx-num text-[13px] font-bold tracking-wide text-[var(--pvx-ink)]">{code}</span>
+      <span translate="no" className="pvx-num text-[13px] font-bold tracking-wide text-[var(--pvx-ink)]">{code}</span>
       <span className="text-[var(--pvx-orange-text)]">{copied ? <IconCheck className="w-3.5 h-3.5" /> : <IconCopy className="w-3.5 h-3.5" />}</span>
     </button>
   );
@@ -151,7 +152,7 @@ function Nav({ name }: { name: string | null }) {
         ) : (
           <a
             href="#productos"
-            className="pvx-press inline-flex items-center gap-1.5 rounded-full bg-[var(--pvx-orange)] px-4 py-2 text-[13.5px] font-bold text-white hover:bg-[var(--pvx-orange-press)]"
+            className="pvx-press pvx-shine inline-flex items-center gap-1.5 rounded-full bg-[var(--pvx-orange)] px-4 py-2 text-[13.5px] font-bold text-white hover:bg-[var(--pvx-orange-press)]"
           >
             Ver productos <IconArrow className="w-3.5 h-3.5" />
           </a>
@@ -194,7 +195,7 @@ function HeroSearch({ cards, query, onQuery, onOpen }: { cards: PublicCard[]; qu
           setFocused(false);
           scrollToCatalog();
         }}
-        className="flex items-center gap-2 rounded-full bg-white p-1.5 pl-5"
+        className="flex items-center gap-2 rounded-full bg-white p-1.5 pl-5 focus-within:shadow-[0_0_0_3px_var(--pvx-orange)]"
       >
         <IconSearch className="w-5 h-5 shrink-0 text-[var(--pvx-ink-3)]" />
         <label htmlFor="pvx-hero-search" className="sr-only">
@@ -212,7 +213,7 @@ function HeroSearch({ cards, query, onQuery, onOpen }: { cards: PublicCard[]; qu
           autoComplete="off"
           className="min-w-0 flex-1 bg-transparent py-2 text-[16px] text-[var(--pvx-ink)] outline-none placeholder:text-[var(--pvx-ink-3)]"
         />
-        <button type="submit" className="pvx-press shrink-0 rounded-full bg-[var(--pvx-orange)] px-4 py-2.5 text-[14px] font-bold text-white hover:bg-[var(--pvx-orange-press)] sm:px-5">
+        <button type="submit" className="pvx-press pvx-shine shrink-0 rounded-full bg-[var(--pvx-orange)] px-4 py-2.5 text-[14px] font-bold text-white hover:bg-[var(--pvx-orange-press)] sm:px-5">
           Buscar
         </button>
       </form>
@@ -290,11 +291,13 @@ function MarqueeItem({ c, onOpen, hidden }: { c: PublicCard; onOpen: (code: stri
 // avanzan en sentidos contrarios. Con "menos movimiento" queda quieta y se
 // desliza con el dedo.
 function ProductMarquee({ cards, onOpen }: { cards: PublicCard[]; onOpen: (code: string) => void }) {
+  const { paused, button } = useMarqueePause();
   const withPhoto = cards.filter((c) => c.photo).slice(0, 20);
   if (withPhoto.length < 6) return null;
   const rows = [withPhoto.filter((_, i) => i % 2 === 0), withPhoto.filter((_, i) => i % 2 === 1)];
   return (
-    <div className="flex flex-col gap-3 sm:gap-4" aria-label="Productos más vendidos">
+    <div className="flex flex-col gap-3 sm:gap-4" aria-label="Productos más vendidos" data-paused={paused || undefined}>
+      <div className="mx-auto flex w-full max-w-[1240px] justify-end px-4 sm:px-8">{button}</div>
       {rows.map((row, r) => (
         <div key={r} className="pvx-marquee overflow-hidden">
           <div className="pvx-marquee-track" data-dir={r === 1 ? "right" : "left"}>
@@ -325,7 +328,7 @@ function Stats({ stats }: { stats: PublicStats }) {
         <div key={r.label} data-r style={{ ["--d" as string]: i }}>
           <dt className="sr-only">{r.label}</dt>
           <dd>
-            <span className="pvx-display pvx-num block whitespace-nowrap text-[44px] text-[var(--pvx-orange)] sm:text-[clamp(44px,4.4vw,64px)]">{r.value}</span>
+            <CountUp value={r.value} className="pvx-display pvx-num block whitespace-nowrap text-[44px] text-[var(--pvx-orange)] sm:text-[clamp(44px,4.4vw,64px)]" />
             <span className="mt-2 block max-w-[220px] text-[15px] leading-snug text-white/75 sm:text-[16px]">{r.label}</span>
           </dd>
         </div>
@@ -360,6 +363,7 @@ function Hero({ cards, stats, name, query, onQuery, onOpen }: { cards: PublicCar
             </span>
           ))}
         </h1>
+        <RotatingCity cities={stats.topCities.slice(0, 6).map((c) => titleCase(c.city))} />
         <p className="mt-8 max-w-[580px] text-[17px] leading-relaxed text-white/80 sm:mt-10 sm:text-[19px]">
           Los productos de Provedix con ventas reales en Ecuador: cuánto se vende, a qué precio y en qué ciudades. Gratis, con el ID de Dropi listo para copiar.
         </p>
@@ -771,6 +775,13 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
 
   return (
     <div ref={rootRef}>
+      <a
+        href="#productos"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:rounded-full focus:bg-white focus:px-4 focus:py-2 focus:text-[14px] focus:font-bold focus:text-[var(--pvx-ink)]"
+      >
+        Saltar a los productos
+      </a>
+      <GlassBar />
       <Hero cards={cards} stats={stats} name={name} query={query} onQuery={onSearch} onOpen={openCard} />
       <Steps top={cards.find((c) => c.photo) ?? cards[0]} />
       <Promises />
@@ -790,7 +801,7 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
           </div>
         </div>
 
-        <div className="sticky top-0 z-20 mt-8 bg-[var(--pvx-paper)]/[.97] shadow-[0_1px_0_var(--pvx-paper-3)]">
+        <div className="sticky top-[60px] z-20 mt-8 sm:top-[68px] bg-[var(--pvx-paper)]/[.97] shadow-[0_1px_0_var(--pvx-paper-3)]">
           <div className="mx-auto flex max-w-[1240px] flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:px-8">
             <label className="flex w-full items-center gap-2 rounded-full bg-[var(--pvx-paper-2)] px-4 focus-within:bg-white focus-within:shadow-[0_0_0_2px_var(--pvx-orange)] sm:max-w-[380px]">
               <IconSearch className="w-4.5 h-4.5 shrink-0 text-[var(--pvx-ink-3)]" />
@@ -888,7 +899,13 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
           <div
             role="dialog"
             aria-modal="true"
-            className={`pvx-sheet w-full sm:max-w-xl ${open.mode === "detail" ? "md:max-w-5xl" : open.mode === "register" ? "sm:max-w-2xl" : ""} max-h-[94vh] overflow-y-auto rounded-t-[28px] bg-[var(--pvx-paper)] sm:rounded-[28px]`}
+            aria-label={open.mode === "register" ? "Registro gratis" : "Ficha del producto"}
+            className={`pvx-sheet w-full rounded-t-[28px] bg-[var(--pvx-paper)] sm:rounded-[28px] ${
+              open.mode === "detail"
+                ? // Ficha: alto fijo que cabe en la pantalla; lo de adentro se reparte en pestañas (2026-10-14).
+                  "flex max-h-[94dvh] flex-col overflow-hidden sm:max-w-2xl lg:h-[min(92dvh,640px)] lg:max-w-5xl"
+                : `max-h-[94vh] overflow-y-auto overscroll-contain sm:max-w-xl ${open.mode === "register" ? "sm:max-w-2xl" : ""}`
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             {open.mode === "register" && (

@@ -83,7 +83,7 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
           <label htmlFor="pvx-name" className={label}>
             Tu nombre
           </label>
-          <input id="pvx-name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required maxLength={80} className={input} placeholder="Ej. Andrea Morales" />
+          <input id="pvx-name" name="name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required maxLength={80} className={input} placeholder="Ej. Andrea Morales…" />
         </div>
         <div>
           <label htmlFor="pvx-store" className={label}>
@@ -91,6 +91,7 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
           </label>
           <input
             id="pvx-store"
+            name="store"
             value={storeName}
             onChange={(e) => setStoreName(e.target.value)}
             autoComplete="organization"
@@ -98,7 +99,7 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
             minLength={2}
             maxLength={80}
             className={input}
-            placeholder="Ej. Andrea Store"
+            placeholder="Ej. Andrea Store…"
           />
         </div>
 
@@ -139,7 +140,7 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
                 value={country}
                 onChange={(e) => setCountry(e.target.value)}
                 aria-label="País del WhatsApp"
-                className="h-full cursor-pointer appearance-none bg-transparent py-2.5 pl-3 pr-7 text-[15px] font-bold outline-none"
+                className="h-full cursor-pointer appearance-none bg-transparent text-[#111214] py-2.5 pl-3 pr-7 text-[15px] font-bold outline-none"
               >
                 {PHONE_COUNTRIES.map((c) => (
                   <option key={c.iso} value={c.iso}>
@@ -151,6 +152,7 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
             </label>
             <input
               id="pvx-wa"
+              name="whatsapp"
               value={whatsapp}
               onChange={(e) => setWhatsapp(e.target.value)}
               onBlur={() => setPhoneTouched(true)}
@@ -159,10 +161,14 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
               required
               maxLength={20}
               className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-[16px] outline-none"
-              placeholder={pc.example}
+              placeholder={`${pc.example}…`}
             />
           </div>
-          {phoneBad && <p className="mt-1 text-[12px] leading-snug text-[#d33a2c]">{phoneCheck.error}</p>}
+          {phoneBad && (
+            <p role="alert" className="mt-1 text-[12px] leading-snug text-[#d33a2c]">
+              {phoneCheck.error}
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="pvx-email" className={label}>
@@ -170,14 +176,16 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
           </label>
           <input
             id="pvx-email"
+            name="email"
             type="email"
+            spellCheck={false}
             value={platformEmail}
             onChange={(e) => setPlatformEmail(e.target.value)}
             autoComplete="email"
             inputMode="email"
             maxLength={120}
             className={input}
-            placeholder="tucorreo@gmail.com"
+            placeholder="tucorreo@gmail.com…"
           />
         </div>
       </div>
@@ -192,12 +200,16 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
         </span>
       </label>
 
-      {error && <div className="mt-2 text-[13px] text-[#d33a2c]">{error}</div>}
+      {error && (
+        <div role="alert" className="mt-2 text-[13px] text-[#d33a2c]">
+          {error}
+        </div>
+      )}
 
       <button
         type="submit"
         disabled={busy}
-        className="pvx-press mt-3 w-full rounded-full bg-[#F95B02] py-3.5 text-[16px] font-bold text-white hover:bg-[#DD4F00] disabled:opacity-60 cursor-pointer"
+        className="pvx-press pvx-shine mt-3 w-full rounded-full bg-[#F95B02] py-3.5 text-[16px] font-bold text-white hover:bg-[#DD4F00] disabled:opacity-60 cursor-pointer"
       >
         {busy ? "Abriendo…" : "Ver los datos completos"}
       </button>

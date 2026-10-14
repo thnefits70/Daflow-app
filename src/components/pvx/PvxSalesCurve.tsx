@@ -95,3 +95,54 @@ export function PvxSalesCurve({ values, height = 70, labels = true, tips }: { va
     </div>
   );
 }
+
+// Barras día por día para la ficha (2026-10-14): la curva suavizada mostraba
+// picos en días "Sin ventas" (promedio de 3 días vs. el rango exacto del día).
+// Acá cada barra ES un día: su alto sale del mismo rango que dice el globito,
+// así nunca se contradicen. Sin fechas ni cifras exactas, como siempre.
+const LEVELS = ["Sin ventas ese día", "1–5 ventas ese día", "6–10 ventas ese día", "11–20 ventas ese día", "21–50 ventas ese día", "51–100 ventas ese día", "Más de 100 ventas ese día"];
+
+// heightClass: alto de las barras según la pantalla (más bajas en celular).
+export function PvxDailyBars({ ranges, heightClass = "h-[150px]" }: { ranges: string[]; heightClass?: string }) {
+  const levels = ranges.map((r) => Math.max(0, LEVELS.indexOf(r)));
+  const top = Math.max(...levels, 1);
+  const lastSale = levels.reduce((acc, l, i) => (l > 0 ? i : acc), -1);
+  const [active, setActive] = useState<number | null>(null);
+  const shown = active ?? (lastSale >= 0 ? lastSale : null);
+  const soldDays = levels.filter((l) => l > 0).length;
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-[12.5px] text-[#4A4F58]">
+          Vendió <b className="text-[#111214]">{soldDays} de {ranges.length} días</b>
+        </span>
+        <span className="min-h-[1.25em] text-right text-[12.5px] font-bold text-[#111214]" aria-live="polite">
+          {shown != null ? `${active == null ? "Último día con ventas: " : ""}${ranges[shown].replace(" ese día", "")}` : ""}
+        </span>
+      </div>
+      <div className={`mt-2 flex items-end gap-[2px] sm:gap-[3px] ${heightClass}`} onPointerLeave={() => setActive(null)} role="img" aria-label={`Ventas por día de los últimos ${ranges.length} días`}>
+        {levels.map((l, i) => (
+          <button
+            key={i}
+            type="button"
+            tabIndex={-1}
+            aria-hidden
+            onPointerEnter={() => setActive(i)}
+            onPointerDown={() => setActive(i)}
+            className="group relative flex h-full flex-1 cursor-pointer items-end"
+          >
+            <span
+              className={`block w-full rounded-t-[4px] transition-colors duration-150 ${l === 0 ? "bg-[#E2E2DE]" : shown === i ? "bg-[#111214]" : "bg-[#F95B02] group-hover:bg-[#DD4F00]"}`}
+              style={{ height: l === 0 ? 3 : `${Math.max(10, (l / top) * 100)}%` }}
+            />
+          </button>
+        ))}
+      </div>
+      <div className="mt-1 flex justify-between text-[11px] text-[#6B717B]">
+        <span>Antes</span>
+        <span>Toca una barra para ver ese día</span>
+        <span>Reciente</span>
+      </div>
+    </div>
+  );
+}

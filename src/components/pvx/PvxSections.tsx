@@ -202,7 +202,7 @@ export function PvxOperation() {
 
 // ---- Ciudades que más compran --------------------------------------------------
 
-function titleCase(s: string): string {
+export function titleCase(s: string): string {
   return s.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (_, a: string, b: string) => a + b.toUpperCase());
 }
 
