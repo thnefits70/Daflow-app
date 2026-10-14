@@ -24,6 +24,7 @@ const cleanReply = (t: string) =>
   t
     .replace(HANDOFF_MARK, "")
     .replace(BLOCK_MARK, "")
+    .replace("[[SOSPECHA]]", "")
     .replace(/\[\[?[A-Z]*\]?$/, "")
     .trim();
 const SUGGESTIONS = [

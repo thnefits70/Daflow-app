@@ -39,6 +39,7 @@ import { COMBO_BRAND_HREF } from "@/lib/comboAlias";
 import { MANIFEST_BRAND_CONFLICTS_HREF } from "@/lib/manifestBrandConflicts";
 import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
 import { getLeaderTeamTaskPendingItems, getMyTeamTaskPendingItem } from "@/lib/teamTasks";
+import { getProvedixSuspiciousChatsPendingItem } from "@/lib/provedixSuspicion";
 
 import { formatPurchaseRequestCode } from "@/lib/purchaseCode";
 
@@ -487,6 +488,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   caja_chica_recarga_pendiente: "Caja Chica — te fondearon, falta que confirmes",
   caja_chica_flete_motorizado: "Caja Chica — flete por pagar al motorizado",
   pagos_administrativos: "Pagos administrativos pendientes de pago",
+  michelle_sospechosos: "Michelle — conversaciones sospechosas por revisar",
   pagos_mercaderia: "Pagos de mercadería pendientes",
   pagos_flete: "Fletes pendientes de pago",
   ventas_externas_revisar: "Ventas Externas — venta nueva por aprobar",
@@ -4150,6 +4152,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(freightExceptionItem ? [freightExceptionItem] : []),
       ...(nairobySalaryItem ? [nairobySalaryItem] : []),
       ...adminPlanItems.map((i) => ({ ...i, type: "plan_mejora_admin" })),
+      // Pedido del usuario 2026-10-14: chats de provedix.com donde alguien intentó
+      // sacarle información a Michelle o usarla para otra cosa (provedixSuspicion.ts).
+      ...(await getProvedixSuspiciousChatsPendingItem().then((i) => (i ? [i] : [])).catch(() => [])),
     ];
     // Pedido del usuario 2026-10-01: lo que no entra al Kardex porque alguien
     // no confirmó en 24 horas va arriba de todo (y sale en el aviso de las 8:00).

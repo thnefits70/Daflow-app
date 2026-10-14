@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notifyOwner } from "@/lib/notifications";
+import { chatSuspicion } from "@/lib/provedixSuspicion";
 
 // Etapa 4 de provedix.com (2026-10-12, decisiones del usuario): tráfico y
 // cartera de dropshippers se ven SOLO en la sección Provedix del admin, sin
@@ -234,6 +235,10 @@ export type ProvedixChatRow = {
   messages: number;
   lastQuestion: string | null;
   blocked: boolean;
+  // Sospecha (provedixSuspicion.ts): motivos y si falta que el admin la revise.
+  suspicious: boolean;
+  reasons: string[];
+  pendingReview: boolean;
   updatedAt: string;
 };
 
@@ -246,20 +251,26 @@ export async function getProvedixChats(): Promise<ProvedixChatRow[]> {
       updatedAt: true,
       lead: { select: { name: true, whatsapp: true } },
       _count: { select: { messages: { where: { role: { in: ["user", "assistant"] } } } } },
-      messages: { where: { role: { in: ["user", "blocked"] } }, orderBy: { createdAt: "desc" }, take: 20, select: { role: true, content: true } },
+      messages: { where: { role: { in: ["user", "blocked", "unblocked", "flag", "reviewed"] } }, orderBy: { createdAt: "desc" }, select: { role: true, content: true, createdAt: true } },
     },
   });
   return chats
     .filter((c) => c._count.messages > 0)
-    .map((c) => ({
-      id: c.id,
-      who: c.lead?.name ?? "Visitante sin registro",
-      whatsapp: c.lead?.whatsapp ?? null,
-      messages: c._count.messages,
-      lastQuestion: c.messages.find((m) => m.role === "user")?.content ?? null,
-      blocked: c.messages.some((m) => m.role === "blocked"),
-      updatedAt: c.updatedAt.toISOString(),
-    }));
+    .map((c) => {
+      const s = chatSuspicion(c.messages);
+      return {
+        id: c.id,
+        who: c.lead?.name ?? "Visitante sin registro",
+        whatsapp: c.lead?.whatsapp ?? null,
+        messages: c._count.messages,
+        lastQuestion: c.messages.find((m) => m.role === "user")?.content ?? null,
+        blocked: c.messages.some((m) => m.role === "blocked"),
+        suspicious: s.suspicious,
+        reasons: s.reasons,
+        pendingReview: s.pending,
+        updatedAt: c.updatedAt.toISOString(),
+      };
+    });
 }
 
 export async function getProvedixChatMessages(chatId: string): Promise<{ role: string; content: string; at: string }[]> {
@@ -268,11 +279,19 @@ export async function getProvedixChatMessages(chatId: string): Promise<{ role: s
 }
 
 // Desbloquear a quien Michelle cerró el chat (el admin decide). Quita el
-// bloqueo de esa persona en todas sus conversaciones (mismo navegador o registro).
+// bloqueo de esa persona en todas sus conversaciones (mismo navegador o
+// registro); queda como "unblocked" para no perder el historial.
 export async function unblockProvedixChat(chatId: string): Promise<void> {
   const chat = await prisma.provedixChat.findUnique({ where: { id: chatId }, select: { visitorId: true, leadId: true } });
   if (!chat) return;
-  await prisma.provedixChatMessage.deleteMany({
+  await prisma.provedixChatMessage.updateMany({
     where: { role: "blocked", chat: chat.leadId ? { OR: [{ visitorId: chat.visitorId }, { leadId: chat.leadId }] } : { visitorId: chat.visitorId } },
+    data: { role: "unblocked", content: "El admin desbloqueó a esta persona." },
   });
+}
+
+// El admin leyó una conversación sospechosa: deja de salir en su Inicio
+// (vuelve a salir si pasa algo sospechoso nuevo).
+export async function markProvedixChatReviewed(chatId: string): Promise<void> {
+  await prisma.provedixChatMessage.create({ data: { chatId, role: "reviewed", content: "El admin revisó esta conversación." } });
 }

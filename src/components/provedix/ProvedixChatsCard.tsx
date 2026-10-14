@@ -11,13 +11,32 @@ import type { ProvedixChatRow } from "@/lib/provedixTraffic";
 // confidencial; acá se ve "Bloqueado" y el admin puede desbloquear.
 
 function when(iso: string) {
-  return new Date(iso).toLocaleString("es-EC", { timeZone: "America/Guayaquil", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleString("es-EC", {
+    timeZone: "America/Guayaquil",
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
-const tidy = (t: string) => t.replace("[[ASESORA]]", "→ pasó a Michelle por WhatsApp").replace("[[BLOQUEAR]]", "→ cerró el chat");
+const tidy = (t: string) =>
+  t
+    .replace("[[ASESORA]]", "→ pasó a Michelle por WhatsApp")
+    .replace("[[BLOQUEAR]]", "→ cerró el chat")
+    .replace("[[SOSPECHA]]", "→ ⚠️ le pareció raro");
+
+const SYSTEM_ICON: Record<string, string> = {
+  blocked: "🔒",
+  unblocked: "🔓",
+  flag: "⚠️",
+  reviewed: "✓",
+};
 
 function Conversation({ chatId }: { chatId: string }) {
-  const [data, setData] = useState<{ role: string; content: string; at: string }[] | null | "error">(null);
+  const [data, setData] = useState<
+    { role: string; content: string; at: string }[] | null | "error"
+  >(null);
   useEffect(() => {
     let alive = true;
     fetch(`/api/provedix/chats/${chatId}`)
@@ -28,19 +47,34 @@ function Conversation({ chatId }: { chatId: string }) {
       alive = false;
     };
   }, [chatId]);
-  if (data === null) return <div className="text-[12px] text-steel">Cargando conversación…</div>;
-  if (data === "error") return <div className="text-[12px] text-red">No se pudo cargar la conversación. Intenta de nuevo.</div>;
+  if (data === null)
+    return <div className="text-[12px] text-steel">Cargando conversación…</div>;
+  if (data === "error")
+    return (
+      <div className="text-[12px] text-red">
+        No se pudo cargar la conversación. Intenta de nuevo.
+      </div>
+    );
   return (
     <div className="flex flex-col gap-2 max-h-[420px] overflow-y-auto pr-1">
       {data.map((m, i) =>
-        m.role === "blocked" ? (
-          <div key={i} className="self-center text-[11.5px] font-semibold text-red">
-            🔒 {m.content} · {when(m.at)}
+        m.role !== "user" && m.role !== "assistant" ? (
+          <div
+            key={i}
+            className={`self-center text-[11.5px] font-semibold ${m.role === "reviewed" || m.role === "unblocked" ? "text-steel" : "text-red"}`}
+          >
+            {SYSTEM_ICON[m.role] ?? "•"} {m.content} · {when(m.at)}
           </div>
         ) : (
-          <div key={i} className={`max-w-[85%] rounded-lg px-3 py-2 text-[12.5px] whitespace-pre-wrap ${m.role === "user" ? "self-end bg-ink text-bg" : "self-start bg-surface border border-rule"}`}>
-            <div className={`text-[10.5px] mb-0.5 ${m.role === "user" ? "text-bg opacity-70" : "text-steel"}`}>
-              {m.role === "user" ? "Dropshipper" : "Michelle (IA)"} · {when(m.at)}
+          <div
+            key={i}
+            className={`max-w-[85%] rounded-lg px-3 py-2 text-[12.5px] whitespace-pre-wrap ${m.role === "user" ? "self-end bg-ink text-bg" : "self-start bg-surface border border-rule"}`}
+          >
+            <div
+              className={`text-[10.5px] mb-0.5 ${m.role === "user" ? "text-bg opacity-70" : "text-steel"}`}
+            >
+              {m.role === "user" ? "Dropshipper" : "Michelle (IA)"} ·{" "}
+              {when(m.at)}
             </div>
             {tidy(m.content)}
           </div>
@@ -50,7 +84,19 @@ function Conversation({ chatId }: { chatId: string }) {
   );
 }
 
-function UnblockButton({ chatId }: { chatId: string }) {
+function ActionButton({
+  chatId,
+  action,
+  label,
+  busyLabel,
+  confirmText,
+}: {
+  chatId: string;
+  action: "unblock" | "reviewed";
+  label: string;
+  busyLabel: string;
+  confirmText?: string;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   return (
@@ -58,43 +104,125 @@ function UnblockButton({ chatId }: { chatId: string }) {
       type="button"
       disabled={busy}
       onClick={async () => {
-        if (!confirm("¿Desbloquear a esta persona? Podrá volver a escribirle a Michelle.")) return;
+        if (confirmText && !confirm(confirmText)) return;
         setBusy(true);
-        const res = await fetch(`/api/provedix/chats/${chatId}`, { method: "POST" }).catch(() => null);
+        const res = await fetch(`/api/provedix/chats/${chatId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        }).catch(() => null);
         setBusy(false);
         if (res?.ok) router.refresh();
-        else alert("No se pudo desbloquear. Intenta de nuevo.");
+        else alert("No se pudo guardar. Intenta de nuevo.");
       }}
       className="text-[11.5px] font-semibold border border-rule rounded-md px-2.5 py-1 hover:bg-surface cursor-pointer disabled:opacity-50"
     >
-      {busy ? "Desbloqueando…" : "Desbloquear"}
+      {busy ? busyLabel : label}
     </button>
   );
 }
 
 export function ProvedixChatsCard({ chats }: { chats: ProvedixChatRow[] }) {
   const [open, setOpen] = useState<string | null>(null);
+  const pendingCount = chats.filter((c) => c.pendingReview).length;
+  // Desde el aviso de Inicio (#michelle) se abre directo en "Sospechosas".
+  const [onlySuspicious, setOnlySuspicious] = useState(false);
+  useEffect(() => {
+    if (window.location.hash !== "#michelle") return;
+    const t = setTimeout(() => {
+      setOnlySuspicious(true);
+      document
+        .getElementById("michelle")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
+  const shown = onlySuspicious ? chats.filter((c) => c.suspicious) : chats;
   return (
-    <div className="bg-surface border border-rule rounded-lg p-5 mb-7">
-      <div className="text-[13px] font-semibold">Conversaciones con Michelle</div>
-      <div className="text-[11px] text-steel mb-3">
-        Lo que los dropshippers le preguntan a la asistente virtual en provedix.com (las últimas 60). Solo la ves tú. Toca una para leerla completa. Si alguien intenta sacarle
-        información confidencial, Michelle cierra el chat y lo bloquea.
+    <div
+      id="michelle"
+      className="bg-surface border border-rule rounded-lg p-5 mb-7 scroll-mt-4"
+    >
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="text-[13px] font-semibold">
+            Conversaciones con Michelle
+          </div>
+          <div className="text-[11px] text-steel mb-3 max-w-[720px]">
+            Lo que los dropshippers le preguntan a la asistente virtual en
+            provedix.com (las últimas 60). Solo la ves tú. Toca una para leerla
+            completa. Si alguien intenta sacarle información confidencial,
+            Michelle cierra el chat y lo bloquea. Las sospechosas sin revisar
+            salen en tu Inicio.
+          </div>
+        </div>
+        <div className="flex gap-1 text-[11.5px] font-semibold">
+          <button
+            type="button"
+            onClick={() => setOnlySuspicious(false)}
+            className={`rounded-md px-2.5 py-1 border cursor-pointer ${!onlySuspicious ? "border-ink bg-ink text-bg" : "border-rule text-steel"}`}
+          >
+            Todas
+          </button>
+          <button
+            type="button"
+            onClick={() => setOnlySuspicious(true)}
+            className={`rounded-md px-2.5 py-1 border cursor-pointer ${onlySuspicious ? "border-ink bg-ink text-bg" : "border-rule text-steel"}`}
+          >
+            Sospechosas{pendingCount ? ` (${pendingCount} sin revisar)` : ""}
+          </button>
+        </div>
       </div>
-      {chats.length === 0 ? (
-        <div className="text-[12px] text-steel">Todavía nadie ha escrito en el chat.</div>
+      {shown.length === 0 ? (
+        <div className="text-[12px] text-steel">
+          {onlySuspicious
+            ? "No hay conversaciones sospechosas."
+            : "Todavía nadie ha escrito en el chat."}
+        </div>
       ) : (
         <div className="flex flex-col">
-          {chats.map((c) => (
+          {shown.map((c) => (
             <div key={c.id} className="border-t border-rule">
-              <button type="button" onClick={() => setOpen(open === c.id ? null : c.id)} className={`w-full text-left py-2 px-1 flex items-start gap-3 hover:bg-cloud cursor-pointer ${open === c.id ? "bg-cloud" : ""}`}>
+              <button
+                type="button"
+                onClick={() => setOpen(open === c.id ? null : c.id)}
+                className={`w-full text-left py-2 px-1 flex items-start gap-3 hover:bg-cloud cursor-pointer ${open === c.id ? "bg-cloud" : ""}`}
+              >
                 <div className="min-w-0 flex-1">
                   <div className="text-[12.5px] font-medium">
                     {c.who}
-                    {c.whatsapp && <span className="text-steel font-normal tabular-nums"> · {c.whatsapp}</span>}
-                    {c.blocked && <span className="ml-2 text-[10.5px] font-bold text-red">🔒 BLOQUEADO</span>}
+                    {c.whatsapp && (
+                      <span className="text-steel font-normal tabular-nums">
+                        {" "}
+                        · {c.whatsapp}
+                      </span>
+                    )}
+                    {c.blocked && (
+                      <span className="ml-2 text-[10.5px] font-bold text-red">
+                        🔒 BLOQUEADO
+                      </span>
+                    )}
+                    {c.suspicious && !c.blocked && (
+                      <span
+                        className={`ml-2 text-[10.5px] font-bold ${c.pendingReview ? "text-red" : "text-steel"}`}
+                      >
+                        ⚠️{" "}
+                        {c.pendingReview
+                          ? "SOSPECHOSA"
+                          : "Sospechosa · revisada"}
+                      </span>
+                    )}
                   </div>
-                  {c.lastQuestion && <div className="text-[12px] text-steel truncate">&ldquo;{c.lastQuestion}&rdquo;</div>}
+                  {c.suspicious && (
+                    <div className="text-[11px] text-red">
+                      {c.reasons.join(" · ")}
+                    </div>
+                  )}
+                  {c.lastQuestion && (
+                    <div className="text-[12px] text-steel truncate">
+                      &ldquo;{c.lastQuestion}&rdquo;
+                    </div>
+                  )}
                 </div>
                 <div className="text-right shrink-0 text-[11px] text-steel tabular-nums">
                   <div>{when(c.updatedAt)}</div>
@@ -103,9 +231,25 @@ export function ProvedixChatsCard({ chats }: { chats: ProvedixChatRow[] }) {
               </button>
               {open === c.id && (
                 <div className="bg-cloud px-3 pb-4 pt-1">
-                  {c.blocked && (
-                    <div className="mb-2 flex justify-end">
-                      <UnblockButton chatId={c.id} />
+                  {(c.blocked || c.pendingReview) && (
+                    <div className="mb-2 flex justify-end gap-2">
+                      {c.pendingReview && (
+                        <ActionButton
+                          chatId={c.id}
+                          action="reviewed"
+                          label="✓ Marcar revisada"
+                          busyLabel="Guardando…"
+                        />
+                      )}
+                      {c.blocked && (
+                        <ActionButton
+                          chatId={c.id}
+                          action="unblock"
+                          label="Desbloquear"
+                          busyLabel="Desbloqueando…"
+                          confirmText="¿Desbloquear a esta persona? Podrá volver a escribirle a Michelle."
+                        />
+                      )}
                     </div>
                   )}
                   <Conversation chatId={c.id} />

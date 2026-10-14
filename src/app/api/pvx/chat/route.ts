@@ -165,6 +165,10 @@ export async function POST(req: NextRequest) {
       } finally {
         controller.close();
         if (acc.trim()) await prisma.provedixChatMessage.create({ data: { chatId, role: "assistant", content: acc.trim() } }).catch(() => null);
+        // Michelle respondió normal pero algo le pareció raro → aviso al admin (provedixSuspicion.ts).
+        if (acc.includes("[[SOSPECHA]]") && !acc.includes(BLOCK_MARK)) {
+          await prisma.provedixChatMessage.create({ data: { chatId, role: "flag", content: "Michelle marcó esta pregunta como rara." } }).catch(() => null);
+        }
         if (acc.includes(BLOCK_MARK)) {
           await prisma.provedixChatMessage.create({ data: { chatId, role: "blocked", content: "Intentó sacar información confidencial: Michelle cerró el chat." } }).catch(() => null);
         }
