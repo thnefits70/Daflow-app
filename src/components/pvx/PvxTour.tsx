@@ -11,7 +11,7 @@ import { IconArrow, IconClose, IconSpark } from "@/components/pvx/PvxIcons";
 // CÓMO AGREGAR UNA NOVEDAD: sube TOUR_VERSION en 1, agrega el paso con
 // `since: <la nueva versión>` y pon `data-tour="<id>"` en el elemento.
 // Quien ya vio la guía verá solo los pasos nuevos (y el botón se ilumina).
-export const TOUR_VERSION = 1;
+export const TOUR_VERSION = 2;
 const SEEN_KEY = "pvx-tour-seen";
 
 type Step = { id: string; since: number; title: string; text: string };
@@ -27,6 +27,7 @@ const STEPS: Step[] = [
   { id: "cortes", since: 1, title: "Cortes en vivo", text: "Cuenta regresiva al próximo corte: tu pedido sale en menos de 3 horas." },
   { id: "recursos", since: 1, title: "Todo para vender", text: "Creativos gratis para tus anuncios, rastreo de guías y cómo pedir una garantía." },
   { id: "canales", since: 1, title: "Productos nuevos primero", text: "Únete a nuestros canales de WhatsApp para enterarte antes que nadie." },
+  { id: "chat", since: 2, title: "Pregúntale a Michelle", text: "Nuestra asistente virtual te ayuda a elegir productos y resuelve tus dudas al instante. Si prefieres una persona, desde ahí mismo le escribes a la asesora." },
   { id: "help", since: 1, title: "Vuelve a ver esta guía", text: "Toca aquí cuando quieras. Cuando agreguemos mejoras, este botón se ilumina con las novedades." },
 ];
 
@@ -211,9 +212,9 @@ export function PvxTour({ autoStart }: { autoStart: boolean }) {
 
   return (
     <>
-      <div className="fixed bottom-4 right-4 z-[45] sm:bottom-6 sm:right-6">
+      <div className="fixed bottom-4 left-4 z-[45] sm:bottom-6 sm:left-6">
         {menu && fresh && (
-          <div className="pvx-pop absolute bottom-full right-0 mb-2 w-[230px] overflow-hidden rounded-2xl bg-white p-1.5 text-[var(--pvx-ink)] shadow-[0_20px_50px_-15px_rgb(0_0_0/0.5)]">
+          <div className="pvx-pop absolute bottom-full left-0 mb-2 w-[230px] overflow-hidden rounded-2xl bg-white p-1.5 text-[var(--pvx-ink)] shadow-[0_20px_50px_-15px_rgb(0_0_0/0.5)]">
             <button type="button" onClick={() => start(true)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[14px] font-bold hover:bg-[var(--pvx-paper-2)] cursor-pointer">
               <IconSpark className="w-4 h-4 text-[var(--pvx-orange)]" /> Ver novedades
             </button>

@@ -8112,8 +8112,38 @@ model ProvedixLead {
   lastSeenAt  DateTime        @default(now())
   visits      Int             @default(1)
   events      ProvedixEvent[]
+  chats       ProvedixChat[]
 
   @@index([lastSeenAt])
+}
+
+// Conversaciones con Michelle, la asistente virtual de provedix.com (pedido
+// del usuario 2026-10-14): se guardan para ver en la cartera qué pregunta
+// cada dropshipper. leadId solo si estaba registrado.
+model ProvedixChat {
+  id        String                @id @default(cuid())
+  visitorId String
+  leadId    String?
+  lead      ProvedixLead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  messages  ProvedixChatMessage[]
+
+  @@index([visitorId])
+  @@index([leadId])
+  @@index([updatedAt])
+}
+
+model ProvedixChatMessage {
+  id        String       @id @default(cuid())
+  chatId    String
+  chat      ProvedixChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role      String // "user" | "assistant"
+  content   String
+  createdAt DateTime     @default(now())
+
+  @@index([chatId, createdAt])
+  @@index([createdAt])
 }
 
 // Actividad en provedix.com (etapas 3–4): visitas, búsquedas y productos

@@ -14,6 +14,7 @@ import { PvxCities, PvxOperation, PvxResources, titleCase } from "@/components/p
 import { CountUp, GlassBar, RotatingCity, useMarqueePause } from "@/components/pvx/PvxEffects";
 import { PvxDemo } from "@/components/pvx/PvxDemo";
 import { PvxTour } from "@/components/pvx/PvxTour";
+import { PvxChat } from "@/components/pvx/PvxChat";
 import { IconFacebook, IconInstagram, IconTikTok } from "@/components/pvx/PvxIcons";
 import { IconArrow, IconBox, IconCheck, IconClock, IconCopy, IconFlame, IconImage, IconLock, IconSearch, IconSpark, IconTruck, IconWhatsApp } from "@/components/pvx/PvxIcons";
 
@@ -659,7 +660,7 @@ function Footer() {
           <p>
             Los datos salen de los despachos reales de nuestras bodegas y se muestran en rangos. No mostramos datos de clientes ni de tiendas. Si te registras, guardamos tu
             nombre, WhatsApp, tienda, plataforma y correo (si lo das) solo para enviarte productos ganadores y atenderte mejor; puedes pedir que los
-            borremos cuando quieras.
+            borremos cuando quieras. Las conversaciones con Michelle, nuestra asistente virtual, también se guardan para atenderte mejor.
           </p>
         </div>
       </div>
@@ -909,6 +910,8 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
       <Footer />
       {/* Guía: sale sola al registrado que no la vio (o con novedades), sin ventanas abiertas. */}
       <PvxTour autoStart={registered === true && !open} />
+      {/* Michelle, asistente virtual (2026-10-15). Registrarse desde el chat abre el mismo registro, sin producto. */}
+      <PvxChat registered={registered === true} onRegister={() => setOpen({ code: "", mode: "register" })} />
 
       {open && (
         <div className="pvx-overlay fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setOpen(null)}>
@@ -930,7 +933,8 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
                 onDone={(n) => {
                   setRegistered(true);
                   setName(n);
-                  loadDetail(open.code);
+                  if (open.code) loadDetail(open.code);
+                  else setOpen(null);
                 }}
               />
             )}

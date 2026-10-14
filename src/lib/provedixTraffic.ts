@@ -225,3 +225,42 @@ export async function checkProvedixSpike(): Promise<void> {
     url: "/admin/provedix",
   });
 }
+
+// Conversaciones con Michelle, la asistente virtual (2026-10-15) — SOLO el admin.
+export type ProvedixChatRow = {
+  id: string;
+  who: string;
+  whatsapp: string | null;
+  messages: number;
+  lastQuestion: string | null;
+  updatedAt: string;
+};
+
+export async function getProvedixChats(): Promise<ProvedixChatRow[]> {
+  const chats = await prisma.provedixChat.findMany({
+    orderBy: { updatedAt: "desc" },
+    take: 60,
+    select: {
+      id: true,
+      updatedAt: true,
+      lead: { select: { name: true, whatsapp: true } },
+      _count: { select: { messages: true } },
+      messages: { where: { role: "user" }, orderBy: { createdAt: "desc" }, take: 1, select: { content: true } },
+    },
+  });
+  return chats
+    .filter((c) => c._count.messages > 0)
+    .map((c) => ({
+      id: c.id,
+      who: c.lead?.name ?? "Visitante sin registro",
+      whatsapp: c.lead?.whatsapp ?? null,
+      messages: c._count.messages,
+      lastQuestion: c.messages[0]?.content ?? null,
+      updatedAt: c.updatedAt.toISOString(),
+    }));
+}
+
+export async function getProvedixChatMessages(chatId: string): Promise<{ role: string; content: string; at: string }[]> {
+  const rows = await prisma.provedixChatMessage.findMany({ where: { chatId }, orderBy: { createdAt: "asc" }, take: 300, select: { role: true, content: true, createdAt: true } });
+  return rows.map((m) => ({ role: m.role, content: m.content, at: m.createdAt.toISOString() }));
+}

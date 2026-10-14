@@ -3,9 +3,10 @@ import { brandLabel } from "@/lib/brandLabels";
 import { StoreSalesTable } from "@/components/provedix/StoreSalesTable";
 import { SnapshotPreview } from "@/components/provedix/SnapshotPreview";
 import type { ProvedixSnapshotData } from "@/lib/provedixSnapshot";
-import type { ProvedixLeadRow, ProvedixTraffic } from "@/lib/provedixTraffic";
+import type { ProvedixChatRow, ProvedixLeadRow, ProvedixTraffic } from "@/lib/provedixTraffic";
 import { ProvedixTrafficCard } from "@/components/provedix/ProvedixTrafficCard";
 import { ProvedixLeadsTable } from "@/components/provedix/ProvedixLeadsTable";
+import { ProvedixChatsCard } from "@/components/provedix/ProvedixChatsCard";
 
 const STAGES: { title: string; detail: string; done: boolean }[] = [
   { title: "1. Leer las guías", detail: "Ciudad, valor cobrado, hombre/mujer y tienda de cada guía.", done: true },
@@ -32,11 +33,13 @@ export function ProvedixPanel({
   snapshot,
   traffic,
   leads,
+  chats,
 }: {
   overview: ProvedixOverview;
   snapshot: (ProvedixSnapshotData & { generatedAt: string }) | null;
   traffic: ProvedixTraffic;
   leads: ProvedixLeadRow[];
+  chats: ProvedixChatRow[];
 }) {
   const { progress, guides, byBrand, cities, gender, cod, stores, windowFrom } = overview;
   const readPct = pct(progress.read, progress.total);
@@ -75,6 +78,7 @@ export function ProvedixPanel({
 
       <ProvedixTrafficCard traffic={traffic} />
       <ProvedixLeadsTable leads={leads} />
+      <ProvedixChatsCard chats={chats} />
 
       <div className="bg-surface border border-rule rounded-lg p-5 mb-5">
         <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">

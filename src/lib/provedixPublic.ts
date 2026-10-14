@@ -121,6 +121,17 @@ export async function getPublicStats(): Promise<PublicStats> {
   return { products: s.products.length, orders: ordersRange(s.guides), cities: citiesRange(s.cityCount), newProducts, topCities: s.topCities ?? [] };
 }
 
+// Todos los productos con lo que ya muestra la página (ficha completa incluida)
+// y el stock sí/no en vivo — para Michelle, la asistente virtual (2026-10-15).
+// Nunca incluye costos de compra, proveedores ni cantidades de stock: el
+// resumen ya no los tiene.
+export async function getPublicProductsFull(): Promise<SnapshotProduct[]> {
+  const s = await cachedSnapshot();
+  if (!s) return [];
+  const stock = await cachedStock(s.products.map((p) => p.code)).catch(() => ({}) as Record<string, PublicStock>);
+  return s.products.map((p) => ({ ...p, stock: stock[p.code] ?? "in", photo: null, combos: p.combos.map((c) => ({ ...c, photos: [] })) }));
+}
+
 export async function getPublicProduct(code: string): Promise<SnapshotProduct | null> {
   const s = await cachedSnapshot();
   const p = s?.products.find((x) => x.code === code);

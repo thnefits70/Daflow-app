@@ -1,6 +1,7 @@
 // Precio por millón de tokens, en USD — actualizar aquí si Anthropic cambia
 // precios o se agrega un modelo nuevo a algún feature de IA en DAFLOW.
 const PRICING_PER_1M: Record<string, { input: number; output: number }> = {
+  "claude-opus-5-5": { input: 4, output: 20 },
   "claude-opus-4-8": { input: 5, output: 25 },
   "claude-sonnet-5": { input: 3, output: 15 },
   "claude-haiku-4-5": { input: 1, output: 5 },
