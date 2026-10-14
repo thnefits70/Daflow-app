@@ -251,7 +251,7 @@ export async function getProvedixChats(): Promise<ProvedixChatRow[]> {
       updatedAt: true,
       lead: { select: { name: true, whatsapp: true } },
       _count: { select: { messages: { where: { role: { in: ["user", "assistant"] } } } } },
-      messages: { where: { role: { in: ["user", "blocked", "unblocked", "flag", "reviewed"] } }, orderBy: { createdAt: "desc" }, select: { role: true, content: true, createdAt: true } },
+      messages: { where: { role: { in: ["user", "blocked", "unblocked", "flag", "guide_fail", "reviewed"] } }, orderBy: { createdAt: "desc" }, select: { role: true, content: true, createdAt: true } },
     },
   });
   return chats

@@ -24,11 +24,13 @@ const tidy = (t: string) =>
   t
     .replace("[[ASESORA]]", "→ pasó a Michelle por WhatsApp")
     .replace("[[BLOQUEAR]]", "→ cerró el chat")
-    .replace("[[SOSPECHA]]", "→ ⚠️ le pareció raro");
+    .replace("[[SOSPECHA]]", "→ ⚠️ le pareció raro")
+    .replace(/\[\[(DROPI|CREATIVOS|LANDING):(\d+)\]\]/g, "[botón $1 · $2]");
 
 const SYSTEM_ICON: Record<string, string> = {
   blocked: "🔒",
   unblocked: "🔓",
+  guide_fail: "❌",
   flag: "⚠️",
   reviewed: "✓",
 };

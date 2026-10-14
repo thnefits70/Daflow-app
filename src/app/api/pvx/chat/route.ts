@@ -6,6 +6,25 @@ import { getAnthropicClient } from "@/lib/nancy";
 import { logAiUsage } from "@/lib/aiUsage";
 import { readVisitor, sameOriginRequest, setVisitorCookies } from "@/lib/provedixVisitor";
 import { MICHELLE_DAILY_LIMIT, MICHELLE_MODEL, michelleSystem } from "@/lib/provedixMichelle";
+import { checkGuideForDropshipper } from "@/lib/provedixGuideCheck";
+
+// Herramienta de Michelle para consultar UNA guía (2026-10-14): solo con los
+// 3 datos que tiene el dueño de la tienda (ver provedixGuideCheck.ts).
+const GUIDE_TOOL = {
+  name: "verificar_guia",
+  description:
+    "Verifica que quien pregunta es el dueño de la tienda de esa guía y, si los datos coinciden, devuelve su estado (despachada, en preparación o cancelada), la transportadora, la fecha de despacho y el enlace de rastreo. Úsala solo cuando la persona ya te dio los 3 datos. Nunca devuelve los datos reales de la guía.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      guia: { type: "string", description: "Número de guía tal como lo escribió la persona" },
+      tienda: { type: "string", description: "Nombre de la tienda (remitente) que dio la persona" },
+      cliente: { type: "string", description: "Nombre completo del cliente que dio la persona" },
+    },
+    required: ["guia", "tienda", "cliente"],
+  },
+};
+const guideInput = z.object({ guia: z.string().min(1).max(40), tienda: z.string().min(1).max(120), cliente: z.string().min(1).max(120) });
 
 // Chat con Michelle, la asistente virtual de provedix.com (2026-10-15).
 // POST: un mensaje nuevo (respuesta en streaming de texto). GET: retomar la
@@ -121,47 +140,66 @@ export async function POST(req: NextRequest) {
 
   const system = await michelleSystem(true);
   const client = getAnthropicClient();
-  const stream = client.beta.messages.stream({
+  const params = {
     model: MICHELLE_MODEL,
     max_tokens: 2000,
     system,
     output_config: { effort: "low" },
+    tools: [GUIDE_TOOL],
     // Si un filtro de seguridad de la IA rechaza por error una pregunta
     // normal, Anthropic la reintenta sola con otro modelo.
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
-    messages,
-    // El SDK instalado (0.114) solo tipa la forma con lista; la API acepta "default".
-  } as unknown as Anthropic.Beta.Messages.MessageCreateParamsNonStreaming);
+  };
 
   const encoder = new TextEncoder();
   let acc = "";
+  let guideBlocked = false;
   const readable = new ReadableStream<Uint8Array>({
     async start(controller) {
+      const usage = { input: 0, output: 0 };
+      const emit = (t: string) => {
+        acc += t;
+        controller.enqueue(encoder.encode(t));
+      };
       try {
-        for await (const event of stream) {
-          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-            acc += event.delta.text;
-            controller.enqueue(encoder.encode(event.delta.text));
+        let convo = messages;
+        // Como mucho 3 vueltas: respuesta → (verificar_guia) → respuesta final.
+        for (let turn = 0; turn < 3; turn++) {
+          // El SDK instalado (0.114) solo tipa "fallbacks" como lista; la API acepta "default".
+          const stream = client.beta.messages.stream({ ...params, messages: convo } as unknown as Anthropic.Beta.Messages.MessageCreateParamsNonStreaming);
+          if (turn > 0 && acc && !acc.endsWith("\n")) emit("\n\n");
+          for await (const event of stream) {
+            if (event.type === "content_block_delta" && event.delta.type === "text_delta") emit(event.delta.text);
           }
+          const final = await stream.finalMessage().catch(() => null);
+          if (final?.usage) {
+            // Costo aproximado incluyendo el ahorro de caché (lectura ≈ 10 %,
+            // escritura ≈ 125 % del precio normal de entrada).
+            const u = final.usage;
+            usage.input += Math.round(u.input_tokens + (u.cache_creation_input_tokens ?? 0) * 1.25 + (u.cache_read_input_tokens ?? 0) * 0.1);
+            usage.output += u.output_tokens;
+          }
+          if (final?.stop_reason === "refusal" && !acc.trim()) emit("Ay, perdón 🙏 esa pregunta no la puedo responder por aquí. ¿Te ayudo con algún producto o con cómo trabajar con Provedix? 😊");
+          if (final?.stop_reason !== "tool_use") break;
+          const uses = final.content.filter((b): b is Anthropic.Beta.BetaToolUseBlock => b.type === "tool_use");
+          const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
+          for (const use of uses) {
+            const input = guideInput.safeParse(use.input);
+            const out = input.success ? await checkGuideForDropshipper(input.data, chatId, { visitorId, leadId }) : { resultado: "no_coincide" as const, intentos_restantes: 0 };
+            if (out.resultado === "bloquear") guideBlocked = true;
+            results.push({ type: "tool_result", tool_use_id: use.id, content: JSON.stringify(out) });
+          }
+          convo = [...convo, { role: "assistant", content: final.content as Anthropic.Beta.BetaContentBlockParam[] }, { role: "user", content: results }];
         }
-        const final = await stream.finalMessage().catch(() => null);
-        if (final?.stop_reason === "refusal" && !acc.trim()) {
-          acc = "Ay, perdón 🙏 esa pregunta no la puedo responder por aquí. ¿Te ayudo con algún producto o con cómo trabajar con Provedix? 😊";
-          controller.enqueue(encoder.encode(acc));
+        if (usage.input || usage.output) {
+          await logAiUsage({ feature: "provedix_michelle", model: MICHELLE_MODEL, actorId: `provedix:${leadId ?? visitorId}`, inputTokens: usage.input, outputTokens: usage.output });
         }
-        if (final?.usage) {
-          // Costo aproximado incluyendo el ahorro de caché (lectura ≈ 10 %,
-          // escritura ≈ 125 % del precio normal de entrada).
-          const u = final.usage;
-          const inputEquivalent = Math.round(u.input_tokens + (u.cache_creation_input_tokens ?? 0) * 1.25 + (u.cache_read_input_tokens ?? 0) * 0.1);
-          await logAiUsage({ feature: "provedix_michelle", model: MICHELLE_MODEL, actorId: `provedix:${leadId ?? visitorId}`, inputTokens: inputEquivalent, outputTokens: u.output_tokens });
-        }
+        // Si la verificación de guías llegó al límite, el chat se cierra aunque la IA no ponga la marca.
+        if (guideBlocked && !acc.includes(BLOCK_MARK)) emit(`\n\n${BLOCKED_TEXT}\n${BLOCK_MARK}`);
       } catch (err) {
         console.error("[michelle]", err);
-        const msg = "\n\nUy, se me cortó la conexión 🙏 Intenta de nuevo en un momento, porfa.";
-        acc += msg;
-        controller.enqueue(encoder.encode(msg));
+        emit("\n\nUy, se me cortó la conexión 🙏 Intenta de nuevo en un momento, porfa.");
       } finally {
         controller.close();
         if (acc.trim()) await prisma.provedixChatMessage.create({ data: { chatId, role: "assistant", content: acc.trim() } }).catch(() => null);
@@ -169,7 +207,8 @@ export async function POST(req: NextRequest) {
         if (acc.includes("[[SOSPECHA]]") && !acc.includes(BLOCK_MARK)) {
           await prisma.provedixChatMessage.create({ data: { chatId, role: "flag", content: "Michelle marcó esta pregunta como rara." } }).catch(() => null);
         }
-        if (acc.includes(BLOCK_MARK)) {
+        // (Si fue por las guías, el bloqueo ya lo guardó provedixGuideCheck.ts.)
+        if (acc.includes(BLOCK_MARK) && !guideBlocked) {
           await prisma.provedixChatMessage.create({ data: { chatId, role: "blocked", content: "Intentó sacar información confidencial: Michelle cerró el chat." } }).catch(() => null);
         }
         await prisma.provedixChat.update({ where: { id: chatId }, data: { updatedAt: new Date() } }).catch(() => null);

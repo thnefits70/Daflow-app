@@ -223,7 +223,7 @@ function labelProducts(lines: PdfLine[], carrier: string, rocket: boolean): Labe
   return out;
 }
 
-async function findGuideInPdfs(fileUrls: string[], guide: string) {
+export async function findGuideInPdfs(fileUrls: string[], guide: string) {
   for (const url of fileUrls) {
     let pages: PdfLine[][];
     try {

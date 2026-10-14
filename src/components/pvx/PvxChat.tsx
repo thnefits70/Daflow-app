@@ -5,6 +5,7 @@ import { ADVISORS } from "@/components/pvx/PvxContact";
 import {
   IconArrow,
   IconClose,
+  IconExternal,
   IconLock,
   IconWhatsApp,
 } from "@/components/pvx/PvxIcons";
@@ -20,12 +21,29 @@ const HANDOFF_MARK = "[[ASESORA]]";
 // Quita la marca (también a medio llegar mientras se escribe la respuesta).
 // [[BLOQUEAR]]: la IA cerró el chat por un intento de sacar información confidencial.
 const BLOCK_MARK = "[[BLOQUEAR]]";
+// Botones de producto (2026-10-14): [[DROPI:ID]] precio en Dropi, [[CREATIVOS:ID]], [[LANDING:ID]].
+const ACTION_RE = /\[\[(DROPI|CREATIVOS|LANDING):(\d{3,8})\]\]/g;
+const ACTION_LABEL: Record<string, string> = {
+  DROPI: "Ver precio en Dropi",
+  CREATIVOS: "Ver creativos",
+  LANDING: "Ver landing",
+};
+function actionsOf(t: string): { kind: string; code: string }[] {
+  const seen = new Set<string>();
+  const out: { kind: string; code: string }[] = [];
+  for (const m of t.matchAll(ACTION_RE)) {
+    if (seen.has(m[1] + m[2])) continue;
+    seen.add(m[1] + m[2]);
+    out.push({ kind: m[1], code: m[2] });
+  }
+  return out.slice(0, 6);
+}
 const cleanReply = (t: string) =>
   t
-    .replace(HANDOFF_MARK, "")
-    .replace(BLOCK_MARK, "")
-    .replace("[[SOSPECHA]]", "")
-    .replace(/\[\[?[A-Z]*\]?$/, "")
+    .replace(/\[\[(ASESORA|BLOQUEAR|SOSPECHA)\]\]/g, "")
+    .replace(ACTION_RE, "")
+    // marca a medio llegar mientras se escribe la respuesta
+    .replace(/\[(\[[A-Z]*(:\d*)?\]?)?$/, "")
     .trim();
 const SUGGESTIONS = [
   "¿Qué productos van en subida?",
@@ -321,6 +339,22 @@ export function PvxChat({
                             <IconWhatsApp className="w-4 h-4" /> Continuar con
                             Michelle por WhatsApp
                           </a>
+                        )}
+                        {actionsOf(m.content).length > 0 && (
+                          <div className="mt-2.5 flex flex-wrap gap-1.5">
+                            {actionsOf(m.content).map((a) => (
+                              <a
+                                key={a.kind + a.code}
+                                href={`/api/pvx/go/${a.kind.toLowerCase()}/${a.code}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`pvx-press inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold ${a.kind === "DROPI" ? "bg-[var(--pvx-orange)] text-white hover:bg-[var(--pvx-orange-press)]" : "border border-[var(--pvx-paper-3)] bg-white hover:border-[var(--pvx-orange)]"}`}
+                              >
+                                {ACTION_LABEL[a.kind]} · {a.code}
+                                <IconExternal className="w-3.5 h-3.5" />
+                              </a>
+                            ))}
+                          </div>
                         )}
                       </>
                     ) : (
