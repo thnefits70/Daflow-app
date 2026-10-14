@@ -981,7 +981,7 @@ export function PayrollRolesPanel({ canEdit, canProposeFixedBonus, canApproveFix
             );
           })()}
 
-          {detail.status === "DRAFT" && canEdit && pendingPayoutCount === detail.roles.length && (
+          {detail.status === "DRAFT" && canEdit && !detail.roles.some((r) => r.paidAt) && (
             <div className="mb-3">
               <button
                 type="button"
