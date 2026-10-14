@@ -60,7 +60,7 @@ const GROUPS: { status: Status; title: string; hint: string; tone: string }[] = 
     hint: "Hace 15 días marcaste que ningún proveedor lo tenía. Pregúntale y responde aquí",
     tone: "text-amber",
   },
-  { status: "urgente", title: "🔴 Urgente", hint: "Se acaba antes de que el proveedor pueda traerlo: 7 días o menos (CHEN lo trae el mismo día o al siguiente, así que sus productos casi nunca están aquí: pasan directo a compra caliente)", tone: "text-red" },
+  { status: "urgente", title: "🔴 Urgente", hint: "Se acaba antes de que el proveedor pueda traerlo: 5 días o menos (los proveedores tardan máximo 4 días hábiles; CHEN lo trae en máximo 2 días, así que sus productos pasan directo a compra caliente)", tone: "text-red" },
   { status: "pronto", title: "🟡 Pronto", hint: "Se vende, pero todavía alcanza para más tiempo del que tarda el proveedor", tone: "text-amber" },
   {
     status: "falta_contar",

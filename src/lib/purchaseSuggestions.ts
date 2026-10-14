@@ -28,14 +28,15 @@ export const HOT_SALES_WINDOW_DAYS = 10;
 // Recompras sigue usando "30 o menos" para decidir si pide calculadora.
 export const HOT_MAX = 30;
 export const COLD_MAX = 60;
-// Confirmado 2026-10-01 por Daniel: "urgente" = lo que tarda el proveedor en
-// traerlo + días de seguridad. 7 con los demás. CHEN (proveedor a crédito)
-// corregido por el usuario 2026-10-14: lo trae el mismo día o máximo al día
-// siguiente (los 7 días de su hoja eran solo para revisar el estado de la
-// mercadería, no lo que tarda) → 1 día. El proveedor es el de la última compra del
-// producto; sin compra en DAFLOW, 7.
-export const URGENT_DAYS = 7;
-export const URGENT_DAYS_CREDIT_SUPPLIER = 1;
+// "Urgente" y la cantidad sugerida usan lo que de verdad tarda en llegar la
+// mercadería. Corregido por el usuario 2026-10-14: los 15/7 días que dio
+// Daniel el 2026-10-01 eran solo el plazo para revisar la mercadería y
+// reclamarle a CHEN, no lo que tarda. CHEN la trae en máximo 2 días; los demás
+// proveedores, en máximo 4 días hábiles (lunes a sábado medio día) ≈ 5 días
+// de calendario contando el domingo. El proveedor es el de la última compra
+// del producto; sin compra en DAFLOW, el de los demás.
+export const URGENT_DAYS = 5;
+export const URGENT_DAYS_CREDIT_SUPPLIER = 2;
 // Confirmado 2026-10-01 por Daniel: sugerir cuánto comprar — lo que se vende
 // mientras llega + un mes más después de que llegue, menos lo que hay.
 export const COVER_DAYS_AFTER_ARRIVAL = 30;
