@@ -888,7 +888,7 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
           <div
             role="dialog"
             aria-modal="true"
-            className={`pvx-sheet w-full sm:max-w-xl ${open.mode === "detail" ? "md:max-w-5xl" : ""} max-h-[94vh] overflow-y-auto rounded-t-[28px] bg-[var(--pvx-paper)] sm:rounded-[28px]`}
+            className={`pvx-sheet w-full sm:max-w-xl ${open.mode === "detail" ? "md:max-w-5xl" : open.mode === "register" ? "sm:max-w-2xl" : ""} max-h-[94vh] overflow-y-auto rounded-t-[28px] bg-[var(--pvx-paper)] sm:rounded-[28px]`}
             onClick={(e) => e.stopPropagation()}
           >
             {open.mode === "register" && (
