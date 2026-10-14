@@ -2548,24 +2548,36 @@ async function getStaleSupplierCreditsAdminPendingItem(href: string): Promise<Pe
 // pendientes de recuperar" arriba) mientras el reembolso siga esperando que
 // el admin confirme en su banco — solo admin puede confirmar (ver isAdmin
 // en confirm-bank/route.ts), así que este ítem solo aplica a esa sección.
-async function getPurchaseRefundBankConfirmPendingItem(href: string): Promise<PendingItem | null> {
+// Pedido del usuario 2026-10-14: el aviso genérico ("1 reembolso · $120")
+// no decía de qué compra era — ahora sale uno por reembolso con proveedor,
+// producto y desde qué fecha espera, y lleva directo a ese reclamo
+// (?reclamo=, leído por PurchaseUrgentReportsPanel).
+async function getPurchaseRefundBankConfirmPendingItems(href: string): Promise<PendingItem[]> {
   const rows = await prisma.purchaseUrgentResolution.findMany({
     where: { type: "REFUND", status: "PENDING", refundAiMatch: true },
-    select: { amount: true, createdAt: true },
+    select: {
+      amount: true,
+      createdAt: true,
+      reportId: true,
+      report: { select: { request: { select: { supplier: { select: { name: true } }, catalogItem: { select: { name: true, justCode: true } } } } } },
+    },
+    orderBy: { createdAt: "asc" },
   });
-  if (rows.length === 0) return null;
 
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const overdue = rows.some((r) => r.createdAt < cutoff);
-  const total = rows.reduce((s, r) => s + r.amount, 0);
-  return {
-    type: "compras_reembolsos_por_confirmar",
-    icon: "🏦",
-    label: "Reembolsos esperando que confirmes tu banco",
-    meta: `${rows.length} reembolso${rows.length === 1 ? "" : "s"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
-    overdue,
-    href,
-  };
+  return rows.map((r) => {
+    const overdue = r.createdAt < cutoff;
+    const { supplier, catalogItem } = r.report.request;
+    const since = r.createdAt.toLocaleDateString("es-EC", { day: "numeric", month: "short", timeZone: "America/Guayaquil" });
+    return {
+      type: "compras_reembolsos_por_confirmar",
+      icon: "🏦",
+      label: `Confirma en tu banco el reembolso de ${supplier.name}`,
+      meta: `${catalogItem.justCode ? `${catalogItem.justCode} ` : ""}${catalogItem.name} · $${r.amount.toFixed(2)} · esperando desde el ${since}${overdue ? " · atrasado" : ""}`,
+      overdue,
+      href: `${href}${href.includes("?") ? "&" : "?"}reclamo=${r.reportId}`,
+    };
+  });
 }
 
 // Pedido de Daniel 2026-10-13: el recordatorio "Control de Inventario —
@@ -4028,7 +4040,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // pestaña interna "Pagos" (?etab=pagos, leída por ExternalSalesPanel).
     const mktDept = deptOf("MKT");
     const mktVentasPagosHref = mktDept ? `/admin/dept/${mktDept.id}?tab=ventas-externas&etab=pagos` : "/admin";
-    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItem, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseAwaitingCostItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, improvementPlanClosureItems, purchaseExceptionItem, stockAdjustmentItem, catalogDeleteItem, supplierAccountItem, freightExceptionItem, nairobySalaryItem, adminPlanItems, priceCorrectionItem, writeOffApprovalItem] = await Promise.all([
+    const [feedbackItems, recognitionItem, pettyCashLow, pettyCashUnconfirmed, adminPaymentsItem, purchaseShippingItem, purchaseCreditsItem, purchaseRefundBankConfirmItems, supplierExchangeRejectedItem, overtimeApprovalItem, commissionBonusApprovalItem, salaryAdvanceItem, managementDeductionItem, personalPurchaseFinanceItem, personalPurchaseAwaitingCostItem, personalPurchaseTransferConfirmItem, personalPurchaseTransferCloseItem, personalPurchaseCashConfirmItem, personalPurchasePaymentWatchItem, payrollTransferItem, payrollIessTransferItem, externalSalePaymentConfirmItem, birthdayItems, nichoBackfillItem, improvementPlanClosureItems, purchaseExceptionItem, stockAdjustmentItem, catalogDeleteItem, supplierAccountItem, freightExceptionItem, nairobySalaryItem, adminPlanItems, priceCorrectionItem, writeOffApprovalItem] = await Promise.all([
       getFeedbackPendingItems(),
       getRecognitionAdminPendingItem("/admin/colaborador-destacado"),
       getPettyCashLowBalanceItems(financeHref),
@@ -4041,7 +4053,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       // Pedido del usuario 2026-10-12: el crédito lo usa quien compró; al
       // admin solo le aparece si ya lleva 30+ días sin usarse.
       getStaleSupplierCreditsAdminPendingItem(comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=creditos` : "/admin"),
-      getPurchaseRefundBankConfirmPendingItem(comCreditsHref),
+      getPurchaseRefundBankConfirmPendingItems(comCreditsHref),
       getSupplierExchangeRejectedAdminPendingItem(invEgresosHref),
       getOvertimeApprovalPendingItem("/admin/nomina?tab=pagos"),
       getCommissionAndBonusApprovalPendingItem("/admin/nomina"),
@@ -4078,7 +4090,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(adminPaymentsItem ? [adminPaymentsItem] : []),
       ...(purchaseShippingItem ? [purchaseShippingItem] : []),
       ...(purchaseCreditsItem ? [purchaseCreditsItem] : []),
-      ...(purchaseRefundBankConfirmItem ? [purchaseRefundBankConfirmItem] : []),
+      ...purchaseRefundBankConfirmItems,
       ...(supplierExchangeRejectedItem ? [supplierExchangeRejectedItem] : []),
       ...(overtimeApprovalItem ? [overtimeApprovalItem] : []),
       ...(commissionBonusApprovalItem ? [commissionBonusApprovalItem] : []),

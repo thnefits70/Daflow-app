@@ -323,6 +323,20 @@ export function PurchaseUrgentReportsPanel({
   }
   useEffect(load, []);
 
+  // Pedido del usuario 2026-10-14: el aviso de Inicio "Confirma en tu banco
+  // el reembolso…" llega con ?reclamo=<id> — al cargar se baja a ese reclamo
+  // y se marca un momento para que se vea cuál es.
+  useEffect(() => {
+    if (!reports) return;
+    const id = new URLSearchParams(window.location.search).get("reclamo");
+    const el = id ? document.getElementById(`reclamo-${id}`) : null;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.style.boxShadow = "0 0 0 3px var(--color-gold)";
+    const t = setTimeout(() => { el.style.boxShadow = ""; }, 4000);
+    return () => clearTimeout(t);
+  }, [reports]);
+
   // Pedido del usuario 2026-10-06 (SC-008): el admin confirma que sí llegó
   // todo y que el equipo contó mal — ver receipt/confirm-full.
   const [confirmFullId, setConfirmFullId] = useState<string | null>(null);
@@ -760,7 +774,7 @@ export function PurchaseUrgentReportsPanel({
             {openReports.map((r) => {
               const remaining = totalReported(r) - claimedQty(r.resolutions);
               return (
-                <div key={r.id} className={`bg-surface border rounded-md p-4 ${r.isLateClaim ? "border-teal/40" : "border-red/40"}`}>
+                <div key={r.id} id={`reclamo-${r.id}`} className={`bg-surface border rounded-md p-4 scroll-mt-20 transition-shadow ${r.isLateClaim ? "border-teal/40" : "border-red/40"}`}>
                   <div className="flex items-center justify-between gap-2 flex-wrap mb-1">
                     <div className="text-[13.5px] font-bold flex items-center gap-2">
                       <CatalogCode code={r.request.catalogItem.justCode} />
@@ -1103,7 +1117,7 @@ export function PurchaseUrgentReportsPanel({
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-2">Resueltos ({closedReports.length})</div>
           <div className="flex flex-col gap-2">
             {closedReports.map((r) => (
-              <div key={r.id} className="bg-surface border border-rule rounded-md p-3.5 text-[12px]">
+              <div key={r.id} id={`reclamo-${r.id}`} className="bg-surface border border-rule rounded-md p-3.5 text-[12px] scroll-mt-20 transition-shadow">
                 <div className="flex items-center justify-between gap-2">
                   <div className="font-semibold flex items-center gap-1.5">
                     <CatalogCode code={r.request.catalogItem.justCode} />

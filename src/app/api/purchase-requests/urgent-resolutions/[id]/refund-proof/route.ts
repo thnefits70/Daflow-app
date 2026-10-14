@@ -59,7 +59,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await notifyOwner("admin", {
       title: "🏦 Verifica en tu banco — reembolso de proveedor",
       body: `${resolution.report.request.catalogItem.name} — $${resolution.amount.toFixed(2)} · confirma si ya llegó el dinero`,
-      url: comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes` : "/admin",
+      url: comDept ? `/admin/dept/${comDept.id}?tab=compras&ptab=urgentes&reclamo=${resolution.reportId}` : "/admin",
     }).catch(() => null);
   }
 
