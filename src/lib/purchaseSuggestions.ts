@@ -285,6 +285,29 @@ export async function findItemsWithStockCover(catalogItemIds: string[]): Promise
   return out;
 }
 
+// Pedido de Jariel 2026-10-14: en Solicitar, una cantidad sugerida (no
+// obligatoria) con el mismo cálculo que Qué comprar — venta diaria promedio
+// de los últimos HOT_SALES_WINDOW_DAYS días × (días del proveedor + 1 mes) −
+// stock (contado si ya se contó). null = suministro, sin Kardex o no se vende.
+export type QuantitySuggestion = { qty: number | null; perDay: number; stock: number; daysLeft: number; urgentDays: number; supplierName: string | null; windowDays: number };
+export async function getQuantitySuggestion(catalogItemId: string): Promise<QuantitySuggestion | null> {
+  const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: catalogItemId }, select: { bodega: true, justCode: true } });
+  if (!item || item.bodega === "MKT_SUMINISTROS" || item.justCode?.includes("-SUM-")) return null;
+  const { windowStart, windowDays } = await getSalesWindow(new Date(), HOT_SALES_WINDOW_DAYS);
+  const [kardex, sold, last, gate] = await Promise.all([
+    prisma.stockKardexEntry.findFirst({ where: { catalogItemId }, orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }], select: { balanceAfter: true } }),
+    getSoldUnitsByItem(windowStart, [catalogItemId]),
+    prisma.purchaseRequest.findFirst({ where: { catalogItemId, status: { not: "REJECTED" } }, orderBy: { createdAt: "desc" }, select: { supplier: { select: { name: true, paymentMode: true } } } }),
+    getCountGate([catalogItemId]),
+  ]);
+  if (!kardex) return null;
+  const perDay = (sold.get(catalogItemId) ?? 0) / windowDays;
+  if (perDay === 0) return null;
+  const stock = countedBalance(gate, catalogItemId, kardex.balanceAfter);
+  const urgentDays = urgentDaysForSupplier(last?.supplier.paymentMode);
+  return { qty: suggestedQuantity(perDay, urgentDays, stock), perDay, stock, daysLeft: Math.max(0, stock) / perDay, urgentDays, supplierName: last?.supplier.name ?? null, windowDays: Math.round(windowDays) };
+}
+
 export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   const now = new Date();
   const { windowStart, windowDays } = await getSalesWindow(now, HOT_SALES_WINDOW_DAYS);

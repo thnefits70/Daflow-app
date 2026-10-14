@@ -35,6 +35,12 @@ type QuoteReadResult = {
 // se guardaba en cada producto aunque solo uno hubiera superado su propio
 // historial de precio — un producto sin nada raro terminaba con la
 // explicación de OTRO pegada encima.
+type QtySuggestion = { qty: number | null; perDay: number; stock: number; daysLeft: number; urgentDays: number; supplierName: string | null; windowDays: number };
+function fmtPerDaySug(n: number) {
+  if (n < 1) return `~${Math.round(n * 7)} por semana`;
+  return `~${n < 10 ? n.toFixed(1).replace(".0", "") : Math.round(n)} por día`;
+}
+
 type Line = { catalogItem: CatalogItemDTO | null; productQuery: string; createDraft: CatalogCreateDraft | null; quantity: string; unitCost: string; ivaIncluded: boolean; justification: string; stats: PriceStats | null };
 const emptyLine = (): Line => ({ catalogItem: null, productQuery: "", createDraft: null, quantity: "", unitCost: "", ivaIncluded: false, justification: "", stats: null });
 
@@ -324,6 +330,8 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // contar desde aquí mismo (no siempre sale en Qué comprar: si el sistema
   // cree que hay stock de sobra, ahí no aparece).
   const [uncountedItems, setUncountedItems] = useState<Record<string, boolean>>({});
+  // Cantidad sugerida, no obligatoria (pedido de Jariel 2026-10-14): mismo cálculo que Qué comprar.
+  const [qtySuggestionByItem, setQtySuggestionByItem] = useState<Record<string, QtySuggestion | null>>({});
   const [countAskByItem, setCountAskByItem] = useState<Record<string, { busy?: boolean; done?: boolean; error?: string }>>({});
   function askCount(catalogItemId: string) {
     setCountAskByItem((m) => ({ ...m, [catalogItemId]: { busy: true } }));
@@ -382,6 +390,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         // Conteo físico (2026-10-13): lo que no se contó no se compra, salvo emergencia.
         setBlockedByLine((m) => ({ ...m, [idx]: data?.blockedBy ?? (emergencyOnly ? null : data?.uncounted ?? null) }));
         setUncountedItems((m) => ({ ...m, [catalogItemId]: !data?.blockedBy && !emergencyOnly && !!data?.uncounted }));
+        setQtySuggestionByItem((m) => ({ ...m, [catalogItemId]: data?.quantitySuggestion ?? null }));
         setRepurchaseByLine((m) => ({ ...m, [idx]: data?.repurchase ?? null }));
         setStockCoverByLine((m) => ({ ...m, [idx]: emergencyOnly ? null : (data?.stockCover ?? null) }));
         setNeedsSizeByItem((m) => ({ ...m, [catalogItemId]: !!data?.needsFulfillmentSize }));
@@ -1395,6 +1404,29 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                 <div className="rounded border border-rule px-2.5 py-2 text-[13px] font-bold bg-cloud">${lineTotals[idx].toFixed(2)}</div>
               </div>
             </div>
+            {line.catalogItem && !uncountedItems[line.catalogItem.id] && (() => {
+              const sug = qtySuggestionByItem[line.catalogItem.id];
+              if (!sug) return null;
+              const days = Math.floor(sug.daysLeft);
+              return (
+                <div className="text-[11.5px] text-steel bg-teal/5 border border-teal/25 rounded-md px-2.5 py-1.5 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span>
+                    💡 {sug.qty ? (
+                      <>Sugerencia (no obligatoria): <b className="text-teal">~{sug.qty} u.</b></>
+                    ) : (
+                      <>Sugerencia: con lo que hay <b className="text-ink">todavía alcanza</b>, no hace falta comprar más por ahora</>
+                    )}
+                    {" "}— se venden {fmtPerDaySug(sug.perDay)} (últimos {sug.windowDays} días), quedan {sug.stock} y alcanzan {days < 1 ? "menos de 1 día" : `${days} día${days === 1 ? "" : "s"}`}
+                    {sug.qty ? `. Cubre ${sug.urgentDays} días mientras llega + 1 mes` : ""}.
+                  </span>
+                  {sug.qty && line.quantity !== String(sug.qty) && (
+                    <button type="button" className="text-[11.5px] font-semibold text-teal underline cursor-pointer" onClick={() => updateLine(idx, { quantity: String(sug.qty) })}>
+                      Usar {sug.qty}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
             {supplierNoInvoice ? (
               <div className="text-[11.5px] text-steel-dim">Este proveedor no da factura — no se suma IVA al costo.</div>
             ) : (

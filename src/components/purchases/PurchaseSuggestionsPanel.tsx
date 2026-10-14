@@ -310,7 +310,7 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
           <div className="text-[12px] text-steel">
             {r.suggestedQty ? (
               <>
-                Comprar <b className="text-teal">~{r.suggestedQty} u.</b> (para {r.urgentDays} días mientras llega + 1 mes)
+                Sugerencia (no obligatoria): comprar <b className="text-teal">~{r.suggestedQty} u.</b> (para {r.urgentDays} días mientras llega + 1 mes)
               </>
             ) : null}
             {r.suggestedQty && r.supplierName ? " · " : ""}
