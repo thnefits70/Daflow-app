@@ -558,6 +558,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   fulfillment_bloque_asignado: "Bloque del corte asignado — sacar de bodega",
   compras_calientes: "Compras calientes (se acaban en 3 días o menos)",
   compras_frias: "Compras frías (60 unidades o menos, alcanzan más de 3 días)",
+  compras_frias_pronto: "Compras frías que se acaban en 5 días o menos (aviso diario)",
   compras_urgentes_sin_atender: "Compras urgentes sin atender (3+ días)",
   compras_sin_encargado: "Compras calientes o frías sin nadie a cargo",
   compras_falta_contar: "Productos por comprar que faltan contar",
@@ -4634,7 +4635,7 @@ export async function getPossiblePendingTypesForActor(
       if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
       if (me.department?.code === "INV") types.push("fulfillment_bloque_asignado");
       if (me.handlesHotPurchases) types.push("compras_calientes", "analisis_mercado_listo_comprar");
-      if (me.handlesColdPurchases) types.push("compras_frias", "analisis_mercado_listo_comprar");
+      if (me.handlesColdPurchases) types.push("compras_frias", "compras_frias_pronto", "analisis_mercado_listo_comprar");
       if (me.canManagePurchases) types.push("recompras_sin_respuesta", "recompras_listas");
       return types.map((type) => ({ type, label: PENDING_TYPE_CATALOG[type] }));
     }
@@ -4646,7 +4647,7 @@ export async function getPossiblePendingTypesForActor(
     if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
     if (me.leadsDept.code === "FIN") types.push("analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");
     if (me.handlesHotPurchases) types.push("compras_calientes", "analisis_mercado_listo_comprar");
-    if (me.handlesColdPurchases) types.push("compras_frias", "analisis_mercado_listo_comprar");
+    if (me.handlesColdPurchases) types.push("compras_frias", "compras_frias_pronto", "analisis_mercado_listo_comprar");
     if (me.leadsDept.code === "INV") types.push("compras_urgentes_sin_atender", "compras_falta_contar", "compras_pedido_conteo");
     if (me.leadsDept.code === "FIN") {
       types.push("roles_de_pago", "tasa_devolucion", "kpi_garantias", "pagos_recordatorios", "servicio_postventa", "caja_chica_saldo", "caja_chica_confirmacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_cierre", "reingreso_mercaderia_verificacion_semanal", "nomina_transferencia", "iess_transferencia", "reclamos_proveedor_atrasados");

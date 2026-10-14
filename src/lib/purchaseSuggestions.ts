@@ -63,6 +63,11 @@ export function isPhysicalCountPause(now = new Date()): boolean {
   return now < PHYSICAL_COUNT_UNTIL;
 }
 export const COLD_WEEK_AHEAD_DAYS = 7;
+// Pedido de Jariel 2026-10-14 (aprobado por el usuario: lista semanal igual +
+// aviso diario): a quien hace las compras frías le llega TODOS los días lo
+// que se acaba en 4 o 5 días (justo antes de volverse compra caliente), con
+// cualquier stock — también lo que tiene más de 60 pero se vende mucho.
+export const COLD_SOON_DAYS = 5;
 export const DISCARD_VALID_DAYS = 30;
 export const DISCARD_REASONS: Record<string, string> = {
   NO_DEMAND: "No hay demanda del producto",
@@ -124,6 +129,8 @@ export type SuggestionRow = {
   countMark: CountMark | null;
   // "Pedir que lo cuenten" todavía abierto (2026-10-14).
   countRequest: CountRequest | null;
+  // Compra fría que se acaba en COLD_SOON_DAYS o menos: aviso diario (2026-10-14).
+  coldSoon: boolean;
 };
 
 export type NewProductRow = { proposalId: string; code: string; name: string; photo: string | null; readyToBuyAt: string };
@@ -324,7 +331,8 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   // y sin esto no había desde dónde pedir que lo cuenten.
   const uncountedSelling = (id: string, bal: number) =>
     gate.active && !gate.counted.has(id) && perDayOf(id) > 0 && (bal < 0 || bal / perDayOf(id) <= URGENT_DAYS_CREDIT_SUPPLIER + COLD_WEEK_AHEAD_DAYS);
-  const candidateIds = [...balances.entries()].filter(([id, bal]) => (bal >= 0 && (bal <= COLD_MAX || isHotStock(id, bal))) || uncountedSelling(id, bal)).map(([id]) => id);
+  const isColdSoonStock = (id: string, bal: number) => perDayOf(id) > 0 && Math.max(0, bal) / perDayOf(id) <= COLD_SOON_DAYS;
+  const candidateIds = [...balances.entries()].filter(([id, bal]) => (bal >= 0 && (bal <= COLD_MAX || isColdSoonStock(id, bal))) || uncountedSelling(id, bal)).map(([id]) => id);
   const [items, lastPurchases, stockoutReports, discards] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({
       where: { id: { in: candidateIds }, awaitingDropiId: false },
@@ -444,12 +452,13 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       newToday,
       countMark: null,
       countRequest: null,
+      coldSoon: isCold && isColdSoonStock(item.id, stock) && (status === "urgente" || status === "pronto"),
     };
     // Sin contar y con stock "de sobra" o negativo: solo como "Falta contar" en calientes.
     if (uncountedSelling(item.id, stock) && (stock < 0 || stock > COLD_MAX)) {
       if (status === "falta_contar") hot.push(row);
     } else if (isHot) hot.push(row);
-    else if (stock <= COLD_MAX) cold.push(row);
+    else if (stock <= COLD_MAX || row.coldSoon) cold.push(row);
   }
 
   const [marks, countRequests] = await Promise.all([getCountMarks([...hot, ...cold].map((r) => r.catalogItemId)), getOpenCountRequests()]);
@@ -642,6 +651,28 @@ export const STOCK_COUNT_HREF = "/area/conteo-inventario";
 // Pedido del usuario 2026-10-13: lo que no se contó no se puede comprar. Al
 // líder de Inventario le sale lo que ya estaría urgente para que lo cuente
 // primero (él puede contar cualquier producto del conteo general).
+// Aviso diario de compras frías (2026-10-14): lo que se acaba en 4–5 días.
+export const COLD_SOON_TYPE = "compras_frias_pronto";
+export function buildColdSoonNotice(s: PurchaseSuggestions): SuggestionNotice | null {
+  const rows = s.cold.filter((r) => r.coldSoon);
+  if (rows.length === 0) return null;
+  const SHOWN = 6;
+  const names = rows
+    .slice(0, SHOWN)
+    .map((r) => `${r.name} (${daysText(r.daysLeft)}${r.suggestedQty ? `, comprar ~${r.suggestedQty}` : ""})`)
+    .join("; ");
+  const meta = `${plural(rows.length, "producto se acaba", "productos se acaban")} en ${COLD_SOON_DAYS} días o menos`;
+  return {
+    audience: "cold",
+    type: COLD_SOON_TYPE,
+    icon: "⏰",
+    label: "Compras frías que se acaban pronto",
+    meta,
+    body: `${meta}: ${names}${rows.length > SHOWN ? ` y ${rows.length - SHOWN} más` : ""}. Si no se compran, en unos días pasan a compras calientes.`,
+    overdue: false,
+  };
+}
+
 export function buildCountFirstNotice(s: PurchaseSuggestions): SuggestionNotice | null {
   const rows = [...s.hot, ...s.cold].filter((r) => r.countedUrgent);
   if (rows.length === 0) return null;
@@ -683,6 +714,12 @@ export async function getPurchaseSuggestionPushes(): Promise<{ ownerId: string; 
   add(hotIds, "hot");
   // Compras frías: el aviso sale solo los lunes (en Inicio se queda toda la semana).
   if (new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: "America/Guayaquil" }) === "Mon") add(coldIds, "cold");
+  // ...y todos los días, lo que se acaba en 4–5 días (2026-10-14).
+  const soon = buildColdSoonNotice(s);
+  if (soon) {
+    const owners: string[] = coldIds.length > 0 ? coldIds : ["admin"];
+    for (const id of owners) out.push({ ownerId: id, type: soon.type, title: `DAFLOW · ${soon.label}`, body: soon.body, url: id === "admin" ? adminHref : PURCHASE_SUGGESTIONS_HREF });
+  }
   add([inventoryLeadId], "escalation");
   const countFirst = buildCountFirstNotice(s);
   if (countFirst && inventoryLeadId) out.push({ ownerId: inventoryLeadId, type: countFirst.type, title: `DAFLOW · ${countFirst.label}`, body: countFirst.body, url: STOCK_COUNT_HREF });
@@ -702,6 +739,8 @@ export async function getPurchaseSuggestionPendingItems(userId: string, href: st
     .map((n) => ({ type: n.type, icon: n.icon, label: n.label, meta: n.meta, overdue: n.overdue, href }));
   const countFirst = audiences.includes("escalation") ? buildCountFirstNotice(s) : null;
   if (countFirst) items.unshift({ type: countFirst.type, icon: countFirst.icon, label: countFirst.label, meta: countFirst.meta, overdue: true, href: STOCK_COUNT_HREF });
+  const soon = audiences.includes("cold") ? buildColdSoonNotice(s) : null;
+  if (soon) items.unshift({ type: soon.type, icon: soon.icon, label: soon.label, meta: soon.meta, overdue: soon.overdue, href });
   // "Pedir que lo cuenten" (2026-10-14): se queda en su Inicio hasta contarlo.
   const asked = audiences.includes("escalation") ? await getCountRequestPendingItem() : null;
   if (asked) items.unshift(asked);
@@ -723,6 +762,8 @@ export async function getPurchaseSuggestionAdminPendingItems() {
   for (const a of missing) {
     const n = buildSuggestionNotice(s, a);
     if (n) items.push({ type: n.type, icon: n.icon, label: n.label, meta: n.meta, overdue: n.overdue, href });
+    const soon = a === "cold" ? buildColdSoonNotice(s) : null;
+    if (soon) items.push({ type: soon.type, icon: soon.icon, label: soon.label, meta: soon.meta, overdue: soon.overdue, href });
   }
   return items;
 }

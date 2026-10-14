@@ -32,6 +32,7 @@ type Row = {
   newToday?: boolean;
   countMark?: "real" | "pending" | "recount" | null;
   countRequest?: { at: string; byName: string } | null;
+  coldSoon?: boolean;
 };
 
 // Misma franja que Stock Actual (pedido de Jariel 2026-10-14): verde = ya
@@ -281,6 +282,8 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
       <div className="min-w-0 flex-1">
         <div className="text-[13px] font-semibold text-ink truncate">
           {/* Pedido de Jariel 2026-10-13: marcar las calientes que entraron hoy. */}
+          {/* Pedido de Jariel 2026-10-14: compras frías que se acaban en 5 días o menos (aviso diario). */}
+          {r.coldSoon ? <span className="mr-1.5 align-middle text-[10.5px] font-bold uppercase tracking-wide text-amber bg-amber/10 rounded px-1.5 py-0.5">Se acaba en 5 días o menos</span> : null}
           {r.newToday ? <span className="mr-1.5 align-middle text-[10.5px] font-bold uppercase tracking-wide text-red bg-red/10 rounded px-1.5 py-0.5">Nueva hoy</span> : null}
           {r.name}
         </div>
@@ -478,7 +481,7 @@ function List({
         {isCold && (
           <div className="mt-2 text-[12px] text-steel bg-amber/10 border border-amber/30 rounded-md px-2.5 py-1.5">
             Esta semana: <b className="text-ink">{week} producto{week === 1 ? "" : "s"}</b> por comprar o descartar (urgentes y los que se vuelven urgentes antes del
-            próximo lunes). El aviso llega los lunes; esta lista se queda en Inicio toda la semana.
+            próximo lunes). El aviso llega los lunes; esta lista se queda en Inicio toda la semana. Además, todos los días llega un aviso con lo que se acaba en 5 días o menos.
           </div>
         )}
         {GROUPS.map((g) => {
@@ -568,7 +571,7 @@ export function PurchaseSuggestionsPanel({ onAnalyzeRepurchase }: { onAnalyzeRep
   const onlyHot = data.audiences.includes("hot") && !data.audiences.includes("cold");
   const hotFirst = !onlyCold;
   const hot = <List key="hot" title="🔥 Compras calientes" sub={`se acaban en 3 días o menos · ${whoText(data.buyerNames?.hot)}`} rows={data.hot} newProducts={data.newProducts} open={!onlyCold} canReportStockout={data.canReportStockout} onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
-  const cold = <List key="cold" title="❄️ Compras frías" sub={`60 unidades o menos que todavía alcanzan más de 3 días · ${whoText(data.buyerNames?.cold)}`} rows={data.cold} newProducts={data.coldNewProducts} open={!onlyHot} canReportStockout={data.canReportStockout} canDiscard={data.canDiscard} isCold onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
+  const cold = <List key="cold" title="❄️ Compras frías" sub={`60 unidades o menos (o se acaban en 5 días) que todavía alcanzan más de 3 días · ${whoText(data.buyerNames?.cold)}`} rows={data.cold} newProducts={data.coldNewProducts} open={!onlyHot} canReportStockout={data.canReportStockout} canDiscard={data.canDiscard} isCold onChanged={load} canRepurchase={data.canRepurchase} repurchases={data.repurchases} />;
 
   return (
     <OpenRepurchaseContext.Provider value={onAnalyzeRepurchase ?? null}>
