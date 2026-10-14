@@ -4235,7 +4235,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (discontinuedItem) teamItems.unshift(discontinuedItem);
       const supplierStockoutItem = await getSupplierStockoutPendingItem("/area/workspace?tab=analisis-mercado&ptab=sinstock");
       if (supplierStockoutItem) teamItems.push(supplierStockoutItem);
-    } else if (me.department?.code === "MKT") {
+    } else if (me.department?.code === "MKT" && !me.canConfirmMarketingDesign) {
+      // Pedido del usuario 2026-10-14: al diseñador (Robert) no le sirve —
+      // él no ofrece productos en tiendas.
       const supplierStockoutInfoItem = await getSupplierStockoutInfoPendingItem("/area/workspace?tab=analisis-mercado&ptab=sinstock");
       if (supplierStockoutInfoItem) teamItems.push(supplierStockoutInfoItem);
     }
