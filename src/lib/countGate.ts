@@ -45,7 +45,7 @@ export function isUncounted(gate: CountGate, catalogItemId: string, hasKardex: b
 }
 
 export function uncountedMessage(name: string): string {
-  return `"${name}" todavía no se cuenta en el conteo físico (o está en recuento por una diferencia grande), así que no se sabe cuánto hay de verdad. No se puede comprar hasta que se cuente: usa "Pedir que lo cuenten" en Qué comprar (le llega a Daniel). Si es una emergencia, va por la vía de emergencia.`;
+  return `"${name}" todavía no se cuenta en el conteo físico (o está en recuento por una diferencia grande), así que no se sabe cuánto hay de verdad. No se puede comprar hasta que se cuente: usa "Pedir que lo cuenten" (aquí mismo en Solicitar o en Qué comprar; le llega a Daniel). Si es una emergencia, va por la vía de emergencia.`;
 }
 
 // Para frenar solicitudes de compra y recompras. Los suministros (no se

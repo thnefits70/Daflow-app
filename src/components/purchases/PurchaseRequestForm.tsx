@@ -320,6 +320,18 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // comprando este producto, se avisa apenas se elige (el servidor igual lo
   // frena al enviar). No se guarda en el borrador.
   const [blockedByLine, setBlockedByLine] = useState<Record<number, string | null>>({});
+  // Pedido de Jariel 2026-10-14: lo bloqueado por no estar contado se pide
+  // contar desde aquí mismo (no siempre sale en Qué comprar: si el sistema
+  // cree que hay stock de sobra, ahí no aparece).
+  const [uncountedItems, setUncountedItems] = useState<Record<string, boolean>>({});
+  const [countAskByItem, setCountAskByItem] = useState<Record<string, { busy?: boolean; done?: boolean; error?: string }>>({});
+  function askCount(catalogItemId: string) {
+    setCountAskByItem((m) => ({ ...m, [catalogItemId]: { busy: true } }));
+    fetch("/api/purchase-suggestions/request-count", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ catalogItemId }) })
+      .then((res) => res.json().then((j) => ({ ok: res.ok, j })))
+      .then(({ ok, j }) => setCountAskByItem((m) => ({ ...m, [catalogItemId]: ok ? { done: true } : { error: j.error ?? "No se pudo avisar." } })))
+      .catch(() => setCountAskByItem((m) => ({ ...m, [catalogItemId]: { error: "No se pudo avisar." } })));
+  }
   // Pedido del usuario 2026-09-30: producto sin marcar como pequeño o normal
   // (nunca pasó por la calculadora de Jariel) — se elige UNA vez, con doble
   // confirmación, y queda guardado en el producto. Por id de producto.
@@ -369,6 +381,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         updateLine(idx, { stats: data?.stats ?? null });
         // Conteo físico (2026-10-13): lo que no se contó no se compra, salvo emergencia.
         setBlockedByLine((m) => ({ ...m, [idx]: data?.blockedBy ?? (emergencyOnly ? null : data?.uncounted ?? null) }));
+        setUncountedItems((m) => ({ ...m, [catalogItemId]: !data?.blockedBy && !emergencyOnly && !!data?.uncounted }));
         setRepurchaseByLine((m) => ({ ...m, [idx]: data?.repurchase ?? null }));
         setStockCoverByLine((m) => ({ ...m, [idx]: emergencyOnly ? null : (data?.stockCover ?? null) }));
         setNeedsSizeByItem((m) => ({ ...m, [catalogItemId]: !!data?.needsFulfillmentSize }));
@@ -1163,10 +1176,22 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                 {blockedByLine[idx]}
                 {/* Pedido de Nairoby 2026-10-12: salida directa para no comprar
                     este producto (antes, con una sola línea, no había X). */}
-                <div className="mt-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button type="button" className="text-[11.5px] font-bold bg-red text-white rounded-md px-3 py-1 cursor-pointer" onClick={() => dropBlockedLine(idx)}>
                     No comprar este producto
                   </button>
+                  {uncountedItems[line.catalogItem.id] && (() => {
+                    const ask = countAskByItem[line.catalogItem.id];
+                    if (ask?.done) return <span className="text-[11.5px] font-semibold text-teal">Listo: se le avisó a Daniel — le sale en su Inicio hasta que lo cuente.</span>;
+                    return (
+                      <>
+                        <button type="button" disabled={ask?.busy} className="text-[11.5px] font-bold border border-amber text-amber rounded-md px-3 py-1 cursor-pointer disabled:opacity-50" onClick={() => askCount(line.catalogItem!.id)}>
+                          {ask?.busy ? "Avisando…" : "Pedir que lo cuenten"}
+                        </button>
+                        {ask?.error && <span className="text-[11.5px] text-red">{ask.error}</span>}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             )}

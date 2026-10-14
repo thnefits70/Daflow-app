@@ -318,7 +318,13 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
   // Compra caliente = se acaba en HOT_DAYS o menos, con cualquier stock.
   const perDayOf = (id: string) => (sold.get(id) ?? 0) / windowDays;
   const isHotStock = (id: string, bal: number) => perDayOf(id) > 0 && Math.max(0, bal) / perDayOf(id) <= HOT_DAYS;
-  const candidateIds = [...balances.entries()].filter(([id, bal]) => bal >= 0 && (bal <= COLD_MAX || isHotStock(id, bal))).map(([id]) => id);
+  // Pedido de Jariel 2026-10-14 (Radio Baofeng 142 sin contar, Consola Retro
+  // −11 en recuento): lo que falta contar y se vende entra a "Falta contar"
+  // aunque el sistema diga que sobra o esté en negativo — el número no es real
+  // y sin esto no había desde dónde pedir que lo cuenten.
+  const uncountedSelling = (id: string, bal: number) =>
+    gate.active && !gate.counted.has(id) && perDayOf(id) > 0 && (bal < 0 || bal / perDayOf(id) <= URGENT_DAYS_CREDIT_SUPPLIER + COLD_WEEK_AHEAD_DAYS);
+  const candidateIds = [...balances.entries()].filter(([id, bal]) => (bal >= 0 && (bal <= COLD_MAX || isHotStock(id, bal))) || uncountedSelling(id, bal)).map(([id]) => id);
   const [items, lastPurchases, stockoutReports, discards] = await Promise.all([
     prisma.purchaseCatalogItem.findMany({
       where: { id: { in: candidateIds }, awaitingDropiId: false },
@@ -439,7 +445,10 @@ export async function getPurchaseSuggestions(): Promise<PurchaseSuggestions> {
       countMark: null,
       countRequest: null,
     };
-    if (isHot) hot.push(row);
+    // Sin contar y con stock "de sobra" o negativo: solo como "Falta contar" en calientes.
+    if (uncountedSelling(item.id, stock) && (stock < 0 || stock > COLD_MAX)) {
+      if (status === "falta_contar") hot.push(row);
+    } else if (isHot) hot.push(row);
     else if (stock <= COLD_MAX) cold.push(row);
   }
 
