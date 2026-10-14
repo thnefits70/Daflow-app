@@ -282,6 +282,101 @@
   animation-play-state: paused;
 }
 
+/* "Video" de presentación de la portada (PvxDemo, 2026-10-14). */
+@keyframes pvx-demo-scene {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.985);
+  }
+}
+.pvx .pvx-demo-scene {
+  animation: pvx-demo-scene 420ms var(--pvx-ease-out) both;
+}
+@keyframes pvx-demo-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.97);
+  }
+}
+.pvx .pvx-demo-in {
+  animation: pvx-demo-in 360ms var(--pvx-ease-out) both;
+}
+@keyframes pvx-demo-bar {
+  from {
+    transform: scaleY(0);
+  }
+}
+.pvx .pvx-demo-bar {
+  animation: pvx-demo-bar 700ms var(--pvx-ease-out) both;
+}
+@keyframes pvx-demo-progress {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+.pvx .pvx-demo-progress {
+  animation-name: pvx-demo-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@keyframes pvx-demo-press {
+  0%,
+  100% {
+    transform: none;
+  }
+  40% {
+    transform: scale(0.93);
+  }
+}
+.pvx .pvx-demo-press {
+  animation: pvx-demo-press 380ms var(--pvx-ease-out) 600ms both;
+}
+@keyframes pvx-demo-track {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+.pvx .pvx-demo-track {
+  animation: pvx-demo-track 3.2s var(--pvx-ease-in-out) 300ms both;
+}
+@keyframes pvx-demo-truck {
+  from {
+    left: 0;
+  }
+  to {
+    left: 100%;
+  }
+}
+.pvx .pvx-demo-truck {
+  animation: pvx-demo-truck 3.2s var(--pvx-ease-in-out) 300ms both;
+}
+@keyframes pvx-caret {
+  50% {
+    opacity: 0;
+  }
+}
+.pvx .pvx-caret {
+  animation: pvx-caret 1s steps(1) infinite;
+}
+
+/* Guía (PvxTour): todo oscuro menos el hueco sobre el elemento. */
+.pvx .pvx-tour-hole {
+  box-shadow:
+    0 0 0 3px var(--pvx-orange),
+    0 0 0 9999px rgb(8 9 11 / 0.66);
+  transition:
+    top 320ms var(--pvx-ease-out),
+    left 320ms var(--pvx-ease-out),
+    width 320ms var(--pvx-ease-out),
+    height 320ms var(--pvx-ease-out);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .pvx .pvx-marquee-track,
   .pvx .pvx-rise,
@@ -290,8 +385,22 @@
   .pvx .pvx-overlay,
   .pvx .pvx-pop,
   .pvx .pvx-swap,
+  .pvx .pvx-demo-scene,
+  .pvx .pvx-tour-hole,
+  .pvx .pvx-demo-in,
+  .pvx .pvx-demo-bar,
+  .pvx .pvx-demo-press,
+  .pvx .pvx-demo-track,
+  .pvx .pvx-demo-truck,
+  .pvx .pvx-caret,
   .pvx .pvx-shine::after {
     animation: none;
+  }
+  .pvx .pvx-demo-track {
+    width: 100%;
+  }
+  .pvx .pvx-demo-truck {
+    left: 100%;
   }
   .pvx .pvx-shine::after {
     display: none;

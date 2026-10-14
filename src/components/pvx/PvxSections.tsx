@@ -87,7 +87,7 @@ function LiveCut() {
     return () => clearInterval(t);
   }, []);
   return (
-    <div className="rounded-[24px] bg-[var(--pvx-night-2)] p-5 sm:p-6">
+    <div data-tour="cortes" className="rounded-[24px] bg-[var(--pvx-night-2)] p-5 sm:p-6">
       <div className="flex items-center gap-2 text-[13px] font-bold text-[var(--pvx-orange)]">
         <span className="relative flex h-2.5 w-2.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--pvx-orange)] opacity-60 motion-reduce:hidden" />
@@ -261,7 +261,7 @@ export function PvxResources() {
         </h2>
 
         <div className="mt-14 grid gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-          <div data-r className="flex flex-col justify-between gap-8 rounded-[28px] bg-[var(--pvx-orange)] p-7 text-white sm:p-10">
+          <div data-r data-tour="recursos" className="flex flex-col justify-between gap-8 rounded-[28px] bg-[var(--pvx-orange)] p-7 text-white sm:p-10">
             <div>
               <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[var(--pvx-ink)] text-[var(--pvx-orange)]">
                 <IconImage className="w-7 h-7" />

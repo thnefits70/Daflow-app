@@ -12,6 +12,8 @@ import { AdvisorPicker, WhatsAppButton } from "@/components/pvx/PvxContact";
 import { PvxRocketSku } from "@/components/pvx/PvxRocketSku";
 import { PvxCities, PvxOperation, PvxResources, titleCase } from "@/components/pvx/PvxSections";
 import { CountUp, GlassBar, RotatingCity, useMarqueePause } from "@/components/pvx/PvxEffects";
+import { PvxDemo } from "@/components/pvx/PvxDemo";
+import { PvxTour } from "@/components/pvx/PvxTour";
 import { IconFacebook, IconInstagram, IconTikTok } from "@/components/pvx/PvxIcons";
 import { IconArrow, IconBox, IconCheck, IconClock, IconCopy, IconFlame, IconImage, IconLock, IconSearch, IconSpark, IconTruck, IconWhatsApp } from "@/components/pvx/PvxIcons";
 
@@ -190,6 +192,7 @@ function HeroSearch({ cards, query, onQuery, onOpen }: { cards: PublicCard[]; qu
     <div ref={boxRef} className="relative w-full max-w-[560px]">
       <form
         role="search"
+        data-tour="search"
         onSubmit={(e) => {
           e.preventDefault();
           setFocused(false);
@@ -364,19 +367,25 @@ function Hero({ cards, stats, name, query, onQuery, onOpen }: { cards: PublicCar
           ))}
         </h1>
         <RotatingCity cities={stats.topCities.slice(0, 6).map((c) => titleCase(c.city))} />
-        <p className="mt-8 max-w-[580px] text-[17px] leading-relaxed text-white/80 sm:mt-10 sm:text-[19px]">
-          Los productos de Provedix con ventas reales en Ecuador: cuánto se vende, a qué precio y en qué ciudades. Gratis, con el ID de Dropi listo para copiar.
-        </p>
-        <div className="mt-7">
-          <HeroSearch cards={cards} query={query} onQuery={onQuery} onOpen={onOpen} />
-        </div>
-        <div className="mt-5">
-          <AdvisorPicker
-            dark
-            className="inline-flex items-center gap-2 text-left text-[14.5px] font-semibold text-white/75 underline decoration-white/30 underline-offset-4 hover:text-white hover:decoration-[var(--pvx-orange)] cursor-pointer"
-          >
-            <IconWhatsApp className="w-4.5 h-4.5 shrink-0 text-[#3ddc84]" /> ¿Dudas? Escríbele a un asesor por WhatsApp
-          </AdvisorPicker>
+        {/* Texto y buscador a la izquierda; "video" de presentación a la derecha (2026-10-14). */}
+        <div className="mt-8 grid gap-10 sm:mt-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,500px)] lg:items-start lg:gap-14">
+          <div>
+            <p className="max-w-[580px] text-[17px] leading-relaxed text-white/80 sm:text-[19px]">
+              Los productos de Provedix con ventas reales en Ecuador: cuánto se vende, a qué precio y en qué ciudades. Gratis, con el ID de Dropi listo para copiar.
+            </p>
+            <div className="mt-7">
+              <HeroSearch cards={cards} query={query} onQuery={onQuery} onOpen={onOpen} />
+            </div>
+            <div className="mt-5">
+              <AdvisorPicker
+                dark
+                className="inline-flex items-center gap-2 text-left text-[14.5px] font-semibold text-white/75 underline decoration-white/30 underline-offset-4 hover:text-white hover:decoration-[var(--pvx-orange)] cursor-pointer"
+              >
+                <IconWhatsApp className="w-4.5 h-4.5 shrink-0 text-[#3ddc84]" /> ¿Dudas? Escríbele a un asesor por WhatsApp
+              </AdvisorPicker>
+            </div>
+          </div>
+          <PvxDemo card={cards.find((c) => c.photo && (c.curve ?? []).some((v) => v > 0)) ?? cards[0]} />
         </div>
       </div>
       <div className="relative mt-14 sm:mt-20">
@@ -527,6 +536,7 @@ function ProductCard({ c, index, registered, onOpen }: { c: PublicCard; index: n
         }
       }}
       className="pvx-card group flex flex-col rounded-[22px] bg-[var(--pvx-paper-2)] p-2 text-left cursor-pointer sm:p-2.5"
+      data-tour={index === 0 ? "card" : undefined}
     >
       <div className="relative aspect-square overflow-hidden rounded-2xl bg-white">
         <div className="pvx-card-photo absolute inset-0">
@@ -553,17 +563,21 @@ function ProductCard({ c, index, registered, onOpen }: { c: PublicCard; index: n
         {c.curve && c.curve.some((v) => v > 0) && <CardMetrics curve={c.curve} unlocked={registered} onUnlock={() => onOpen(c.code)} />}
         {/* Mismo orden y alto en todas las tarjetas, también en celular (2026-10-12). */}
         <div className="relative mt-2 flex flex-col gap-1.5">
-          <CardDropiId code={c.code} />
+          <div data-tour={index === 0 ? "card-id" : undefined}>
+            <CardDropiId code={c.code} />
+          </div>
           <div className="grid grid-cols-2 gap-1.5">
             <DropiLink code={c.code} compact block />
-            <WhatsAppButton p={c} outOfStock={c.stock === "out"} compact block />
+            <div data-tour={index === 0 ? "card-asesor" : undefined}>
+              <WhatsAppButton p={c} outOfStock={c.stock === "out"} compact block />
+            </div>
           </div>
           {(c.rocketSkus ?? []).slice(0, 1).map((r) => (
             <PvxRocketSku key={r} sku={r} />
           ))}
         </div>
         <div className="mt-auto pt-2.5">
-          <div className="flex items-center justify-center gap-1.5 rounded-full bg-[var(--pvx-ink)] px-3 py-2 text-center text-[12.5px] font-bold leading-tight text-white transition-colors duration-200 group-hover:bg-[var(--pvx-orange)]">
+          <div data-tour={index === 0 ? "card-cta" : undefined} className="flex items-center justify-center gap-1.5 rounded-full bg-[var(--pvx-ink)] px-3 py-2 text-center text-[12.5px] font-bold leading-tight text-white transition-colors duration-200 group-hover:bg-[var(--pvx-orange)]">
             {!registered && <IconLock className="w-3.5 h-3.5 shrink-0" />}
             <span className="min-[420px]:hidden">Precio y ganancia</span>
             <span className="hidden min-[420px]:inline">Precio, ganancia y ciudades</span>
@@ -602,7 +616,7 @@ function Footer() {
             </AdvisorPicker>
           </div>
         </div>
-        <div className="mt-16 grid gap-8 rounded-[28px] bg-white/[.05] p-6 sm:p-8 lg:grid-cols-2 lg:items-center">
+        <div data-tour="canales" className="mt-16 grid gap-8 rounded-[28px] bg-white/[.05] p-6 sm:p-8 lg:grid-cols-2 lg:items-center">
           <div>
             <p className="pvx-heading text-[24px] sm:text-[28px]">Productos nuevos, primero en tu WhatsApp</p>
             <p className="mt-2 text-[15px] leading-relaxed text-white/70">Únete a nuestros canales y entérate antes que nadie de lo que llega y de lo que se está vendiendo.</p>
@@ -802,7 +816,7 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
         </div>
 
         <div className="sticky top-[60px] z-20 mt-8 sm:top-[68px] bg-[var(--pvx-paper)]/[.97] shadow-[0_1px_0_var(--pvx-paper-3)]">
-          <div className="mx-auto flex max-w-[1240px] flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:px-8">
+          <div data-tour="filters" className="mx-auto flex max-w-[1240px] flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:px-8">
             <label className="flex w-full items-center gap-2 rounded-full bg-[var(--pvx-paper-2)] px-4 focus-within:bg-white focus-within:shadow-[0_0_0_2px_var(--pvx-orange)] sm:max-w-[380px]">
               <IconSearch className="w-4.5 h-4.5 shrink-0 text-[var(--pvx-ink-3)]" />
               <span className="sr-only">Buscar en el catálogo</span>
@@ -893,6 +907,8 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
 
       <PvxResources />
       <Footer />
+      {/* Guía: sale sola al registrado que no la vio (o con novedades), sin ventanas abiertas. */}
+      <PvxTour autoStart={registered === true && !open} />
 
       {open && (
         <div className="pvx-overlay fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4" onClick={() => setOpen(null)}>
