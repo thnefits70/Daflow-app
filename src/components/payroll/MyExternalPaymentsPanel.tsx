@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FileText, MessageSquare } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { PayrollChat } from "./PayrollChat";
+import { MyBankAccountPanel } from "./MyBankAccountPanel";
 import { formatDateTime } from "@/lib/formatDateTime";
 
 const MONTHS = [
@@ -37,6 +38,10 @@ type Payment = {
 // nómina (PayrollChat) que sí tiene todo el mundo en PayStubsPanel modo
 // "own" — podían recibir mensajes de Nairoby pero no tenían dónde
 // responder ni adjuntar nada. Se agrega acá con el mismo `canSend`.
+// Corrección 2026-10-14: igual pasaba con la cuenta bancaria — el aviso de
+// Inicio "Registra tu cuenta bancaria" traía a este grupo acá y no había
+// dónde registrarla (caso Michell, recién ingresada). Mismo panel que ve
+// todo el mundo en PayStubsPanel modo "own".
 export function MyExternalPaymentsPanel({ ownUserId }: { ownUserId: string }) {
   const [payments, setPayments] = useState<Payment[] | null>(null);
 
@@ -48,6 +53,8 @@ export function MyExternalPaymentsPanel({ ownUserId }: { ownUserId: string }) {
 
   return (
     <div>
+      <MyBankAccountPanel />
+
       <div className="mb-4.5">
         <div className="font-semibold text-[13.5px] mb-1.5 flex items-center gap-1.5">
           <MessageSquare size={14} className="text-steel" /> Mensajes con Nómina
