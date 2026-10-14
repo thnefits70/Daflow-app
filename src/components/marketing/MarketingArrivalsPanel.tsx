@@ -6,11 +6,13 @@ import { actorName } from "@/lib/actorName";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { PurchaseCode } from "@/components/shared/PurchaseCode";
 import { CopyDropiPrice } from "@/components/shared/CopyDropiPrice";
 import { recommendedDropiStock, DROPI_STOCK_MIN_RECOMMENDED } from "@/lib/dropiStockRecommendation";
 
 type Row = {
   id: string;
+  requestNumber: number | null;
   quantity: number;
   catalogItem: { name: string; photos: string[]; justCode: string | null };
   receipt: { photoUrls: string[]; receivedQuantity: number; confirmedAt: string } | null;
@@ -202,6 +204,7 @@ export function MarketingArrivalsPanel({ canConfirmAdvisor }: { canConfirmAdviso
               <span>{r.catalogItem.name}</span>
             </div>
             <div className="text-[12px] text-steel mb-3">
+              <PurchaseCode requestNumber={r.requestNumber} className="mr-1.5" />
               {r.receipt?.receivedQuantity ?? r.quantity} un. recibidas{r.receipt ? ` · ${new Date(r.receipt.confirmedAt).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })}` : ""}
             </div>
 

@@ -10,6 +10,7 @@ import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { LiveVideoCapture } from "@/components/shared/LiveVideoCapture";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { PurchaseCode } from "@/components/shared/PurchaseCode";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { isScreenPhotoNote } from "@/lib/receiptPhotoScreen";
 import { WAREHOUSE_AREAS, areaLabel, type WarehouseArea } from "@/lib/warehouseAreas";
@@ -37,6 +38,7 @@ function isLateClaimDraftEmpty(d: LateClaimDraftData) {
 type Row = {
   id: string;
   groupId: string;
+  requestNumber: number | null;
   // Confirmado 2026-09-15, bug real reportado por el usuario: un proveedor
   // de crédito (hoy CHEN) nunca pasa por PAID antes de recibir (ver
   // receipt/route.ts, isCreditSupplier) — así que esta cola tiene que poder
@@ -121,6 +123,7 @@ type PendingUrgentReport = {
   reportedAt: string;
   reportedBy: { name: string } | null;
   request: {
+    requestNumber: number | null;
     quantity: number;
     unitCost: number;
     totalCost: number;
@@ -142,6 +145,7 @@ type PendingExcessKardex = {
   reportedBy: { name: string } | null;
   reportedAt: string;
   request: {
+    requestNumber: number | null;
     quantity: number;
     requestedAt: string;
     requestedBy: { name: string } | null;
@@ -168,7 +172,7 @@ type PendingReplacement = {
   replacementAiMatch: boolean | null;
   replacementAiNote: string | null;
   report: {
-    request: { id: string; catalogItem: { name: string; photos: string[]; justCode: string | null }; supplier: { name: string } };
+    request: { id: string; requestNumber: number | null; catalogItem: { name: string; photos: string[]; justCode: string | null }; supplier: { name: string } };
   };
 };
 
@@ -1153,7 +1157,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     <span>{pr.request.catalogItem.name}</span>
                   </div>
                   <div className="text-[11.5px] text-steel mb-2">
-                    {pr.request.supplier.name} — se pidieron {pr.request.quantity} un., contó {countedQty} · reportado por {actorName(pr.reportedBy?.name)} · {formatDateTime(pr.reportedAt)}
+                    <PurchaseCode requestNumber={pr.request.requestNumber} className="mr-1.5" />{pr.request.supplier.name} — se pidieron {pr.request.quantity} un., contó {countedQty} · reportado por {actorName(pr.reportedBy?.name)} · {formatDateTime(pr.reportedAt)}
                   </div>
                   {parts.length > 0 && <div className="text-[11.5px] text-steel mb-2">{parts.join(" · ")}</div>}
                   {pr.excessQty > 0 && (
@@ -1364,7 +1368,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                   Recibido por {actorName((ex.request.receipt?.confirmedBy ?? ex.reportedBy)?.name)} · {formatDateTime(ex.request.receipt?.confirmedAt ?? ex.reportedAt)}
                 </div>
                 <div className="text-[11.5px] text-steel mb-1.5">
-                  {ex.request.supplier.name} — se pidieron {ex.request.quantity} un., {ex.excessQty} de excedente confirmado por {actorName(ex.excessConfirmedBy?.name)} · {formatDateTime(ex.excessConfirmedAt)}
+                  <PurchaseCode requestNumber={ex.request.requestNumber} className="mr-1.5" />{ex.request.supplier.name} — se pidieron {ex.request.quantity} un., {ex.excessQty} de excedente confirmado por {actorName(ex.excessConfirmedBy?.name)} · {formatDateTime(ex.excessConfirmedAt)}
                 </div>
                 {ex.excessGestionNote && (
                   <div className="text-[11.5px] text-steel-dim mb-2">Gestión de {actorName(ex.excessGestionBy?.name)}: &quot;{ex.excessGestionNote}&quot;</div>
@@ -1413,7 +1417,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                   <span className="text-[10px] font-mono font-bold text-teal bg-teal/10 border border-teal/40 rounded px-1.5 py-0.5">{c.lateClaimCode}</span>
                 </div>
                 <div className="text-[11.5px] text-steel mb-2">
-                  {c.request.supplier.name} — {c.damagedQty} un. dañadas · reportado por {actorName(c.reportedBy?.name)} · {formatDateTime(c.reportedAt)}
+                  <PurchaseCode requestNumber={c.request.requestNumber} className="mr-1.5" />{c.request.supplier.name} — {c.damagedQty} un. dañadas · reportado por {actorName(c.reportedBy?.name)} · {formatDateTime(c.reportedAt)}
                   {c.stockStatus === "SOLD" && " · ya se vendieron"}
                 </div>
                 {c.originUncertain && (
@@ -1488,7 +1492,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                   <span>{pr.report.request.catalogItem.name}</span>
                 </div>
                 <div className="text-[11.5px] text-steel mb-2">
-                  {pr.report.request.supplier.name}
+                  <PurchaseCode requestNumber={pr.report.request.requestNumber} className="mr-1.5" />{pr.report.request.supplier.name}
                   {(canApprove || isAdmin) && ` — ${pr.quantity} un.`}
                   {" "}· llega hasta {pr.replacementDueDate ? new Date(pr.replacementDueDate).toLocaleDateString("es-MX") : "—"}
                 </div>
@@ -1622,6 +1626,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
               </div>
             )}
             <div className="text-[10px] text-steel-dim mb-2">
+              <PurchaseCode requestNumber={g[0].requestNumber} className="mr-1.5" />
               Solicitada por {actorName(g[0].requestedBy?.name)} · {formatDateTime(g[0].requestedAt)}
               {/* Confirmado 2026-09-15, bug real: un pedido de crédito (CHEN) llega
                   acá sin haberse pagado todavía (paidBy null) — actorName cae en el
@@ -2546,7 +2551,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                     </span>
                   </div>
                   <div className="text-[11.5px] text-steel mb-2">
-                    {row.supplier.name}
+                    <PurchaseCode requestNumber={row.requestNumber} className="mr-1.5" />{row.supplier.name}
                     {row.receipt?.confirmedAt && ` — recibido ${formatDateTime(row.receipt.confirmedAt)}`}
                   </div>
 

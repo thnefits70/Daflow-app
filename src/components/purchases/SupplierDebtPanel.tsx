@@ -7,6 +7,7 @@ import { compressImage } from "@/lib/compressImage";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { useFormDraft, clearFormDraft } from "@/lib/useFormDraft";
 import { SupplierSheetEmailsManager } from "@/components/purchases/SupplierSheetEmailsManager";
+import { PurchaseCode } from "@/components/shared/PurchaseCode";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -77,7 +78,7 @@ type Payment = {
   aiReviewSummary: string | null;
   aiReviewOk: boolean | null;
   aiReviewAt: string | null;
-  requests: { id: string; quantity: number; totalCost: number; creditDeduction: number; catalogItem: { name: string } }[];
+  requests: { id: string; requestNumber: number | null; quantity: number; totalCost: number; creditDeduction: number; catalogItem: { name: string } }[];
   excessReports: { id: string; excessQty: number; amount: number; request: { requestNumber: number | null; catalogItem: { name: string } } }[];
   transfers: Transfer[];
 };
@@ -740,7 +741,7 @@ export function SupplierDebtPanel() {
                       {p.requests.map((r) => (
                         <li key={r.id} className="flex justify-between">
                           <span>
-                            {r.catalogItem.name} × {r.quantity}
+                            <PurchaseCode requestNumber={r.requestNumber} className="mr-1.5" />{r.catalogItem.name} × {r.quantity}
                             {r.creditDeduction > 0 && <span className="text-gold"> (con descuento de {money(r.creditDeduction)})</span>}
                           </span>
                           <span className="tabular-nums">{money(r.totalCost)}</span>

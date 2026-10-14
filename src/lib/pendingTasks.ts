@@ -39,6 +39,18 @@ import { COMBO_BRAND_HREF } from "@/lib/comboAlias";
 import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
 import { getLeaderTeamTaskPendingItems, getMyTeamTaskPendingItem } from "@/lib/teamTasks";
 
+import { formatPurchaseRequestCode } from "@/lib/purchaseCode";
+
+// Pedido de Daniel 2026-10-14: el código SC-XXX de cada compra se ve en todo
+// el flujo, también en las tareas de Inicio.
+function scList(nums: (number | null | undefined)[]): string {
+  const codes = [...new Set(nums.filter((n): n is number => n != null))].sort((a, b) => a - b).map(formatPurchaseRequestCode);
+  if (codes.length === 0) return "";
+  return ` · ${codes.slice(0, 4).join(", ")}${codes.length > 4 ? ` y ${codes.length - 4} más` : ""}`;
+}
+function withSc(code: string | null, name: string): string {
+  return code ? `${code} ${name}` : name;
+}
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
 // the deadline to have a week's data in is the following Monday — since ISO
@@ -1287,7 +1299,7 @@ async function getPurchaseApprovalPendingItem(href: string): Promise<PendingItem
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const rows = await prisma.purchaseRequest.findMany({
     where: { status: "PENDING_APPROVAL" },
-    select: { groupId: true, totalCost: true, requestedAt: true },
+    select: { groupId: true, requestNumber: true, totalCost: true, requestedAt: true },
   });
   if (rows.length === 0) return null;
 
@@ -1305,7 +1317,7 @@ async function getPurchaseApprovalPendingItem(href: string): Promise<PendingItem
     type: "compras_pendientes_aprobacion",
     icon: "✅",
     label: "Solicitudes de compra por aprobar",
-    meta: `${groups.length} solicitud${groups.length === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    meta: `${groups.length} solicitud${groups.length === 1 ? "" : "es"} · $${total.toFixed(2)}${scList(rows.map((r) => r.requestNumber))}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
   };
@@ -1580,7 +1592,7 @@ async function getPurchaseShippingPendingItem(href: string): Promise<PendingItem
         { shippingPaymentTiming: "WITH_PURCHASE", shippingPaymentMethod: { not: "PETTY_CASH" }, shippingCostTotal: { gt: 0 }, status: { in: ["PAID", "RECEIVED_PENDING_REVIEW", "RECEIVED"] } },
       ],
     },
-    select: { groupId: true, shippingCostTotal: true, shippingPaymentRequestedAt: true, paidAt: true },
+    select: { groupId: true, requestNumber: true, shippingCostTotal: true, shippingPaymentRequestedAt: true, paidAt: true },
   });
   if (rows.length === 0) return null;
 
@@ -1598,7 +1610,7 @@ async function getPurchaseShippingPendingItem(href: string): Promise<PendingItem
     type: "pagos_flete",
     icon: "🚚",
     label: "Fletes pendientes de pago",
-    meta: `${groups.length} operación${groups.length === 1 ? "" : "es"} · $${total.toFixed(2)}${overdue ? " · atrasado" : ""}`,
+    meta: `${groups.length} operación${groups.length === 1 ? "" : "es"} · $${total.toFixed(2)}${scList(rows.map((r) => r.requestNumber))}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
   };
@@ -1670,6 +1682,7 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
       groupId: true,
       status: true,
       shippingCarrierPending: true,
+      requestNumber: true,
       bankAccountChangeRequestedAt: true,
       requestedAt: true,
       rejectionClosedAt: true,
@@ -1694,8 +1707,8 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
       label: "Mercadería que no llegó con el resto del pedido — coordina crédito, devolución o envío con el proveedor",
       meta:
         leftBehind.length === 1
-          ? `${leftBehind[0].name} (${leftBehind[0].quantity} un.) · ${leftBehind[0].supplierName}`
-          : `${leftBehind.length} productos: ${leftBehind.map((l) => l.name).join(", ")}`,
+          ? `${withSc(leftBehind[0].code, leftBehind[0].name)} (${leftBehind[0].quantity} un.) · ${leftBehind[0].supplierName}`
+          : `${leftBehind.length} productos: ${leftBehind.map((l) => withSc(l.code, l.name)).join(", ")}`,
       overdue: true,
       href: LEFT_BEHIND_HREF,
     });
@@ -1708,8 +1721,8 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
       label: "Pedido que lleva más de 2 días sin llegar — pregunta al proveedor",
       meta:
         overdueOrders.length === 1
-          ? `${overdueOrders[0].name} (${overdueOrders[0].quantity} un.) · ${overdueOrders[0].supplierName} · ${overdueOrders[0].days} días`
-          : `${overdueOrders.length} productos: ${overdueOrders.map((l) => l.name).join(", ")}`,
+          ? `${withSc(overdueOrders[0].code, overdueOrders[0].name)} (${overdueOrders[0].quantity} un.) · ${overdueOrders[0].supplierName} · ${overdueOrders[0].days} días`
+          : `${overdueOrders.length} productos: ${overdueOrders.map((l) => withSc(l.code, l.name)).join(", ")}`,
       overdue: true,
       href: OVERDUE_ORDERS_HREF,
     });
@@ -1723,7 +1736,7 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
       type: "compras_rechazadas",
       icon: "🔁",
       label: "Solicitudes de compra rechazadas — corregir y reenviar, o cerrar si no va",
-      meta: `${rejected.length} solicitud${rejected.length === 1 ? "" : "es"} · atrasado`,
+      meta: `${rejected.length} solicitud${rejected.length === 1 ? "" : "es"}${scList(rejected.map((g) => g.requestNumber))} · atrasado`,
       overdue: true,
       href,
     });
@@ -1736,7 +1749,7 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
       type: "compras_transportista",
       icon: "🚚",
       label: "Falta completar transportista y costo de envío",
-      meta: `${missingCarrier.length} solicitud${missingCarrier.length === 1 ? "" : "es"}${overdue ? " · atrasado" : ""}`,
+      meta: `${missingCarrier.length} solicitud${missingCarrier.length === 1 ? "" : "es"}${scList(missingCarrier.map((g) => g.requestNumber))}${overdue ? " · atrasado" : ""}`,
       overdue,
       href,
     });
@@ -1748,7 +1761,7 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
       type: "compras_cuenta_bancaria",
       icon: "🏦",
       label: "Cambia la cuenta bancaria del proveedor — la anterior no sirvió",
-      meta: `${bankChange.length} solicitud${bankChange.length === 1 ? "" : "es"} · atrasado`,
+      meta: `${bankChange.length} solicitud${bankChange.length === 1 ? "" : "es"}${scList(bankChange.map((g) => g.requestNumber))} · atrasado`,
       overdue: true,
       href,
     });
@@ -2307,7 +2320,7 @@ async function getLinesToConfirmPendingItem(): Promise<PendingItem | null> {
     type: "compras_confirmar_no_llego",
     icon: "📦",
     label: "Producto que no se registró con el resto del pedido — confirma si llegó o no",
-    meta: lines.length === 1 ? `${lines[0].name} · ${lines[0].supplierName}` : `${lines.length} productos: ${lines.map((l) => l.name).join(", ")}`,
+    meta: lines.length === 1 ? `${withSc(lines[0].code, lines[0].name)} · ${lines[0].supplierName}` : `${lines.length} productos: ${lines.map((l) => withSc(l.code, l.name)).join(", ")}`,
     overdue: true,
     href: INVENTORY_RECEIVING_HREF,
   };
@@ -2324,7 +2337,7 @@ async function getPurchaseReceivingPendingItem(href: string, showAmount: boolean
         { status: "APPROVED", supplier: { paymentMode: "CREDITO" } },
       ],
     },
-    select: { groupId: true, totalCost: true, paidAt: true, reviewedAt: true, receipt: { select: { confirmedAt: true } } },
+    select: { groupId: true, requestNumber: true, totalCost: true, paidAt: true, reviewedAt: true, receipt: { select: { confirmedAt: true } } },
   });
   if (rows.length === 0) return null;
 
@@ -2343,7 +2356,7 @@ async function getPurchaseReceivingPendingItem(href: string, showAmount: boolean
     type: "compras_recepcion",
     icon: "📥",
     label: "Confirmar mercadería recibida",
-    meta: `${groups.length} solicitud${groups.length === 1 ? "" : "es"}${showAmount ? ` · $${total.toFixed(2)}` : ""}${overdue ? " · atrasado" : ""}`,
+    meta: `${groups.length} solicitud${groups.length === 1 ? "" : "es"}${showAmount ? ` · $${total.toFixed(2)}` : ""}${scList(rows.map((r) => r.requestNumber))}${overdue ? " · atrasado" : ""}`,
     overdue,
     href,
   };
@@ -3950,7 +3963,7 @@ async function getKardexDelayAdminItems(deptIds: Map<string, string>): Promise<P
     getCountedUnconfirmedLots().then((l) => overdueCountedLots(l)),
     prisma.purchaseRequest.findMany({
       where: { status: "RECEIVED_PENDING_REVIEW", receipt: { confirmedAt: { lt: cutoff } } },
-      select: { groupId: true, receipt: { select: { confirmedAt: true } } },
+      select: { groupId: true, requestNumber: true, receipt: { select: { confirmedAt: true } } },
     }),
     getMarketProductKardexReleasePendingRows().then((rows) => rows.filter((r) => r.since < cutoff)),
   ]);
@@ -3973,7 +3986,7 @@ async function getKardexDelayAdminItems(deptIds: Map<string, string>): Promise<P
       type: "kardex_atrasado_recepciones",
       icon: "🛑",
       label: "Daniel no aprueba mercadería ya recibida",
-      meta: `${groups} solicitud${groups === 1 ? "" : "es"} recibida${groups === 1 ? "" : "s"} por su equipo hace ${daysSince(oldest)}+ día(s) · no entra al stock hasta que apruebe`,
+      meta: `${groups} solicitud${groups === 1 ? "" : "es"} recibida${groups === 1 ? "" : "s"} por su equipo hace ${daysSince(oldest)}+ día(s)${scList(receipts.map((r) => r.requestNumber))} · no entra al stock hasta que apruebe`,
       overdue: true,
       href: comDept ? `/admin/dept/${comDept.id}?tab=compras` : "/admin",
     });

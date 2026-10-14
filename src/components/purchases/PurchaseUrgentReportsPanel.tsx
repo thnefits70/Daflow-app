@@ -9,6 +9,7 @@ import { actorName } from "@/lib/actorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { PurchaseCode } from "@/components/shared/PurchaseCode";
 import { useFormDraft } from "@/lib/useFormDraft";
 
 type ResolutionType = "CREDIT" | "REPLACEMENT" | "REFUND" | "WRITE_OFF";
@@ -18,8 +19,8 @@ type ResolutionStatus = "PENDING" | "COMPLETED" | "CANCELLED";
 // verificación de punta a punta, solo cambia el rótulo (ver
 // resolutionLabel más abajo).
 type UiResolutionType = ResolutionType | "MISSING_DELIVERY";
-type ShortReceipt = { id: string; name: string; supplierName: string; quantity: number; receivedQuantity: number; missing: number; receivedAt: string | null; requestedByName: string | null };
-type LeftBehind = { id: string; name: string; supplierName: string; quantity: number; since: string; requestedByName: string | null };
+type ShortReceipt = { id: string; code: string | null; name: string; supplierName: string; quantity: number; receivedQuantity: number; missing: number; receivedAt: string | null; requestedByName: string | null };
+type LeftBehind = { id: string; code: string | null; name: string; supplierName: string; quantity: number; since: string; requestedByName: string | null };
 
 type ResolutionDraftData = { resType: UiResolutionType; resQty: string; resDueDate: string; resNote: string; resProofUrl: string; resProofName: string };
 function isResolutionDraftEmpty(d: ResolutionDraftData) {
@@ -584,7 +585,7 @@ export function PurchaseUrgentReportsPanel({
           <div className="flex flex-col gap-2.5">
             {leftBehind.map((l) => (
               <div key={l.id} className="bg-cloud rounded-md p-3 text-[12px]">
-                <div className="font-semibold">{l.name}</div>
+                <div className="font-semibold">{l.code && <span className="font-mono text-[10.5px] text-steel mr-1.5">{l.code}</span>}{l.name}</div>
                 <div className="text-steel text-[11.5px] mb-1.5">
                   {l.supplierName} — no llegaron las <b>{l.quantity} un.</b> · lo demás se recibió {formatDateTime(l.since)} · compra de {actorName(l.requestedByName)}
                 </div>
@@ -620,7 +621,7 @@ export function PurchaseUrgentReportsPanel({
           <div className="flex flex-col gap-2.5">
             {shortReceipts.map((s) => (
               <div key={s.id} className="bg-cloud rounded-md p-3 text-[12px]">
-                <div className="font-semibold">{s.name}</div>
+                <div className="font-semibold">{s.code && <span className="font-mono text-[10.5px] text-steel mr-1.5">{s.code}</span>}{s.name}</div>
                 <div className="text-steel text-[11.5px] mb-1.5">
                   {s.supplierName} — se pidieron {s.quantity} un., llegaron {s.receivedQuantity}. Faltan <b>{s.missing} un.</b>
                   {s.receivedAt && <> · recibido {formatDateTime(s.receivedAt)}</>} · compra de {actorName(s.requestedByName)}
@@ -679,7 +680,7 @@ export function PurchaseUrgentReportsPanel({
                   <span>{r.request.catalogItem.name}</span>
                 </div>
                 <div className="text-steel text-[11.5px] mb-1.5">
-                  {r.request.supplier.name} — se pidieron {r.request.quantity} un., llegaron {r.excessQty} de más · reportado por {actorName(r.reportedBy?.name)} · {formatDateTime(r.reportedAt)}
+                  <PurchaseCode requestNumber={r.request.requestNumber} className="mr-1.5" />{r.request.supplier.name} — se pidieron {r.request.quantity} un., llegaron {r.excessQty} de más · reportado por {actorName(r.reportedBy?.name)} · {formatDateTime(r.reportedAt)}
                 </div>
 
                 {!r.excessGestionAt ? (
@@ -751,6 +752,7 @@ export function PurchaseUrgentReportsPanel({
               return (
                 <div key={res.id} className="flex items-center justify-between gap-2 bg-cloud rounded px-3 py-2 text-[12px]">
                   <div className="flex items-center gap-1.5">
+                    <PurchaseCode requestNumber={report.request.requestNumber} />
                     <span className="font-semibold">{report.request.supplier.name}</span> —
                     <CatalogCode code={report.request.catalogItem.justCode} />
                     <span>{report.request.catalogItem.name}</span>
@@ -1122,6 +1124,7 @@ export function PurchaseUrgentReportsPanel({
                   <div className="font-semibold flex items-center gap-1.5">
                     <CatalogCode code={r.request.catalogItem.justCode} />
                     <span>{r.request.catalogItem.name} — {r.request.supplier.name}</span>
+                    <PurchaseCode requestNumber={r.request.requestNumber} />
                   </div>
                   <CheckCircle2 size={14} className="text-green" />
                 </div>

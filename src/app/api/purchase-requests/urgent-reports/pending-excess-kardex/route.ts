@@ -21,6 +21,7 @@ export async function GET(_req: NextRequest) {
       reportedBy: { select: { name: true } },
       request: {
         select: {
+          requestNumber: true,
           quantity: true,
           requestedAt: true,
           requestedBy: { select: { name: true } },

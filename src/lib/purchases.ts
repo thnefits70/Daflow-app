@@ -23,9 +23,8 @@ export async function nextPurchaseRequestNumber(): Promise<number> {
   return updated.lastPurchaseRequestNumber;
 }
 
-export function formatPurchaseRequestCode(requestNumber: number): string {
-  return `SC-${String(requestNumber).padStart(3, "0")}`;
-}
+import { formatPurchaseRequestCode } from "./purchaseCode";
+export { formatPurchaseRequestCode };
 
 // Solicitud de compra todavía en camino (no rechazada, no ingresada al Kardex).
 export const OPEN_PURCHASE_STATUSES = ["PENDING_APPROVAL", "APPROVED", "PAID", "RECEIVED_PENDING_REVIEW"] as const;
@@ -512,7 +511,7 @@ export async function getStalePurchaseRequestPushes(): Promise<StalePurchaseRequ
   return pushes;
 }
 
-export type ShortReceiptUnclaimed = { id: string; name: string; supplierName: string; quantity: number; receivedQuantity: number; missing: number; receivedAt: Date | null; requestedById: string | null; requestedByName: string | null };
+export type ShortReceiptUnclaimed = { id: string; code: string | null; name: string; supplierName: string; quantity: number; receivedQuantity: number; missing: number; receivedAt: Date | null; requestedById: string | null; requestedByName: string | null };
 
 // Pedido del usuario 2026-10-05 (caso Bolsa De Lavar Zapatos, 12 ago: 270 de
 // 300): compras recibidas con menos de lo pedido y sin ningún reporte urgente
@@ -529,6 +528,7 @@ export async function getShortReceiptsUnclaimed(requestedById?: string): Promise
     },
     select: {
       id: true,
+      requestNumber: true,
       quantity: true,
       requestedById: true,
       requestedBy: { select: { name: true } },
@@ -541,6 +541,7 @@ export async function getShortReceiptsUnclaimed(requestedById?: string): Promise
     .filter((r) => r.receipt && r.receipt.receivedQuantity < r.quantity)
     .map((r) => ({
       id: r.id,
+      code: r.requestNumber ? formatPurchaseRequestCode(r.requestNumber) : null,
       name: r.catalogItem.name,
       supplierName: r.supplier?.name ?? "proveedor",
       quantity: r.quantity,

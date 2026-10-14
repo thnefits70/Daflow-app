@@ -119,6 +119,7 @@ export type PendingCreditDTO = {
   supplier: { id: string; name: string };
   createdBy: { name: string } | null;
   reservedForCode: string | null;
+  originRequestNumber: number | null;
 };
 
 // Confirmado 2026-08-12: pedido explícito del usuario — una sola pantalla
@@ -129,7 +130,12 @@ export async function getAllPendingCredits(): Promise<PendingCreditDTO[]> {
   const credits = await prisma.supplierCredit.findMany({
     where: { status: { in: ["AVAILABLE", "RESERVED"] } },
     orderBy: { createdAt: "desc" },
-    include: { supplier: { select: { id: true, name: true } }, createdBy: { select: { name: true } } },
+    include: {
+      supplier: { select: { id: true, name: true } },
+      createdBy: { select: { name: true } },
+      // Pedido de Daniel 2026-10-14: de qué compra (SC-XXX) salió el crédito.
+      urgentResolution: { select: { report: { select: { request: { select: { requestNumber: true } } } } } },
+    },
   });
 
   const groupIds = [...new Set(credits.map((c) => c.reservedForGroupId).filter((x): x is string => !!x))];
@@ -159,6 +165,7 @@ export async function getAllPendingCredits(): Promise<PendingCreditDTO[]> {
       c.reservedForGroupId && codeByGroupId.get(c.reservedForGroupId)
         ? `SC-${String(codeByGroupId.get(c.reservedForGroupId)).padStart(3, "0")}`
         : null,
+    originRequestNumber: c.urgentResolution?.report.request.requestNumber ?? null,
   }));
 }
 

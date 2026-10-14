@@ -11,6 +11,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { PriceTrendChart, PriceHistoryBreakdownList } from "./PriceTrendChart";
 import type { SupplierPriceHistory, PriceHistoryStats, SupplierPricePoint } from "@/lib/purchases";
 import { CatalogCode, CopyValueButton } from "@/components/shared/CatalogCode";
+import { PurchaseCode } from "@/components/shared/PurchaseCode";
 import { shippingDueWithMerchandise, groupShippingTotal } from "@/lib/purchaseShipping";
 import { quoteTotalMatchesLines } from "@/lib/quoteMatch";
 
@@ -35,6 +36,7 @@ type BankAccount = {
 type Row = {
   id: string;
   groupId: string;
+  requestNumber: number | null;
   quantity: number;
   unitCost: number;
   totalCost: number;
@@ -769,7 +771,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                           {r.catalogItem.name} · {r.quantity} un. — ${r.unitCost.toFixed(2)}/un.
                         </div>
                       ))}
-                      <div className="text-[11.5px] text-steel mt-0.5">{g[0].supplier.name}</div>
+                      <div className="text-[11.5px] text-steel mt-0.5"><PurchaseCode requestNumber={g[0].requestNumber} className="mr-1.5" />{g[0].supplier.name}</div>
                       {g[0].attemptNumber > 1 && <div className="text-[10px] text-gold mt-0.5">{attemptLabel(g[0].attemptNumber)}</div>}
                       <div className="flex flex-col gap-0.5 mt-1.5">
                         {timeline.map((step, i) => (
@@ -883,7 +885,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                     })()}
                   </div>
                 ))}
-                <div className="text-[11.5px] text-steel mt-0.5">{g[0].supplier.name}</div>
+                <div className="text-[11.5px] text-steel mt-0.5"><PurchaseCode requestNumber={g[0].requestNumber} className="mr-1.5" />{g[0].supplier.name}</div>
                 <div className="text-[10px] text-steel-dim mt-0.5">
                   Solicitada por {actorName(g[0].requestedBy?.name)}
                   {g[0].attemptNumber > 1 && <span className="text-gold"> — {attemptLabel(g[0].attemptNumber)}</span>}

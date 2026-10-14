@@ -5,6 +5,7 @@ import { Wallet, Lock } from "lucide-react";
 import { actorName } from "@/lib/actorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { ProofPreview } from "@/components/shared/ProofPreview";
+import { PurchaseCode } from "@/components/shared/PurchaseCode";
 
 type PendingCredit = {
   id: string;
@@ -19,6 +20,7 @@ type PendingCredit = {
   supplier: { id: string; name: string };
   createdBy: { name: string } | null;
   reservedForCode: string | null;
+  originRequestNumber?: number | null;
 };
 
 function money(n: number) {
@@ -67,7 +69,7 @@ export function PurchaseCreditsPanel() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="text-[13.5px] font-bold text-ink">{c.supplier.name}</div>
-                  <div className="text-[12.5px] text-steel">{c.reason}</div>
+                  <div className="text-[12.5px] text-steel">{c.originRequestNumber != null && <><PurchaseCode requestNumber={c.originRequestNumber} /> · </>}{c.reason}</div>
                 </div>
                 <div className="text-[15px] font-bold text-ink shrink-0">{money(c.amount)}</div>
               </div>
