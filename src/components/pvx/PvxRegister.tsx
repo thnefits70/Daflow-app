@@ -15,6 +15,10 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
   const [phoneTouched, setPhoneTouched] = useState(false);
   const phoneCheck = checkWhatsapp(country, whatsapp);
   const pc = phoneCountry(country)!;
+  // Pedido del usuario 2026-10-14: tienda y plataforma obligatorias, correo opcional.
+  const [storeName, setStoreName] = useState("");
+  const [platform, setPlatform] = useState<"" | "DROPI" | "ROCKET" | "AMBAS">("");
+  const [platformEmail, setPlatformEmail] = useState("");
   const [consent, setConsent] = useState(false);
   const [website, setWebsite] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,6 +33,10 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
       document.getElementById("pvx-wa")?.focus();
       return;
     }
+    if (!platform) {
+      setError("Elige dónde vendes: Dropi, Rocket o ambas.");
+      return;
+    }
     if (!consent) {
       setError("Marca la casilla para recibir los productos ganadores.");
       return;
@@ -37,7 +45,7 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
     const res = await fetch("/api/pvx/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, country, whatsapp, consent, website }),
+      body: JSON.stringify({ name, storeName, platform, platformEmail: platformEmail.trim(), country, whatsapp, consent, website }),
     }).catch(() => null);
     const data = await res?.json().catch(() => null);
     setBusy(false);
@@ -60,7 +68,7 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
         </button>
       </div>
       <p className="text-[15px] leading-relaxed text-[#4A4F58] mt-3">
-        Precio al que se vende, cuánto ganas, en qué ciudades se vende más y los combos que funcionan. Es gratis: solo te pedimos tu nombre y tu WhatsApp.
+        Precio al que se vende, cuánto ganas, en qué ciudades se vende más y los combos que funcionan. Es gratis y te toma un minuto.
       </p>
 
       <label className="block mt-5 text-[13.5px] font-bold">Tu nombre</label>
@@ -72,6 +80,58 @@ export function PvxRegister({ onDone, onClose }: { onDone: (name: string) => voi
         maxLength={80}
         className="mt-1.5 w-full rounded-2xl bg-[#F4F4F2] px-4 py-3 text-[16px] outline-none focus:bg-white focus:shadow-[0_0_0_2px_#F95B02]"
         placeholder="Ej. Andrea Morales"
+      />
+      <label htmlFor="pvx-store" className="block mt-3 text-[13.5px] font-bold">
+        Nombre de tu tienda
+      </label>
+      <input
+        id="pvx-store"
+        value={storeName}
+        onChange={(e) => setStoreName(e.target.value)}
+        autoComplete="organization"
+        required
+        minLength={2}
+        maxLength={80}
+        className="mt-1.5 w-full rounded-2xl bg-[#F4F4F2] px-4 py-3 text-[16px] outline-none focus:bg-white focus:shadow-[0_0_0_2px_#F95B02]"
+        placeholder="Ej. Andrea Store"
+      />
+      <span className="block mt-3 text-[13.5px] font-bold" id="pvx-platform-label">
+        ¿Dónde vendes?
+      </span>
+      <div role="radiogroup" aria-labelledby="pvx-platform-label" className="mt-1.5 grid grid-cols-3 gap-2">
+        {(
+          [
+            ["DROPI", "Dropi"],
+            ["ROCKET", "Rocket"],
+            ["AMBAS", "En ambas"],
+          ] as const
+        ).map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={platform === v}
+            onClick={() => setPlatform(v)}
+            className={`pvx-press rounded-2xl px-2 py-3 text-[15px] font-bold cursor-pointer ${platform === v ? "bg-[#111214] text-white" : "bg-[#F4F4F2] text-[#111214] hover:bg-[#E9E9E6]"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <label htmlFor="pvx-email" className="block mt-3 text-[13.5px] font-bold">
+        Correo con el que vendes en {platform === "ROCKET" ? "Rocket" : platform === "AMBAS" ? "Dropi o Rocket" : "Dropi"}{" "}
+        <span className="font-semibold text-[#4A4F58]">(opcional)</span>
+      </label>
+      <input
+        id="pvx-email"
+        type="email"
+        value={platformEmail}
+        onChange={(e) => setPlatformEmail(e.target.value)}
+        autoComplete="email"
+        inputMode="email"
+        maxLength={120}
+        className="mt-1.5 w-full rounded-2xl bg-[#F4F4F2] px-4 py-3 text-[16px] outline-none focus:bg-white focus:shadow-[0_0_0_2px_#F95B02]"
+        placeholder="tucorreo@gmail.com"
       />
       <label htmlFor="pvx-wa" className="block mt-3 text-[13.5px] font-bold">
         Tu WhatsApp <span className="font-semibold text-[#4A4F58]">(con el código de tu país)</span>

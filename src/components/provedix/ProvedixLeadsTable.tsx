@@ -66,11 +66,15 @@ function Activity({ leadId }: { leadId: string }) {
   );
 }
 
+const PLATFORM_LABEL: Record<string, string> = { DROPI: "Dropi", ROCKET: "Rocket", AMBAS: "Dropi y Rocket" };
+
 export function ProvedixLeadsTable({ leads }: { leads: ProvedixLeadRow[] }) {
   const [open, setOpen] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
-  const shown = q ? leads.filter((l) => l.name.toLowerCase().includes(q) || l.whatsapp.includes(q)) : leads;
+  const shown = q
+    ? leads.filter((l) => l.name.toLowerCase().includes(q) || l.whatsapp.includes(q) || (l.storeName ?? "").toLowerCase().includes(q) || (l.platformEmail ?? "").toLowerCase().includes(q))
+    : leads;
 
   return (
     <div className="bg-surface border border-rule rounded-lg p-5 mb-7">
@@ -97,6 +101,8 @@ export function ProvedixLeadsTable({ leads }: { leads: ProvedixLeadRow[] }) {
               <tr className="text-left text-[10.5px] uppercase tracking-wide text-steel">
                 <th className="pb-2 pr-3 font-semibold">Nombre</th>
                 <th className="pb-2 pr-3 font-semibold">WhatsApp</th>
+                <th className="pb-2 pr-3 font-semibold">Tienda</th>
+                <th className="pb-2 pr-3 font-semibold">Vende en</th>
                 <th className="pb-2 pr-3 font-semibold">Registro</th>
                 <th className="pb-2 pr-3 font-semibold">Última vez</th>
                 <th className="pb-2 pr-3 font-semibold text-right">Entradas</th>
@@ -110,6 +116,11 @@ export function ProvedixLeadsTable({ leads }: { leads: ProvedixLeadRow[] }) {
                   <tr className={`border-t border-rule cursor-pointer hover:bg-cloud ${open === l.id ? "bg-cloud" : ""}`} onClick={() => setOpen(open === l.id ? null : l.id)}>
                     <td className="py-2 pr-3 font-medium">{l.name}</td>
                     <td className="py-2 pr-3 tabular-nums whitespace-nowrap">{l.whatsapp}</td>
+                    <td className="py-2 pr-3">
+                      {l.storeName ?? <span className="text-steel">—</span>}
+                      {l.platformEmail && <div className="text-[11px] text-steel break-all">{l.platformEmail}</div>}
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap">{l.platform ? PLATFORM_LABEL[l.platform] ?? l.platform : <span className="text-steel">—</span>}</td>
                     <td className="py-2 pr-3 tabular-nums whitespace-nowrap">{dayOnly(l.createdAt)}</td>
                     <td className="py-2 pr-3 tabular-nums whitespace-nowrap">{when(l.lastSeenAt)}</td>
                     <td className="py-2 pr-3 text-right tabular-nums">{l.visits}</td>
@@ -118,7 +129,7 @@ export function ProvedixLeadsTable({ leads }: { leads: ProvedixLeadRow[] }) {
                   </tr>
                   {open === l.id && (
                     <tr className="bg-cloud">
-                      <td colSpan={7} className="px-3 pb-4 pt-1">
+                      <td colSpan={9} className="px-3 pb-4 pt-1">
                         <Activity leadId={l.id} />
                       </td>
                     </tr>
@@ -127,7 +138,7 @@ export function ProvedixLeadsTable({ leads }: { leads: ProvedixLeadRow[] }) {
               ))}
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-3 text-steel">Nadie coincide con esa búsqueda.</td>
+                  <td colSpan={9} className="py-3 text-steel">Nadie coincide con esa búsqueda.</td>
                 </tr>
               )}
             </tbody>

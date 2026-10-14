@@ -640,7 +640,8 @@ function Footer() {
           <p>Provedix · Importadora Damián — Guayaquil, Ecuador.</p>
           <p>
             Los datos salen de los despachos reales de nuestras bodegas y se muestran en rangos. No mostramos datos de clientes ni de tiendas. Si te registras, guardamos tu
-            nombre y WhatsApp solo para enviarte productos ganadores; puedes pedir que los borremos cuando quieras.
+            nombre, WhatsApp, tienda, plataforma y correo (si lo das) solo para enviarte productos ganadores y atenderte mejor; puedes pedir que los
+            borremos cuando quieras.
           </p>
         </div>
       </div>

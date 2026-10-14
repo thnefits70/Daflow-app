@@ -8066,6 +8066,11 @@ model ProvedixLead {
   name        String
   whatsapp    String          @unique // normalizado: 09XXXXXXXX o +código
   consentAt   DateTime // aceptó recibir productos ganadores por WhatsApp
+  // Registro ampliado (pedido del usuario 2026-10-14): tienda y plataforma
+  // obligatorias en registros nuevos (null en los viejos); correo opcional.
+  storeName     String?
+  platform      String? // "DROPI" | "ROCKET" | "AMBAS"
+  platformEmail String? // correo con el que vende en Dropi/Rocket
   createdAt   DateTime        @default(now())
   lastSeenAt  DateTime        @default(now())
   visits      Int             @default(1)

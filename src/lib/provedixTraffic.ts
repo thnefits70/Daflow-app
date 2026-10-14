@@ -114,6 +114,10 @@ export type ProvedixLeadRow = {
   id: string;
   name: string;
   whatsapp: string;
+  // Desde 2026-10-14 (null en registros anteriores).
+  storeName: string | null;
+  platform: string | null;
+  platformEmail: string | null;
   createdAt: string;
   lastSeenAt: string;
   visits: number;
@@ -137,6 +141,9 @@ export async function getProvedixLeads(): Promise<ProvedixLeadRow[]> {
     id: l.id,
     name: l.name,
     whatsapp: l.whatsapp,
+    storeName: l.storeName,
+    platform: l.platform,
+    platformEmail: l.platformEmail,
     createdAt: l.createdAt.toISOString(),
     lastSeenAt: l.lastSeenAt.toISOString(),
     visits: l.visits,

@@ -13,6 +13,10 @@ const schema = z.object({
   // las reglas de celular de ese país (pvxPhone.ts).
   country: z.string().trim().length(2, "Elige el país de tu WhatsApp."),
   whatsapp: z.string().trim().min(6, "Escribe tu WhatsApp.").max(24),
+  // Pedido del usuario 2026-10-14: tienda y plataforma obligatorias, correo opcional.
+  storeName: z.string({ message: "Escribe el nombre de tu tienda." }).trim().min(2, "Escribe el nombre de tu tienda.").max(80),
+  platform: z.enum(["DROPI", "ROCKET", "AMBAS"], { message: "Elige dónde vendes: Dropi, Rocket o ambas." }),
+  platformEmail: z.union([z.literal(""), z.string().trim().toLowerCase().email("Ese correo no es válido.").max(120)]).optional(),
   consent: z.literal(true, { message: "Acepta recibir los productos ganadores para continuar." }),
   website: z.string().optional(),
 });
@@ -30,6 +34,9 @@ export async function POST(req: NextRequest) {
   const whatsapp = normalizeWhatsapp(checked.full);
   if (!whatsapp) return NextResponse.json({ error: "Ese WhatsApp no es válido." }, { status: 400 });
   const name = parsed.data.name.replace(/\s+/g, " ");
+  const storeName = parsed.data.storeName.replace(/\s+/g, " ");
+  const { platform } = parsed.data;
+  const platformEmail = parsed.data.platformEmail || null;
 
   const { visitorId } = await readVisitor(req);
   const now = new Date();
@@ -37,8 +44,9 @@ export async function POST(req: NextRequest) {
   // persona, se actualiza su nombre y se le vuelve a abrir la página.
   const lead = await prisma.provedixLead.upsert({
     where: { whatsapp },
-    create: { name, whatsapp, consentAt: now },
-    update: { name, consentAt: now, lastSeenAt: now },
+    create: { name, whatsapp, storeName, platform, platformEmail, consentAt: now },
+    // El correo solo se reemplaza si escribió uno (no se borra uno que ya dio).
+    update: { name, storeName, platform, ...(platformEmail ? { platformEmail } : {}), consentAt: now, lastSeenAt: now },
     select: { id: true, name: true },
   });
   // Lo que miró antes de registrarse también queda a su nombre.
