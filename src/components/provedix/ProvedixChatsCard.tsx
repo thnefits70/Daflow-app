@@ -32,7 +32,7 @@ function Conversation({ chatId }: { chatId: string }) {
           <div className={`text-[10.5px] mb-0.5 ${m.role === "user" ? "text-bg opacity-70" : "text-steel"}`}>
             {m.role === "user" ? "Dropshipper" : "Michelle (IA)"} · {when(m.at)}
           </div>
-          {m.content}
+          {m.content.replace("[[ASESORA]]", "→ pasó a Michelle por WhatsApp")}
         </div>
       ))}
     </div>

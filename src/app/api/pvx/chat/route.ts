@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
   const { visitorId, leadId } = await readVisitor(req);
   const used = await usedToday(visitorId, leadId);
   if (used >= MICHELLE_DAILY_LIMIT || !ipAllowed(req)) {
-    return NextResponse.json({ error: "Llegaste al límite de mensajes de hoy 🙈 Mañana sigo ayudándote encantada. Si es un caso crítico, toca \"¿Tienes un caso más crítico?\" 💛", remaining: 0 }, { status: 429 });
+    return NextResponse.json({ error: "Llegaste al límite de mensajes de hoy 🙈 Mañana sigo ayudándote encantada. 💛", remaining: 0 }, { status: 429 });
   }
   const globalUsed = await prisma.provedixChatMessage.count({ where: { role: "user", createdAt: { gte: new Date(Date.now() - DAY) } } });
   if (globalUsed >= GLOBAL_DAILY_LIMIT) {

@@ -5,11 +5,15 @@ import { ADVISORS } from "@/components/pvx/PvxContact";
 import { IconArrow, IconClose, IconLock, IconWhatsApp } from "@/components/pvx/PvxIcons";
 
 // Chat con Michelle, la asistente virtual de provedix.com (2026-10-15).
-// Se presenta siempre como asistente virtual con IA y tiene a mano el botón
-// para hablar con la asesora (persona) por WhatsApp.
+// Se presenta siempre como asistente virtual con IA. El botón para seguir con
+// la asesora (persona) por WhatsApp sale solo cuando la IA ya no puede resolver.
 
 type Msg = { role: "user" | "assistant"; content: string };
 const CHAT_KEY = "pvx-chat-id";
+// Marca que pone la IA al final cuando ya no puede resolver el caso (ver provedixMichelle.ts).
+const HANDOFF_MARK = "[[ASESORA]]";
+// Quita la marca (también a medio llegar mientras se escribe la respuesta).
+const cleanReply = (t: string) => t.replace(HANDOFF_MARK, "").replace(/\[\[?[A-Z]*\]?$/, "").trim();
 const SUGGESTIONS = ["¿Qué productos van en subida?", "¿Cómo empiezo a vender con Provedix?", "¿A qué hora es el próximo corte?", "Recomiéndame algo para el hogar"];
 
 function readChatId(): string | null {
@@ -138,7 +142,6 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
     [busy, chatId],
   );
 
-  const lastQuestion = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
   const outOfMessages = remaining === 0;
 
   return (
@@ -203,7 +206,21 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
                   <Avatar size={28} />
                   <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[14.5px] leading-relaxed">
                     {m.content ? (
-                      <Rich text={m.content} />
+                      <>
+                        <Rich text={cleanReply(m.content)} />
+                        {/* La asistente pone la marca solo cuando ya no puede resolver el caso (pedido 2026-10-14):
+                            recién ahí aparece el botón a Michelle, la asesora, con la consulta ya escrita. */}
+                        {m.content.includes(HANDOFF_MARK) && (
+                          <a
+                            href={handoffUrl(ADVISORS.dropi.phone, messages.slice(0, i).findLast((x) => x.role === "user")?.content ?? "")}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="pvx-press mt-2.5 flex items-center justify-center gap-2 rounded-full bg-[#138a45] px-4 py-2.5 text-[14px] font-bold text-white hover:bg-[#0f7239]"
+                          >
+                            <IconWhatsApp className="w-4 h-4" /> Continuar con Michelle por WhatsApp
+                          </a>
+                        )}
+                      </>
                     ) : (
                       <span className="inline-flex gap-1 py-1" aria-label="Michelle está escribiendo">
                         <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)] [animation-delay:-0.3s]" />
@@ -233,18 +250,7 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
           <div className="border-t border-[var(--pvx-paper-3)] px-3 pb-3 pt-2">
             {/* Casos críticos → WhatsApp de Michelle (la asesora). Pedido 2026-10-14: la asistente resuelve
                 lo normal para no sobrecargarla; ella atiende solo lo que requiere un análisis más complejo. */}
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <a
-                href={handoffUrl(ADVISORS.dropi.phone, lastQuestion)}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Te atiende Michelle, del equipo, por WhatsApp"
-                className="inline-flex items-center gap-1.5 text-[12.5px] font-bold text-[#0f7239] hover:underline"
-              >
-                <IconWhatsApp className="w-4 h-4" /> ¿Tienes un caso más crítico?
-              </a>
-              {remaining != null && <span className="text-[11.5px] text-[var(--pvx-ink-3)]">{remaining} mensajes hoy</span>}
-            </div>
+            {remaining != null && <div className="mb-1.5 text-right text-[11.5px] text-[var(--pvx-ink-3)]">{remaining} mensajes hoy</div>}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
