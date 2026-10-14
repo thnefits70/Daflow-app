@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { PriceCalculator } from "@/components/marketanalysis/PriceCalculator";
 import { splitByVariant } from "@/lib/variantMix";
+import { ExplainButton } from "@/components/shared/ExplainButton";
 
 type Status = "preguntar_proveedor" | "urgente" | "pronto" | "sin_proveedor" | "descartado" | "no_sale" | "en_compra" | "falta_contar";
 type DiscardInfo = { id: string; reason: string; reasonLabel: string; note: string | null; byName: string | null; at: string };
@@ -228,6 +229,7 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
     fetch(`/api/purchase-suggestions/discard/${r.discard.id}/undo`, { method: "POST" }).then(() => onChanged());
   }
   const days = fmtDaysLeft(r.daysLeft);
+  const group = GROUPS.find((g) => g.status === r.status);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -272,7 +274,7 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
       .finally(() => setBusy(false));
   }
   return (
-    <div title={countStripeTitle(r.countMark)} className={`flex items-center gap-3 px-3 py-2.5 border-b border-rule last:border-b-0 border-l-4 ${countStripe(r.countMark)}`}>
+    <div data-explain-scope title={countStripeTitle(r.countMark)} className={`flex items-center gap-3 px-3 py-2.5 border-b border-rule last:border-b-0 border-l-4 ${countStripe(r.countMark)}`}>
       {r.photo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img loading="lazy" decoding="async" src={r.photo} alt="" className="w-10 h-10 rounded object-cover bg-cloud shrink-0" />
@@ -373,6 +375,11 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
           <div className="text-[11.5px] text-teal font-semibold mt-0.5">Listo: se le avisó a Daniel para que lo cuente.</div>
         ) : null}
         {error && <div className="text-[11.5px] text-red mt-0.5">{error}</div>}
+        {/* Pedido del usuario 2026-10-14: Mary explica la fila en palabras sencillas. */}
+        <ExplainButton
+          topic="que-comprar"
+          extra={`Lista: ${isCold ? "Compras frías" : "Compras calientes"} · Grupo: ${group?.title ?? r.status} — ${group?.hint ?? ""}${r.countMark ? `\nFranja: ${countStripeTitle(r.countMark)}` : ""}`}
+        />
       </div>
       {/* 2026-10-14 (pedido de Jariel): también en urgentes y pronto, para verificar el stock antes de comprar. */}
       {canRepurchase && (r.status === "falta_contar" || r.status === "urgente" || r.status === "pronto") && !countAsked && !r.countRequest && (
@@ -583,7 +590,7 @@ export function PurchaseSuggestionsPanel({ onAnalyzeRepurchase }: { onAnalyzeRep
           Los avisos vuelven el {fmtDate(data.countPausedUntil)} a las 8:00.
         </div>
       )}
-      <div className="bg-teal/10 border border-teal/30 rounded-md px-3 py-2 text-[12px] text-steel mb-4">
+      <div data-explain-scope className="bg-teal/10 border border-teal/30 rounded-md px-3 py-2 text-[12px] text-steel mb-4">
         Cuánto se vende sale de los pedidos de Dropi que sube Daniel y de las ventas externas de los últimos{" "}
         <b className="text-ink">{days} día{days === 1 ? "" : "s"}</b>
         . Con ese promedio diario se calcula en cuántos días se acaba cada producto. Los combos cuentan como venta de cada producto que los forma.
@@ -591,6 +598,7 @@ export function PurchaseSuggestionsPanel({ onAnalyzeRepurchase }: { onAnalyzeRep
           <span className="inline-block w-2 h-2 rounded-sm bg-green align-middle" /> Franja verde: ya recontado, el stock es real ·{" "}
           <span className="inline-block w-2 h-2 rounded-sm bg-gold align-middle" /> amarilla: contado pero falta aplicarlo o está en recuento · sin franja: todavía no se cuenta (antes de comprar, usa &quot;Pedir que lo cuenten&quot;).
         </div>
+        <ExplainButton topic="que-comprar" label="¿Cómo funciona esta lista?" />
       </div>
       {/* Pedido del usuario 2026-10-05: Nairoby necesita la calculadora de Análisis de Mercado para sus compras frías. */}
       {data.canUseCalculator && <PriceCalculator />}
