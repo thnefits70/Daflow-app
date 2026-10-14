@@ -48,24 +48,38 @@ export function isAutoFillRateWeek(week: string): boolean {
   return week >= AUTO_FILL_RATE_FROM_WEEK;
 }
 
-// Lo que DAFLOW sabe solo de la semana: guías totales y falta de stock.
-export async function computeAutoCounts(week: string): Promise<{ guides: number; outOfStock: number; externalSales: number }> {
+// Pedido de Daniel 2026-10-14: guías canceladas que Daniel o Allan
+// confirmaron que retuvieron (CancelledGuideReport.retainedAt) — no salieron,
+// así que no cuentan como despachadas. Se comparan en mayúsculas y sin
+// espacios, igual que dispatchedDaily.ts.
+export async function retainedGuideNumbers(): Promise<Set<string>> {
+  const rows = await prisma.cancelledGuideReport.findMany({ where: { retainedAt: { not: null } }, select: { guideNumber: true } });
+  return new Set(rows.map((r) => r.guideNumber.trim().toUpperCase()));
+}
+
+// Lo que DAFLOW sabe solo de la semana: guías totales, falta de stock y
+// guías retenidas que estaban en esos cortes.
+export async function computeAutoCounts(week: string): Promise<{ guides: number; outOfStock: number; externalSales: number; retained: number }> {
   const days = daysOfIsoWeek(week);
   const lots = await prisma.fulfillmentLot.findMany({
     where: { day: { in: days }, status: { in: ["SENT", "CLOSED"] } },
     select: { id: true },
   });
+  const retainedSet = await retainedGuideNumbers();
   let guides = 0;
   let outOfStock = 0;
+  let retained = 0;
   for (const { id } of lots) {
     const lot = await getCompiledLot(id);
     if (!lot) continue;
-    guides += await prisma.fulfillmentRequestGuide.count({ where: { batch: { lotId: id } } });
+    const lotGuides = await prisma.fulfillmentRequestGuide.findMany({ where: { batch: { lotId: id } }, select: { guideNumber: true } });
+    guides += lotGuides.length;
+    retained += lotGuides.filter((g) => retainedSet.has(g.guideNumber.trim().toUpperCase())).length;
     for (const p of lot.picking) {
       if (p.confirmedAt && p.confirmedQty !== null && p.confirmedQty < p.needed) outOfStock += p.needed - p.confirmedQty;
     }
   }
-  return { guides, outOfStock: Math.min(outOfStock, guides), externalSales: await countDeliveredExternalSales(days) };
+  return { guides, outOfStock: Math.min(outOfStock, guides), externalSales: await countDeliveredExternalSales(days), retained };
 }
 
 // Ventas externas entregadas al motorizado en esos días (hora de Ecuador).
@@ -78,8 +92,9 @@ async function countDeliveredExternalSales(days: string[]): Promise<number> {
 }
 
 // Despachadas y no despachadas a partir de lo automático + lo que escribió Yair.
-export function fillRateNumbers(counts: { guides: number; outOfStock: number; externalSales: number }, prepared: number, generated: number) {
-  const value = Math.max(0, counts.guides - counts.outOfStock - prepared - generated) + counts.externalSales;
+// Las retenidas se quitan del todo (no son despachadas ni fallas del Fill Rate).
+export function fillRateNumbers(counts: { guides: number; outOfStock: number; externalSales: number; retained?: number }, prepared: number, generated: number) {
+  const value = Math.max(0, counts.guides - (counts.retained ?? 0) - counts.outOfStock - prepared - generated) + counts.externalSales;
   return { value, outOfStock: counts.outOfStock, notDispatched: counts.outOfStock + prepared + generated };
 }
 

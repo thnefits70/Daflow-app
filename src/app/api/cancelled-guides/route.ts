@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canSubmitCancelledGuide, canViewAllCancelledGuides, canAssignCancelledGuideItems } from "@/lib/guards";
+import { canSubmitCancelledGuide, canViewAllCancelledGuides, canAssignCancelledGuideItems, canRetainCancelledGuides } from "@/lib/guards";
 
 const REPORT_INCLUDE = {
   submittedBy: { select: { name: true } },
@@ -10,6 +10,7 @@ const REPORT_INCLUDE = {
   fulfillmentRemovedBy: { select: { name: true } },
   itemsAssignedBy: { select: { name: true } },
   reingresadoBy: { select: { name: true } },
+  retainedBy: { select: { name: true } },
 } as const;
 
 // Confirmado 2026-08-25: lista propia (asesores de MKT/FUL) o completa
@@ -24,7 +25,10 @@ export async function GET() {
   // cargar productos, cruzando departamentos (/api/cancelled-guides/pending-items)
   // — el historial debe reflejar esa misma cobertura, no solo lo que ella
   // reportó, para que pueda seguir el estado de las guías que gestiona.
-  const seeAll = (await canViewAllCancelledGuides()) || (await canAssignCancelledGuideItems());
+  // Daniel y Allan (canRetainCancelledGuides, 2026-10-14) marcan cualquier guía
+  // como retenida — ven todas.
+  const canRetain = await canRetainCancelledGuides();
+  const seeAll = canRetain || (await canViewAllCancelledGuides()) || (await canAssignCancelledGuideItems());
   if (!seeAll && !(await canSubmitCancelledGuide())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 
   const reports = await prisma.cancelledGuideReport.findMany({
@@ -32,5 +36,5 @@ export async function GET() {
     include: REPORT_INCLUDE,
     orderBy: { createdAt: "desc" },
   });
-  return NextResponse.json(reports);
+  return NextResponse.json({ reports, canRetain });
 }

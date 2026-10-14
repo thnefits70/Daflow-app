@@ -37,6 +37,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
   const days = data ? data.days.filter((d, i) => i < 6 || d.guides + d.externalSales + d.cancelledReported > 0) : [];
   const sum = (f: (d: DispatchedDailyBreakdown["days"][number]) => number) => days.reduce((a, d) => a + f(d), 0);
   const anyCancelled = days.some((d) => d.cancelledInCut > 0 || d.cancelledReported > 0);
+  const anyRetained = days.some((d) => d.retained > 0);
 
   return (
     <>
@@ -80,6 +81,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                           <th key={b} className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">{b}</th>
                         ))}
                         <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">Guías</th>
+                        {anyRetained && <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">− Retenidas</th>}
                         <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">− Falta de stock</th>
                         <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">+ Ventas externas</th>
                         <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap text-ink">= Despachados</th>
@@ -99,6 +101,11 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                               <td key={b} className="py-1.5 px-2 text-right font-mono">{n(d.brands.find((x) => x.label === b)?.value ?? 0)}</td>
                             ))}
                             <td className="py-1.5 px-2 text-right font-mono">{n(d.guides)}</td>
+                            {anyRetained && (
+                              <td className="py-1.5 px-2 text-right font-mono" style={d.retained ? { color: "#D9A441" } : undefined}>
+                                {d.retained ? `−${n(d.retained)}` : "0"}
+                              </td>
+                            )}
                             <td className="py-1.5 px-2 text-right font-mono" style={d.outOfStock ? { color: "#FF9B90" } : undefined}>
                               {d.outOfStock ? `−${n(d.outOfStock)}` : "0"}
                             </td>
@@ -120,6 +127,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                           <td key={b} className="py-2 px-2 text-right font-mono">{n(sum((d) => d.brands.find((x) => x.label === b)?.value ?? 0))}</td>
                         ))}
                         <td className="py-2 px-2 text-right font-mono">{n(sum((d) => d.guides))}</td>
+                        {anyRetained && <td className="py-2 px-2 text-right font-mono">−{n(sum((d) => d.retained))}</td>}
                         <td className="py-2 px-2 text-right font-mono">−{n(sum((d) => d.outOfStock))}</td>
                         <td className="py-2 px-2 text-right font-mono">+{n(sum((d) => d.externalSales))}</td>
                         <td className="py-2 px-2 text-right font-mono">{n(sum((d) => d.dispatched) - data.manualWeekly)}</td>
@@ -129,14 +137,15 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                   </table>
                 </div>
                 <div className="mt-3 flex flex-col gap-1 text-[11.5px] text-steel">
-                  <div>Las columnas por marca son las guías de los cortes de ese día. Despachados = guías − falta de stock + ventas externas entregadas.</div>
+                  <div>Las columnas por marca son las guías de los cortes de ese día. Despachados = guías − retenidas − falta de stock + ventas externas entregadas.</div>
+                  {anyRetained && <div><span style={{ color: "#D9A441" }}>Retenidas</span>: guías canceladas que Daniel o Allan confirmaron que retuvieron — no salieron, no cuentan.</div>}
                   {data.manualWeekly > 0 && (
                     <div>Esta semana además resta {n(data.manualWeekly)} preparadas/generadas que se anotaron a mano para toda la semana (no se pueden repartir por día).</div>
                   )}
                   {anyCancelled && (
                     <div>
-                      <span style={{ color: "#D9A441" }}>Canceladas</span>: guías de los cortes de ese día que después se reportaron como canceladas — hoy
-                      siguen sumando en despachados. Entre paréntesis, las reportadas ese día en total (algunas pueden ser de otros días o de guías que no
+                      <span style={{ color: "#D9A441" }}>Canceladas</span>: guías de los cortes de ese día que después se reportaron como canceladas — siguen
+                      sumando en despachados hasta que se confirme que se retuvieron. Entre paréntesis, las reportadas ese día en total (algunas pueden ser de otros días o de guías que no
                       estaban en un corte).
                     </div>
                   )}

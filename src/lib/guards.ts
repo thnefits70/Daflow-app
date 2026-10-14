@@ -1370,6 +1370,18 @@ export async function canAssignCancelledGuideItems() {
 
 // Ve TODAS las solicitudes (no solo las propias) — líderes de MKT/FUL/INV y
 // admin, pedido explícito del usuario ("Bryan sepa todas las guías...").
+// Pedido de Daniel 2026-10-14: Daniel (Líder de Inventarios) y Allan
+// confirman, guía por guía, que retuvieron una guía cancelada. Allan va por
+// ID porque no es líder; si cambia la persona, se cambia acá.
+const CANCELLED_GUIDE_RETAINER_IDS = ["cmrl3hs4m000204l7cjqriaqy"]; // ALLAN ANASTACIO
+export async function canRetainCancelledGuides() {
+  const session = await auth();
+  if (!session) return false;
+  if (CANCELLED_GUIDE_RETAINER_IDS.includes(session.user.id)) return true;
+  const user = await cancelledGuideUserContext(session.user.id);
+  return !!user?.isLeader && user.leadsDept?.code === "INV";
+}
+
 export async function canViewAllCancelledGuides() {
   const session = await auth();
   if (!session) return false;

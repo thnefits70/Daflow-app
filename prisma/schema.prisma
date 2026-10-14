@@ -646,6 +646,7 @@ model User {
   cancelledGuidesInventoryConfirmed   CancelledGuideReport[] @relation("CancelledGuideInventoryConfirmedBy")
   cancelledGuidesCutoffDecided        CancelledGuideReport[] @relation("CancelledGuideCutoffDecidedBy")
   cancelledGuidesReingresado          CancelledGuideReport[] @relation("CancelledGuideReingresadoBy")
+  cancelledGuidesRetained             CancelledGuideReport[] @relation("CancelledGuideRetainedBy")
   cancelledGuidesBatchManaged         CancelledGuideReport[] @relation("CancelledGuideBatchManagedBy")
   cancelledGuidesItemsAssigned        CancelledGuideReport[] @relation("CancelledGuideItemsAssignedBy")
   cancelledGuidesFulfillmentRemoved   CancelledGuideReport[] @relation("CancelledGuideFulfillmentRemovedBy")
@@ -7491,6 +7492,13 @@ model CancelledGuideReport {
   reingresadoAt   DateTime?
   reingresadoById String?
   reingresadoBy   User?     @relation("CancelledGuideReingresadoBy", fields: [reingresadoById], references: [id], onDelete: SetNull)
+
+  // Pedido de Daniel 2026-10-14: Daniel o Allan confirman, guía por guía,
+  // que la retuvieron (no salió). Se avisa a quien la reportó y la guía deja
+  // de sumar en Pedidos despachados (ver retainedGuideNumbers en autoFillRate.ts).
+  retainedAt   DateTime?
+  retainedById String?
+  retainedBy   User?     @relation("CancelledGuideRetainedBy", fields: [retainedById], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([batchCode])

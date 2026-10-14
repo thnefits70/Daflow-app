@@ -343,7 +343,7 @@ export function WeeklyTrendChart({
     const dotValues = segColors.concat([segColors[segColors.length - 1]]).join(";");
     const fadeAt = Math.min(1, drawFrac + 0.005).toFixed(4);
     drawInDot = (
-      <g color={segColors[0]}>
+      <g color={segColors[0]} pointerEvents="none">
         <animateMotion
           dur={`${CYCLE_SECONDS}s`}
           repeatCount="indefinite"
