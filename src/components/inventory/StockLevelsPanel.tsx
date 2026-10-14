@@ -12,7 +12,7 @@ import { TabGuide } from "@/components/shared/TabGuide";
 import { ExpandableName } from "@/components/ui/ExpandableName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { WAREHOUSE_AREAS, areaLabel, isWarehouseArea, type WarehouseArea } from "@/lib/warehouseAreas";
-import { ManifestBrandLearner } from "./ManifestBrandLearner";
+import { ManifestBrandConflicts } from "./ManifestBrandConflicts";
 import { CombinedPriceChart, PriceHistoryBreakdownList } from "@/components/purchases/PriceTrendChart";
 import type { SupplierPriceHistory } from "@/lib/purchases";
 import { ExplainButton } from "@/components/shared/ExplainButton";
@@ -1088,6 +1088,15 @@ export function StockLevelsPanel({
 
       {isAdmin && <StockCountReview onApproved={loadRows} />}
       {isAdmin && <ZeroCostCorrectionCard onApplied={loadRows} />}
+      {(isAdmin || canSetMissingBrand) && (
+        <ManifestBrandConflicts
+          isAdmin={isAdmin}
+          onChanged={() => {
+            loadRows();
+            loadCombos();
+          }}
+        />
+      )}
 
       {isAdmin && (
         <div className="border border-gold rounded-md mb-3">
@@ -1489,14 +1498,6 @@ export function StockLevelsPanel({
 
       {viewMode !== "products" && (filteredCombos.length > 0 || comboQuery.trim() !== "") && (
         <div className="mt-5">
-          {isAdmin && (
-            <ManifestBrandLearner
-              onDone={() => {
-                loadRows();
-                loadCombos();
-              }}
-            />
-          )}
           {combosSinMarcaOnly && (
             <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-gold/60 bg-gold/10 px-3 py-2 text-[12px]">
               <span className="font-semibold">Mostrando solo los combos que se vendieron en Dropi sin marca.</span>

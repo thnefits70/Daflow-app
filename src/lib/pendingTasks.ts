@@ -36,6 +36,7 @@ import { getDropiPriceChanges } from "@/lib/dropiPriceChanges";
 import { getMissingDropiPrices, PROVISIONAL_DROPI_PRICE_HELPERS } from "@/lib/dropiPriceMissing";
 import { getUnmatchedGuideVariants } from "@/lib/variantSales";
 import { COMBO_BRAND_HREF } from "@/lib/comboAlias";
+import { MANIFEST_BRAND_CONFLICTS_HREF } from "@/lib/manifestBrandConflicts";
 import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
 import { getLeaderTeamTaskPendingItems, getMyTeamTaskPendingItem } from "@/lib/teamTasks";
 
@@ -566,6 +567,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   precio_dropi_faltante: "Productos de provedix.com sin Precio Dropi — escribir el precio publicado en Dropi",
   combos_semana: "Combos sugeridos de la semana por revisar",
   combos_sin_marca: "Combos vendidos en Dropi sin marca — elegir su marca",
+  marcas_no_coinciden: "Marcas que no coinciden con el manifiesto",
   fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
   fulfillment_bloque_asignado: "Bloque del corte asignado — sacar de bodega",
   compras_calientes: "Compras calientes (se acaban en 3 días o menos)",
@@ -3337,6 +3339,23 @@ async function getCombosWithoutBrandPendingItem(): Promise<PendingItem | null> {
   };
 }
 
+// Pedido del usuario 2026-10-14 (ver lib/manifestBrandConflicts.ts): IDs
+// con marca puesta que vinieron en el manifiesto de otra marca. La asesora
+// B2B decide la primera vez; si el mismo ID vuelve a no coincidir, al admin.
+async function getManifestBrandConflictsPendingItem(forAdmin: boolean, href: string): Promise<PendingItem | null> {
+  const rows = await prisma.manifestBrandConflict.findMany({ where: { resolvedAt: null, forAdmin }, select: { code: true }, orderBy: { createdAt: "asc" } });
+  if (rows.length === 0) return null;
+  const codes = rows.map((r) => r.code);
+  return {
+    type: "marcas_no_coinciden",
+    icon: "🏷️",
+    label: forAdmin ? "Marcas que otra vez no coinciden con el manifiesto — revisa qué pasa" : "Marcas que no coinciden con el manifiesto — decide cuál es la correcta",
+    meta: `${codes.length === 1 ? "1 ID" : `${codes.length} IDs`}: ${codes.slice(0, 5).join(", ")}${codes.length > 5 ? "…" : ""}`,
+    overdue: false,
+    href,
+  };
+}
+
 // Pedido del usuario 2026-10-02: los productos sin área de bodega (A…G) solo
 // se veían como "N sin área todavía" dentro de Stock Actual. Ahora Daniel
 // los ve en Inicio y con un clic llega a Stock Actual con el filtro "Sin
@@ -4123,6 +4142,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       ...(purchaseExceptionItem ? [purchaseExceptionItem] : []),
       ...(stockAdjustmentItem ? [stockAdjustmentItem] : []),
       ...(await getStockCountApprovalPendingItem(invStockHref).then((i) => (i ? [i] : [])).catch(() => [])),
+      ...(await getManifestBrandConflictsPendingItem(true, `${invStockHref}&filtro=marcas-no-coinciden`).then((i) => (i ? [i] : [])).catch(() => [])),
       ...(priceCorrectionItem ? [priceCorrectionItem] : []),
       ...(writeOffApprovalItem ? [writeOffApprovalItem] : []),
       ...(catalogDeleteItem ? [catalogDeleteItem] : []),
@@ -4267,6 +4287,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (combosItem) teamItems.push(combosItem);
       const noBrandItem = await getCombosWithoutBrandPendingItem().catch(() => null);
       if (noBrandItem) teamItems.unshift(noBrandItem);
+      const brandConflictItem = await getManifestBrandConflictsPendingItem(false, MANIFEST_BRAND_CONFLICTS_HREF).catch(() => null);
+      if (brandConflictItem) teamItems.push(brandConflictItem);
     }
     if (me.canLinkStoreProducts) {
       const storeTrackingItem = await getStoreTrackingUnlinkedPendingItem();
@@ -4621,7 +4643,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion", "ajuste_stock_conteo", "catalogo_compras_borrado", "cuenta_proveedor_verificar", "caja_chica_excepcion_flete", "sueldo_nairoby_transferencia", "plan_mejora_admin", "correccion_precio_compra", "perdida_compra_aprobar");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion", "ajuste_stock_conteo", "catalogo_compras_borrado", "cuenta_proveedor_verificar", "caja_chica_excepcion_flete", "sueldo_nairoby_transferencia", "plan_mejora_admin", "correccion_precio_compra", "perdida_compra_aprobar", "marcas_no_coinciden");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -4658,7 +4680,7 @@ export async function getPossiblePendingTypesForActor(
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
       if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "precio_dropi_faltante", "analisis_mercado_pasar_publico");
       if (me.canUploadRocketSku) types.push("analisis_mercado_subir_rocket");
-      if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca");
+      if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca", "marcas_no_coinciden");
       if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
       if (me.department?.code === "INV") types.push("fulfillment_bloque_asignado");
       if (me.handlesHotPurchases) types.push("compras_calientes", "analisis_mercado_listo_comprar");
@@ -4670,7 +4692,7 @@ export async function getPossiblePendingTypesForActor(
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida", "tareas_por_revisar", "tareas_vencidas_equipo");
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
     if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "precio_dropi_faltante");
-      if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca");
+      if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca", "marcas_no_coinciden");
     if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
     if (me.leadsDept.code === "FIN") types.push("analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");
     if (me.handlesHotPurchases) types.push("compras_calientes", "analisis_mercado_listo_comprar");

@@ -2123,6 +2123,30 @@ model PurchaseCatalogItem {
   stockLabelPrints               StockLabelPrint[]
 }
 
+// Pedido del usuario 2026-10-14: un ID (producto o combo) que ya tiene marca
+// pero viene en el manifiesto de OTRA marca. La app nunca cambia la marca
+// sola: la asesora B2B decide (dejarla o cambiarla) una sola vez por ID. Si
+// después vuelve a no coincidir con otra marca, le toca al admin (forAdmin)
+// para ver qué está pasando. Ver lib/manifestBrandConflicts.ts.
+model ManifestBrandConflict {
+  id            String              @id @default(cuid())
+  kind          String // "producto" | "combo"
+  code          String
+  storedBrand   MarketProductBodega
+  manifestBrand MarketProductBodega
+  forAdmin      Boolean             @default(false)
+  createdAt     DateTime            @default(now())
+
+  // "KEPT" (se deja la marca que tenía) | "CHANGED" (pasa a la del manifiesto)
+  resolution     String?
+  resolvedAt     DateTime?
+  resolvedById   String?
+  resolvedByName String?
+
+  @@unique([kind, code, storedBrand, manifestBrand])
+  @@index([resolvedAt])
+}
+
 // Confirmado 2026-09-29 (pedido de Daniel, sí del usuario): un producto que
 // casi no salía (10 o menos en los 30 días anteriores) y de pronto sale 4 o
 // más en un día, según los manifiestos que sube Yair. Una fila por salto —

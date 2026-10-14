@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import type { MarketProductBodega } from "@/generated/prisma/client";
 import { parseGuidesPdf } from "@/lib/dropiGuidesPdf";
 import { fetchStoredFile } from "@/lib/privateFiles";
+import { recordManifestBrandConflicts } from "@/lib/manifestBrandConflicts";
 
 // Confirmado 2026-09-28 con el usuario: cada PDF de guías que descarga Yair
 // es el manifiesto de UNA marca en Dropi (su cuenta), y cada ID (producto o
@@ -25,8 +26,8 @@ export type ManifestBrandConflict = { kind: "producto" | "combo"; code: string; 
 export type ManifestLearnResult = { brand: MarketProductBodega | null; combos: string[]; products: string[]; conflicts: ManifestBrandConflict[] };
 
 // Pone la marca del manifiesto a los IDs que vienen en él y todavía no la
-// tienen. Nunca pisa una marca ya puesta: si no coincide, la devuelve como
-// conflicto para que el admin decida.
+// tienen. Nunca pisa una marca ya puesta: si no coincide, la guarda como
+// caso para que la asesora B2B decida (lib/manifestBrandConflicts.ts).
 export async function learnBrandsFromManifest(codes: string[]): Promise<ManifestLearnResult> {
   const unique = [...new Set(codes)];
   const brand = await manifestBrandFor(unique);
@@ -47,12 +48,12 @@ export async function learnBrandsFromManifest(codes: string[]): Promise<Manifest
     ...combos.filter((c) => c.bodega && c.bodega !== brand).map((c) => ({ kind: "combo" as const, code: c.code, name: c.label ?? c.code, stored: c.bodega!, manifest: brand })),
     ...products.filter((p) => p.bodega && p.bodega !== brand).map((p) => ({ kind: "producto" as const, code: p.justCode!, name: p.name, stored: p.bodega!, manifest: brand })),
   ];
+  await recordManifestBrandConflicts(conflicts).catch(() => null);
   return { brand, combos: newCombos.map((c) => c.code), products: newProducts.map((p) => p.justCode!), conflicts };
 }
 
 // Vuelve a leer PDFs de guías ya subidos (uno por manifiesto, así cada uno da
-// su propia marca) y aprende la marca de sus IDs. Lo usan el botón del admin
-// y el guardado del corte.
+// su propia marca) y aprende la marca de sus IDs. Lo usa el guardado del corte.
 export async function learnBrandsFromFiles(fileUrls: string[]): Promise<ManifestLearnResult & { unread: number }> {
   const out: ManifestLearnResult & { unread: number } = { brand: null, combos: [], products: [], conflicts: [], unread: 0 };
   for (const url of fileUrls) {
