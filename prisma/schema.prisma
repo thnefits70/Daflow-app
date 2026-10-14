@@ -4008,6 +4008,11 @@ model NewIdBranding {
   channelUploadedById String?
   channelUploadedBy   User?     @relation("NewIdBrandingChannelUploadedBy", fields: [channelUploadedById], references: [id], onDelete: SetNull)
 
+  // Pedido de Robert 2026-10-14: el ID está privatizado para un dropshipper.
+  // Se desmarca cuando vuelve a ser público (no cumplió con las ventas).
+  privateAt   DateTime?
+  privateById String?
+
   createdAt DateTime @default(now())
 }
 
