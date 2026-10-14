@@ -1,5 +1,6 @@
 import { TrendSpark } from "@/components/shared/TrendSpark";
 import { KpiInfoTip } from "@/components/shared/KpiInfoTip";
+import { ExplainButton } from "@/components/shared/ExplainButton";
 import type { InventoryKpisDataDTO } from "@/lib/inventoryKpis";
 
 // Tarjeta compacta en Inicio — confirmado 2026-08-04: visible para el líder
@@ -11,7 +12,7 @@ export function InventoryKpisHomeCard({ data }: { data: InventoryKpisDataDTO }) 
   if (!data.hasData) return null;
 
   return (
-    <div className="bg-surface border border-rule rounded-md p-4.5">
+    <div data-explain-scope className="bg-surface border border-rule rounded-md p-4.5">
       <div className="font-semibold text-[13.5px] mb-3">📦 KPIs de inventario</div>
       <div className="grid grid-cols-3 gap-3">
         <div>
@@ -52,6 +53,15 @@ export function InventoryKpisHomeCard({ data }: { data: InventoryKpisDataDTO }) 
           <span className="w-1.5 h-1.5 rounded-full bg-red shrink-0" /> {data.overstockAlert.message}
         </div>
       )}
+      {/* Pedido del usuario 2026-10-14: Mary explica estos números. */}
+      <ExplainButton
+        topic="kpis"
+        extra={`Tendencia vs. el período anterior — DIO: ${trendText(data.dio.good)} (antes ${data.dio.previous?.toFixed(0) ?? "—"} días) · GMROI: ${trendText(data.gmroiSeries.good)} (antes ${data.gmroiSeries.previous?.toFixed(1) ?? "—"}x)`}
+      />
     </div>
   );
+}
+
+function trendText(good: boolean | null) {
+  return good === null ? "sin dato anterior" : good ? "mejorando" : "empeorando";
 }

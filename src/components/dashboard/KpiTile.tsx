@@ -11,6 +11,7 @@ import {
 } from "./WeeklyTrendChart";
 import { PieChart } from "./PieChart";
 import { KpiInfoTip } from "@/components/shared/KpiInfoTip";
+import { ExplainButton } from "@/components/shared/ExplainButton";
 import type { WeeklyTrend, WarrantyMonthlyChart } from "@/lib/dashboard";
 import type { TopReturnProducts } from "@/lib/returnRate";
 import type { WarrantyLossMonth, WarrantyProductRow } from "@/lib/warrantyInsights";
@@ -52,7 +53,7 @@ export function KpiTile({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`bg-surface border border-rule rounded-lg p-4 ${className ?? ""}`}>
+    <div data-explain-scope className={`bg-surface border border-rule rounded-lg p-4 ${className ?? ""}`}>
       <div className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-steel mb-2">{kicker}</div>
       <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
         <span className="font-display text-[22px] font-bold leading-none">{value}</span>
@@ -68,6 +69,8 @@ export function KpiTile({
       <div className="text-[10.5px] text-steel mb-2.5">{period}</div>
       {children}
       {legend && <KpiRangeLegend items={legend} />}
+      {/* Pedido del usuario 2026-10-14: Mary explica el indicador. */}
+      <ExplainButton topic="kpis" />
     </div>
   );
 }
@@ -372,7 +375,7 @@ export function ReturnRateTile({ trend }: { trend: NonNullable<WeeklyTrend> }) {
 // que más regresan en los últimos 30 días (ver getTopReturnProducts).
 export function ReturnProductsTile({ data, href }: { data: TopReturnProducts; href?: string }) {
   return (
-    <div className="bg-surface border border-rule rounded-lg p-4">
+    <div data-explain-scope className="bg-surface border border-rule rounded-lg p-4">
       <div className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-steel mb-2">Productos que más regresan</div>
       <div className="flex items-baseline gap-2 flex-wrap mb-0.5">
         <span className="font-display text-[22px] font-bold leading-none">{data.highCount}</span>
@@ -403,6 +406,7 @@ export function ReturnProductsTile({ data, href }: { data: TopReturnProducts; hr
           Ver todos →
         </a>
       )}
+      <ExplainButton topic="kpis" />
     </div>
   );
 }
@@ -435,7 +439,7 @@ export function WarrantyMonthTile({ chart, emptyMessage }: { chart: WarrantyMont
 // cuál reclamar al proveedor o dejar de comprar.
 export function WarrantyProductsTile({ rows }: { rows: WarrantyProductRow[] }) {
   return (
-    <div className="bg-surface border border-rule rounded-lg p-4">
+    <div data-explain-scope className="bg-surface border border-rule rounded-lg p-4">
       <div className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-steel mb-2">Productos con más garantías</div>
       <div className="text-[10.5px] text-steel mb-2.5">Últimos 30 días · ordenados por fallas del producto</div>
       {rows.length === 0 ? (
@@ -454,6 +458,7 @@ export function WarrantyProductsTile({ rows }: { rows: WarrantyProductRow[] }) {
           ))}
         </div>
       )}
+      <ExplainButton topic="kpis" />
     </div>
   );
 }
@@ -468,7 +473,7 @@ function usd(n: number) {
 // sale en Inicio (vive en KPIs financieros, solo admin y Nairoby).
 export function WarrantyCostTile({ current, previous }: { current: WarrantyLossMonth; previous: WarrantyLossMonth | null }) {
   return (
-    <div className="bg-red/5 border border-red/30 rounded-lg p-4">
+    <div data-explain-scope className="bg-red/5 border border-red/30 rounded-lg p-4">
       <div className="flex items-center gap-1.5 flex-wrap mb-2">
         <span className="font-mono text-[9.5px] font-semibold uppercase tracking-wide text-red">Pérdidas por garantías</span>
         <KpiInfoTip>
@@ -493,6 +498,7 @@ export function WarrantyCostTile({ current, previous }: { current: WarrantyLossM
           Mes anterior ({formatMonthShort(previous.month)}): <b className="text-red">${usd(previous.total)}</b> en pérdidas
         </div>
       )}
+      <ExplainButton topic="kpis" />
     </div>
   );
 }

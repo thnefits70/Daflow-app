@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { ExplainButton } from "@/components/shared/ExplainButton";
 import {
   getAutoReturnRateMonths,
   getRecentReturnRate,
@@ -79,7 +80,7 @@ export async function AutoReturnRatePanel() {
         </div>
       </div>
 
-      <div className="bg-surface border border-rule rounded-md p-4">
+      <div data-explain-scope className="bg-surface border border-rule rounded-md p-4">
         <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
           <div className="text-[13px] font-semibold">Últimos 30 días por producto</div>
           {highCount > 0 && (
@@ -99,10 +100,11 @@ export async function AutoReturnRatePanel() {
         ) : (
           <Table rows={recent.byProduct.filter((p) => p.out > 0)} label="Producto" limit={PRODUCT_LIMIT} />
         )}
+        <ExplainButton topic="kpis" />
       </div>
 
       {months.map((m) => (
-        <details key={m.month} className="bg-surface border border-rule rounded-md p-4" open={m === months[0]}>
+        <details data-explain-scope key={m.month} className="bg-surface border border-rule rounded-md p-4" open={m === months[0]}>
           <summary className="cursor-pointer flex items-center gap-3 flex-wrap">
             <span className="font-semibold text-[13.5px]">{monthLabel(m.month)}</span>
             <span className="font-mono text-[13px]">{!m.started || m.pct === null ? "—" : `${m.pct}%`}</span>
@@ -131,6 +133,7 @@ export async function AutoReturnRatePanel() {
               Las devoluciones de este mes se cuentan desde {RETURN_LAG_DAYS} días después de que empieza; antes de eso el % saldría 0% sin serlo.
             </div>
           )}
+          <ExplainButton topic="kpis" extra={`Tasa de Devolución de ${monthLabel(m.month)}`} />
         </details>
       ))}
     </div>

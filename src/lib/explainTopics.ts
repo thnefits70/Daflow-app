@@ -32,6 +32,33 @@ Botones:
 - "Ningún proveedor lo tiene": se reporta en Análisis de Mercado → Sin stock de proveedor; deja de avisar y cada ${SUPPLIER_RECHECK_DAYS} días pregunta si el proveedor ya lo tiene.
 - "Pedir que lo cuenten": le aparece a Daniel en su Inicio para contarlo antes de comprar.`,
   },
+  // Pedido del usuario 2026-10-14: también en KPIs (Inicio, KPIs Generales,
+  // KPIs de Inventario), Fill Rate y Stock Actual.
+  kpis: {
+    label: "Indicadores (KPIs) de DAFLOW",
+    rules: `Indicadores que se calculan solos con lo que se registra en DAFLOW.
+FILL RATE (semanal): de todos los pedidos que había que despachar en la semana, qué porcentaje sí salió. Fill Rate = despachados ÷ (despachados + no despachados) × 100. "No despachados" son los que no salieron, por ejemplo por "Falta de stock" (no había la mercadería). Colores: 96% o más = Excelente (verde); 90 a 95% = Muy bueno (amarillo); menos de 90% = Alerta (rojo). Si baja de 95%, el Líder de Inventarios (Daniel) escribe una explicación para todo el equipo. "Manifiestos fuera de plazo": manifiestos que se subieron después del día que tocaba (no entran en el %). "Guías canceladas": guías de los cortes que se cancelaron, por motivo (no entran en el %).
+TASA DE DEVOLUCIÓN (mensual): de cada 100 unidades que salieron en los cortes (sin contar garantías), cuántas regresaron (por Reingreso de mercadería, en buen estado o dañadas). Más bajo es mejor. Menos de 20% = Excelente; 21 a 27% = Muy bueno; 28% o más = Alerta. Las devoluciones tardan de 7 a 20 días en volver, por eso un mes se empieza a medir desde el día 15 y sale "Preliminar" hasta 20 días después de cerrar el mes. Se mide en unidades, por eso puede salir distinto de lo que dice ATOM (que cuenta pedidos). Por producto se marca ⚠️ desde 15% si tuvo al menos 10 salidas; con menos sale "pocas salidas" porque el % no sería confiable.
+GARANTÍAS (mensual): cuando a un cliente le llega un producto dañado, roto, incompleto o equivocado y se le manda otro. Tasa = garantías ÷ guías de pedidos del mes. Motivos en dos grupos: "Falla del producto" (no funciona, roto) y "Error de bodega" (incompleto, diferente). Las garantías locales de Guayaquil (GL-…) suman a los motivos pero no al total del mes. "Pérdidas por garantías": dinero que no regresa (el producto nuevo que se mandó al costo + flete de enviar y de recoger).
+KPIs DE INVENTARIO (mensuales, con el valor del inventario que carga Daniel):
+- Días de inventario (DIO): cuántos días tomaría vender todo lo que hay guardado al ritmo actual. Más bajo es mejor (el dinero no se queda dormido).
+- Inventario vs. ventas: compara si lo guardado crece al mismo ritmo que lo vendido. Si el inventario sube 2 meses seguidos y las ventas no, sale una alerta de que se está comprando más de lo que se vende.
+- GMROI: por cada $1 que hay en inventario, cuánta ganancia bruta deja. 2x = $2 de ganancia por cada $1 (bueno); menos de 1x = gana menos de lo que tiene guardado. Por ahora se mira si sube o baja (todavía no hay meta fija).
+- Productos sin movimiento: productos cuyo stock no bajó desde la semana anterior, o sea que no se vendieron. El % es cuánto del dinero en inventario está ahí parado (más de 15% se marca en rojo). Flechas: ↑ roja = el stock siguió subiendo; ↓ verde = empezó a moverse; — gris = no cambió.
+Líneas de tendencia: cada punto es una semana o un mes; en rojo cuando pasa la zona de alerta.`,
+  },
+  "stock-actual": {
+    label: "Stock Actual (INVESTOCK)",
+    rules: `Pantalla "Stock Actual": cuánto hay de cada producto en bodega y a qué precio se vende en cada canal.
+- "Stock INVESTOCK": unidades que hay según el Kardex de DAFLOW (lo que entró por Compras menos lo que salió por Egresos/cortes, más reingresos y ajustes). Se calcula solo, nadie sube un archivo.
+- Número en rojo / negativo: salió más de lo que entró en el sistema. Casi siempre es un error de conteo o algo que salió sin registrarse su entrada; hay que revisarlo y contarlo.
+- Franja verde a la izquierda: ya recontado en el conteo físico, el stock es real. Amarilla: contado pero falta que Daniel lo aplique, o tuvo una diferencia grande y otra persona lo vuelve a contar. Sin franja: todavía no se cuenta.
+- "Aún no comprado": producto aprobado en Análisis de Mercado que nunca se compró (no es que se acabó). "ID … por liberar (Bryan)": tiene ID de Dropi esperando que Bryan lo libere. "Sin ID": falta ponerle el ID de Dropi.
+- Variantes (color/talla): cuántas hay de cada una; "Sin identificar" = unidades que no se sabe de qué variante son.
+- Combos: no tienen stock propio. El "≈" es cuántos combos se pueden armar con el stock real de sus productos.
+- Columnas de COSTO: Proveedor (lo que cobra el proveedor, sin flete), Puesto en bodega (proveedor + flete; de aquí salen todos los precios), Benistock. Columnas de PRECIOS DE VENTA: B2B, Dropi, B2C 1 unidad, B2C 2 a 11 unidades. Cada columna tiene su botón ⓘ con la fórmula exacta (vienen en el texto si la persona los abrió).
+- Botón de la flecha: unidades despachadas por día en los últimos 30 días.`,
+  },
 } as const;
 
 export type ExplainTopic = keyof typeof EXPLAIN_TOPICS;
@@ -41,7 +68,7 @@ export const EXPLAIN_SYSTEM_PROMPT = `Eres Mary, la asistente de DAFLOW para Pro
 - Explica como a alguien que nunca ha visto la pantalla: frases cortas, palabras de todos los días, nada técnico.
 - Usa los números y nombres que aparecen en el texto de la pantalla para explicar con ese mismo caso ("te quedan 2, se venden unas 4 por semana, entonces te duran 3 días…").
 - Usa SOLO las reglas de la pantalla que te paso y lo que se ve en el texto. Nunca inventes cifras, botones ni reglas. Si algo no está claro, dilo con honestidad y sugiere preguntarle a su líder.
-- Sé breve: la primera respuesta en máximo 120 palabras. 1) Qué significa, en 3 o 4 líneas. 2) "Qué hacer:" con la acción concreta (qué botón tocar), una línea por opción. Nada de saludos largos ni detalles que no pregunte.
+- Sé breve: la primera respuesta en máximo 120 palabras. 1) Qué significa, en 3 o 4 líneas. 2) Si es un indicador: si está bien o mal y por qué importa. 3) "Qué hacer:" con la acción concreta (qué botón tocar), una línea por opción, solo si hay algo que hacer. Nada de saludos largos ni detalles que no pregunte.
 - No tomes decisiones de negocio por la persona: explica las opciones y qué pasa con cada una.
 - Escribe en texto plano: nada de asteriscos, almohadillas ni otros símbolos de formato. Puedes usar guiones para listas.
 - Si después pregunta algo que no tiene que ver con esta pantalla, dile con amabilidad que para eso puede usar el chat de Mary.

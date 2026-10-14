@@ -6,6 +6,7 @@ import type { InventoryKpisDataDTO } from "@/lib/inventoryKpis";
 import type { StaleStreakBucket } from "@/lib/inventoryKpisCalc";
 import { TrendSpark } from "@/components/shared/TrendSpark";
 import { KpiInfoTip } from "@/components/shared/KpiInfoTip";
+import { ExplainButton } from "@/components/shared/ExplainButton";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatCalendarDate } from "@/lib/formatDateTime";
 import { ExpandableName } from "@/components/ui/ExpandableName";
@@ -196,7 +197,7 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
     )}
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
       {/* 1. Rotación / DIO */}
-      <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #14c7c7" }}>
+      <div data-explain-scope className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #14c7c7" }}>
         <div className="flex items-center justify-between mb-1 flex-wrap gap-y-1.5">
           <div className="flex items-center gap-1.5">
             <div className="font-semibold text-[13.5px]">Rotación de inventario (DIO)</div>
@@ -221,10 +222,11 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
           valueFormatter={(v) => `${v.toFixed(0)}d`}
           explanations={data.series.map((_, i) => explainDioPoint(i, data.series, data.dioSeries))}
         />
+        <ExplainButton topic="kpis" />
       </div>
 
       {/* 2. Inventario vs Ventas */}
-      <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #1e5eff" }}>
+      <div data-explain-scope className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #1e5eff" }}>
         <div className="flex items-center justify-between mb-1 flex-wrap gap-y-1.5">
           <div className="flex items-center gap-1.5">
             <div className="font-semibold text-[13.5px]">Inventario vs. Ventas (mensual)</div>
@@ -255,10 +257,11 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
             <span className="w-1.5 h-1.5 rounded-full bg-red shrink-0" /> {data.overstockAlert.message}
           </div>
         )}
+        <ExplainButton topic="kpis" />
       </div>
 
       {/* 3. GMROI */}
-      <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #22a67e" }}>
+      <div data-explain-scope className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #22a67e" }}>
         <div className="flex items-center justify-between mb-1 flex-wrap gap-y-1.5">
           <div className="flex items-center gap-1.5">
             <div className="font-semibold text-[13.5px]">GMROI</div>
@@ -287,10 +290,11 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
           valueFormatter={(v) => `${v.toFixed(1)}x`}
           explanations={data.series.map((_, i) => explainGmroiPoint(i, data.series, data.gmroiFullSeries))}
         />
+        <ExplainButton topic="kpis" />
       </div>
 
       {/* 4. Productos sin movimiento */}
-      <div className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #e0574a" }}>
+      <div data-explain-scope className="bg-surface border border-rule rounded-md p-4.5" style={{ borderTop: "2px solid #e0574a" }}>
         <div className="flex items-center justify-between mb-1 flex-wrap gap-y-1.5">
           <div className="flex items-center gap-1.5">
             <div className="font-semibold text-[13.5px]">Productos que nadie compra</div>
@@ -377,6 +381,7 @@ export function InventoryKpisPanel({ data }: { data: InventoryKpisDataDTO }) {
             )}
           </div>
         </div>
+        <ExplainButton topic="kpis" />
       </div>
     </div>
 

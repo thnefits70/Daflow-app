@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import type { ExplainTopic } from "@/lib/explainTopics";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -9,7 +10,7 @@ type Msg = { role: "user" | "assistant"; content: string };
 // contenedor más cercano con data-explain-scope (o el que se pase en
 // `extra`) y permite seguir preguntando. Las reglas de cada pantalla están en
 // src/lib/explainTopics.ts.
-export function ExplainButton({ topic, extra, label = "¿Qué significa?" }: { topic: "que-comprar"; extra?: string; label?: string }) {
+export function ExplainButton({ topic, extra, label = "¿Qué significa?", compact = false }: { topic: ExplainTopic; extra?: string; label?: string; compact?: boolean }) {
   const btnRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [screenText, setScreenText] = useState("");
@@ -71,15 +72,18 @@ export function ExplainButton({ topic, extra, label = "¿Qué significa?" }: { t
   }
 
   return (
-    <div className="mt-1">
+    // compact: solo el "?" dentro de una fila (Stock Actual); al abrir ocupa
+    // todo el ancho debajo (la fila debe tener flex-wrap).
+    <div className={compact ? (open ? "basis-full w-full" : "shrink-0") : "mt-1"}>
       <button
         ref={btnRef}
         type="button"
         onClick={start}
+        title={label}
         className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-teal hover:underline"
       >
         <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-teal text-[10px] leading-none">?</span>
-        {open ? "Cerrar explicación" : label}
+        {compact && !open ? null : open ? "Cerrar explicación" : label}
       </button>
       {open && (
         <div className="mt-1.5 rounded-md border border-teal/40 bg-teal/5 px-3 py-2 text-[12.5px] text-ink max-w-[640px]">

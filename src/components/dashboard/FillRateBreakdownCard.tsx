@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { formatWeekShort } from "./WeeklyTrendChart";
 import { formatDateTime } from "@/lib/formatDateTime";
 import type { FillRateBreakdown } from "@/lib/dashboard";
+import { ExplainButton } from "@/components/shared/ExplainButton";
 
 // Confirmado 2026-08-31: reemplaza las bandas anteriores (≥98/95-97/<95) —
 // ≥96% excelente, 90-95% muy bueno, <90% alerta/ineficiente. Debe quedar
@@ -157,7 +158,7 @@ export function FillRateBreakdownCard({
   const { lateManifests: lm, cancelledGuides: cg } = data;
 
   return (
-    <div className="bg-surface border border-rule rounded-lg p-6 mb-5">
+    <div data-explain-scope className="bg-surface border border-rule rounded-lg p-6 mb-5">
       <div className="flex items-end justify-between flex-wrap gap-2 mb-4">
         <div>
           <div className="font-mono text-[10.5px] uppercase tracking-wide text-steel mb-1">
@@ -251,6 +252,11 @@ export function FillRateBreakdownCard({
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#22C55E" }} />≥96% Excelente</span>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#D9A441" }} />90–95% Muy bueno</span>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: "#E0574A" }} />&lt;90% Alerta / ineficiente</span>
+      </div>
+
+      {/* Pedido del usuario 2026-10-14: Mary explica el Fill Rate de la semana. */}
+      <div className="mb-3">
+        <ExplainButton topic="kpis" />
       </div>
 
       {data.needsJustification && <JustificationSection status={status} data={data} canJustify={canJustify} />}

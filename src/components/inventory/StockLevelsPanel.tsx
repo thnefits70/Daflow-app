@@ -15,6 +15,7 @@ import { WAREHOUSE_AREAS, areaLabel, isWarehouseArea, type WarehouseArea } from 
 import { ManifestBrandLearner } from "./ManifestBrandLearner";
 import { CombinedPriceChart, PriceHistoryBreakdownList } from "@/components/purchases/PriceTrendChart";
 import type { SupplierPriceHistory } from "@/lib/purchases";
+import { ExplainButton } from "@/components/shared/ExplainButton";
 
 function fromSinAreaLink() {
   return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("filtro") === "sin-area";
@@ -544,6 +545,20 @@ function significantWords(s: string): string[] {
 // precio — mismas fórmulas ya usadas en src/lib/marketProduct.ts
 // (computeBenistockPrice/computeB2BPrice/computeB2CPrice), explicadas en
 // palabras simples, no en código.
+// Lo que Mary necesita para explicar una fila de Stock Actual (2026-10-14):
+// cada número con el nombre de su columna, más las fórmulas de arriba.
+function stockRowExplainText(r: { name: string; justCode: string | null; bodega: string | null; warehouseArea: string | null; balance: number; providerPrice?: number | null; bodegaPrice?: number | null; benistockPrice?: number | null; b2bPriceDefault?: number | null; dropiPrice?: number | null; b2cPrice1Unit?: number | null; b2cPrice2to11?: number | null }) {
+  const money = (v?: number | null) => (v == null ? "sin dato" : `$${v.toFixed(2)}`);
+  return [
+    `Producto: ${r.name}${r.justCode ? ` (ID ${r.justCode})` : ""} · Marca: ${r.bodega ?? "sin marca"} · Área: ${r.warehouseArea ?? "sin área"}`,
+    `Stock INVESTOCK: ${r.balance} unidades`,
+    `Costo — Proveedor (sin flete): ${money(r.providerPrice)} · Puesto en bodega: ${money(r.bodegaPrice)} · Benistock: ${money(r.benistockPrice)}`,
+    `Precios de venta — B2B: ${money(r.b2bPriceDefault)} · Dropi: ${money(r.dropiPrice)} · B2C 1 un.: ${money(r.b2cPrice1Unit)} · B2C 2-11 un.: ${money(r.b2cPrice2to11)}`,
+    "Fórmulas de cada columna:",
+    ...Object.values(FORMULA_EXPLANATIONS).map((f) => `- ${f.title}: ${f.text}`),
+  ].join("\n");
+}
+
 const FORMULA_EXPLANATIONS: Record<FormulaKey, { title: string; text: string }> = {
   stock: {
     title: "Stock",
@@ -1288,7 +1303,8 @@ export function StockLevelsPanel({
 
       {viewMode !== "combos" && (
         <>
-          <div className="text-[12px] text-steel mb-2">
+          <div data-explain-scope className="text-[12px] text-steel mb-2">
+            <ExplainButton topic="stock-actual" label="¿Cómo leer esta pantalla?" />
             {sorted.length} producto(s)
             {unmarkedCount > 0 && (
               <span className="ml-2 text-gold font-semibold">· {unmarkedCount} sin marca todavía</span>
@@ -1333,6 +1349,7 @@ export function StockLevelsPanel({
             // seguir de punta a punta sin saltar a la fila de al lado.
             sorted.map((r, i) => (
               <div
+                data-explain-scope
                 key={r.catalogItemId}
                 title={r.recounted ? "Ya recontado en el conteo físico: stock real" : r.countPending === "recount" ? "Contado con una diferencia grande: lo vuelve a contar otra persona" : r.countPending ? "Contado: falta que Daniel lo aplique a INVESTOCK" : undefined}
                 className={`grid grid-cols-[auto_minmax(200px,1fr)_110px_80px_90px_100px_110px_110px_100px_100px_110px_110px] gap-3 px-3 py-2.5 border-t border-rule items-center border-l-4 ${r.recounted ? "border-l-green bg-green/10" : r.countPending ? "border-l-gold bg-gold/10" : `border-l-transparent ${i % 2 === 1 ? "bg-cloud/40" : ""}`}`}
@@ -1347,7 +1364,7 @@ export function StockLevelsPanel({
                   <div className="w-8 h-8 rounded border border-dashed border-rule shrink-0" />
                 )}
                 <span className="text-[12.5px] flex flex-col min-w-0">
-                  <span className="flex items-center gap-1.5 min-w-0">
+                  <span className="flex items-center flex-wrap gap-1.5 min-w-0">
                     <CatalogCode code={r.justCode} />
                     <button
                       type="button"
@@ -1372,6 +1389,8 @@ export function StockLevelsPanel({
                       </button>
                     )}
                     <ProductNameToggle name={r.name} countedVariants={r.countedVariants ?? null} hasVariantStock={!!r.variantStock} />
+                    {/* Pedido del usuario 2026-10-14: Mary explica la fila. */}
+                    <ExplainButton compact topic="stock-actual" extra={`${stockRowExplainText(r)}\nFranja:${r.recounted ? "verde, ya recontado" : r.countPending === "recount" ? "amarilla, en recuento" : r.countPending ? "amarilla, contado sin aplicar" : "sin franja, todavía no se cuenta"}`} />
                     {r.countedVariants && !r.variantStock && (
                       <span className="shrink-0 text-[9.5px] font-bold uppercase text-teal" title="Tiene variantes contadas: pulsa el nombre para verlas">
                         {r.countedVariants.length} var.
