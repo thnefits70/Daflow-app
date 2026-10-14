@@ -36,6 +36,12 @@ function nextMonths(count: number): string[] {
 // mano, en cuotas, y de ahí en adelante buildAutomaticLineItems las
 // descuenta solas — sin paso de aceptación del colaborador (a diferencia
 // de "Descuentos por mala gestión"), porque es deuda real ya conocida.
+// Confirmado 2026-10-14, pedido de Nairoby: el formulario para cargar deudas
+// nuevas ya no se muestra — solo hacía falta para los meses en que no se
+// trabajaba con DAFLOW. Las deudas ya cargadas siguen visibles y se siguen
+// descontando solas.
+const LEGACY_DEBT_INTAKE_OPEN = false;
+
 export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [debts, setDebts] = useState<Debt[] | null>(null);
@@ -121,7 +127,7 @@ export function LegacyPayrollDebtsPanel({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div>
-      {canEdit && (
+      {LEGACY_DEBT_INTAKE_OPEN && canEdit && (
         <div className="bg-surface border border-rule rounded-md p-4 mb-4">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-steel mb-3">Cargar deuda anterior al sistema</div>
           <div className="flex flex-col gap-2 max-w-sm">

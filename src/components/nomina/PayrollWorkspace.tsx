@@ -206,11 +206,7 @@ export function PayrollWorkspace({
       {tab === "deudaanterior" && canViewRoles && (
         <>
           <TabGuide storageKey="nomina-deudaanterior">
-            {canEditRoles ? (
-              <>Carga acá, una sola vez, una deuda de anticipo/compra/descuento de ANTES de que existiera este sistema (no está en ningún otro registro). Elegí cuotas y se descuenta sola desde este mes, sin que el colaborador tenga que aceptarla — es deuda real ya conocida por ambos.</>
-            ) : (
-              <>Vista de solo lectura de las deudas anteriores al sistema que Nairoby fue cargando a mano.</>
-            )}
+            Deudas de antes de que existiera DAFLOW que se cargaron a mano. Se siguen descontando solas en sus cuotas; ya no se cargan deudas nuevas aquí.
           </TabGuide>
           <LegacyPayrollDebtsPanel canEdit={canEditRoles} />
         </>
