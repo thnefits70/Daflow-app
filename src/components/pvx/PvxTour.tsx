@@ -27,7 +27,7 @@ const STEPS: Step[] = [
   { id: "cortes", since: 1, title: "Cortes en vivo", text: "Cuenta regresiva al próximo corte: tu pedido sale en menos de 3 horas." },
   { id: "recursos", since: 1, title: "Todo para vender", text: "Creativos gratis para tus anuncios, rastreo de guías y cómo pedir una garantía." },
   { id: "canales", since: 1, title: "Productos nuevos primero", text: "Únete a nuestros canales de WhatsApp para enterarte antes que nadie." },
-  { id: "chat", since: 2, title: "Pregúntale a Michelle", text: "Nuestra asistente virtual te ayuda a elegir productos y resuelve tus dudas al instante. Si prefieres una persona, desde ahí mismo le escribes a la asesora." },
+  { id: "chat", since: 2, title: "Pregúntale a Michelle", text: "Nuestra asistente virtual te ayuda a elegir productos y resuelve tus dudas al instante. Si tienes un caso más crítico, desde ahí mismo le escribes a Michelle, del equipo, por WhatsApp." },
   { id: "help", since: 1, title: "Vuelve a ver esta guía", text: "Toca aquí cuando quieras. Cuando agreguemos mejoras, este botón se ilumina con las novedades." },
 ];
 

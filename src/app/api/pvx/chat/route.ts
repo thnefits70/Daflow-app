@@ -72,11 +72,11 @@ export async function POST(req: NextRequest) {
   const { visitorId, leadId } = await readVisitor(req);
   const used = await usedToday(visitorId, leadId);
   if (used >= MICHELLE_DAILY_LIMIT || !ipAllowed(req)) {
-    return NextResponse.json({ error: "Llegaste al límite de mensajes de hoy. Mañana sigo ayudándote, o escríbele a la asesora por WhatsApp.", remaining: 0 }, { status: 429 });
+    return NextResponse.json({ error: "Llegaste al límite de mensajes de hoy 🙈 Mañana sigo ayudándote encantada. Si es un caso crítico, toca \"¿Tienes un caso más crítico?\" 💛", remaining: 0 }, { status: 429 });
   }
   const globalUsed = await prisma.provedixChatMessage.count({ where: { role: "user", createdAt: { gte: new Date(Date.now() - DAY) } } });
   if (globalUsed >= GLOBAL_DAILY_LIMIT) {
-    return NextResponse.json({ error: "Estoy atendiendo a muchas personas en este momento. Escríbele a la asesora por WhatsApp y te responde enseguida." }, { status: 503 });
+    return NextResponse.json({ error: "Estoy atendiendo a muchas personas en este momento 🙏 Inténtalo de nuevo en un ratito, porfa." }, { status: 503 });
   }
 
   let chat = await findChat(parsed.data.chatId, visitorId, leadId);
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
         }
         const final = await stream.finalMessage().catch(() => null);
         if (final?.stop_reason === "refusal" && !acc.trim()) {
-          acc = "Perdón, esa pregunta no la puedo responder por aquí. ¿Te ayudo con algún producto o con cómo trabajar con Provedix?";
+          acc = "Ay, perdón 🙏 esa pregunta no la puedo responder por aquí. ¿Te ayudo con algún producto o con cómo trabajar con Provedix? 😊";
           controller.enqueue(encoder.encode(acc));
         }
         if (final?.usage) {
@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
         }
       } catch (err) {
         console.error("[michelle]", err);
-        const msg = "\n\nSe me cortó la conexión. Intenta de nuevo en un momento, o escríbele a la asesora por WhatsApp.";
+        const msg = "\n\nUy, se me cortó la conexión 🙏 Intenta de nuevo en un momento, porfa.";
         acc += msg;
         controller.enqueue(encoder.encode(msg));
       } finally {

@@ -51,8 +51,8 @@ function Avatar({ size = 36 }: { size?: number }) {
 
 function handoffUrl(phone: string, lastQuestion: string): string {
   const text = lastQuestion
-    ? `Hola, estaba hablando con Michelle, la asistente virtual de Provedix. Mi consulta: "${lastQuestion.slice(0, 300)}"`
-    : "Hola, vengo del chat de Provedix y quiero hablar con una asesora.";
+    ? `Hola Michelle, vengo del chat de Provedix y tengo un caso que necesita tu ayuda. Mi consulta: "${lastQuestion.slice(0, 300)}"`
+    : "Hola Michelle, vengo del chat de Provedix y tengo un caso que necesita tu ayuda.";
   return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
 }
 
@@ -65,7 +65,6 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
-  const [handoff, setHandoff] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -180,7 +179,7 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
             <div className="flex gap-2">
               <Avatar size={28} />
               <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[14.5px] leading-relaxed">
-                ¡Hola! Soy <b>Michelle</b>, la asistente virtual de Provedix. Te ayudo a encontrar productos ganadores, ver cuánto se venden y resolver tus dudas sobre cómo trabajar con nosotros. Si prefieres hablar con una persona, toca <b>&ldquo;Hablar con una asesora&rdquo;</b>.
+¡Hola! 👋 Soy <b>Michelle</b>, tu asistente virtual de Provedix 😊 Estoy aquí para ayudarte a encontrar productos ganadores, ver cuánto se venden y resolver tus dudas. Cuéntame, ¿en qué te ayudo hoy? 💛
               </div>
             </div>
 
@@ -232,39 +231,19 @@ export function PvxChat({ registered, onRegister }: { registered: boolean; onReg
           )}
 
           <div className="border-t border-[var(--pvx-paper-3)] px-3 pb-3 pt-2">
-            <div className="relative mb-2 flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={() => setHandoff(!handoff)}
-                aria-expanded={handoff}
-                className="inline-flex items-center gap-1.5 text-[12.5px] font-bold text-[#0f7239] hover:underline cursor-pointer"
+            {/* Casos críticos → WhatsApp de Michelle (la asesora). Pedido 2026-10-14: la asistente resuelve
+                lo normal para no sobrecargarla; ella atiende solo lo que requiere un análisis más complejo. */}
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <a
+                href={handoffUrl(ADVISORS.dropi.phone, lastQuestion)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Te atiende Michelle, del equipo, por WhatsApp"
+                className="inline-flex items-center gap-1.5 text-[12.5px] font-bold text-[#0f7239] hover:underline"
               >
-                <IconWhatsApp className="w-4 h-4" /> Hablar con una asesora
-              </button>
+                <IconWhatsApp className="w-4 h-4" /> ¿Tienes un caso más crítico?
+              </a>
               {remaining != null && <span className="text-[11.5px] text-[var(--pvx-ink-3)]">{remaining} mensajes hoy</span>}
-              {handoff && (
-                <div className="pvx-pop absolute bottom-full left-0 mb-2 w-[260px] rounded-2xl bg-white p-1.5 shadow-[0_18px_44px_-14px_rgb(0_0_0/0.45)] ring-1 ring-[var(--pvx-paper-3)]">
-                  {(Object.keys(ADVISORS) as (keyof typeof ADVISORS)[]).map((k) => (
-                    <a
-                      key={k}
-                      href={handoffUrl(ADVISORS[k].phone, lastQuestion)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2.5 rounded-xl px-3 py-2.5 hover:bg-[var(--pvx-paper-2)]"
-                    >
-                      <span className="grid h-8 w-8 place-items-center rounded-full bg-[#138a45] text-white">
-                        <IconWhatsApp className="w-4 h-4" />
-                      </span>
-                      <span>
-                        <span className="block text-[13.5px] font-bold">
-                          {ADVISORS[k].platform} · {ADVISORS[k].name}
-                        </span>
-                        <span className="block text-[11.5px] text-[var(--pvx-ink-2)]">Persona del equipo, por WhatsApp</span>
-                      </span>
-                    </a>
-                  ))}
-                </div>
-              )}
             </div>
             <form
               onSubmit={(e) => {
