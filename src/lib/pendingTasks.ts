@@ -40,6 +40,7 @@ import { MANIFEST_BRAND_CONFLICTS_HREF } from "@/lib/manifestBrandConflicts";
 import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
 import { getLeaderTeamTaskPendingItems, getMyTeamTaskPendingItem } from "@/lib/teamTasks";
 import { getProvedixSuspiciousChatsPendingItem } from "@/lib/provedixSuspicion";
+import { getMichelleCancelPendingItems } from "@/lib/michelleCancellations";
 
 import { formatPurchaseRequestCode } from "@/lib/purchaseCode";
 
@@ -489,6 +490,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   caja_chica_flete_motorizado: "Caja Chica — flete por pagar al motorizado",
   pagos_administrativos: "Pagos administrativos pendientes de pago",
   michelle_sospechosos: "Michelle — conversaciones sospechosas por revisar",
+  michelle_por_retener: "Guías canceladas por retener (chat de provedix)",
+  michelle_por_aprobar: "Cancelaciones fuera de horario por decidir",
   pagos_mercaderia: "Pagos de mercadería pendientes",
   pagos_flete: "Fletes pendientes de pago",
   ventas_externas_revisar: "Ventas Externas — venta nueva por aprobar",
@@ -4372,6 +4375,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // Confirmado 2026-09-29 (pedido de Daniel): Producto que despierta —
     // Jariel y Heidy no lideran ningún departamento.
     teamItems.unshift(...(await getSuddenDemandPendingItems(actor.userId)));
+    // Guías canceladas por el chat de Michelle (2026-10-15): Joao las retiene.
+    teamItems.unshift(...(await getMichelleCancelPendingItems(actor.userId).catch(() => [])));
     if (teamItems.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: me.department?.code === "INV" ? "En Inventario" : "Para ti", items: teamItems };
   }
@@ -4622,6 +4627,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   // Bryan Rios, Yair; Nairoby solo si el producto tiene 31 a 60 en bodega.
   items.unshift(...(await getSuddenDemandPendingItems(actor.userId)));
 
+  // Guías canceladas por el chat de Michelle (2026-10-15): Daniel decide las de fuera de horario.
+  items.unshift(...(await getMichelleCancelPendingItems(actor.userId).catch(() => [])));
   if (items.length === 0) return null;
   return {
     title: monthly ? "Pendientes de este mes" : "Pendientes de esta semana",

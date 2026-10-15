@@ -79,16 +79,34 @@ export type GuideCheckResult =
       transportadora: string;
       fecha_despacho: string | null;
       enlace_rastreo: string | null;
+      cancelacion?: string;
     }
   | { resultado: "no_coincide"; intentos_restantes: number }
   | { resultado: "no_encontrada"; intentos_restantes: number }
   | { resultado: "bloquear" };
 
-export async function checkGuideForDropshipper(
+export type VerifiedGuide = {
+  guideNumber: string;
+  carrier: string;
+  manifestDay: string | null;
+  codes: string[];
+  batch: {
+    source: string;
+    fileUrls: string[];
+    lot: { day: string; status: string } | null;
+  };
+};
+
+// Comprueba que quien pregunta es el dueño de la guía (guía + tienda +
+// cliente). Cada fallo cuenta para el bloqueo de 24 h. También la usa la
+// cancelación de guías por Michelle (michelleCancellations.ts).
+export async function verifyGuideOwner(
   input: { guia: string; tienda: string; cliente: string },
   chatId: string,
   who: { visitorId: string; leadId: string | null },
-): Promise<GuideCheckResult> {
+): Promise<
+  { ok: true; row: VerifiedGuide } | { ok: false; result: GuideCheckResult }
+> {
   const guide = input.guia.replace(/[\s-]/g, "").toUpperCase().slice(0, 30);
   const person = who.leadId
     ? { OR: [{ visitorId: who.visitorId }, { leadId: who.leadId }] }
@@ -100,9 +118,10 @@ export async function checkGuideForDropshipper(
       chat: person,
     },
   });
-  if (fails >= GUIDE_FAIL_LIMIT) return { resultado: "bloquear" };
+  if (fails >= GUIDE_FAIL_LIMIT)
+    return { ok: false, result: { resultado: "bloquear" } };
 
-  const fail = async (): Promise<GuideCheckResult> => {
+  const fail = async (): Promise<{ ok: false; result: GuideCheckResult }> => {
     await prisma.provedixChatMessage.create({
       data: {
         chatId,
@@ -120,9 +139,12 @@ export async function checkGuideForDropshipper(
             "Falló 3 veces la verificación de guías: chat bloqueado 24 horas.",
         },
       });
-      return { resultado: "bloquear" };
+      return { ok: false, result: { resultado: "bloquear" } };
     }
-    return { resultado: "no_coincide", intentos_restantes: left };
+    return {
+      ok: false,
+      result: { resultado: "no_coincide", intentos_restantes: left },
+    };
   };
 
   if (!/^[A-Z0-9]{6,30}$/.test(guide)) return fail();
@@ -133,8 +155,10 @@ export async function checkGuideForDropshipper(
       carrier: true,
       sender: true,
       manifestDay: true,
+      codes: true,
       batch: {
         select: {
+          source: true,
           fileUrls: true,
           lot: { select: { day: true, status: true } },
         },
@@ -145,8 +169,14 @@ export async function checkGuideForDropshipper(
   // probar números al azar sin límite.
   if (!row) {
     const r = await fail();
-    return r.resultado === "no_coincide"
-      ? { resultado: "no_encontrada", intentos_restantes: r.intentos_restantes }
+    return r.result.resultado === "no_coincide"
+      ? {
+          ok: false,
+          result: {
+            resultado: "no_encontrada",
+            intentos_restantes: r.result.intentos_restantes,
+          },
+        }
       : r;
   }
 
@@ -169,22 +199,74 @@ export async function checkGuideForDropshipper(
     !storeMatches(input.tienda, senders)
   )
     return fail();
+  return {
+    ok: true,
+    row: {
+      guideNumber: row.guideNumber,
+      carrier: row.carrier,
+      manifestDay: row.manifestDay,
+      codes: row.codes,
+      batch: {
+        source: row.batch.source,
+        fileUrls: row.batch.fileUrls,
+        lot: row.batch.lot,
+      },
+    },
+  };
+}
 
-  const carrier = TRACKING.find((t) => t.match.test(row.carrier));
+export function trackingFor(carrier: string): {
+  name: string;
+  url: string | null;
+} {
+  const t = TRACKING.find((x) => x.match.test(carrier));
+  return { name: t?.name ?? carrier, url: t?.url ?? null };
+}
+
+// Estado de la cancelación pedida por el chat (si hay), en palabras para la IA.
+export const MICHELLE_CANCEL_STATUS_TEXT: Record<string, string> = {
+  POR_APROBAR:
+    "cancelación pedida fuera de horario: el equipo está revisando si todavía se puede",
+  POR_RETENER:
+    "cancelación aceptada: el equipo la está buscando para retenerla",
+  RETENIDA: "retenida: no salió (hay foto de evidencia)",
+  NO_RETENIDA: "no se pudo retener: ya había salido o no se encontró",
+  RECHAZADA: "no se pudo cancelar: ya estaba en despacho",
+};
+
+export async function checkGuideForDropshipper(
+  input: { guia: string; tienda: string; cliente: string },
+  chatId: string,
+  who: { visitorId: string; leadId: string | null },
+): Promise<GuideCheckResult> {
+  const v = await verifyGuideOwner(input, chatId, who);
+  if (!v.ok) return v.result;
+  const row = v.row;
+  const carrier = trackingFor(row.carrier);
   const cancelled = await prisma.cancelledGuideReport.findFirst({
     where: { guideNumber: { equals: row.guideNumber, mode: "insensitive" } },
-    select: { retainedAt: true },
+    select: { retainedAt: true, michelleStatus: true },
   });
   const lot = row.batch.lot;
   return {
     resultado: "verificada",
-    estado: cancelled
-      ? "retenida_cancelada"
-      : !lot || lot.status === "DRAFT"
-        ? "en_preparacion"
-        : "despachada",
-    transportadora: carrier?.name ?? row.carrier,
+    estado:
+      cancelled &&
+      cancelled.michelleStatus !== "NO_RETENIDA" &&
+      cancelled.michelleStatus !== "RECHAZADA"
+        ? "retenida_cancelada"
+        : !lot || lot.status === "DRAFT"
+          ? "en_preparacion"
+          : "despachada",
+    transportadora: carrier.name,
     fecha_despacho: row.manifestDay ?? lot?.day ?? null,
-    enlace_rastreo: carrier?.url ?? null,
+    enlace_rastreo: carrier.url,
+    ...(cancelled?.michelleStatus
+      ? {
+          cancelacion:
+            MICHELLE_CANCEL_STATUS_TEXT[cancelled.michelleStatus] ??
+            cancelled.michelleStatus,
+        }
+      : {}),
   };
 }

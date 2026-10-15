@@ -30,6 +30,7 @@ import {
 } from "@/lib/guards";
 import { canBrandNewIds } from "@/lib/newIdBranding";
 import { getWarrantyDispatchRole } from "@/lib/warrantyDispatch";
+import { getMichelleCancelRole } from "@/lib/michelleCancellations";
 import { ensurePrivateBucket, privateFileUrl, PRIVATE_BUCKET, PRIVATE_FOLDERS } from "@/lib/privateFiles";
 import { PERSONAL_PRIVATE_FOLDERS } from "@/lib/privateFileAccess";
 
@@ -175,6 +176,10 @@ export async function POST(req: NextRequest) {
   // Garantías por despachar (2026-10-14): Michelle y Yair suben la guía.
   if (!allowed && session?.user.role === "employee" && folder === "warranty-dispatch-guides") {
     allowed = !!(await getWarrantyDispatchRole())?.canUpload;
+  }
+  // Guías canceladas por el chat de Michelle (2026-10-15): foto en vivo al retenerla.
+  if (!allowed && session?.user.role === "employee" && folder === "cancelled-guide-photos") {
+    allowed = !!(await getMichelleCancelRole())?.canRetain;
   }
   if (!allowed && session?.user.role === "employee" && folder === "external-sale-invoices") {
     allowed = await canInvoiceExternalSale();

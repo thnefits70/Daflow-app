@@ -7500,7 +7500,21 @@ model CancelledGuideReport {
   retainedById String?
   retainedBy   User?     @relation("CancelledGuideRetainedBy", fields: [retainedById], references: [id], onDelete: SetNull)
 
+  // Cancelación pedida por el dropshipper en el chat de Michelle (provedix.com,
+  // pedido del usuario 2026-10-15; reglas de Bryan y Daniel en
+  // michelleCancellations.ts). michelleStatus: POR_APROBAR (fuera de horario,
+  // decide Daniel) → POR_RETENER (Joao) → RETENIDA (con foto en vivo) o
+  // NO_RETENIDA; RECHAZADA = Daniel dijo que no.
+  michelleChatId      String?
+  michelleStatus      String?
+  michelleOutOfHours  Boolean   @default(false)
+  michelleNote        String?
+  michelleDecidedAt   DateTime?
+  michelleDecidedById String?
+  retainedPhotoUrl    String?
+
   @@index([createdAt])
+  @@index([michelleStatus])
   @@index([batchCode])
   @@index([batchManagedAt])
   @@index([itemsAssignedAt])

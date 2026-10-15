@@ -38,10 +38,15 @@ function actionsOf(t: string): { kind: string; code: string }[] {
   }
   return out.slice(0, 6);
 }
+// Foto de evidencia de una guía retenida (la escribe el equipo, 2026-10-15).
+const PHOTO_RE = /\[\[FOTO:([a-z0-9]{10,40})\]\]/gi;
+const photoIdsOf = (t: string) =>
+  [...t.matchAll(PHOTO_RE)].map((m) => m[1]).slice(0, 2);
 const cleanReply = (t: string) =>
   t
     .replace(/\[\[(ASESORA|BLOQUEAR|SOSPECHA)\]\]/g, "")
     .replace(ACTION_RE, "")
+    .replace(PHOTO_RE, "")
     // marca a medio llegar mientras se escribe la respuesta
     .replace(/\[(\[[A-Z]*(:\d*)?\]?)?$/, "")
     .trim();
@@ -129,11 +134,16 @@ export function PvxChat({
     "Por seguridad, esta conversación quedó cerrada 🔒",
   );
   const listRef = useRef<HTMLDivElement>(null);
+  // Última vez que se trajo la conversación: al volver a abrir el chat se
+  // actualiza (así ve la respuesta del equipo sobre su guía, 2026-10-15).
+  const lastLoadRef = useRef(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Al abrir por primera vez: retoma la conversación guardada.
+  // Al abrir: retoma la conversación guardada (y la actualiza si pasó más de 1 minuto).
   useEffect(() => {
-    if (!open || loaded) return;
+    if (!open || busy || (loaded && Date.now() - lastLoadRef.current < 60_000))
+      return;
+    lastLoadRef.current = Date.now();
     const id = readChatId();
     fetch(`/api/pvx/chat${id ? `?chatId=${encodeURIComponent(id)}` : ""}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -148,7 +158,7 @@ export function PvxChat({
       })
       .catch(() => null)
       .finally(() => setLoaded(true));
-  }, [open, loaded]);
+  }, [open, loaded, busy]);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
@@ -223,6 +233,8 @@ export function PvxChat({
       } catch {
         setError("Se perdió la conexión. Intenta de nuevo.");
       } finally {
+        // Lo recién conversado ya está en pantalla: no volver a traerlo enseguida.
+        lastLoadRef.current = Date.now();
         setBusy(false);
         inputRef.current?.focus();
       }
@@ -356,6 +368,23 @@ export function PvxChat({
                             Michelle por WhatsApp
                           </a>
                         )}
+                        {photoIdsOf(m.content).map((pid) => (
+                          <a
+                            key={pid}
+                            href={`/api/pvx/chat/photo/${pid}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-2.5 block overflow-hidden rounded-xl border border-[var(--pvx-paper-3)]"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={`/api/pvx/chat/photo/${pid}`}
+                              alt="Foto de evidencia de tu guía retenida"
+                              className="max-h-72 w-full object-cover"
+                              loading="lazy"
+                            />
+                          </a>
+                        ))}
                         {actionsOf(m.content).length > 0 && (
                           <div className="mt-2.5 flex flex-wrap gap-1.5">
                             {actionsOf(m.content).map((a) => (

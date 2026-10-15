@@ -12,8 +12,9 @@ import { CancelledGuidesPanel } from "@/components/cancelled-guides/CancelledGui
 import { FulfillmentRequestPanel } from "./FulfillmentRequestPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { WarrantyDispatchPanel } from "./WarrantyDispatchPanel";
+import { MichelleCancellationsPanel } from "./MichelleCancellationsPanel";
 
-type Tab = "deterioro" | "seguimiento" | "proveedor" | "guias" | "garantias" | "solicitud" | "historial";
+type Tab = "deterioro" | "seguimiento" | "proveedor" | "guias" | "garantias" | "michelle" | "solicitud" | "historial";
 
 export function MerchandiseOutflowPanel({
   canCapture,
@@ -145,6 +146,7 @@ export function MerchandiseOutflowPanel({
     // Avisos de cortes (Yair envió / faltaron productos) llegan con otab=solicitud.
     if (t === "solicitud" && (canSubmitFulfillmentRequest || canViewFulfillmentRequests)) return t;
     if (t === "garantias" && canSeeWarrantyDispatch) return t;
+    if (t === "michelle" && canSeeWarrantyDispatch) return t;
     return defaultTab;
   });
 
@@ -176,6 +178,8 @@ export function MerchandiseOutflowPanel({
     ...(canSeeProveedorTab ? [{ id: "proveedor" as const, label: "Mercadería devuelta al proveedor" }] : []),
     ...(canSubmitCancelledGuide || canManageCancelledGuideBatches || canConfirmCancelledGuideFulfillmentRemoval || canAssignCancelledGuideItems || canAct ? [{ id: "guias" as const, label: "Guías canceladas" }] : []),
     ...(canSeeWarrantyDispatch ? [{ id: "garantias" as const, label: "Garantías" }] : []),
+    // Guías que el dropshipper canceló por el chat de Michelle (2026-10-15): mismas personas que Garantías.
+    ...(canSeeWarrantyDispatch ? [{ id: "michelle" as const, label: "Canceladas por chat" }] : []),
     // Confirmado 2026-09-23: ya no existe "Dar de baja en Just" — cada
     // salida se descuenta sola de INVESTOCK en el momento en que se envía.
     ...(canView ? [{ id: "historial" as const, label: "Historial" }] : []),
@@ -267,6 +271,14 @@ export function MerchandiseOutflowPanel({
             Michelle y Yair suben aquí la guía de cada garantía ya autorizada, con un comentario de qué se envía y qué debe verse en el video. Joao marca el recuadro de la derecha cuando la toma y saca la guía físicamente; luego Daniel o Allan revisan y pulsan &quot;Correcto&quot;. Esta pantalla no mueve stock: eso sigue saliendo del corte.
           </TabGuide>
           <WarrantyDispatchPanel />
+        </>
+      )}
+      {tab === "michelle" && canSeeWarrantyDispatch && (
+        <>
+          <TabGuide storageKey="merchoutflow-michelle">
+            Aquí llegan las guías que un dropshipper canceló y pidió retener por el chat de Michelle en provedix.com. Joao la busca, la retiene y pulsa &quot;Retenida: tomar foto&quot; (la foto se toma en ese momento). Con eso la mercadería vuelve sola al stock y a Daniel y Allan les llega el aviso. Las pedidas fuera de horario (Veloces después de las 9:30, las demás después de las 11:00, o en fin de semana) primero las decide Daniel.
+          </TabGuide>
+          <MichelleCancellationsPanel />
         </>
       )}
       {tab === "solicitud" && (canSubmitFulfillmentRequest || canViewFulfillmentRequests) && (
