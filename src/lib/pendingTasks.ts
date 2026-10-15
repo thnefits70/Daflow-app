@@ -41,7 +41,7 @@ import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
 import { getLeaderTeamTaskPendingItems, getMyTeamTaskPendingItem } from "@/lib/teamTasks";
 import { getProvedixSuspiciousChatsPendingItem } from "@/lib/provedixSuspicion";
 import { getMichelleCancelPendingItems } from "@/lib/michelleCancellations";
-import { getIdDeadlinePendingItem, getReleaseDeadlineItems, timeLeftText } from "@/lib/handoffLocks";
+import { getDropiOutagePendingItem, getIdDeadlinePendingItem, getPendingIdExtensions, getReleaseDeadlineItems, timeLeftText } from "@/lib/handoffLocks";
 
 import { formatPurchaseRequestCode } from "@/lib/purchaseCode";
 
@@ -565,6 +565,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_brandear: "Nuevos IDs por brandear",
   analisis_mercado_sin_id: "Productos de Compras sin ID de Dropi",
   analisis_mercado_id_plazo: "ID madre de Dropi (6 h desde el pago)",
+  dropi_caido: "Dropi marcado como caído",
+  dropi_mas_tiempo: "Más tiempo por Dropi (lo decide el admin)",
   analisis_mercado_subir_rocket: "Subir a Rocket (Solo Rocket por ahora)",
   analisis_mercado_rocket_atrasado: "SKU de Rocket atrasado (más de 24 h)",
   analisis_mercado_pasar_publico: "Pasar a público en Dropi",
@@ -1525,7 +1527,7 @@ async function getMarketProductKardexReleasePendingItem(href: string): Promise<P
     type: "analisis_mercado_liberar_kardex",
     icon: "📦",
     label: "Liberar al Kardex — mercadería en bodega sin INVESTOCK",
-    meta: `${rows.length} producto${rows.length === 1 ? "" : "s"} · ${units} un. · ${timeLeftText(rows[0].deadline)}`,
+    meta: `${rows.length} producto${rows.length === 1 ? "" : "s"} · ${units} un. · ${timeLeftText(rows[0])}`,
     overdue,
     href,
   };
@@ -4029,6 +4031,22 @@ async function getKardexDelayAdminItems(deptIds: Map<string, string>): Promise<P
       href: mktDept ? `/admin/dept/${mktDept.id}?tab=analisis-mercado&ptab=trazabilidad` : "/admin",
     });
   }
+  // Pedido del usuario 2026-10-15 (ver handoffLocks.ts): pedidos de más
+  // tiempo por Dropi que decide el admin, y Dropi marcado como caído.
+  const mktHref = mktDept ? `/admin/dept/${mktDept.id}?tab=analisis-mercado` : "/admin";
+  const extensions = await getPendingIdExtensions();
+  if (extensions.length > 0) {
+    items.unshift({
+      type: "dropi_mas_tiempo",
+      icon: "⏳",
+      label: "La asesora B2B pide más tiempo: Dropi no funciona",
+      meta: `${extensions.length === 1 ? extensions[0].name : `${extensions.length} productos`} · con captura · da 2 h más o no`,
+      overdue: true,
+      href: mktHref,
+    });
+  }
+  const outageItem = await getDropiOutagePendingItem(mktHref);
+  if (outageItem) items.unshift(outageItem);
   return items;
 }
 
@@ -4519,6 +4537,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (rejectedPurchaseProposalItem) items.push(rejectedPurchaseProposalItem);
     const kardexReleaseItem = await getMarketProductKardexReleasePendingItem("/area/workspace?tab=analisis-mercado&ptab=trazabilidad");
     if (kardexReleaseItem) items.unshift(kardexReleaseItem);
+    // 2026-10-15: recordar a Bryan reactivar si marcó Dropi como caído.
+    const dropiOutageItem = await getDropiOutagePendingItem("/area/workspace?tab=analisis-mercado");
+    if (dropiOutageItem) items.unshift(dropiOutageItem);
     const rocketOverdueItem = await getRocketSkuOverduePendingItem("/area/workspace?tab=analisis-mercado&ptab=trazabilidad");
     if (rocketOverdueItem) items.unshift(rocketOverdueItem);
     const externalSaleReviewItem = await getExternalSaleReviewPendingItem("/area/workspace?tab=ventas-externas&etab=revision");

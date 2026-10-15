@@ -27,6 +27,7 @@ import {
   canEditPayrollRoles,
   canProposeMarketProduct,
   canManageOutflowPurchaseGestion,
+  canPublishMarketProduct,
 } from "@/lib/guards";
 import { canBrandNewIds } from "@/lib/newIdBranding";
 import { getWarrantyDispatchRole } from "@/lib/warrantyDispatch";
@@ -240,6 +241,10 @@ export async function POST(req: NextRequest) {
   // guardar en /api/team-tasks; aquí basta estar logueado.
   if (!allowed && session?.user.role === "employee" && folder === "team-task-files") {
     allowed = true;
+  }
+  // Captura de "Dropi no funciona" de la asesora B2B (2026-10-15, ver handoffLocks.ts).
+  if (!allowed && session?.user.role === "employee" && folder === "dropi-down-proofs") {
+    allowed = await canPublishMarketProduct();
   }
   if (!allowed) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
 

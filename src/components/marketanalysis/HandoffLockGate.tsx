@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { HandoffLock } from "@/lib/handoffLocks";
 import { shareHandoffLock, usePublishTabOpen, onHandoffLockRefresh } from "./handoffLockSignal";
+import { DropiDownRequest } from "./DropiDownRequest";
 
 // Pedido del usuario 2026-10-15 — ver handoffLocks.ts. Capa encima de la
 // pantalla (lo que la persona estaba haciendo queda debajo, no se pierde):
@@ -93,8 +94,9 @@ export function HandoffLockGate() {
             <div key={i.proposalId} className={`border rounded-md p-3 text-[12.5px] ${i.overdue ? "border-red/50 bg-red/5" : "border-rule"}`}>
               <div className="font-semibold text-ink">{i.name}</div>
               <div className="text-steel text-[11.5px]">
-                {i.units} un. · {i.overdue ? "venció" : "vence"} {fmt(i.deadline)}
+                {i.units} un. · {i.paused ? "en pausa (Dropi caído)" : `${i.overdue ? "venció" : "vence"} ${fmt(i.deadline)}`}
               </div>
+              {isId && <DropiDownRequest item={i} onDone={load} />}
               {!isId && (
               <div className="flex items-center gap-2 mt-2">
                 <button

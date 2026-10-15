@@ -666,10 +666,10 @@ model User {
   improvementPlanReviewsCreated    ImprovementPlanReview[] @relation("ImprovementPlanReviewCreatedBy")
   stockLabelPrints                 StockLabelPrint[]       @relation("StockLabelPrintBy")
 
-  teamTasksCreated        TeamTask[]           @relation("TeamTaskCreatedBy")
-  teamTaskAssignments     TeamTaskAssignment[] @relation("TeamTaskAssignee")
+  teamTasksCreated            TeamTask[]           @relation("TeamTaskCreatedBy")
+  teamTaskAssignments         TeamTaskAssignment[] @relation("TeamTaskAssignee")
   teamTaskAssignmentsReviewed TeamTaskAssignment[] @relation("TeamTaskReviewedBy")
-  teamTaskEvents          TeamTaskEvent[]      @relation("TeamTaskEventActor")
+  teamTaskEvents              TeamTaskEvent[]      @relation("TeamTaskEventActor")
 
   @@index([deptId])
   @@index([leadsDeptId])
@@ -2488,12 +2488,12 @@ model MarketProductProposal {
   // para que los cortes lo reconozcan) y el SKU (texto, solo referencia).
   // Ninguno reemplaza el ID madre del Kardex (justCode). Sin datos a las
   // 24 h de aprobado, le sale a Bryan como atrasado.
-  rocketOnly      Boolean   @default(false)
-  rocketProductId String?
-  rocketSku       String?
-  rocketSkuAt   DateTime?
-  rocketSkuById String?
-  rocketSkuBy   User?     @relation("MarketProductProposalRocketSkuBy", fields: [rocketSkuById], references: [id], onDelete: SetNull)
+  rocketOnly          Boolean   @default(false)
+  rocketProductId     String?
+  rocketSku           String?
+  rocketSkuAt         DateTime?
+  rocketSkuById       String?
+  rocketSkuBy         User?     @relation("MarketProductProposalRocketSkuBy", fields: [rocketSkuById], references: [id], onDelete: SetNull)
   // Pasar a público en Dropi: lo decide Bryan (publicRequested*), lo ejecuta
   // la asesora B2B en Dropi y lo confirma acá (madePublic*, isPublic=true).
   publicRequestedAt   DateTime?
@@ -2542,9 +2542,47 @@ model MarketProductProposal {
   priceChanges           MarketProductPriceChange[]
   purchaseRequests       PurchaseRequest[]
   unfoundWinningProducts UnfoundWinningProduct[]
+  handoffExtensions      HandoffExtension[]
 
   @@index([status])
   @@index([proposedById])
+}
+
+// Pedido del usuario 2026-10-15 (ver handoffLocks.ts): prórroga del plazo
+// del ID madre cuando Dropi no funciona. La asesora B2B pide la primera con
+// captura y se aplica sola (2 h laborables, una vez por producto); las
+// siguientes las pide igual pero las da el admin (grantedAt null = esperando).
+model HandoffExtension {
+  id            String                @id @default(cuid())
+  proposalId    String
+  proposal      MarketProductProposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  hours         Int
+  reason        String
+  photoUrl      String?
+  requestedById String?
+  requestedAt   DateTime              @default(now())
+  grantedAt     DateTime?
+  // null con grantedAt puesto = la dio el admin (o se aplicó sola, ver auto).
+  grantedById   String?
+  auto          Boolean               @default(false)
+
+  @@index([proposalId])
+  @@index([grantedAt])
+}
+
+// Pedido del usuario 2026-10-15: Bryan o el admin marcan "Dropi está caído";
+// mientras endedAt sea null los relojes del ID madre y de liberar al Kardex
+// no corren (ver handoffLocks.ts). startedById/endedById null = admin.
+model DropiOutage {
+  id          String    @id @default(cuid())
+  startedAt   DateTime  @default(now())
+  startedById String?
+  note        String?
+  endedAt     DateTime?
+  endedById   String?
+  remindedAt  DateTime?
+
+  @@index([endedAt])
 }
 
 // Confirmado 2026-09-22, pedido de Jariel (vía el usuario): "productos
@@ -8045,16 +8083,16 @@ model ProductVariantEdit {
 // equipo de Inventario, con un bloque de horario entre cortes. La persona ve
 // la tarea en su Inicio, la empieza (corre su tiempo) y avisa cuando termina.
 model StockCountAssignment {
-  id             String     @id @default(cuid())
+  id             String            @id @default(cuid())
   countId        String
-  count          StockCount @relation(fields: [countId], references: [id], onDelete: Cascade)
+  count          StockCount        @relation(fields: [countId], references: [id], onDelete: Cascade)
   // Área A–G, "NONE" (productos sin área) o "RECOUNT" (lo que el admin
   // mandó a recontar; esos productos van en catalogItemIds).
   area           String
-  catalogItemIds String[]   @default([])
+  catalogItemIds String[]          @default([])
   assigneeId     String
   assignedById   String?
-  assignedAt     DateTime   @default(now())
+  assignedAt     DateTime          @default(now())
   // Fin del bloque de horario que eligió Daniel (meta para terminar).
   dueAt          DateTime
   startedAt      DateTime?
@@ -8095,25 +8133,25 @@ enum LooseInvoiceReason {
 // producto específico) que igual sirven de sustento ante el SRI. No tocan el
 // invoiceStatus de ninguna PurchaseRequest — viven aparte.
 model LooseInvoice {
-  id            String             @id @default(cuid())
-  supplierId    String
-  supplier      Supplier           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  invoiceNumber String?
-  invoiceDate   DateTime
-  amount        Float
-  docUrl        String
-  reason        LooseInvoiceReason
+  id             String             @id @default(cuid())
+  supplierId     String
+  supplier       Supplier           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  invoiceNumber  String?
+  invoiceDate    DateTime
+  amount         Float
+  docUrl         String
+  reason         LooseInvoiceReason
   // Operación anterior a la que corresponde (groupId de PurchaseRequest) —
   // solo para PREVIOUS_PURCHASE, opcional.
   relatedGroupId String?
-  note          String?            @db.Text
-  createdById   String?
-  createdBy     User?              @relation("LooseInvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt     DateTime           @default(now())
+  note           String?            @db.Text
+  createdById    String?
+  createdBy      User?              @relation("LooseInvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime           @default(now())
   // Quitar = ocultar, con rastro de quién y cuándo.
-  deletedAt     DateTime?
-  deletedById   String?
-  deletedBy     User?              @relation("LooseInvoiceDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedAt      DateTime?
+  deletedById    String?
+  deletedBy      User?              @relation("LooseInvoiceDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   @@index([supplierId])
   @@index([invoiceDate])
@@ -8135,20 +8173,20 @@ model ProvedixSnapshot {
 // dropshippers". Por ahora NO se contacta a nadie (decisión del usuario);
 // solo los ve el admin en la sección Provedix. Un registro por WhatsApp.
 model ProvedixLead {
-  id          String          @id @default(cuid())
-  name        String
-  whatsapp    String          @unique // normalizado: 09XXXXXXXX o +código
-  consentAt   DateTime // aceptó recibir productos ganadores por WhatsApp
+  id            String          @id @default(cuid())
+  name          String
+  whatsapp      String          @unique // normalizado: 09XXXXXXXX o +código
+  consentAt     DateTime // aceptó recibir productos ganadores por WhatsApp
   // Registro ampliado (pedido del usuario 2026-10-14): tienda y plataforma
   // obligatorias en registros nuevos (null en los viejos); correo opcional.
   storeName     String?
   platform      String? // "DROPI" | "ROCKET" | "AMBAS"
   platformEmail String? // correo con el que vende en Dropi/Rocket
-  createdAt   DateTime        @default(now())
-  lastSeenAt  DateTime        @default(now())
-  visits      Int             @default(1)
-  events      ProvedixEvent[]
-  chats       ProvedixChat[]
+  createdAt     DateTime        @default(now())
+  lastSeenAt    DateTime        @default(now())
+  visits        Int             @default(1)
+  events        ProvedixEvent[]
+  chats         ProvedixChat[]
 
   @@index([lastSeenAt])
 }
@@ -8224,7 +8262,7 @@ enum TeamTaskEventKind {
 }
 
 model TeamTask {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   title       String
   description String?
   // Solo la fecha (día de Ecuador), sin hora.
@@ -8258,7 +8296,7 @@ model TeamTaskAssignment {
 
   status TeamTaskStatus @default(POR_HACER)
 
-  startedAt DateTime?
+  startedAt     DateTime?
   // Lo último que dejó el colaborador al marcarla "Hecha" (el historial
   // completo queda en TeamTaskEvent).
   doneAt        DateTime?
@@ -8308,7 +8346,7 @@ model TeamTaskEvent {
 // guía físicamente; Daniel o Allan revisan que esté correcto. No mueve stock:
 // el descuento sigue saliendo del corte.
 model WarrantyDispatchGuide {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   guideNumber String
   fileUrl     String
   fileName    String?

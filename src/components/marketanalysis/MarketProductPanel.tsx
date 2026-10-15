@@ -20,6 +20,8 @@ import { DropiPriceMissingQueue } from "./DropiPriceMissingQueue";
 import { computePreviewPrice, computeCompetitorComparison } from "./PriceCalculator";
 import { AdvisorComboRegister } from "./AdvisorComboRegister";
 import { useSharedHandoffLock, setPublishTabOpen, requestHandoffLockRefresh } from "./handoffLockSignal";
+import { DropiDownRequest } from "./DropiDownRequest";
+import { DropiOutageBar } from "./DropiOutageBar";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -206,6 +208,8 @@ export function MarketProductPanel({
 
   return (
     <div>
+      {/* 2026-10-15: Bryan y el admin marcan Dropi caído (ver handoffLocks.ts). */}
+      <DropiOutageBar />
       <div className="flex gap-5.5 border-b border-rule mb-5.5 overflow-x-auto">
         {shownTabs.map((t) => (
           <button
@@ -244,6 +248,12 @@ export function MarketProductPanel({
               <div className="font-bold text-red mb-1">DAFLOW está bloqueado hasta que pongas el ID madre de Dropi</div>
               Pasaron 6 horas laborables desde que se pagó la compra de:{" "}
               <b>{handoffLock.items.map((i) => i.name).join(", ")}</b>. Créalos en Dropi y confirma su ID abajo. Apenas los pongas, vuelves a usar DAFLOW con normalidad.
+              {/* 2026-10-15: si Dropi no funciona, pedir más tiempo con captura (ver handoffLocks.ts). */}
+              {handoffLock.items.map((i) => (
+                <div key={i.proposalId} className="mt-2">
+                  <span className="font-semibold">{i.name}:</span> <DropiDownRequest item={i} onDone={requestHandoffLockRefresh} />
+                </div>
+              ))}
             </div>
           )}
           <DropiPriceChangesQueue />
