@@ -8005,6 +8005,22 @@ model ProductVariantAlias {
   @@index([catalogItemId])
 }
 
+// Pedido del usuario 2026-10-15 (aprobado por Daniel): todo el equipo de
+// INVESTOCK puede agregar, cambiar el nombre, juntar o quitar tallas/colores
+// de un producto. Cada cambio queda aquí: quién, cuándo y qué.
+model ProductVariantEdit {
+  id            String   @id @default(cuid())
+  catalogItemId String
+  action        String // ADD | RENAME | MERGE | REMOVE
+  detail        String
+  userId        String?
+  userName      String?
+  createdAt     DateTime @default(now())
+
+  @@index([catalogItemId, createdAt])
+  @@index([createdAt])
+}
+
 // Pedido del usuario 2026-10-05: Daniel asigna cada área a UNA persona del
 // equipo de Inventario, con un bloque de horario entre cortes. La persona ve
 // la tarea en su Inicio, la empieza (corre su tiempo) y avisa cuando termina.

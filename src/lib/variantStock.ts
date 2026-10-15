@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getVariantResolver } from "@/lib/variantSales";
+import { resolveCountsByAlias } from "@/lib/variantEdit";
 
 // Stock por variante (pedido del usuario 2026-10-06). Es un DESGLOSE del
 // Kardex, que sigue siendo el stock oficial del producto (costos, total):
@@ -56,9 +57,10 @@ export async function applyReceiptToVariants(receiptId: string): Promise<void> {
     where: { id: receiptId },
     select: { variantCounts: true, request: { select: { catalogItemId: true } } },
   });
-  const counts = Array.isArray(receipt?.variantCounts) ? (receipt.variantCounts as VariantCount[]) : [];
-  if (!receipt || counts.length === 0) return;
+  const raw = Array.isArray(receipt?.variantCounts) ? (receipt.variantCounts as VariantCount[]) : [];
+  if (!receipt || raw.length === 0) return;
   const catalogItemId = receipt.request.catalogItemId;
+  const counts = await resolveCountsByAlias(catalogItemId, raw);
   const existing = await prisma.productVariant.findMany({ where: { catalogItemId }, select: { id: true, name: true } });
   const rows: { variantId: string; quantity: number; reason: string; refId: string }[] = [];
   for (const c of counts) {
@@ -118,7 +120,11 @@ export async function applyLotSalesToVariants(lotId: string, dispatchedByItem: M
     pickLeft.set(
       itemId,
       (pickedBy.get(itemId) ?? [])
-        .map((c) => [official.find((o) => o.catalogItemId === itemId && o.name.toLowerCase() === c.name.toLowerCase())?.id, c.qty] as [string | undefined, number])
+        .map((c) => {
+          // El color que el equipo sacó, aunque esa talla luego se haya juntado o renombrado.
+          const name = (resolve(itemId, c.name) ?? c.name).toLowerCase();
+          return [official.find((o) => o.catalogItemId === itemId && o.name.toLowerCase() === name)?.id, c.qty] as [string | undefined, number];
+        })
         .filter((x): x is [string, number] => !!x[0]),
     );
     for (const [variantId, qty] of fromGuides) {
@@ -274,7 +280,7 @@ export async function applyReturnToVariants(itemId: string, catalogItemId: strin
   const existing = await prisma.productVariant.findMany({ where: { catalogItemId }, select: { id: true, name: true } });
   const rows: { variantId: string; quantity: number; reason: string; refId: string }[] = [];
   let left = goodQty;
-  for (const c of sumUp(counts)) {
+  for (const c of sumUp(await resolveCountsByAlias(catalogItemId, counts))) {
     const qty = Math.min(c.qty, left);
     if (qty <= 0) break;
     rows.push({ variantId: await findOrCreateVariant(catalogItemId, c.name, existing), quantity: qty, reason: "RETURN", refId: itemId });

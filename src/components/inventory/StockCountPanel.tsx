@@ -7,6 +7,7 @@ import type { AssignmentBoard, AssignmentView } from "@/lib/stockCountAssignment
 import { WAREHOUSE_AREAS, areaLabel } from "@/lib/warehouseAreas";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { BIG_DIFF_UNITS } from "@/lib/stockCountRules";
+import { OPEN_VARIANT_EDITOR, VARIANTS_CHANGED } from "@/components/inventory/VariantListEditor";
 
 type Data = { count: CountView | null; fullCompleted: boolean; weeklyArea: string | null; isLead: boolean; board: AssignmentBoard | null };
 
@@ -141,6 +142,11 @@ export function StockCountPanel() {
   useEffect(() => {
     const t = setInterval(load, 60_000);
     return () => clearInterval(t);
+  }, []);
+  // Alguien juntó o renombró tallas: los nombres sugeridos cambian.
+  useEffect(() => {
+    window.addEventListener(VARIANTS_CHANGED, load);
+    return () => window.removeEventListener(VARIANTS_CHANGED, load);
   }, []);
 
   const count = data?.count ?? null;
@@ -404,6 +410,15 @@ export function StockCountPanel() {
                         onClick={() => setVarDrafts((d) => ({ ...d, [p.id]: [...p.variantNames.map((name) => ({ name, qty: "", added: false })), ...(p.variantNames.length === 0 ? [{ name: "", qty: "", added: true }] : [])] }))}
                       >
                         Este producto tiene colores o tallas
+                      </button>
+                    )}
+                    {p.variantNames.length > 0 && (
+                      <button
+                        type="button"
+                        className="ml-3 text-steel hover:text-teal text-[11.5px] underline cursor-pointer"
+                        onClick={() => window.dispatchEvent(new CustomEvent(OPEN_VARIANT_EDITOR, { detail: p.id }))}
+                      >
+                        Editar tallas/colores
                       </button>
                     )}
                   </div>

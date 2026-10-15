@@ -5,6 +5,7 @@ import { WAREHOUSE_AREAS } from "@/lib/warehouseAreas";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
 import { variantSuggestions } from "@/lib/variantSales";
 import { applyCountToVariants } from "@/lib/variantStock";
+import { resolveCountsByAlias } from "@/lib/variantEdit";
 import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId } from "@/lib/guards";
 import { isBigDifference } from "@/lib/stockCountRules";
@@ -457,8 +458,11 @@ async function saveCountedVariants(countId: string) {
   for (const l of lines) await saveLineVariants(l.catalogItemId, parseVariantCounts(l.variantCounts) ?? [], countId);
 }
 
-async function saveLineVariants(catalogItemId: string, counted: VariantCount[], countId: string) {
+async function saveLineVariants(catalogItemId: string, rawCounted: VariantCount[], countId: string) {
   const now = new Date();
+  // Tallas juntadas o renombradas después de contar (2026-10-15): el nombre
+  // viejo cae en la que quedó.
+  const counted = await resolveCountsByAlias(catalogItemId, rawCounted);
   const existing = await prisma.productVariant.findMany({ where: { catalogItemId }, select: { id: true, name: true } });
   await prisma.$transaction([
     ...counted.map((v) => {
