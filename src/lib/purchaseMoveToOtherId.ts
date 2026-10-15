@@ -95,7 +95,7 @@ export async function moveRequestToOtherId(params: {
       catalogItemId: true,
       supplierId: true,
       quantity: true,
-      totalCost: true,
+      unitCost: true,
       shippingIncluded: true,
       shippingCostTotal: true,
       catalogItem: { select: { name: true, justCode: true, bodega: true } },
@@ -151,8 +151,9 @@ export async function moveRequestToOtherId(params: {
             platform: "DROPI",
             noCompetitorData: true,
             discoverySourceNote: "Modelo nuevo que llegó en una compra",
+            // batchCost es el costo POR UNIDAD (ver schema MarketProductSupplierPrice).
             calculatedSalePrice: computeMarketProductSalePrice({
-              batchCost: request.totalCost,
+              batchCost: request.unitCost,
               batchUnits: request.quantity,
               freightCost,
               insuranceRatePercent: 6,
@@ -169,7 +170,7 @@ export async function moveRequestToOtherId(params: {
             // Ya está comprado: nunca aparece en "listo para comprar".
             readyToBuyAt: new Date(),
             readyToBuyById: params.actorId,
-            supplierPrices: { create: [{ supplierId: request.supplierId, batchCost: request.totalCost, batchUnits: request.quantity, freightCost, isPrimary: true }] },
+            supplierPrices: { create: [{ supplierId: request.supplierId, batchCost: request.unitCost, batchUnits: request.quantity, freightCost, isPrimary: true }] },
           },
           select: { id: true, code: true },
         });
