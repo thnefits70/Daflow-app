@@ -15,6 +15,7 @@ import { CountUp, GlassBar, RotatingCity, useMarqueePause } from "@/components/p
 import { PvxDemo } from "@/components/pvx/PvxDemo";
 import { PvxTour } from "@/components/pvx/PvxTour";
 import { PvxChat } from "@/components/pvx/PvxChat";
+import { PvxCalculator } from "@/components/pvx/PvxCalculator";
 import { IconFacebook, IconInstagram, IconTikTok } from "@/components/pvx/PvxIcons";
 import { IconArrow, IconBox, IconCheck, IconClock, IconCopy, IconFlame, IconImage, IconLock, IconSearch, IconSpark, IconTruck, IconWhatsApp } from "@/components/pvx/PvxIcons";
 
@@ -906,6 +907,8 @@ export function PvxCatalog({ cards, stats }: { cards: PublicCard[]; stats: Publi
         </div>
       </section>
 
+      {/* Calculadora de ganancia (2026-10-15): libre; datos reales del producto con registro. */}
+      <PvxCalculator cards={cards} registered={registered === true} onRegister={() => setOpen({ code: "", mode: "register" })} />
       <PvxResources />
       <Footer />
       {/* Guía: sale sola al registrado que no la vio (o con novedades), sin ventanas abiertas. */}

@@ -11,7 +11,7 @@ import { IconArrow, IconClose, IconSpark } from "@/components/pvx/PvxIcons";
 // CÓMO AGREGAR UNA NOVEDAD: sube TOUR_VERSION en 1, agrega el paso con
 // `since: <la nueva versión>` y pon `data-tour="<id>"` en el elemento.
 // Quien ya vio la guía verá solo los pasos nuevos (y el botón se ilumina).
-export const TOUR_VERSION = 2;
+export const TOUR_VERSION = 3;
 const SEEN_KEY = "pvx-tour-seen";
 
 type Step = { id: string; since: number; title: string; text: string };
@@ -27,6 +27,7 @@ const STEPS: Step[] = [
   { id: "cortes", since: 1, title: "Cortes en vivo", text: "Cuenta regresiva al próximo corte: tu pedido sale en menos de 3 horas." },
   { id: "recursos", since: 1, title: "Todo para vender", text: "Creativos gratis para tus anuncios, rastreo de guías y cómo pedir una garantía." },
   { id: "canales", since: 1, title: "Productos nuevos primero", text: "Únete a nuestros canales de WhatsApp para enterarte antes que nadie." },
+  { id: "calc", since: 3, title: "¿A cuánto lo vendo?", text: "Pon el precio en Dropi, tu flete y tu CPA, y te decimos el precio que te deja ganancia y cuánto puedes pagar de publicidad sin perder." },
   { id: "chat", since: 2, title: "Pregúntale a Michelle", text: "Nuestra asistente virtual te ayuda a elegir productos y resuelve tus dudas al instante. Y si tu caso necesita a una persona, ella misma te pasa con Michelle, del equipo, por WhatsApp." },
   { id: "help", since: 1, title: "Vuelve a ver esta guía", text: "Toca aquí cuando quieras. Cuando agreguemos mejoras, este botón se ilumina con las novedades." },
 ];

@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { ADVISORS } from "@/components/pvx/PvxContact";
+import { PVX_CALC_EVENT } from "@/components/pvx/PvxCalculator";
 import {
   IconArrow,
   IconClose,
@@ -22,7 +23,7 @@ const HANDOFF_MARK = "[[ASESORA]]";
 // [[BLOQUEAR]]: la IA cerró el chat por un intento de sacar información confidencial.
 const BLOCK_MARK = "[[BLOQUEAR]]";
 // Botones de producto (2026-10-14): [[DROPI:ID]] precio en Dropi, [[CREATIVOS:ID]], [[LANDING:ID]].
-const ACTION_RE = /\[\[(DROPI|CREATIVOS|LANDING):(\d{3,8})\]\]/g;
+const ACTION_RE = /\[\[(DROPI|CREATIVOS|LANDING|CALC):(\d{3,8})\]\]/g;
 const ACTION_LABEL: Record<string, string> = {
   DROPI: "Ver precio en Dropi",
   CREATIVOS: "Ver creativos",
@@ -387,18 +388,37 @@ export function PvxChat({
                         ))}
                         {actionsOf(m.content).length > 0 && (
                           <div className="mt-2.5 flex flex-wrap gap-1.5">
-                            {actionsOf(m.content).map((a) => (
-                              <a
-                                key={a.kind + a.code}
-                                href={`/api/pvx/go/${a.kind.toLowerCase()}/${a.code}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className={`pvx-press inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold ${a.kind === "DROPI" ? "bg-[var(--pvx-orange)] text-white hover:bg-[var(--pvx-orange-press)]" : "border border-[var(--pvx-paper-3)] bg-white hover:border-[var(--pvx-orange)]"}`}
-                              >
-                                {ACTION_LABEL[a.kind]} · {a.code}
-                                <IconExternal className="w-3.5 h-3.5" />
-                              </a>
-                            ))}
+                            {actionsOf(m.content).map((a) =>
+                              a.kind === "CALC" ? (
+                                // Abre la calculadora de la página con este producto (2026-10-15).
+                                <button
+                                  key={a.kind + a.code}
+                                  type="button"
+                                  onClick={() => {
+                                    setOpen(false);
+                                    window.dispatchEvent(
+                                      new CustomEvent(PVX_CALC_EVENT, {
+                                        detail: a.code,
+                                      }),
+                                    );
+                                  }}
+                                  className="pvx-press inline-flex items-center gap-1.5 rounded-full bg-[var(--pvx-ink)] px-3.5 py-2 text-[13px] font-bold text-white hover:bg-[#25282f] cursor-pointer"
+                                >
+                                  🧮 Calcular mi ganancia · {a.code}
+                                </button>
+                              ) : (
+                                <a
+                                  key={a.kind + a.code}
+                                  href={`/api/pvx/go/${a.kind.toLowerCase()}/${a.code}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className={`pvx-press inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold ${a.kind === "DROPI" ? "bg-[var(--pvx-orange)] text-white hover:bg-[var(--pvx-orange-press)]" : "border border-[var(--pvx-paper-3)] bg-white hover:border-[var(--pvx-orange)]"}`}
+                                >
+                                  {ACTION_LABEL[a.kind]} · {a.code}
+                                  <IconExternal className="w-3.5 h-3.5" />
+                                </a>
+                              ),
+                            )}
                           </div>
                         )}
                       </>
