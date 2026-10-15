@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, FileText, Trash2 } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { warrantyGuideNumberError } from "@/lib/warrantyGuideNumber";
 
 type Guide = {
   id: string;
@@ -212,7 +213,8 @@ function UploadForm({ onSent }: { onSent: () => void }) {
   // solo número + comentario; el archivo llega con el corte (ver cutFile).
   async function send() {
     setErr("");
-    if (guideNumber.trim().length < 3) return setErr("Escribe el número de guía.");
+    const guideErr = warrantyGuideNumberError(guideNumber);
+    if (guideErr) return setErr(guideErr);
     setSaving(true);
     const res = await fetch("/api/warranty-dispatch-guides", {
       method: "POST",

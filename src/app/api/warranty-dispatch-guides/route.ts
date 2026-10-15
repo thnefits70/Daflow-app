@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { warrantyGuideNumberError } from "@/lib/warrantyGuideNumber";
 import { getWarrantyDispatchRole, listWarrantyDispatchGuides, notifyHandlersNewGuide, userName } from "@/lib/warrantyDispatch";
 
 export async function GET() {
@@ -24,6 +25,8 @@ export async function POST(req: NextRequest) {
   const parsed = createSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Datos inválidos." }, { status: 400 });
 
+  const guideErr = warrantyGuideNumberError(parsed.data.guideNumber);
+  if (guideErr) return NextResponse.json({ error: guideErr }, { status: 400 });
   const guideNumber = parsed.data.guideNumber.toUpperCase().replace(/\s+/g, "");
   const open = await prisma.warrantyDispatchGuide.findFirst({ where: { guideNumber, verifiedAt: null }, select: { id: true } });
   if (open) return NextResponse.json({ error: "Esa guía ya está en la lista, pendiente de despachar." }, { status: 400 });
