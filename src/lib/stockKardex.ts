@@ -1,7 +1,7 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getInventoryLeadId } from "@/lib/guards";
-import { effectiveUnitCost } from "@/lib/purchases";
+import { PRICED_STATUSES, effectiveUnitCost } from "@/lib/purchases";
 import { getZeroCostCorrections } from "@/lib/sellingCost";
 import { applyReceiptToVariants } from "@/lib/variantStock";
 import type { MarketProductBodega, StockMovementType } from "@/generated/prisma/client";
@@ -387,6 +387,10 @@ export type CurrentStockRow = {
   // confirmó y que Bryan todavía no libera (catálogo sin justCode).
   notPurchasedYet: boolean;
   pendingDropiId: string | null;
+  // 2026-10-15: true cuando el costo nunca vino de una compra real en
+  // INVESTOCK (ninguna línea IN) — el admin lo puede corregir a mano
+  // (declareManualCost). Caso Fundas 40x52 declaradas a $725 c/u.
+  costCorrectable: boolean;
 };
 
 // Confirmado 2026-09-10 (pedido explícito del usuario): pantalla "Stock
@@ -455,6 +459,9 @@ export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
       select: { catalogItemId: true, balanceAfter: true, avgCostAfter: true, type: true },
     }),
   ]);
+  const withRealIn = new Set(
+    (await prisma.stockKardexEntry.findMany({ where: { type: "IN" }, distinct: ["catalogItemId"], select: { catalogItemId: true } })).map((e) => e.catalogItemId),
+  );
   const byItemId = new Map(latestPerItem.map((e) => [e.catalogItemId, e]));
   return items.map((i) => {
     const latest = byItemId.get(i.id);
@@ -470,6 +477,7 @@ export async function getAllCurrentStock(): Promise<CurrentStockRow[]> {
       costDeclaredManually: latest?.type === "COST_DECLARATION",
       notPurchasedYet: !latest && i._count.requests === 0,
       pendingDropiId: i.justCode ? null : i.marketProductProposal?.dropiProductId ?? null,
+      costCorrectable: !!latest && latest.avgCostAfter > 0 && !withRealIn.has(i.id),
     };
   });
 }
@@ -668,19 +676,51 @@ export async function reviewPhysicalCountAdjustment(params: { id: string; action
 // saldo real) para que quede clara la diferencia con una compra real en
 // cualquier auditoría futura. El día que entre la compra real de ese
 // producto, el Kardex sigue corriendo normal desde ahí.
+//
+// Ampliado 2026-10-15, pedido del usuario (caso Fundas 40x52 declaradas a
+// $725 c/u en vez de ~$0.08 → inventario del mes salió en $1.5 millones):
+// también se puede CORREGIR un costo que nunca vino de una compra real en
+// INVESTOCK (sin ninguna línea IN — solo declarado, sync de Just o
+// conteo). Un costo que ya salió de una compra real sigue intocable.
+// Y si el costo nuevo es más de 3 veces (o menos de un tercio) la última
+// compra real del producto (o el costo vigente si no hay compras), se
+// devuelve un aviso y solo se guarda si el admin lo confirma.
+export const UNUSUAL_COST_RATIO = 3;
+
+export class UnusualCostError extends Error {}
+
 export async function declareManualCost(params: {
   catalogItemId: string;
   declaredCost: number;
   // null cuando lo declara el admin — su sesión no es un User real (ver
   // auth.ts, id sintético "admin").
   declaredById: string | null;
+  confirmUnusual?: boolean;
 }): Promise<{ balanceAfter: number; avgCostAfter: number }> {
   if (params.declaredCost <= 0) {
     throw new Error("El costo declarado debe ser mayor a 0.");
   }
-  const current = await getCurrentStock(params.catalogItemId);
-  if (current.avgCost > 0) {
+  const [current, realIn, lastPurchase] = await Promise.all([
+    getCurrentStock(params.catalogItemId),
+    prisma.stockKardexEntry.findFirst({ where: { catalogItemId: params.catalogItemId, type: "IN" }, select: { id: true } }),
+    prisma.purchaseRequest.findFirst({
+      where: { catalogItemId: params.catalogItemId, status: { in: PRICED_STATUSES }, unitCost: { gt: 0 } },
+      orderBy: { createdAt: "desc" },
+      select: { unitCost: true, quantity: true, shippingIncluded: true, shippingCostTotal: true },
+    }),
+  ]);
+  if (current.avgCost > 0 && realIn) {
     throw new Error("Este producto ya tiene un costo real en INVESTOCK — no se puede reemplazar con un costo declarado a mano.");
+  }
+  if (!params.confirmUnusual) {
+    const ref = lastPurchase ? effectiveUnitCost(lastPurchase) : current.avgCost > 0 ? current.avgCost : null;
+    if (ref && (params.declaredCost > ref * UNUSUAL_COST_RATIO || params.declaredCost < ref / UNUSUAL_COST_RATIO)) {
+      const refLabel = lastPurchase ? "la última compra real" : "el costo actual";
+      const totalNote = current.balance > 0 ? ` Con ${current.balance} unidades en stock, el inventario valdría $${(current.balance * params.declaredCost).toFixed(2)} solo por este producto.` : "";
+      throw new UnusualCostError(
+        `Costo fuera de lo normal: $${params.declaredCost.toFixed(4)} por unidad, y ${refLabel} fue $${ref.toFixed(4)} por unidad.${totalNote} ¿Seguro que es el costo de UNA unidad (no de un paquete)?`,
+      );
+    }
   }
   const entry = await prisma.stockKardexEntry.create({
     data: {

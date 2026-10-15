@@ -96,6 +96,7 @@ type StockRow = {
   bodega: Marca | null;
   warehouseArea: string | null;
   costSource?: "proposal" | "kardex" | null;
+  costCorrectable?: boolean;
   providerPrice?: number;
   bodegaPrice?: number;
   benistockPrice?: number;
@@ -238,7 +239,16 @@ function CopyableText({ value, className }: { value: string; className: string }
 // Kardex como su propio tipo de línea (COST_DECLARATION, ver
 // declareManualCost en stockKardex.ts), nunca se confunde con una compra
 // real — el botón desaparece solo cuando entre la compra real de verdad.
-function DeclareCostButton({ catalogItemId, onDeclared }: { catalogItemId: string; onDeclared: () => void }) {
+// Costos de centavos (fundas ~$0.08) no caben en 2 decimales.
+function fmtCost(n: number) {
+  return n > 0 && n < 1 ? n.toFixed(4) : n.toFixed(2);
+}
+
+// 2026-10-15 (caso Fundas 40x52 a $725 c/u): con correct=true sirve para
+// corregir un costo que nunca vino de una compra real, y si el costo
+// nuevo es muy distinto a la última compra el servidor avisa y pide
+// confirmar antes de guardar.
+function DeclareCostButton({ catalogItemId, onDeclared, correct = false }: { catalogItemId: string; onDeclared: () => void; correct?: boolean }) {
   const [editing, setEditing] = useState(false);
   // Confirmado 2026-09-21, pedido explícito del usuario: el costo del
   // proveedor NUNCA trae el flete, así que se separan los dos campos para
@@ -256,19 +266,26 @@ function DeclareCostButton({ catalogItemId, onDeclared }: { catalogItemId: strin
       setError("Ingresa un costo de producto mayor a 0.");
       return;
     }
-    const breakdown = freightCost.trim() ? `\n\nCosto producto: $${(Number(productCost) || 0).toFixed(2)} + flete estimado: $${(Number(freightCost) || 0).toFixed(2)}` : "";
-    if (!window.confirm(`¿Declarar $${total.toFixed(2)} como costo estimado puesto en bodega de este producto?${breakdown}\n\nNo es una compra real — queda marcado así en el historial, y se reemplaza solo cuando se cargue la compra real en Control de Compras.`)) {
+    const breakdown = freightCost.trim() ? `\n\nCosto producto: $${fmtCost(Number(productCost) || 0)} + flete estimado: $${fmtCost(Number(freightCost) || 0)}` : "";
+    if (!window.confirm(`¿${correct ? "Corregir a" : "Declarar"} $${fmtCost(total)} como costo estimado puesto en bodega de UNA unidad de este producto?${breakdown}\n\nNo es una compra real — queda marcado así en el historial, y se reemplaza solo cuando se cargue la compra real en Control de Compras.`)) {
       return;
     }
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`/api/inventory-control/catalog-items/${catalogItemId}/declare-cost`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ declaredCost: total }),
-      });
-      const data = await res.json().catch(() => null);
+      const send = (confirmUnusual: boolean) =>
+        fetch(`/api/inventory-control/catalog-items/${catalogItemId}/declare-cost`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ declaredCost: total, confirmUnusual }),
+        });
+      let res = await send(false);
+      let data = await res.json().catch(() => null);
+      if (!res.ok && data?.needsConfirm) {
+        if (!window.confirm(`⚠ ${data.error}\n\n¿Guardar de todas formas?`)) return;
+        res = await send(true);
+        data = await res.json().catch(() => null);
+      }
       if (!res.ok) throw new Error(data?.error ?? "No se pudo declarar el costo.");
       setEditing(false);
       onDeclared();
@@ -283,11 +300,11 @@ function DeclareCostButton({ catalogItemId, onDeclared }: { catalogItemId: strin
     return (
       <button
         type="button"
-        title="Declarar costo estimado — no es una compra real, se reemplaza cuando entre la compra real."
+        title={correct ? "Corregir el costo — este costo nunca vino de una compra real, se escribió a mano." : "Declarar costo estimado — no es una compra real, se reemplaza cuando entre la compra real."}
         className="text-[9.5px] font-bold uppercase text-gold hover:underline cursor-pointer shrink-0"
         onClick={() => setEditing(true)}
       >
-        Declarar costo
+        {correct ? "Corregir costo" : "Declarar costo"}
       </button>
     );
   }
@@ -298,10 +315,10 @@ function DeclareCostButton({ catalogItemId, onDeclared }: { catalogItemId: strin
         <input
           autoFocus
           type="number"
-          step="0.01"
-          min="0.01"
+          step="any"
+          min="0"
           disabled={busy}
-          title="Costo del producto (sin flete) — el del proveedor"
+          title="Costo del producto (sin flete) — el del proveedor, por UNA unidad"
           placeholder="Producto"
           className="w-16 rounded border border-teal bg-cloud px-1 py-0.5 text-[11px] font-mono disabled:opacity-60"
           value={productCost}
@@ -334,7 +351,7 @@ function DeclareCostButton({ catalogItemId, onDeclared }: { catalogItemId: strin
           <X size={12} />
         </button>
       </div>
-      <span className="text-[9.5px] text-steel">Total puesto en bodega: <span className="font-mono font-bold text-ink">${total.toFixed(2)}</span></span>
+      <span className="text-[9.5px] text-steel">Total puesto en bodega: <span className="font-mono font-bold text-ink">${fmtCost(total)}</span></span>
       {error && <span className="text-red text-[9.5px]">{error}</span>}
     </div>
   );
@@ -1451,9 +1468,11 @@ export function StockLevelsPanel({
                     value={r.providerPrice}
                     className={"text-right font-mono text-[13px] text-steel"}
                   />
-                  {isAdmin && r.costSource !== "proposal" && r.costSource !== "kardex" && (
+                  {isAdmin && r.costSource !== "proposal" && r.costSource !== "kardex" ? (
                     <DeclareCostButton catalogItemId={r.catalogItemId} onDeclared={loadRows} />
-                  )}
+                  ) : isAdmin && r.costCorrectable ? (
+                    <DeclareCostButton catalogItemId={r.catalogItemId} onDeclared={loadRows} correct />
+                  ) : null}
                 </span>
                 {/* 2026-10-02, pedido del usuario: Puesto en bodega en dorado — es la
                     base de la que salen todos los demás precios. */}
