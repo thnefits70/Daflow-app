@@ -64,9 +64,11 @@ export async function POST(req: NextRequest) {
   const d = parsed.data;
   const originalGuide = cleanGuide(d.originalGuide);
 
-  const found = await lookupGuide(originalGuide, { productsOnly: d.kind === "RESHIP" });
-  if (d.kind === "CASH" && !found.ok) return NextResponse.json({ error: found.error }, { status: 400 });
-  const src = found.ok ? found.source : null;
+  // La guía original tiene que haber salido en uno de nuestros cortes: así el
+  // arreglo queda vinculado a ella (pedido del usuario 2026-10-15).
+  const found = await lookupGuide(originalGuide);
+  if (!found.ok) return NextResponse.json({ error: found.error }, { status: 400 });
+  const src = found.source;
 
   if (d.kind === "RESHIP") {
     const orderNumber = d.orderNumber.toUpperCase().replace(/\s+/g, "");

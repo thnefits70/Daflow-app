@@ -5,7 +5,9 @@ import { arrangementCode, arrangementNotices, getArrangementRole } from "@/lib/w
 
 const schema = z.discriminatedUnion("action", [
   // Admin: el pago del flete del dropshipper llegó / no llegó.
-  z.object({ action: z.literal("verify_payment") }),
+  // Doble confirmación (pedido del usuario 2026-10-15): el admin escribe el
+  // monto que le llegó y tiene que coincidir con el flete registrado.
+  z.object({ action: z.literal("verify_payment"), receivedAmount: z.number().positive("Escribe el monto que llegó.") }),
   z.object({ action: z.literal("reject_payment"), note: z.string().trim().min(3, "Escribe qué pasó.").max(500) }),
   // Quien lo registró: sube otro comprobante tras un rechazo.
   z.object({ action: z.literal("resubmit_payment"), evidenceUrl: z.string().url() }),
@@ -40,6 +42,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (!role.isAdmin) return deny("Solo el administrador verifica el pago.");
       if (a.kind !== "RESHIP" || a.status !== "PAYMENT_REVIEW") return wrong();
       const ok = p.action === "verify_payment";
+      if (p.action === "verify_payment" && Math.abs(p.receivedAmount - (a.freightAmount ?? 0)) > 0.005) {
+        return NextResponse.json({ error: `El monto no coincide: el flete registrado es $${(a.freightAmount ?? 0).toFixed(2)}. Revisa el banco o la wallet, o pulsa "No llegó".` }, { status: 400 });
+      }
       const note = p.action === "reject_payment" ? p.note : null;
       await prisma.warrantyArrangement.update({ where: { id }, data: { status: ok ? "PAYMENT_OK" : "PAYMENT_REJECTED", reviewedById: role.userId, reviewedAt: now, reviewNote: note } });
       await arrangementNotices.paymentReviewed(code, a.orderNumber ?? "", ok, a.createdById, note);

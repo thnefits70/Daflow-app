@@ -158,6 +158,8 @@ async function post(url: string, body: unknown): Promise<string | null> {
 
 function ReshipForm({ onDone }: { onDone: () => void }) {
   const [originalGuide, setOriginalGuide] = useState("");
+  const [found, setFound] = useState<Lookup | null>(null);
+  const [searching, setSearching] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
   const [freight, setFreight] = useState("");
   const [method, setMethod] = useState<"DROPI_WALLET" | "TRANSFER" | "">("");
@@ -166,17 +168,29 @@ function ReshipForm({ onDone }: { onDone: () => void }) {
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
 
+  async function search() {
+    setErr("");
+    setFound(null);
+    if (originalGuide.trim().length < 3) return setErr("Escribe la guía original del problema.");
+    setSearching(true);
+    const res = await fetch(`/api/warranty-arrangements?guide=${encodeURIComponent(originalGuide.trim())}`);
+    const d = await res.json().catch(() => null);
+    setSearching(false);
+    if (!res.ok) return setErr(d?.error ?? "No se encontró la guía.");
+    setFound(d);
+  }
+
   async function send() {
     setErr("");
     const amount = Number(freight.replace(",", "."));
-    if (originalGuide.trim().length < 3) return setErr("Escribe la guía original del problema.");
+    if (!found) return setErr("Primero busca la guía original: tiene que haber salido en nuestros cortes.");
     if (orderNumber.trim().length < 2) return setErr("Escribe el número de pedido del reenvío.");
     if (!(amount > 0)) return setErr("Escribe el valor exacto del flete.");
     if (!method) return setErr("Elige cómo pagó el dropshipper.");
     if (reason.trim().length < 5) return setErr("Explica qué hizo mal el dropshipper.");
     if (!file) return setErr("Sube el comprobante del pago.");
     setSaving(true);
-    const e = await post("/api/warranty-arrangements", { kind: "RESHIP", originalGuide, orderNumber, freightAmount: amount, paymentMethod: method, reason, evidenceUrl: file.url });
+    const e = await post("/api/warranty-arrangements", { kind: "RESHIP", originalGuide: found.guide, orderNumber, freightAmount: amount, paymentMethod: method, reason, evidenceUrl: file.url });
     setSaving(false);
     if (e) return setErr(e);
     onDone();
@@ -186,9 +200,19 @@ function ReshipForm({ onDone }: { onDone: () => void }) {
     <div className="bg-surface border border-rule rounded-md p-4 flex flex-col gap-3">
       <div className="font-display font-bold text-[14px]">Reenvío: flete lo paga el dropshipper</div>
       <div className="text-[12px] text-steel">El dropshipper paga el flete exacto antes. El admin verifica el pago y recién ahí Daniel genera la guía.</div>
-      <Field label="Guía original del problema">
-        <input value={originalGuide} onChange={(e) => setOriginalGuide(e.target.value)} placeholder="Ej.: D002055162" className={`${inputCls} font-mono`} />
-      </Field>
+      <div className="flex gap-2 items-end">
+        <Field label="Guía original del problema">
+          <input value={originalGuide} onChange={(e) => { setOriginalGuide(e.target.value); setFound(null); }} placeholder="Ej.: D002055162" className={`${inputCls} font-mono`} />
+        </Field>
+        <button type="button" disabled={searching} onClick={search} className={btnGhost}>{searching ? "Buscando…" : "Buscar"}</button>
+      </div>
+      {found && (
+        <div className="text-[12.5px] bg-cloud rounded-md p-2.5">
+          ✓ Salió en nuestros cortes · <span className="font-semibold">{found.clientName ?? "Cliente sin nombre"}</span>
+          {found.city ? ` · ${found.city}` : ""}
+          <div className="text-[11.5px] text-steel">{found.lines.map((l) => l.name).join(", ")}</div>
+        </div>
+      )}
       <Field label="Número de pedido del reenvío">
         <input value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} className={`${inputCls} font-mono`} />
       </Field>
@@ -338,6 +362,8 @@ function Card({ r, role, onChange }: { r: Row; role: Role; onChange: () => void 
   const [err, setErr] = useState("");
   const [text, setText] = useState("");
   const [file, setFile] = useState<{ url: string; name: string } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [received, setReceived] = useState("");
   const st = STATUS[r.status] ?? { label: r.status, tone: "text-steel" };
   const mine = r.createdById === role.userId;
 
@@ -350,6 +376,7 @@ function Card({ r, role, onChange }: { r: Row; role: Role; onChange: () => void 
     if (e) return setErr(e);
     setText("");
     setFile(null);
+    setConfirming(false);
     onChange();
   }
 
@@ -411,9 +438,26 @@ function Card({ r, role, onChange }: { r: Row; role: Role; onChange: () => void 
       {/* Acciones según quién mira */}
       {r.status === "PAYMENT_REVIEW" && role.isAdmin && (
         <div className="flex flex-col gap-2 mt-1">
-          <div className="flex gap-2 flex-wrap">
-            <button type="button" disabled={busy} className={btnPrimary} onClick={() => act({ action: "verify_payment" }, `¿Confirmas que llegaron ${money(r.freightAmount)} del dropshipper?`)}>Sí llegó el pago ✓</button>
-          </div>
+          {/* Doble confirmación: primero el botón, luego escribir el monto que llegó. */}
+          {!confirming ? (
+            <button type="button" disabled={busy} className={`self-start ${btnPrimary}`} onClick={() => { setConfirming(true); setReceived(""); }}>Sí llegó el pago</button>
+          ) : (
+            <div className="flex flex-col gap-1.5 border border-teal rounded-md p-2.5">
+              <span className="text-[12px] font-semibold">Paso 2 de 2: escribe el monto exacto que llegó a tu {r.paymentMethod === "DROPI_WALLET" ? "wallet de Dropi" : "cuenta"}.</span>
+              <div className="flex gap-2">
+                <input value={received} onChange={(e) => setReceived(e.target.value)} inputMode="decimal" placeholder="Ej.: 6.50" className={`${inputCls} flex-1`} />
+                <button
+                  type="button"
+                  disabled={busy || !(Number(received.replace(",", ".")) > 0)}
+                  className={btnPrimary}
+                  onClick={() => act({ action: "verify_payment", receivedAmount: Number(received.replace(",", ".")) }, `¿Confirmas que llegaron $${Number(received.replace(",", ".")).toFixed(2)} del dropshipper? Después Daniel podrá despachar.`)}
+                >
+                  Confirmar ✓
+                </button>
+                <button type="button" disabled={busy} className={btnGhost} onClick={() => setConfirming(false)}>Volver</button>
+              </div>
+            </div>
+          )}
           <div className="flex gap-2">
             <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Si no llegó, escribe qué pasó" className={`${inputCls} flex-1`} />
             <button type="button" disabled={busy || text.trim().length < 3} className={btnGhost} onClick={() => act({ action: "reject_payment", note: text })}>No llegó</button>
