@@ -12,7 +12,7 @@ import { AdvisorPicker, WhatsAppButton } from "@/components/pvx/PvxContact";
 import { PvxRocketSku } from "@/components/pvx/PvxRocketSku";
 import { PvxCities, PvxOperation, PvxResources, titleCase } from "@/components/pvx/PvxSections";
 import { CountUp, GlassBar, RotatingCity, useMarqueePause } from "@/components/pvx/PvxEffects";
-import { PvxDemo } from "@/components/pvx/PvxDemo";
+import { PvxDemo, pickDemoCards } from "@/components/pvx/PvxDemo";
 import { PvxTour } from "@/components/pvx/PvxTour";
 import { PvxChat } from "@/components/pvx/PvxChat";
 import { PvxCalculator } from "@/components/pvx/PvxCalculator";
@@ -410,7 +410,7 @@ function Hero({ cards, stats, name, query, onQuery, onOpen }: { cards: PublicCar
               </AdvisorPicker>
             </div>
           </div>
-          <PvxDemo card={cards.find((c) => c.photo && (c.curve ?? []).some((v) => v > 0)) ?? cards[0]} />
+          <PvxDemo cards={pickDemoCards(cards)} />
         </div>
       </div>
       <div className="relative mt-14 sm:mt-20">

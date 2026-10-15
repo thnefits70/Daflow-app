@@ -12,6 +12,8 @@ import {
   type CalcStatus,
 } from "@/lib/pvxCalc";
 import { IconExternal, IconLock } from "@/components/pvx/PvxIcons";
+import { PVX_SHARE_URLS, PvxShare } from "@/components/pvx/PvxShare";
+import { PvxCalcDemo } from "@/components/pvx/PvxCalcDemo";
 
 // Calculadora de ganancia de provedix.com (pedido del usuario 2026-10-15,
 // basada en la calculadora ECOMX que mandó; fórmulas en src/lib/pvxCalc.ts).
@@ -238,6 +240,16 @@ export function PvxCalculator({
     return () => window.removeEventListener(PVX_CALC_EVENT, onPick);
   }, []);
 
+  // Entró por el enlace compartido provedix.com/calculadora: va directo aquí.
+  useEffect(() => {
+    if (window.location.pathname !== "/calculadora") return;
+    const t = setTimeout(
+      () => ref.current?.scrollIntoView({ block: "start" }),
+      300,
+    );
+    return () => clearTimeout(t);
+  }, []);
+
   const q = query.trim().toLowerCase();
   const options =
     q.length >= 2
@@ -304,6 +316,13 @@ export function PvxCalculator({
           Pon tus números y te decimos el precio que cubre cancelaciones,
           devoluciones y publicidad, y cuánto puedes pagar de CPA sin perder.
         </p>
+        {/* Compartir la calculadora (2026-10-15): que más dropshippers conozcan provedix.com. */}
+        <div className="mt-5">
+          <PvxShare
+            url={PVX_SHARE_URLS.calculadora}
+            message="🧮 Calcula a cuánto vender tus productos para ganar, gratis en Provedix:"
+          />
+        </div>
 
         <div className="mt-10 grid gap-6 lg:grid-cols-[1.05fr_1fr]">
           {/* Datos */}
@@ -476,12 +495,19 @@ export function PvxCalculator({
             aria-live="polite"
           >
             {!res ? (
-              <div className="grid h-full min-h-[280px] place-items-center text-center text-white/70">
-                <p className="max-w-xs text-[15px]">
-                  Escribe el precio en Dropi del producto y te mostramos a
-                  cuánto venderlo. 👈
-                </p>
-              </div>
+              // "Video" animado de cómo se usa (2026-10-15), mientras no escribe nada.
+              <PvxCalcDemo
+                onTry={() =>
+                  setForm((fm) => ({
+                    ...fm,
+                    unitCost: "5",
+                    units: "1",
+                    freight: "7",
+                    cpa: "5",
+                    profit: "5",
+                  }))
+                }
+              />
             ) : (
               <>
                 <div className="flex items-start justify-between gap-3">

@@ -21,6 +21,7 @@ const SUPPLIER_LEDGER_ALLOWED_PREFIXES = ["/proveedor-ledger", "/api/proveedor-l
 // (2026-10-14: /api/auth/session y /api/app-version ya no pasan — la página
 // pública no carga la sesión ni el aviso de versión de DAFLOW.)
 const PROVEDIX_EXTRA_PATHS = ["/robots.txt", "/sitemap.xml", "/googleb11466063347423e.html"];
+const PROVEDIX_SHARE_PATHS = ["/calculadora", "/michelle"];
 
 // Seguridad de provedix.com (pedido del usuario 2026-10-14): la página solo
 // puede cargar cosas de su propio dominio (nada de scripts de otros sitios),
@@ -60,7 +61,10 @@ function provedixProxy(req: NextRequest): NextResponse {
     url.port = "";
     return NextResponse.redirect(url, 308);
   }
-  if (pathname === "/") return withProvedixSecurity(NextResponse.rewrite(new URL("/pvx", req.nextUrl)));
+  // Enlaces para compartir (2026-10-15): provedix.com/calculadora abre la
+  // calculadora y provedix.com/michelle abre el chat de Michelle IA — es la
+  // misma página; ella decide qué abrir según la dirección.
+  if (pathname === "/" || PROVEDIX_SHARE_PATHS.includes(pathname)) return withProvedixSecurity(NextResponse.rewrite(new URL("/pvx", req.nextUrl)));
   const allowed = PROVEDIX_PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) || PROVEDIX_EXTRA_PATHS.includes(pathname);
   return allowed ? withProvedixSecurity(NextResponse.next()) : new NextResponse(null, { status: 404 });
 }

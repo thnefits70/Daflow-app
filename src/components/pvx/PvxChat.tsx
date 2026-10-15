@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { ADVISORS } from "@/components/pvx/PvxContact";
 import { PVX_CALC_EVENT } from "@/components/pvx/PvxCalculator";
+import { PVX_SHARE_URLS, PvxShare } from "@/components/pvx/PvxShare";
 import {
   IconArrow,
   IconClose,
@@ -122,6 +123,16 @@ export function PvxChat({
   onRegister: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  // Entró por el enlace compartido provedix.com/michelle: el chat se abre solo.
+  useEffect(() => {
+    if (
+      window.location.pathname !== "/michelle" &&
+      window.location.hash !== "#michelle"
+    )
+      return;
+    const t = setTimeout(() => setOpen(true), 400);
+    return () => clearTimeout(t);
+  }, []);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
   const [remaining, setRemaining] = useState<number | null>(null);
@@ -333,6 +344,19 @@ export function PvxChat({
                     {s}
                   </button>
                 ))}
+              </div>
+            )}
+            {/* Compartir el chat (2026-10-15): enlace provedix.com/michelle. */}
+            {messages.length === 0 && loaded && (
+              <div className="mt-4 rounded-2xl bg-white px-3.5 py-3 ml-9">
+                <p className="mb-2 text-[12.5px] text-[var(--pvx-ink-2)]">
+                  ¿Conoces a otro dropshipper? Compártele este chat 💛
+                </p>
+                <PvxShare
+                  compact
+                  url={PVX_SHARE_URLS.michelle}
+                  message="💬 Pregúntale a Michelle IA, la asistente de Provedix, por productos ganadores y tus pedidos:"
+                />
               </div>
             )}
 
