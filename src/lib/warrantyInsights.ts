@@ -4,6 +4,7 @@ import { WARRANTY_AUTO_SINCE_MONTH, isAutoWarrantyMonth } from "@/lib/warrantyKp
 import { WARRANTY_PICKUP_FREIGHT_AVG } from "@/lib/localWarrantyConstants";
 import { bodegaUnitCost, resolveCostBasisForCatalogItems } from "@/lib/marketProduct";
 import { DROPI_INSURANCE_DEFAULT } from "@/lib/dropiPricing";
+import { getDropshipperPaidGuides, getPaidCashSettlements } from "@/lib/warrantyArrangements";
 
 // Pedidos del usuario 2026-10-03 sobre los KPIs de garantías:
 // 1. Las garantías locales (GL-000X) NO suman al total del mes, pero sus
@@ -132,7 +133,9 @@ export async function getTopWarrantyProducts(limit = 5): Promise<WarrantyProduct
     .slice(0, limit);
 }
 
-export type WarrantyCostMonth = { month: string; warranties: number; productCost: number; freight: number; total: number; reserve: number; soldCost: number };
+// settlements = arreglos en dinero pagados al cliente en vez de garantía
+// (2026-10-15); suman al total pero no a la cantidad de garantías.
+export type WarrantyCostMonth = { month: string; warranties: number; productCost: number; freight: number; settlements: number; settlementCount: number; total: number; reserve: number; soldCost: number };
 
 // Cuánto costaron las garantías del mes contra lo que guardó el seguro (6%
 // del costo de lo vendido en los cortes). Producto al costo puesto en bodega
@@ -140,14 +143,19 @@ export type WarrantyCostMonth = { month: string; warranties: number; productCost
 // locales se usa el flete real si se registró.
 export async function getWarrantyCostMonth(month: string): Promise<WarrantyCostMonth> {
   const { from, to } = monthRange(month);
-  const [corteItems, soldRows, localSales] = await Promise.all([
+  const [corteItemsAll, soldRows, localSales, reshipGuides, cash] = await Promise.all([
     prisma.fulfillmentRequestItem.findMany({ where: { warrantyGuide: { not: null }, batch: { requestedAt: { gte: from, lt: to } } }, select: { catalogItemId: true, quantity: true, warrantyGuide: true } }),
     prisma.fulfillmentRequestItem.groupBy({ by: ["catalogItemId"], where: { warrantyGuide: null, batch: { requestedAt: { gte: from, lt: to } } }, _sum: { quantity: true } }),
     prisma.externalSale.findMany({
       where: { kind: "WARRANTY", deletedAt: null, createdAt: { gte: from, lt: to } },
       select: { freightCost: true, items: { select: { catalogItemId: true, quantity: true, warrantyRole: true, warrantyReason: true } } },
     }),
+    getDropshipperPaidGuides(),
+    getPaidCashSettlements(from, to),
   ]);
+  // Reenvíos que pagó el dropshipper por su mala gestión: ni el flete ni el
+  // producto (ya había regresado) son pérdida nuestra.
+  const corteItems = corteItemsAll.filter((i) => !reshipGuides.has(i.warrantyGuide!.toUpperCase()));
   const ids = new Set<string>([...corteItems.map((i) => i.catalogItemId), ...soldRows.map((r) => r.catalogItemId)]);
   for (const s of localSales) for (const i of s.items) if (i.catalogItemId) ids.add(i.catalogItemId);
   const bases = await resolveCostBasisForCatalogItems([...ids]);
@@ -180,7 +188,9 @@ export async function getWarrantyCostMonth(month: string): Promise<WarrantyCostM
     warranties: guides.size + localSales.length,
     productCost: round2(productCost),
     freight: round2(freight),
-    total: round2(productCost + freight),
+    settlements: round2(cash.total),
+    settlementCount: cash.count,
+    total: round2(productCost + freight + cash.total),
     reserve: round2((soldCost * DROPI_INSURANCE_DEFAULT) / 100),
     soldCost: round2(soldCost),
   };
@@ -208,7 +218,7 @@ export async function getWarrantyCostOverview(): Promise<{ current: WarrantyCost
 // perdió en garantías (total + producto dañado + fletes perdidos). El 6% nunca
 // sale en Inicio (vive en KPIs financieros) — se recorta acá en el servidor
 // para que ni llegue a la página.
-export type WarrantyLossMonth = { month: string; warranties: number; total: number; productCost: number; freight: number };
+export type WarrantyLossMonth = { month: string; warranties: number; total: number; productCost: number; freight: number; settlements: number };
 export type WarrantyLossOverview = { current: WarrantyLossMonth; previous: WarrantyLossMonth | null };
 
 export async function getWarrantyLossOverview(): Promise<WarrantyLossOverview> {
@@ -219,6 +229,7 @@ export async function getWarrantyLossOverview(): Promise<WarrantyLossOverview> {
     total: m.total,
     productCost: m.productCost,
     freight: m.freight,
+    settlements: m.settlements,
   });
   return { current: strip(current), previous: previous ? strip(previous) : null };
 }

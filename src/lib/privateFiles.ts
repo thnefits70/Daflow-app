@@ -25,6 +25,8 @@ export const PRIVATE_FOLDERS = new Set([
   "warranty-dispatch-guides",
   // Foto en vivo de la guía retenida que canceló el dropshipper (Michelle, 2026-10-15).
   "cancelled-guide-photos",
+  // Arreglos de garantía (2026-10-15): comprobantes de pago y chats con clientes.
+  "warranty-arrangement-files",
   // Segunda etapa (2026-10-12): documentos financieros internos. NO entran
   // los que ve CHEN sin sesión en su hoja de Google (=IMAGEN):
   // supplier-debt-transfers y supplier-shipping-photos, ni fotos de producto.

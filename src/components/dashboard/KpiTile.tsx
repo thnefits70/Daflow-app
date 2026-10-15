@@ -488,6 +488,7 @@ export function WarrantyCostTile({ current, previous }: { current: WarrantyLossM
       <div className="text-[11.5px] flex flex-col gap-0.5 mt-2.5">
         <div className="flex justify-between"><span className="text-steel">Producto dañado reemplazado</span><span className="text-red">${usd(current.productCost)}</span></div>
         <div className="flex justify-between"><span className="text-steel">Fletes perdidos (envío y recogida)</span><span className="text-red">${usd(current.freight)}</span></div>
+        {current.settlements > 0 && <div className="flex justify-between"><span className="text-steel">Arreglos en dinero con clientes</span><span className="text-red">${usd(current.settlements)}</span></div>}
         <div className="flex justify-between font-semibold text-red pt-1 mt-0.5 border-t border-red/20">
           <span>Total en pérdidas</span>
           <span>${usd(current.total)}</span>

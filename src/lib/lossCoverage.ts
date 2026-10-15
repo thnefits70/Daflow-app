@@ -18,7 +18,7 @@ import { currentGuayaquilMonth, getWarrantyCostMonth, monthRange, previousMonth 
 
 export type LossCoverageMonth = {
   month: string;
-  warranty: { total: number; productCost: number; freight: number; count: number };
+  warranty: { total: number; productCost: number; freight: number; settlements: number; count: number };
   deterioro: { total: number; units: number };
   supplierRejected: { total: number; units: number };
   damagedReturns: { total: number; units: number };
@@ -76,7 +76,7 @@ export async function getLossCoverageMonth(month: string): Promise<LossCoverageM
   const total = warranty.total + deterioro.total + supplierRejected.total + damagedReturns.total;
   return {
     month,
-    warranty: { total: warranty.total, productCost: warranty.productCost, freight: warranty.freight, count: warranty.warranties },
+    warranty: { total: warranty.total, productCost: warranty.productCost, freight: warranty.freight, settlements: warranty.settlements, count: warranty.warranties },
     deterioro: { total: round2(deterioro.total), units: deterioro.units },
     supplierRejected: { total: round2(supplierRejected.total), units: supplierRejected.units },
     damagedReturns: { total: round2(damagedReturns.total), units: damagedReturns.units },

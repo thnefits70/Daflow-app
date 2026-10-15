@@ -12,7 +12,7 @@ function MonthCard({ m }: { m: LossCoverageMonth }) {
   const diff = Math.abs(m.reserve - m.total);
   const usedPct = m.reserve > 0 ? Math.min(100, (m.total / m.reserve) * 100) : m.total > 0 ? 100 : 0;
   const rows = [
-    { label: "Garantías", hint: `${m.warranty.count} garantía${m.warranty.count === 1 ? "" : "s"} · producto ${usd(m.warranty.productCost)} + fletes ${usd(m.warranty.freight)}`, total: m.warranty.total },
+    { label: "Garantías", hint: `${m.warranty.count} garantía${m.warranty.count === 1 ? "" : "s"} · producto ${usd(m.warranty.productCost)} + fletes ${usd(m.warranty.freight)}${m.warranty.settlements > 0 ? ` + arreglos en dinero ${usd(m.warranty.settlements)}` : ""}`, total: m.warranty.total },
     { label: "Deterioro dado de baja", hint: `${m.deterioro.units} unidad${m.deterioro.units === 1 ? "" : "es"} encontradas dañadas en bodega`, total: m.deterioro.total },
     { label: "Reclamos rechazados por el proveedor", hint: `${m.supplierRejected.units} unidad${m.supplierRejected.units === 1 ? "" : "es"} · no cambió ni dio crédito`, total: m.supplierRejected.total },
     { label: "Devoluciones dañadas sin arreglo", hint: `${m.damagedReturns.units} unidad${m.damagedReturns.units === 1 ? "" : "es"} que regresaron rotas`, total: m.damagedReturns.total },

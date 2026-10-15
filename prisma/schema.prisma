@@ -8363,3 +8363,56 @@ model WarrantyDispatchGuide {
 
   @@index([verifiedAt])
 }
+
+// Arreglos de garantía (pedido de Bryan 2026-10-15, reglas del usuario):
+// kind RESHIP = reenvío por mala gestión del dropshipper — él paga el flete
+// exacto POR ADELANTADO (wallet de Dropi o transferencia), el admin verifica
+// el pago y recién ahí Daniel genera la guía del pedido. kind CASH = arreglo
+// en dinero con el cliente en vez de garantía (se queda el producto): Bryan
+// aprueba, el admin paga desde la cuenta principal (nunca Caja Chica) y sube
+// el comprobante. Michelle y Yair los registran.
+model WarrantyArrangement {
+  id     String @id @default(cuid())
+  number Int    @unique @default(autoincrement())
+  kind   String // RESHIP | CASH
+  // RESHIP: PAYMENT_REVIEW → PAYMENT_OK → DONE (o PAYMENT_REJECTED → PAYMENT_REVIEW)
+  // CASH:   APPROVAL → TO_PAY → PAID (o REJECTED)
+  // Ambos: CANCELLED
+  status String
+
+  originalGuide String
+  clientName    String?
+  city          String?
+  reason        String
+  evidenceUrl   String? // RESHIP: comprobante del dropshipper · CASH: foto del chat donde el cliente acepta
+
+  // RESHIP
+  orderNumber    String?
+  freightAmount  Float?
+  paymentMethod  String? // DROPI_WALLET | TRANSFER
+  guideNumber    String?
+  guideAttachedAt   DateTime?
+  guideAttachedById String?
+
+  // CASH
+  catalogItemId   String?
+  productName     String?
+  amount          Float?
+  holderName      String?
+  holderIdNumber  String?
+  bankName        String?
+  bankAccountType String?
+  bankAccountNumber String?
+  payoutProofUrl  String?
+  paidAt          DateTime?
+
+  createdById String
+  createdAt   DateTime @default(now())
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNote   String?
+  cancelledAt  DateTime?
+
+  @@index([status])
+  @@index([kind, createdAt])
+}

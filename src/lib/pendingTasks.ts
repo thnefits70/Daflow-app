@@ -41,6 +41,7 @@ import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
 import { getLeaderTeamTaskPendingItems, getMyTeamTaskPendingItem } from "@/lib/teamTasks";
 import { getProvedixSuspiciousChatsPendingItem } from "@/lib/provedixSuspicion";
 import { getMichelleCancelPendingItems } from "@/lib/michelleCancellations";
+import { getArrangementAdminPendingItems, getArrangementPendingItems } from "@/lib/warrantyArrangements";
 import { getDropiOutagePendingItem, getIdDeadlinePendingItem, getPendingIdExtensions, getReleaseDeadlineItems, timeLeftText } from "@/lib/handoffLocks";
 
 import { formatPurchaseRequestCode } from "@/lib/purchaseCode";
@@ -493,6 +494,11 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   michelle_sospechosos: "Michelle — conversaciones sospechosas por revisar",
   michelle_por_retener: "Guías canceladas por retener (chat de provedix)",
   michelle_por_aprobar: "Cancelaciones fuera de horario por decidir",
+  arreglo_verificar_flete: "Arreglos — verificar pago de flete del dropshipper",
+  arreglo_pagar_cliente: "Arreglos — pagar arreglo en dinero al cliente",
+  arreglo_aprobar: "Arreglos en dinero por aprobar",
+  arreglo_generar_guia: "Reenvío pagado por el dropshipper: generar guía",
+  arreglo_comprobante_rechazado: "Arreglos — comprobante de flete no verificado",
   pagos_mercaderia: "Pagos de mercadería pendientes",
   pagos_flete: "Fletes pendientes de pago",
   ventas_externas_revisar: "Ventas Externas — venta nueva por aprobar",
@@ -4178,6 +4184,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       // Pedido del usuario 2026-10-14: chats de provedix.com donde alguien intentó
       // sacarle información a Michelle o usarla para otra cosa (provedixSuspicion.ts).
       ...(await getProvedixSuspiciousChatsPendingItem().then((i) => (i ? [i] : [])).catch(() => [])),
+      // Arreglos de garantía (2026-10-15): verificar el flete del dropshipper y pagar arreglos en dinero.
+      ...(await getArrangementAdminPendingItems().catch(() => [])),
     ];
     // Pedido del usuario 2026-10-01: lo que no entra al Kardex porque alguien
     // no confirmó en 24 horas va arriba de todo (y sale en el aviso de las 8:00).
@@ -4400,6 +4408,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     teamItems.unshift(...(await getSuddenDemandPendingItems(actor.userId)));
     // Guías canceladas por el chat de Michelle (2026-10-15): Joao las retiene.
     teamItems.unshift(...(await getMichelleCancelPendingItems(actor.userId).catch(() => [])));
+    // Arreglos de garantía (2026-10-15): Bryan aprueba, Daniel anota la guía.
+    teamItems.unshift(...(await getArrangementPendingItems(actor.userId).catch(() => [])));
     if (teamItems.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: me.department?.code === "INV" ? "En Inventario" : "Para ti", items: teamItems };
   }
@@ -4412,6 +4422,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   items.push(...myPettyCashConfirmationItems);
   if (myPayrollMessageItem) items.push(myPayrollMessageItem);
   items.unshift(...(await getMyLocalWarrantyPendingItems(actor.userId, "/area/workspace?tab=ventas-externas&etab=garantias")));
+  items.unshift(...(await getArrangementPendingItems(actor.userId).catch(() => [])));
   let monthly = false;
 
   if (me.leadsDept.code === "FIN") {
@@ -4681,7 +4692,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion", "ajuste_stock_conteo", "catalogo_compras_borrado", "cuenta_proveedor_verificar", "caja_chica_excepcion_flete", "sueldo_nairoby_transferencia", "plan_mejora_admin", "correccion_precio_compra", "perdida_compra_aprobar", "marcas_no_coinciden");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion", "ajuste_stock_conteo", "catalogo_compras_borrado", "cuenta_proveedor_verificar", "caja_chica_excepcion_flete", "sueldo_nairoby_transferencia", "plan_mejora_admin", "correccion_precio_compra", "perdida_compra_aprobar", "marcas_no_coinciden", "arreglo_verificar_flete", "arreglo_pagar_cliente");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
@@ -4741,7 +4752,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "variantes_guias_unir", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "conteo_inventario", "stock_negativo", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado");
+      types.push("compras_recepcion", "compras_cambios_verificar", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "variantes_guias_unir", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "conteo_inventario", "stock_negativo", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "arreglo_generar_guia");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
@@ -4752,7 +4763,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.canManagePurchases) types.push("deterioro_compras_gestion", "compras_excedente_gestion");
     if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion", "compras_excedente_confirmar");
-    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion", "analisis_mercado_sin_compra", "ventas_externas_revisar", "recompras_por_aprobar", "analisis_mercado_rocket_atrasado");
+    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion", "analisis_mercado_sin_compra", "ventas_externas_revisar", "recompras_por_aprobar", "analisis_mercado_rocket_atrasado", "arreglo_aprobar");
     if (me.canManagePurchases || ["COM", "FIN"].includes(me.leadsDept.code)) types.push("recompras_sin_respuesta", "recompras_listas");
   }
 
