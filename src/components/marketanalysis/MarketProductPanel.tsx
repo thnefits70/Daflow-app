@@ -37,6 +37,8 @@ type Proposal = {
   competitorProductName: string | null;
   noCompetitorData: boolean;
   discoverySourceNote: string | null;
+  hasVariants?: boolean | null;
+  variantNotes?: string | null;
   insuranceRatePercent: number;
   fulfillmentCost: number;
   marginPercent: number;
@@ -303,6 +305,8 @@ type ProposeDraftData = {
   competitorProductName: string;
   noCompetitorData: boolean;
   discoverySourceNote: string;
+  hasVariants?: boolean | null;
+  variantNotes?: string;
   insurance: string;
   fulfillment: string;
   margin: string;
@@ -322,6 +326,7 @@ function isProposeDraftEmpty(d: ProposeDraftData) {
     !d.competitorBodegaName.trim() &&
     !d.competitorProductName.trim() &&
     !d.discoverySourceNote.trim() &&
+    !d.variantNotes?.trim() &&
     !d.primarySupplierId &&
     !d.primaryCost.trim() &&
     !d.primaryFreight.trim()
@@ -355,6 +360,9 @@ function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | n
   const [competitorProductName, setCompetitorProductName] = useState(prefill?.productName ?? "");
   const [noCompetitorData, setNoCompetitorData] = useState(false);
   const [discoverySourceNote, setDiscoverySourceNote] = useState("");
+  // Pedido de Jariel 2026-10-15: null = todavía no responde Sí/No.
+  const [hasVariants, setHasVariants] = useState<boolean | null>(null);
+  const [variantNotes, setVariantNotes] = useState("");
   const [insurance, setInsurance] = useState("6");
   const [fulfillment, setFulfillment] = useState("0.75");
   const [margin, setMargin] = useState("20");
@@ -378,7 +386,7 @@ function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | n
     {
       productName, description, imageUrl, platform,
       competitorId, competitorPrice, competitorBodegaName, competitorProductName,
-      noCompetitorData, discoverySourceNote,
+      noCompetitorData, discoverySourceNote, hasVariants, variantNotes,
       insurance, fulfillment, margin,
       primarySupplierId, primaryCost, primaryUnits, primaryFreight, primaryNoFreight,
     },
@@ -393,6 +401,8 @@ function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | n
       setCompetitorProductName(d.competitorProductName);
       setNoCompetitorData(d.noCompetitorData);
       setDiscoverySourceNote(d.discoverySourceNote);
+      setHasVariants(d.hasVariants ?? null);
+      setVariantNotes(d.variantNotes ?? "");
       setInsurance(d.insurance);
       setFulfillment(d.fulfillment);
       setMargin(d.margin);
@@ -448,6 +458,14 @@ function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | n
       setErr("Falta el flete del proveedor. Ponlo, o marca \"Este proveedor no cobra flete\" si de verdad no aplica.");
       return;
     }
+    if (hasVariants === null) {
+      setErr("Responde si este ID es un producto con variantes (Sí o No).");
+      return;
+    }
+    if (hasVariants && !variantNotes.trim()) {
+      setErr("Escribe las notas de variantes (colores, tallas o cuántas variantes lleva).");
+      return;
+    }
     setBusy(true);
     if (spellCheckedName !== productName) {
       const check = await fetch("/api/market-products/check-spelling", {
@@ -477,6 +495,8 @@ function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | n
         competitorProductName: showsCompetitor ? competitorProductName || undefined : undefined,
         noCompetitorData,
         discoverySourceNote: noCompetitorData ? discoverySourceNote || undefined : undefined,
+        hasVariants,
+        variantNotes: hasVariants ? variantNotes.trim() || undefined : undefined,
         insuranceRatePercent: Number(insurance),
         fulfillmentCost: Number(fulfillment),
         marginPercent: Number(margin),
@@ -488,7 +508,7 @@ function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | n
     if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo enviar."); return; }
     setOk("Propuesta enviada a Bryan para aprobación.");
     setProductName(""); setDescription(""); setImageUrl(""); setCompetitorId(""); setCompetitorPrice(""); setCompetitorBodegaName(""); setCompetitorProductName("");
-    setNoCompetitorData(false); setDiscoverySourceNote("");
+    setNoCompetitorData(false); setDiscoverySourceNote(""); setHasVariants(null); setVariantNotes("");
     setPrimarySupplierId(""); setPrimaryCost(""); setPrimaryUnits("100"); setPrimaryFreight(""); setPrimaryNoFreight(false);
     clearProposeDraft();
     if (prefillActive) { setPrefillActive(false); setOk("Propuesta enviada a Bryan para aprobación. En Ganadores no encontrados ya quedó marcado como propuesto."); }
@@ -549,6 +569,31 @@ function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | n
       <div className="mb-3">
         <label className="text-[12px] font-semibold text-steel">Descripción (opcional)</label>
         <textarea className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px] mt-1" value={description} onChange={(e) => setDescription(e.target.value)} />
+      </div>
+      {/* Pedido de Jariel 2026-10-15: notas de variantes que la asesora B2B
+          lee en "Publicar en Dropi" al crear el ID. */}
+      <div className="mb-3">
+        <label className="text-[12px] font-semibold text-steel">¿Este ID es un producto con variantes?</label>
+        <div className="flex gap-1.5 mt-1">
+          {([true, false] as const).map((v) => (
+            <button key={String(v)} type="button" className={`flex-1 rounded border py-1.5 text-[12px] font-semibold cursor-pointer ${hasVariants === v ? "border-teal bg-teal/10 text-teal" : "border-rule text-steel"}`} onClick={() => setHasVariants(v)}>
+              {v ? "Sí" : "No"}
+            </button>
+          ))}
+        </div>
+        {hasVariants && (
+          <div className="mt-2 bg-cloud border border-rule rounded-md p-3">
+            <div className="text-[12px] font-semibold text-steel mb-1">Notas de variantes</div>
+            <div className="text-[11px] text-steel mb-2">Las verá la asesora B2B al crear el ID en Dropi.</div>
+            <textarea
+              className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px]"
+              rows={3}
+              placeholder="Ej. 4 colores: negro, blanco, rosado, azul · tallas S, M, L"
+              value={variantNotes}
+              onChange={(e) => setVariantNotes(e.target.value)}
+            />
+          </div>
+        )}
       </div>
       <div className="mb-3">
         <label className="text-[12px] font-semibold text-steel">¿En qué plataforma se vende?</label>
@@ -682,6 +727,18 @@ function ProposeForm({ prefill, onClearPrefill }: { prefill?: ProposePrefill | n
   );
 }
 
+// Pedido de Jariel 2026-10-15: lo que anotó de variantes al proponer.
+function VariantNotesBox({ p }: { p: Proposal }) {
+  if (p.hasVariants == null) return null;
+  if (!p.hasVariants) return <div className="text-[12px] text-steel mb-2">Variantes: no lleva — ID sin variantes.</div>;
+  return (
+    <div className="mb-2 rounded-md border border-teal/40 bg-teal/5 px-3 py-2">
+      <div className="text-[12px] font-semibold text-teal mb-0.5">Producto con variantes — notas de {p.proposedBy?.name ?? "quien propuso"}</div>
+      <div className="text-[12.5px] text-ink whitespace-pre-wrap">{p.variantNotes || "—"}</div>
+    </div>
+  );
+}
+
 // ---------------- Paso 2: Aprobación (Bryan) ----------------
 function ReviewQueue({ canAct }: { canAct: boolean }) {
   const [rows, setRows] = useState<Proposal[] | null>(null);
@@ -750,6 +807,7 @@ function ReviewQueue({ canAct }: { canAct: boolean }) {
               Sin datos de respaldo — recomendado por proveedor{p.discoverySourceNote ? `: ${p.discoverySourceNote}` : ""}
             </div>
           )}
+          <VariantNotesBox p={p} />
           {canAct && (
             rejecting === p.id ? (
               <div>
@@ -931,6 +989,7 @@ function PublishQueue() {
               <div className="text-[13px] font-bold text-ink mt-1">Precio de Dropi: {money(p.calculatedSalePrice)}</div>
             </div>
           </div>
+          <VariantNotesBox p={p} />
           <PublishPriceGuide p={p} />
           {p.calculatedSalePrice != null && <CopyDropiPrice price={p.calculatedSalePrice} label="Precio Dropi mínimo" />}
           {err && errId === p.id && <div className="text-red text-[12.5px] mb-2">{err}</div>}
@@ -1287,6 +1346,7 @@ function MyProposalsView() {
                   ) : null}
                 </div>
               )}
+              <VariantNotesBox p={p} />
               {p.status === "REJECTED" && p.rejectReason && (
                 <div className="text-[12px] text-red mb-2">Motivo: {p.rejectReason}</div>
               )}

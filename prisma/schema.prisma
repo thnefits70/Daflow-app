@@ -2446,6 +2446,12 @@ model MarketProductProposal {
   noCompetitorData    Boolean @default(false)
   discoverySourceNote String?
 
+  // Pedido de Jariel 2026-10-15: ¿el ID lleva variantes? Si dice que sí,
+  // anota libre colores/tallas/cantidad para que la asesora B2B las use de
+  // referencia al crear el ID en Dropi. null = propuesta anterior a esto.
+  hasVariants  Boolean?
+  variantNotes String?
+
   // Snapshot del cálculo del paso 1 — el costo real de compra vive en
   // supplierPrices y NUNCA se edita después. Estos tres sí son editables
   // luego (ver MarketProductPriceChange) — confirmado 2026-09-09: solo

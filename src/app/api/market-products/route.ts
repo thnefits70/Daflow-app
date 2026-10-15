@@ -48,6 +48,8 @@ const createSchema = z.object({
   competitorProductName: z.string().trim().optional(),
   noCompetitorData: z.boolean().optional(),
   discoverySourceNote: z.string().trim().max(300).optional(),
+  hasVariants: z.boolean({ message: "Responde si el ID es un producto con variantes." }),
+  variantNotes: z.string().trim().max(2000).optional(),
   insuranceRatePercent: z.number().min(0).max(100).optional(),
   fulfillmentCost: z.number().nonnegative().optional(),
   marginPercent: z.number().min(0).max(99).optional(),
@@ -82,6 +84,9 @@ export async function POST(req: NextRequest) {
   // en Dropi/Dropkiller/Rocket), esos campos se ignoran aunque vengan
   // llenos — a propósito vacíos, no un olvido.
   const skipCompetitor = d.platform === "ROCKET" || !!d.noCompetitorData;
+  if (d.hasVariants && !d.variantNotes) {
+    return NextResponse.json({ error: "Escribe las notas de variantes (colores, tallas o cuántas variantes lleva)." }, { status: 400 });
+  }
 
   // Pedido del usuario 2026-10-05: Jariel y Nairoby proponen por separado y
   // no hablan entre ellos — si el mismo producto (mismo ID de la competencia
@@ -133,6 +138,8 @@ export async function POST(req: NextRequest) {
       competitorProductName: skipCompetitor ? null : d.competitorProductName || null,
       noCompetitorData: !!d.noCompetitorData,
       discoverySourceNote: d.noCompetitorData ? d.discoverySourceNote || null : null,
+      hasVariants: d.hasVariants,
+      variantNotes: d.hasVariants ? d.variantNotes || null : null,
       insuranceRatePercent,
       fulfillmentCost,
       marginPercent,
