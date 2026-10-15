@@ -7,6 +7,7 @@ import { CancelledGuideFulfillmentRemovalInbox } from "./CancelledGuideFulfillme
 import { CancelledGuideItemAssignmentPanel } from "./CancelledGuideItemAssignmentPanel";
 import { CancelledGuideHistoryList } from "./CancelledGuideHistoryList";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Tab = "reportar" | "lotes" | "salida-fulfillment" | "productos" | "historial";
 
@@ -32,7 +33,7 @@ export function CancelledGuidesPanel({
         : canAssignItems
           ? "productos"
           : "historial";
-  const [tab, setTab] = useState<Tab>(defaultTab);
+  const [tab, setTab] = useRememberedState<Tab>("tab", defaultTab);
 
   const tabs: { id: Tab; label: string }[] = [
     ...(canSubmit ? [{ id: "reportar" as const, label: "Reportar" }] : []),

@@ -15,6 +15,7 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 import { PriceTrendChart, PriceHistoryBreakdownList } from "./PriceTrendChart";
 import type { SupplierPriceHistory, SupplierPricePoint } from "@/lib/purchases";
 import { shippingDueWithMerchandise, groupShippingTotal } from "@/lib/purchaseShipping";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type InvoiceStatus = "PENDING" | "COMPLETE" | "PARTIAL" | "NON_FISCAL" | "NONE";
 
@@ -300,7 +301,7 @@ export function PurchaseInvoicingPanel({
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("invoicing-q", "");
   // Confirmado 2026-09-24, pedido de Nairoby: filtrar por la marca fija del
   // proveedor (ver Supplier.givesInvoice) para buscar en el SRI solo lo que
   // de verdad va a tener factura.

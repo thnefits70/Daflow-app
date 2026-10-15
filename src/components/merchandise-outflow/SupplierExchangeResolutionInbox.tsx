@@ -6,6 +6,7 @@ import { LiveCameraCapture } from "@/components/shared/LiveCameraCapture";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type ItemDTO = {
   id: string;
@@ -235,7 +236,7 @@ export function SupplierExchangeResolutionInbox({
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("exchange-q", "");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 

@@ -8,6 +8,7 @@ import { WAREHOUSE_AREAS, areaLabel } from "@/lib/warehouseAreas";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { BIG_DIFF_UNITS } from "@/lib/stockCountRules";
 import { OPEN_VARIANT_EDITOR, VARIANTS_CHANGED } from "@/components/inventory/VariantListEditor";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Data = { count: CountView | null; fullCompleted: boolean; weeklyArea: string | null; isLead: boolean; board: AssignmentBoard | null };
 
@@ -116,7 +117,7 @@ function VariantCountEditor({ rows, onChange, onSave, onSingle, saving, correcti
 export function StockCountPanel() {
   const [data, setData] = useState<Data | null>(null);
   const [area, setArea] = useState<string>("");
-  const [q, setQ] = useState("");
+  const [q, setQ] = useRememberedState("count-q", "");
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   // Por producto: casillas por color/talla, o "single" si quien cuenta dijo
   // que no tiene (sin entrada = lo que sugiera el producto).

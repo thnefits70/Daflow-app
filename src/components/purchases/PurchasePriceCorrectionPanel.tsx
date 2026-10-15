@@ -5,6 +5,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { ProofPreview } from "@/components/shared/ProofPreview";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Eligible = {
   id: string;
@@ -55,7 +56,7 @@ const STATUS_LABEL: Record<string, string> = {
 // solo la solicitud, la deuda/hoja de CHEN y el Kardex (INVESTOCK).
 export function PurchasePriceCorrectionPanel() {
   const [data, setData] = useState<{ corrections: Correction[]; eligible: Eligible[]; isAdmin: boolean } | null>(null);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useRememberedState("price-fix-search", "");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [newPrice, setNewPrice] = useState("");
   const [reason, setReason] = useState("");

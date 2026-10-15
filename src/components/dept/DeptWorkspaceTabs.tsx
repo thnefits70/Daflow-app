@@ -45,6 +45,7 @@ import { TeamTasksPanel } from "@/components/team-tasks/TeamTasksPanel";
 import { WeeklyCheckinLockGate } from "@/components/dept/WeeklyCheckinLockGate";
 import { useWorkspaceTabDots } from "@/components/dept/useWorkspaceTabDots";
 import { isWorkspaceTabVisible } from "@/lib/workspaceTabVisibility";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type DocumentDTO = { id: string; title: string; content: string; link: string; fileUrl: string | null; fileName: string | null };
 type ExamSummary = { id: string; title: string; questionCount: number };
@@ -539,7 +540,7 @@ export function DeptWorkspaceTabs({
   // fallback si sigue siendo una pestaña visible para él.
   const fallbackTab: TabKey = trackWeeklyReview ? "feedback" : trackKpis ? "kpis" : trackWeeklyMetric ? "semanal" : "procesos";
   const initialTab = (preferredTab && tabs.some((t) => t.key === preferredTab) ? (preferredTab as TabKey) : fallbackTab);
-  const [tab, setTab] = useState<TabKey>(initialTab);
+  const [tab, setTab] = useRememberedState<TabKey>("area-tab", initialTab);
   const [seenFeedback, setSeenFeedback] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [focusBox, setFocusBox] = useState<string | null>(null);

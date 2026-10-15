@@ -5,6 +5,7 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 import { PurchaseSupplierPicker } from "@/components/purchases/PurchaseSupplierPicker";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { computeRepurchase, HOT_SELF_MAX_INCREASE_PERCENT, hotSelfConfirmBlock, repurchaseVerdictText, REPURCHASE_VERDICT_LABELS, type RepurchaseCalc, type RepurchaseVerdict } from "@/lib/repurchasePricing";
+import { useRememberedState } from "@/lib/rememberedState";
 
 // Recompras (pedido del usuario 2026-10-06). Toda recompra — calientes de
 // Jariel y frías de Nairoby — se analiza acá y la aprueba Bryan Ríos antes de
@@ -210,7 +211,7 @@ function VerdictBox({ calc, competitorPrice, marginPercent }: { calc: Repurchase
 // ---- Paso 1: elegir el producto ------------------------------------------------
 
 function ItemSearch({ onPick }: { onPick: (i: ItemOption) => void }) {
-  const [q, setQ] = useState("");
+  const [q, setQ] = useRememberedState("repurchase-q", "");
   const [results, setResults] = useState<ItemOption[]>([]);
   const [loading, setLoading] = useState(false);
   useEffect(() => {

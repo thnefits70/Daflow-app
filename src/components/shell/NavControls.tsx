@@ -8,7 +8,7 @@ import { ArrowLeft } from "lucide-react";
 // cómo volver a la página anterior. Este botón va en la barra del menú
 // lateral (y en la barra superior del celular).
 // Sin botón "Refrescar": pedido del usuario, debe ser automático — al volver
-// a DAFLOW tras un rato fuera se recarga sola (ver AppVersionWatcher).
+// a DAFLOW tras un rato fuera trae los datos al día sola (ver AppVersionWatcher).
 // `labeled`: versión con texto para el menú lateral de computadora; sin él,
 // solo ícono para la barra superior del celular.
 export function NavControls({ homeHref, labeled = false, className = "" }: { homeHref: string; labeled?: boolean; className?: string }) {

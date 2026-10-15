@@ -7,6 +7,7 @@ import { ProofPreview } from "@/components/shared/ProofPreview";
 import { compressImage } from "@/lib/compressImage";
 import { uploadFile } from "@/lib/uploadFile";
 import type { TeamTaskAssignmentDTO, TeamTaskDTO, TeamTaskRole } from "@/lib/teamTasks";
+import { useRememberedState } from "@/lib/rememberedState";
 
 // Tareas del equipo — pedido de Bryan Ríos 2026-10-13. Una sola pestaña con
 // tres vistas según quién mira: el líder asigna y revisa, el colaborador ve
@@ -90,7 +91,7 @@ export function TeamTasksPanel({ deptId }: { deptId: string }) {
   const [data, setData] = useState<{ role: TeamTaskRole; tasks: TeamTaskDTO[]; members: { id: string; name: string }[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  const [filter, setFilter] = useState<Filter>("abiertas");
+  const [filter, setFilter] = useRememberedState<Filter>("tasks-filter", "abiertas");
   const [person, setPerson] = useState<string>("");
 
   function load() {

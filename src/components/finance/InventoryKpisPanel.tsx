@@ -10,6 +10,7 @@ import { ExplainButton } from "@/components/shared/ExplainButton";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatCalendarDate } from "@/lib/formatDateTime";
 import { ExpandableName } from "@/components/ui/ExpandableName";
+import { useRememberedState } from "@/lib/rememberedState";
 
 const BUCKET_STYLE: Record<StaleStreakBucket, { label: string; color: string }> = {
   "1-3": { label: "recién detectado", color: "#92a3c0" },
@@ -399,7 +400,7 @@ type SortKey = "stock" | "costTotal" | "critical";
 // el inventario real de la semana por stock o valor para actuar de una vez,
 // sin esperar la segunda semana de comparación.
 function AllProductsSnapshotTable({ rows, period }: { rows: SnapshotRow[]; period: string | null }) {
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useRememberedState("kpi-search", "");
   const [sortKey, setSortKey] = useState<SortKey>("critical");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 

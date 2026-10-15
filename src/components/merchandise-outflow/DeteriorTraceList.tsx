@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { PackagePlus, Search, Trash2 } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Named = { name: string } | null;
 
@@ -412,8 +413,8 @@ export function DeteriorTraceList({
   hideMoney = false,
 }: { canAct?: boolean; onGoToExchange?: () => void; defaultFilter?: "open" | "closed" | "all"; refreshKey?: number; canAdminDelete?: boolean; hideMoney?: boolean } = {}) {
   const [items, setItems] = useState<TraceItem[] | null>(null);
-  const [filter, setFilter] = useState<"open" | "closed" | "all">(defaultFilter);
-  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useRememberedState<"open" | "closed" | "all">("deterior-filter", defaultFilter);
+  const [query, setQuery] = useRememberedState("deterior-q", "");
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {

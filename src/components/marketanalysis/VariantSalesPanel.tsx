@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { MIX_MIN_UNITS, splitByVariant } from "@/lib/variantMix";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Variant = { label: string; units: number; pct: number; trend: "up" | "down" | null };
 type Product = { catalogItemId: string; name: string; justCode: string | null; photo: string | null; totalUnits: number; variantUnits: number; variants: Variant[] };
@@ -77,7 +78,7 @@ export function VariantSalesPanel() {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useRememberedState("variant-sales-q", "");
 
   useEffect(() => {
     let alive = true;

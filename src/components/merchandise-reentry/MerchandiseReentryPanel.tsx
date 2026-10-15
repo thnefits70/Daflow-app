@@ -10,6 +10,7 @@ import { DropiComboManager } from "./DropiComboManager";
 import { StockLabelsPanel } from "./StockLabelsPanel";
 import { ExpirationLotsPanel } from "./ExpirationLotsPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Tab = "capturar" | "revision" | "danos" | "productos" | "historial";
 
@@ -32,7 +33,7 @@ export function MerchandiseReentryPanel({
   // marcaba "Subido a Just") — la parte buena entra sola a INVESTOCK apenas
   // Daniel aprueba el lote (ver inventoryAutoFlows.ts).
   const defaultTab: Tab = canCapture ? "capturar" : canApprove ? "revision" : canClose ? "danos" : "historial";
-  const [tab, setTab] = useState<Tab>(defaultTab);
+  const [tab, setTab] = useRememberedState<Tab>("tab", defaultTab);
 
   // Confirmado 2026-08-19: pedido explícito del usuario — el atajo de
   // "Pendientes" en Inicio llega con ?tab=revision para que Daniel entre

@@ -6,6 +6,7 @@ import { Plus, Check, Undo2, Trash2, Pencil, Search } from "lucide-react";
 import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type RecordDTO = { period: string; amountPaid: number; completedAt: string; completedByName: string | null };
 type ReminderDTO = {
@@ -38,7 +39,7 @@ export function PaymentRemindersPanel({
   editable: boolean;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"active" | "inactive">("active");
+  const [tab, setTab] = useRememberedState<"active" | "inactive">("reminders-tab", "active");
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
@@ -72,7 +73,7 @@ export function PaymentRemindersPanel({
   const [amountValue, setAmountValue] = useState("");
   const [refDraftFor, setRefDraftFor] = useState<string | null>(null);
   const [refValue, setRefValue] = useState("");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useRememberedState("reminders-search", "");
   const [editDraftFor, setEditDraftFor] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editMethod, setEditMethod] = useState("");

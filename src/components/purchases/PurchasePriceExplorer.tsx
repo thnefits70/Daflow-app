@@ -5,6 +5,7 @@ import { Search, X, ChevronDown, Award, FileText } from "lucide-react";
 import { CombinedPriceChart } from "./PriceTrendChart";
 import type { SupplierPriceHistory } from "@/lib/purchases";
 import { ExpandableName } from "@/components/ui/ExpandableName";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type CatalogItem = { id: string; name: string; photos: string[]; description?: string | null; code?: string | null; justCode?: string | null };
 
@@ -208,7 +209,7 @@ function ProductComparisonCard({ item, onRemove }: { item: CatalogItem; onRemove
 // comprado ese insumo, ordenados del más barato al más caro.
 export function PurchasePriceExplorer() {
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("price-q", "");
   const [selected, setSelected] = useState<CatalogItem[]>([]);
 
   useEffect(() => {

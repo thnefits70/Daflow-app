@@ -8,6 +8,7 @@ import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { retentionRiskFor } from "@/lib/storeFeedbackCalc";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type EvaluationDTO = {
   id: string;
@@ -286,7 +287,7 @@ export function StoreFeedbackPanel({ stores, editable = true }: { stores: StoreD
   const [expandedStoreId, setExpandedStoreId] = useState<string | null>(null);
   const [showScript, setShowScript] = useState(false);
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useRememberedState("feedback-search", "");
   const [brandFilter, setBrandFilter] = useState("");
   const [monthFrom, setMonthFrom] = useState("");
   const [monthTo, setMonthTo] = useState("");

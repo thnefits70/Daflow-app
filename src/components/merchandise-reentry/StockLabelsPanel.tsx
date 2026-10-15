@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { Search, Printer, CheckCheck, ScanLine } from "lucide-react";
 import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
 import type { StockLabelPrintSummary } from "@/app/api/stock-label-prints/route";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type CatalogItem = { id: string; name: string; justCode: string | null; pendingRegistration: boolean };
 
@@ -19,7 +20,7 @@ function stockCodeFor(item: CatalogItem): string {
 // donde vive ese producto, no en cada unidad física.
 export function StockLabelsPanel() {
   const [items, setItems] = useState<CatalogItem[]>([]);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("labels-q", "");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [qrByCode, setQrByCode] = useState<Record<string, string>>({});
   // Pedido de Daniel 2026-10-02: cuántas veces se imprimió cada QR y cuáles

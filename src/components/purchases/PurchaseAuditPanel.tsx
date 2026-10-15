@@ -6,6 +6,7 @@ import { actorName } from "@/lib/actorName";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { PurchaseOperationDocuments, type OperationDocRow } from "./PurchaseOperationDocuments";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Row = Omit<OperationDocRow, "receipt"> & {
   groupId: string;
@@ -148,7 +149,7 @@ export function PurchaseAuditPanel({ hideMoney = false }: { hideMoney?: boolean 
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("audit-q", "");
   // Pedido de Daniel 2026-09-28: "poder ver todo lo que llegó" — por defecto
   // se ve todo lo recibido; "Solo cerrado" es el criterio de siempre.
   const [scope, setScope] = useState<"all" | "closed">("all");

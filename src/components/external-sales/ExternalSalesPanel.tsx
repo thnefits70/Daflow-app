@@ -15,6 +15,7 @@ import { ExternalSaleReturnInbox } from "./ExternalSaleReturnInbox";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { LocalWarrantyPanel } from "./LocalWarrantyPanel";
 import { WarrantyPickupInbox } from "./WarrantyPickupInbox";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Tab = "declarar" | "garantias" | "revision" | "pagos" | "facturacion" | "despacho" | "preparar" | "entregas" | "devoluciones" | "cierre" | "auditoria" | "historial";
 
@@ -53,7 +54,7 @@ export function ExternalSalesPanel({
   const canDispatch = canAssignPrep || canAssignPack;
   const showPrepTab = canPrep && !canAssignPrep;
   const defaultTab: Tab = canDeclare ? "declarar" : canManageWarranties ? "garantias" : canReview ? "revision" : canDispatch ? "despacho" : "historial";
-  const [tab, setTab] = useState<Tab>(() => {
+  const [tab, setTab] = useRememberedState<Tab>("tab", () => {
     if (typeof window === "undefined") return defaultTab;
     let t = new URLSearchParams(window.location.search).get("etab");
     // Enlaces viejos (avisos ya enviados, Inicio) a las pestañas que se juntaron.

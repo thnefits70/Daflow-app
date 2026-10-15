@@ -6,6 +6,7 @@ import { formatDateTime, formatCalendarDate } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { ExpirationAlerts } from "./ExpirationAlerts";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type CatalogItem = { id: string; name: string; justCode: string | null; hasExpiration: boolean };
 type LotRow = { id: string; manufactureDate: string | null; expirationDate: string; quantityReceived: number; quantityRemaining: number; declaredAt: string };
@@ -20,7 +21,7 @@ function isExpirationLotDraftEmpty(d: ExpirationLotDraftData) {
 // permiso que "Etiquetas de percha".
 export function ExpirationLotsPanel() {
   const [items, setItems] = useState<CatalogItem[]>([]);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("lots-q", "");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [manufactureDate, setManufactureDate] = useState("");
   const [expirationDate, setExpirationDate] = useState("");

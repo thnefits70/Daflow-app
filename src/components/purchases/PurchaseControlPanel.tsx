@@ -20,6 +20,7 @@ import { SupplierSheetNotesPanel } from "./SupplierSheetNotesPanel";
 import { PurchasePriceCorrectionPanel } from "./PurchasePriceCorrectionPanel";
 import { PurchaseSuggestionsPanel } from "./PurchaseSuggestionsPanel";
 import { RepurchasePanel } from "./RepurchasePanel";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Tab = "que-comprar" | "recompras" | "solicitar" | "mias" | "comparar" | "aprobacion" | "confirmar-credito" | "inventario" | "finanzas" | "urgentes" | "creditos" | "proveedores-credito" | "notas-chen" | "precio" | "auditoria";
 
@@ -146,7 +147,7 @@ export function PurchaseControlPanel({
   // Daniel) nunca ve montos — mismo criterio que PurchaseReceivingPanel.
   const hideMoney = canReceiveTeam && !isAdmin && !canSubmit && !canReview && !canInvoice && !canApproveReceiving && !canManageGestion;
   const preferredDefault: Tab[] = ["solicitar", "aprobacion", "inventario", "finanzas", "mias", "comparar", "urgentes", "auditoria"];
-  const [tab, setTab] = useState<Tab>(preferredDefault.find((k) => tabs.some((t) => t.key === k)) ?? tabs[0]?.key ?? "solicitar");
+  const [tab, setTab] = useRememberedState<Tab>("tab", preferredDefault.find((k) => tabs.some((t) => t.key === k)) ?? tabs[0]?.key ?? "solicitar");
 
   // Confirmado 2026-08-13: pedido explícito del usuario — los links "Ir →"
   // de Pendientes en Inicio (ej. "Pagos de mercadería pendientes") llegan

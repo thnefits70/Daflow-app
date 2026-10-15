@@ -9,6 +9,7 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 import { PurchaseCode } from "@/components/shared/PurchaseCode";
 import { CopyDropiPrice } from "@/components/shared/CopyDropiPrice";
 import { recommendedDropiStock, DROPI_STOCK_MIN_RECOMMENDED } from "@/lib/dropiStockRecommendation";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Row = {
   id: string;
@@ -81,8 +82,8 @@ export function MarketingArrivalsPanel({ canConfirmAdvisor }: { canConfirmAdviso
   const [rows, setRows] = useState<Row[] | null>(null);
   const [confirmers, setConfirmers] = useState<Confirmer[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string>("all");
-  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useRememberedState<string>("arrivals-filter", "all");
+  const [search, setSearch] = useRememberedState("arrivals-search", "");
 
   function load() {
     fetch("/api/marketing-arrivals")

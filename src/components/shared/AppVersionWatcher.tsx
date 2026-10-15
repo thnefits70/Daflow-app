@@ -1,35 +1,44 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { isProvedixHost } from "@/lib/provedixHosts";
+import { endRestore, markRestoreBeforeReload, restoreScrollAfterReload } from "@/lib/rememberedState";
 
 // Pedido 2026-10-03: Joel seguía usando una versión vieja del escáner porque
 // tenía DAFLOW abierto en el celular desde antes de publicar la mejora (el
 // navegador del celular "congela" la pestaña y al volver la muestra igual,
-// sin cargar nada nuevo). Ahora DAFLOW revisa solo si hay versión nueva:
-//  - al cambiar de pantalla → carga la nueva al instante (igual se salía de
-//    esa pantalla, no se pierde nada);
-//  - al volver a DAFLOW tras un rato fuera → se recarga sola, salvo que la
-//    persona haya escrito algo en esa pantalla (para no borrárselo): ahí
-//    espera al siguiente cambio de pantalla.
+// sin cargar nada nuevo). Ahora DAFLOW revisa sola si hay versión nueva.
 // Sin avisos ni botones — pedido del usuario: debe ser automático.
-// 2026-10-05: también los DATOS. Se quitó el botón "Refrescar" (pedido del
-// usuario: nada manual). Al volver a DAFLOW tras ≥1 min fuera se recarga
-// sola con datos al día, aunque no haya versión nueva — salvo que se haya
-// escrito algo o elegido una foto/archivo en esa pantalla.
+//
+// 2026-10-15 (Michelle, la asesora humana, y Nairoby): la recarga completa
+// la sacaba de la tarea que estaba gestionando (se iba a WhatsApp, volvía y
+// tenía que buscar todo otra vez). Ahora:
+//  - Datos al día al volver tras ≥1 min fuera: se traen por detrás
+//    (router.refresh) SIN recargar — la tarea abierta, los filtros, lo
+//    escrito y el lugar de la lista se quedan igual.
+//  - Versión nueva: entra al cambiar de pantalla (ya se estaba saliendo, no
+//    se pierde nada). En la misma pantalla solo si estuvo fuera ≥2 h y no
+//    escribió nada; ahí la pantalla vuelve con su pestaña, filtros y posición
+//    (useRememberedState).
 
 const CURRENT = process.env.NEXT_PUBLIC_APP_VERSION ?? "dev";
 const POLL_MS = 5 * 60_000;
 const MIN_GAP_MS = 30_000; // no preguntar más seguido que esto
-const AWAY_MS = 30_000; // tiempo fuera para recargar sola al volver (versión nueva)
-const DATA_AWAY_MS = 60_000; // tiempo fuera para recargar sola al volver (datos al día)
+const AWAY_MS = 2 * 60 * 60_000; // tiempo fuera para cargar la versión nueva en la misma pantalla
+const DATA_AWAY_MS = 60_000; // tiempo fuera para traer datos al día al volver
 
 export function AppVersionWatcher() {
   const pathname = usePathname();
+  const router = useRouter();
   const staleRef = useRef(false);
   const dirtyRef = useRef(false);
   const firstPath = useRef(true);
+
+  // Tras una recarga en la misma pantalla, volver al mismo lugar de la lista.
+  useEffect(() => {
+    restoreScrollAfterReload();
+  }, []);
 
   // Cambio de pantalla con versión vieja → recarga (ya en la pantalla nueva).
   useEffect(() => {
@@ -38,22 +47,15 @@ export function AppVersionWatcher() {
       return;
     }
     dirtyRef.current = false;
+    endRestore();
     if (staleRef.current) window.location.reload();
   }, [pathname]);
 
-  // Datos al día al volver (también en local). Elegir foto/archivo abre la
-  // cámara o la galería y "saca" de DAFLOW: eso cuenta como escrito, para no
-  // recargar justo cuando vuelve con la foto.
+  // Datos al día al volver (también en local), sin recargar la pantalla.
   useEffect(() => {
-    // provedix.com (página pública, 2026-10-12): no se recarga al volver — el
-    // visitante pierde la ficha que tenía abierta al regresar de WhatsApp/Dropi.
+    // provedix.com (página pública, 2026-10-12): no se toca al volver.
     if (isProvedixHost(window.location.hostname) || window.location.pathname.startsWith("/pvx")) return;
     let hiddenAt = 0;
-    const markDirty = () => { dirtyRef.current = true; };
-    const onClick = (e: MouseEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t?.closest('input[type="file"], label')) dirtyRef.current = true;
-    };
     const onVisibility = () => {
       if (document.visibilityState === "hidden") {
         hiddenAt = Date.now();
@@ -61,24 +63,19 @@ export function AppVersionWatcher() {
       }
       const away = hiddenAt ? Date.now() - hiddenAt : 0;
       hiddenAt = 0;
-      if (away >= DATA_AWAY_MS && !dirtyRef.current) window.location.reload();
+      if (away >= DATA_AWAY_MS) router.refresh();
     };
+    // El celular devolvió la pestaña "congelada" (memoria del navegador).
     const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted && !dirtyRef.current) window.location.reload();
+      if (e.persisted) router.refresh();
     };
-    document.addEventListener("input", markDirty, true);
-    document.addEventListener("change", markDirty, true);
-    document.addEventListener("click", onClick, true);
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("pageshow", onPageShow);
     return () => {
-      document.removeEventListener("input", markDirty, true);
-      document.removeEventListener("change", markDirty, true);
-      document.removeEventListener("click", onClick, true);
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pageshow", onPageShow);
     };
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (CURRENT === "dev") return; // en la computadora de desarrollo no aplica
@@ -104,11 +101,20 @@ export function AppVersionWatcher() {
       return false;
     };
 
-    const onInput = () => { dirtyRef.current = true; };
+    // Escribir algo o elegir foto/archivo (abre cámara/galería y "saca" de
+    // DAFLOW) cuenta como trabajo en curso: nunca se recarga encima.
+    const markDirty = () => { dirtyRef.current = true; };
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t?.closest('input[type="file"], label')) dirtyRef.current = true;
+    };
 
     const onBack = async (wasAwayMs: number) => {
       const isStale = await check(true);
-      if (isStale && wasAwayMs >= AWAY_MS && !dirtyRef.current) window.location.reload();
+      if (isStale && wasAwayMs >= AWAY_MS && !dirtyRef.current) {
+        markRestoreBeforeReload();
+        window.location.reload();
+      }
     };
 
     const onVisibility = () => {
@@ -119,16 +125,12 @@ export function AppVersionWatcher() {
       void onBack(hiddenAt ? Date.now() - hiddenAt : 0);
     };
 
-    // El celular devolvió la pestaña "congelada" (memoria del navegador).
-    const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) void onBack(AWAY_MS);
-    };
-
     const onFocus = () => { void check(); };
 
-    document.addEventListener("input", onInput, true);
+    document.addEventListener("input", markDirty, true);
+    document.addEventListener("change", markDirty, true);
+    document.addEventListener("click", onClick, true);
     document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("pageshow", onPageShow);
     window.addEventListener("focus", onFocus);
     const id = window.setInterval(() => {
       if (document.visibilityState === "visible") void check();
@@ -136,9 +138,10 @@ export function AppVersionWatcher() {
     void check(true);
 
     return () => {
-      document.removeEventListener("input", onInput, true);
+      document.removeEventListener("input", markDirty, true);
+      document.removeEventListener("change", markDirty, true);
+      document.removeEventListener("click", onClick, true);
       document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("focus", onFocus);
       window.clearInterval(id);
     };

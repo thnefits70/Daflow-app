@@ -7,6 +7,7 @@ import { LocationPicker } from "./LocationPicker";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { useRememberedState } from "@/lib/rememberedState";
 
 export type SupplierContactDTO = { id?: string; label: string; whatsapp: string };
 export type ChannelPlatform = "TELEGRAM" | "INSTAGRAM" | "FACEBOOK" | "OTHER";
@@ -163,7 +164,7 @@ export function SuppliersPanel({
   // (type=CARRIER), solo se filtran/etiquetan distinto en esta pantalla.
   // Con ?verificar=1 abre la pestaña donde de verdad está la cuenta pendiente:
   // directorio, transportistas o Pendientes (proveedor aún sin aprobar).
-  const [tab, setTab] = useState<"directorio" | "transportistas" | "pendientes">(() => {
+  const [tab, setTab] = useRememberedState<"directorio" | "transportistas" | "pendientes">("tab", () => {
     if (!initialOnlyUnverified) return "directorio";
     if (suppliers.some((s) => s.type === "SUPPLIER" && hasUnverifiedAccount(s))) return "directorio";
     if (suppliers.some((s) => s.type === "CARRIER" && hasUnverifiedAccount(s))) return "transportistas";
@@ -181,7 +182,7 @@ export function SuppliersPanel({
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("suppliers-q", "");
   const [addingContactId, setAddingContactId] = useState<string | null>(null);
   const [newContact, setNewContact] = useState({ label: "", whatsapp: "" });
   const [contactErr, setContactErr] = useState("");

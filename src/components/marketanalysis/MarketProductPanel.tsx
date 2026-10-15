@@ -22,6 +22,7 @@ import { AdvisorComboRegister } from "./AdvisorComboRegister";
 import { useSharedHandoffLock, setPublishTabOpen, requestHandoffLockRefresh } from "./handoffLockSignal";
 import { DropiDownRequest } from "./DropiDownRequest";
 import { DropiOutageBar } from "./DropiOutageBar";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -169,7 +170,7 @@ export function MarketProductPanel({
     ...(canReview ? [{ key: "trazabilidad" as Tab, label: "Trazabilidad" }] : []),
     ...(priceHelper && !canPublish ? [{ key: "preciodropi" as Tab, label: "Precio Dropi (provisional)" }] : []),
   ];
-  const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "proponer");
+  const [tab, setTab] = useRememberedState<Tab>("tab", tabs[0]?.key ?? "proponer");
   // Pedido de Jariel 2026-10-15 (aprobado por el usuario): con el ID madre
   // vencido (ver handoffLocks.ts) solo queda "Publicar en Dropi".
   const handoffLock = useSharedHandoffLock();
@@ -277,7 +278,7 @@ export function MarketProductPanel({
 // esto filtra en vivo por lo que se va escribiendo, mismo patrón de
 // buscar+elegir que ya usan ProductMatchPicker/ClientMatchPicker.
 function SupplierSelect({ suppliers, value, onChange }: { suppliers: SupplierOption[]; value: string; onChange: (id: string) => void }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("market-q1", "");
   const [open, setOpen] = useState(false);
   const selected = suppliers.find((s) => s.id === value) ?? null;
   const filtered = query.trim() ? suppliers.filter((s) => s.name.toLowerCase().includes(query.toLowerCase())) : suppliers;
@@ -1155,7 +1156,7 @@ function PublishPriceGuide({ p }: { p: Proposal }) {
 // Acá queda su historial, con buscador por nombre/código/ID de Dropi.
 function PublishedHistoryView() {
   const [rows, setRows] = useState<Proposal[] | null>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("market-q2", "");
 
   useEffect(() => {
     fetch("/api/market-products?view=published-history").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
@@ -1233,7 +1234,7 @@ type ConsultaRow = {
 // Mismo patrón de búsqueda por nombre/código que ExpirationLotsPanel.tsx.
 function PricingConsultaTable() {
   const [rows, setRows] = useState<ConsultaRow[] | null>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("market-q3", "");
 
   useEffect(() => {
     fetch("/api/market-products?view=consulta").then((r) => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
@@ -1827,9 +1828,9 @@ function UnfoundWinnersView({ onPropose }: { onPropose: (p: ProposePrefill) => v
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [ok, setOk] = useState("");
-  const [filter, setFilter] = useState<"PENDING" | "PROPOSED" | "DISCARDED" | "ALL">("PENDING");
+  const [filter, setFilter] = useRememberedState<"PENDING" | "PROPOSED" | "DISCARDED" | "ALL">("market-filter", "PENDING");
   const [supplierFilter, setSupplierFilter] = useState("");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useRememberedState("market-search", "");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [rowBusy, setRowBusy] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);

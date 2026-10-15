@@ -10,6 +10,7 @@ import { ExpandableName } from "@/components/ui/ExpandableName";
 import { SupplierCreditProofDialog } from "@/components/merchandise-outflow/SupplierCreditProofDialog";
 import type { CreditProofClaim } from "@/lib/supplierCreditProofShared";
 import { isPreDaflowClaim, PRE_DAFLOW_NOTE } from "@/lib/preDaflowClaim";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type SupplierOption = { id: string; name: string };
 type ItemDTO = {
@@ -152,7 +153,7 @@ export function PurchaseDeteriorGestionPanel({ onChanged }: { onChanged?: () => 
 }
 
 function GestionCard({ item, onChanged, onCredit }: { item: ItemDTO; onChanged: () => void; onCredit?: () => void }) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("deterior-gestion-q", "");
   const [results, setResults] = useState<SupplierOption[]>([]);
   const [linking, setLinking] = useState(false);
   const [pickingAgain, setPickingAgain] = useState(false);

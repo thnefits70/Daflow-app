@@ -5,6 +5,7 @@ import { AlertTriangle, Ban, ChevronDown, ChevronUp, Pencil, Trash2, Undo2, Wren
 import { ProductMatchPicker, type ProductMatchResult } from "./ProductMatchPicker";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type ItemDTO = {
   id: string;
@@ -73,7 +74,7 @@ function repeatedCatalogIds(items: ItemDTO[]): Set<string> {
 const REPEATED_BADGE = <span className="shrink-0 text-[9.5px] font-bold uppercase tracking-wide text-gold border border-gold/50 rounded-full px-1.5 py-0.5">Repetido en este lote</span>;
 
 export function ReviewInbox({ canAct }: { canAct: boolean }) {
-  const [tab, setTab] = useState<"ready" | "review">("ready");
+  const [tab, setTab] = useRememberedState<"ready" | "review">("review-tab", "ready");
   const [ready, setReady] = useState<BatchDTO[]>([]);
   const [needsReview, setNeedsReview] = useState<BatchDTO[]>([]);
   const [loading, setLoading] = useState(true);

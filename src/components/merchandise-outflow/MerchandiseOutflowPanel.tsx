@@ -13,6 +13,7 @@ import { FulfillmentRequestPanel } from "./FulfillmentRequestPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { WarrantyDispatchPanel } from "./WarrantyDispatchPanel";
 import { MichelleCancellationsPanel } from "./MichelleCancellationsPanel";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Tab = "deterioro" | "seguimiento" | "proveedor" | "guias" | "garantias" | "michelle" | "solicitud" | "historial";
 
@@ -139,7 +140,7 @@ export function MerchandiseOutflowPanel({
   // ?tab=egresos&otab=X para entrar directo a lo que hay que gestionar —
   // resuelto en el inicializador de useState (no en un efecto) para no
   // disparar un setState extra apenas monta.
-  const [tab, setTab] = useState<Tab>(() => {
+  const [tab, setTab] = useRememberedState<Tab>("tab", () => {
     if (typeof window === "undefined") return defaultTab;
     const t = new URLSearchParams(window.location.search).get("otab");
     if (t === "deterioro" || t === "seguimiento" || t === "proveedor" || t === "guias") return t;

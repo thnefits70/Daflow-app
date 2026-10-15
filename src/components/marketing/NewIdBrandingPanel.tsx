@@ -8,6 +8,7 @@ import { formatDateTime } from "@/lib/formatDateTime";
 import { actorName } from "@/lib/actorName";
 import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Mark = { at: string; by: string | null };
 type StepKey = "dropiImages" | "dropiInfo" | "driveVideo" | "realPhotos" | "channel" | "private";
@@ -169,8 +170,8 @@ function StepCheck({
 // toman fotos reales; recién ahí pasa al historial, listo para el canal.
 export function NewIdBrandingPanel() {
   const [data, setData] = useState<Board | null>(null);
-  const [view, setView] = useState<View>("pending");
-  const [search, setSearch] = useState("");
+  const [view, setView] = useRememberedState<View>("branding-view", "pending");
+  const [search, setSearch] = useRememberedState("branding-search", "");
   const [err, setErr] = useState("");
 
   function load() {

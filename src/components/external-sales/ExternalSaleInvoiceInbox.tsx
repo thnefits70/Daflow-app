@@ -5,6 +5,7 @@ import { Upload } from "lucide-react";
 import { ProofPreview } from "@/components/shared/ProofPreview";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { uploadFile } from "@/lib/uploadFile";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type FacturaSolicitud = "SI" | "NO" | "PENDIENTE";
 
@@ -57,7 +58,7 @@ function facturaBadge(s: SaleDTO) {
 export function ExternalSaleInvoiceInbox() {
   const [sales, setSales] = useState<SaleDTO[] | null>(null);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
-  const [filter, setFilter] = useState<Filter>("requieren");
+  const [filter, setFilter] = useRememberedState<Filter>("invoice-filter", "requieren");
   const [error, setError] = useState("");
 
   function load() {

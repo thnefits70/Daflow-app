@@ -7,6 +7,7 @@ import { LegacyUnlinkedItems } from "./LegacyUnlinkedItems";
 import { CatalogItemMergeTool } from "./CatalogItemMergeTool";
 import { CatalogDuplicatesReview } from "./CatalogDuplicatesReview";
 import { ExpandableName } from "@/components/ui/ExpandableName";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type CatalogItemDTO = { id: string; name: string; justCode: string | null; photos: string[]; pendingRegistration: boolean };
 function fmt(iso: string) {
@@ -309,7 +310,7 @@ export function JustCatalogPanel({ canManage }: { canManage: boolean }) {
   const [items, setItems] = useState<CatalogItemDTO[]>([]);
   const [canEditCode, setCanEditCode] = useState(false);
   const [query, setQuery] = useState("");
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useRememberedState<string | null>("catalog-q", null);
 
   function load() {
     fetch("/api/merchandise-reentry/just-catalog")

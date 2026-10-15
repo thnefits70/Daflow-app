@@ -6,6 +6,7 @@ import { Plus, Check, Undo2, Trash2, Pencil, Bell } from "lucide-react";
 import { PushOptIn } from "@/components/shared/PushOptIn";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type CompletionDTO = { period: string; completedAt: string; completedByName: string | null };
 type ReminderDTO = {
@@ -81,7 +82,7 @@ export function PeriodicRemindersPanel({
   currentUserId: string | null;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"active" | "inactive">("active");
+  const [tab, setTab] = useRememberedState<"active" | "inactive">("periodic-tab", "active");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);

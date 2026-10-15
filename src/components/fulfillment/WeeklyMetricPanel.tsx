@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Trash2, Pencil, Search } from "lucide-react";
 import { PushTypeToggle } from "@/components/shared/PushTypeToggle";
 import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
+import { useRememberedState } from "@/lib/rememberedState";
 
 export type WeeklyMetricDTO = {
   id: string;
@@ -89,7 +90,7 @@ export function WeeklyMetricPanel({
   const [justification, setJustification] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useRememberedState("metric-search", "");
 
   // Confirmado 2026-09-08: pedido explícito del usuario — si lo que se está
   // por guardar YA queda en alerta (<95%, mismo umbral que needsJustification

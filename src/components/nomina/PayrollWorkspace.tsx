@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { OvertimeEntryPanel } from "./OvertimeEntryPanel";
 import { OvertimeApprovalPanel } from "./OvertimeApprovalPanel";
 import { OvertimeHistoryPanel } from "./OvertimeHistoryPanel";
@@ -17,6 +17,7 @@ import { SalaryAdvanceApprovalPanel, AdvanceHistoryPanel } from "@/components/sa
 import { ManagementDeductionsPanel } from "./ManagementDeductionsPanel";
 import { LegacyPayrollDebtsPanel } from "./LegacyPayrollDebtsPanel";
 import { TabGuide } from "@/components/shared/TabGuide";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Tab = "horas" | "aprobar" | "historial" | "roles" | "historialpagos" | "comisiones" | "bonosceo" | "comprasfinanzas" | "anticipos" | "descuentos" | "deudaanterior";
 
@@ -64,7 +65,7 @@ export function PayrollWorkspace({
     ...(canCreateManagementDeduction ? [{ key: "descuentos" as Tab, label: "Descuentos" }] : []),
     ...(canViewRoles ? [{ key: "deudaanterior" as Tab, label: "Deuda anterior" }] : []),
   ];
-  const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "roles");
+  const [tab, setTab] = useRememberedState<Tab>("payroll-tab", tabs[0]?.key ?? "roles");
 
   // Confirmado 2026-08-18: pedido explícito del usuario — el atajo "Ir →" de
   // Pendientes en Inicio ("Comisiones y bonos por aprobar", "Compras

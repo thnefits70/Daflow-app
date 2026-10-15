@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Plus, User, Award, Search, X } from "lucide-react";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Dept = { id: string; name: string; code: string };
 
@@ -90,10 +91,10 @@ export function NominaGrid({
 
   const deptById = (id: string | null) => departments.find((d) => d.id === id);
 
-  const [tab, setTab] = useState<"active" | "inactive">("active");
+  const [tab, setTab] = useRememberedState<"active" | "inactive">("nomina-tab", "active");
   const activeUsers = users.filter((u) => u.isActive);
   const inactiveUsers = users.filter((u) => !u.isActive);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("nomina-q", "");
   // Busca sin importar tildes ni mayúsculas, por nombre, usuario, cargo o área.
   const normalize = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
   const q = normalize(query.trim());

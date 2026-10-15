@@ -16,6 +16,7 @@ import { ManifestBrandConflicts } from "./ManifestBrandConflicts";
 import { CombinedPriceChart, PriceHistoryBreakdownList } from "@/components/purchases/PriceTrendChart";
 import type { SupplierPriceHistory } from "@/lib/purchases";
 import { ExplainButton } from "@/components/shared/ExplainButton";
+import { useRememberedState } from "@/lib/rememberedState";
 
 function fromSinAreaLink() {
   return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("filtro") === "sin-area";
@@ -647,7 +648,7 @@ export function StockLevelsPanel({
   }
   // Pedido del usuario 2026-10-01: cortes contados que Daniel aún no confirma.
   const [unconfirmedDispatch, setUnconfirmedDispatch] = useState<{ lots: number; units: number; since: string | null } | null>(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useRememberedState("stock-q", "");
   // Confirmado 2026-09-28, pedido del usuario: buscador propio de los combos,
   // justo encima de su tabla (el de arriba queda lejos cuando se ven
   // productos y combos juntos). Pegar el ID del combo o palabras clave; si

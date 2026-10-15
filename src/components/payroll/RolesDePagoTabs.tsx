@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { ExternalPaymentsPanel } from "@/components/payroll/ExternalPaymentsPanel";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Tab = "roles" | "factura";
 
@@ -9,13 +10,13 @@ type Tab = "roles" | "factura";
 // de quien está en modo de pago externo (factura/comprobante) del Rol de
 // pago formal, sin perder el mismo lugar de siempre (/area/roles-de-pago).
 export function RolesDePagoTabs({ canEditExternal, payStubsPanel }: { canEditExternal: boolean; payStubsPanel: React.ReactNode }) {
-  const [tab, setTab] = useState<Tab>("roles");
+  const [tab, setTab] = useRememberedState<Tab>("roles-tab", "roles");
 
   // El aviso de "Pagos por factura/comprobante" en Inicio enlaza con
   // ?ptab=factura para abrir directo esa pestaña.
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("ptab") === "factura") setTab("factura");
-  }, []);
+  }, [setTab]);
 
   return (
     <div>

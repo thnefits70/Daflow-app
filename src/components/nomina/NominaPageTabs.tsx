@@ -5,6 +5,7 @@ import { NominaGrid } from "./NominaGrid";
 import { PayrollWorkspace } from "./PayrollWorkspace";
 import { PayStubsPanel } from "@/components/payroll/PayStubsPanel";
 import { RolesDePagoTabs } from "@/components/payroll/RolesDePagoTabs";
+import { useRememberedState } from "@/lib/rememberedState";
 
 type Dept = { id: string; name: string; code: string };
 type NominaUser = {
@@ -76,7 +77,7 @@ export function NominaPageTabs({
     ...(showPayrollTab ? [{ key: "pagos" as Tab, label: "Pagos y horas extra" }] : []),
     ...(canManagePayStubs ? [{ key: "rolesdepago" as Tab, label: "Roles de pago" }] : []),
   ];
-  const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "colaboradores");
+  const [tab, setTab] = useRememberedState<Tab>("tab", tabs[0]?.key ?? "colaboradores");
 
   // Confirmado 2026-08-14: pedido explícito del usuario — el atajo "Ir →"
   // de Pendientes en Inicio ("Horas extra por aprobar") llega con
