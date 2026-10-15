@@ -28,6 +28,8 @@ export function MoveToOtherIdButton({ requestId, itemName, onMoved }: { requestI
   const [looking, setLooking] = useState(false);
   const [name, setName] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
+  const [hasVariants, setHasVariants] = useState<boolean | null>(null);
+  const [variantNotes, setVariantNotes] = useState("");
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -82,6 +84,8 @@ export function MoveToOtherIdButton({ requestId, itemName, onMoved }: { requestI
     setLookup(null);
     setName("");
     setPhotos([]);
+    setHasVariants(null);
+    setVariantNotes("");
     setErr("");
     setConfirming(false);
   }
@@ -105,7 +109,7 @@ export function MoveToOtherIdButton({ requestId, itemName, onMoved }: { requestI
   async function move() {
     setBusy(true);
     setErr("");
-    const body = mode === "existing" ? { existingCatalogItemId: lookup?.existing?.id } : { newItem: { name: name.trim(), photos } };
+    const body = mode === "existing" ? { existingCatalogItemId: lookup?.existing?.id } : { newItem: { name: name.trim(), photos, hasVariants, variantNotes: hasVariants ? variantNotes.trim() : undefined } };
     const res = await fetch(`/api/purchase-requests/${requestId}/move-to-other-id`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -134,7 +138,7 @@ export function MoveToOtherIdButton({ requestId, itemName, onMoved }: { requestI
   const canSubmit =
     !busy &&
     !uploading &&
-    (mode === "existing" ? !!existing && !existing.isSame && !looking : name.trim().length >= 3 && photos.length >= 3);
+    (mode === "existing" ? !!existing && !existing.isSame && !looking : name.trim().length >= 3 && photos.length >= 3 && hasVariants !== null && (!hasVariants || variantNotes.trim().length > 0));
   const targetLabel = mode === "existing" && existing ? `${existing.name} (${existing.justCode})` : `${name.trim()} (modelo nuevo)`;
   const tab = (m: "new" | "existing", label: string) => (
     <button
@@ -190,7 +194,30 @@ export function MoveToOtherIdButton({ requestId, itemName, onMoved }: { requestI
               </label>
             )}
           </div>
-          <div className="text-[10.5px] text-steel-dim">Si ya llegó, se ponen solas las fotos de lo que llegó; puedes cambiarlas.</div>
+          <div className="text-[10.5px] text-steel-dim mb-2">Si ya llegó, se ponen solas las fotos de lo que llegó; puedes cambiarlas.</div>
+          {/* Caso AM-0052: misma pregunta que en Proponer, para que la asesora B2B sepa cómo crear el ID. */}
+          <label className="block mb-1 text-[10px] font-semibold uppercase tracking-wide text-steel">¿Lleva variantes (tallas, colores)?</label>
+          <div className="flex gap-1.5 mb-1" style={{ maxWidth: 220 }}>
+            {([true, false] as const).map((v) => (
+              <button
+                key={String(v)}
+                type="button"
+                className={`flex-1 rounded border py-1.5 text-[12px] font-semibold cursor-pointer ${hasVariants === v ? "border-blue bg-blue/15 text-blue" : "border-rule text-steel"}`}
+                onClick={() => { setHasVariants(v); setConfirming(false); }}
+              >
+                {v ? "Sí" : "No"}
+              </button>
+            ))}
+          </div>
+          {hasVariants && (
+            <textarea
+              className="w-full rounded border border-rule px-2.5 py-1.5 text-[13px] mt-1"
+              rows={2}
+              placeholder="Ej. tallas S, M, L, XL · 1 color"
+              value={variantNotes}
+              onChange={(e) => { setVariantNotes(e.target.value); setConfirming(false); }}
+            />
+          )}
         </div>
       ) : (
         <div className="mb-2.5">

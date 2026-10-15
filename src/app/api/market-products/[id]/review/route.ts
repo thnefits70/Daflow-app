@@ -102,7 +102,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (parsed.data.decision === "APPROVED") {
     // Pedido de Jariel 2026-10-15: aviso 1 a la asesora B2B (ver publishNotices.ts).
-    await notifyPublishersOfApproval(existing.code, existing.productName).catch(() => null);
+    await notifyPublishersOfApproval(existing.code, existing.productName, existing).catch(() => null);
 
     // Confirmado 2026-09-09: pedido explícito del usuario — en el mismo
     // instante que Bryan aprueba, Daniel recibe la misma info como

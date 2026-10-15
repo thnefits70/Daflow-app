@@ -26,13 +26,22 @@ async function publisherIds(): Promise<string[]> {
   return users.map((u) => u.id);
 }
 
-export async function notifyPublishersOfApproval(code: string, productName: string): Promise<void> {
+// Pedido de Michelle (asesora B2B) 2026-10-15, caso AM-0052: el aviso dice
+// si el ID lleva variantes, para no tener que abrir DAFLOW para saberlo.
+export function variantsLine(hasVariants: boolean | null | undefined, variantNotes: string | null | undefined): string {
+  if (hasVariants == null) return "";
+  if (!hasVariants) return " Sin variantes.";
+  return ` Con variantes: ${(variantNotes ?? "").trim() || "ver notas en DAFLOW"}.`;
+}
+
+export async function notifyPublishersOfApproval(code: string, productName: string, variants?: { hasVariants: boolean | null; variantNotes: string | null }): Promise<void> {
   const ids = await publisherIds();
+  const extra = variants ? variantsLine(variants.hasVariants, variants.variantNotes) : "";
   await Promise.all(
     ids.map((id) =>
       notifyOwner(id, {
         title: APPROVED_TITLE,
-        body: `${code} ${productName} — Bryan lo aprobó. Créalo en Dropi y pon el ID en DAFLOW.`,
+        body: `${code} ${productName} — Bryan lo aprobó. Créalo en Dropi y pon el ID en DAFLOW.${extra}`,
         url: PUBLISH_TAB_URL,
       }).catch(() => null)
     )

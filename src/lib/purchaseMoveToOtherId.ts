@@ -49,7 +49,7 @@ export async function checkSameProductConfirmed(items: { catalogItemId: string; 
 export const MOVABLE_STATUSES = ["PENDING_APPROVAL", "APPROVED", "PAID", "RECEIVED_PENDING_REVIEW"] as const;
 type MovableStatus = (typeof MOVABLE_STATUSES)[number];
 
-export type MoveTarget = { existingCatalogItemId: string } | { newItem: { name: string; photos: string[] } };
+export type MoveTarget = { existingCatalogItemId: string } | { newItem: { name: string; photos: string[]; hasVariants: boolean; variantNotes?: string } };
 
 export async function findCatalogItemByJustCode(justCode: string) {
   return prisma.purchaseCatalogItem.findUnique({
@@ -120,7 +120,11 @@ export async function moveRequestToOtherId(params: {
     if (!(await movePurchase(prisma, source, item.id, null, params.actorId))) return { ok: false, error: CHANGED, status: 409 };
     target = item;
   } else {
-    const { name, photos } = params.target.newItem;
+    const { name, photos, hasVariants } = params.target.newItem;
+    // Misma pregunta que al proponer (caso AM-0052: el aviso no decía si
+    // llevaba variantes y la asesora B2B no sabía cómo crear el ID).
+    const variantNotes = hasVariants ? params.target.newItem.variantNotes?.trim() || null : null;
+    if (hasVariants && !variantNotes) return { ok: false, error: "Escribe las notas de variantes (colores, tallas o cuántas variantes lleva).", status: 400 };
     const nameTaken = await prisma.purchaseCatalogItem.findFirst({ where: { name: { equals: name, mode: "insensitive" } }, select: { name: true } });
     if (nameTaken) return { ok: false, error: `Ya existe "${nameTaken.name}" — ponle un nombre que diferencie el modelo nuevo.`, status: 409 };
     const proposalTaken = await prisma.marketProductProposal.findFirst({
@@ -151,6 +155,8 @@ export async function moveRequestToOtherId(params: {
             platform: "DROPI",
             noCompetitorData: true,
             discoverySourceNote: "Modelo nuevo que llegó en una compra",
+            hasVariants,
+            variantNotes,
             // batchCost es el costo POR UNIDAD (ver schema MarketProductSupplierPrice).
             calculatedSalePrice: computeMarketProductSalePrice({
               batchCost: request.unitCost,
@@ -185,7 +191,7 @@ export async function moveRequestToOtherId(params: {
     target = result.item;
     proposal = result.created;
     // Aviso 1 a la asesora B2B, igual que cuando Bryan aprueba una propuesta.
-    await notifyPublishersOfApproval(proposal.code, name).catch(() => null);
+    await notifyPublishersOfApproval(proposal.code, name, { hasVariants, variantNotes }).catch(() => null);
   }
 
   // Avisa a las otras partes: quien pidió, Bryan y Daniel.

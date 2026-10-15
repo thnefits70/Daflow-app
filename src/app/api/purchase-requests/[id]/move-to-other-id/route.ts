@@ -37,6 +37,8 @@ const schema = z.union([
       name: z.string().trim().min(3, "Escribe el nombre del modelo nuevo."),
       // Mismo mínimo que al crear cualquier producto (purchase-catalog).
       photos: z.array(z.string().url()).min(3, "Agrega mínimo 3 fotos del modelo nuevo.").max(3),
+      hasVariants: z.boolean({ message: "Responde si el modelo nuevo lleva variantes." }),
+      variantNotes: z.string().trim().max(1000).optional(),
     }),
   }),
 ]);
