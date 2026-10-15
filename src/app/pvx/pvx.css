@@ -418,3 +418,9 @@
     transition: none;
   }
 }
+
+/* Casillas que ya dibujan su propio borde redondeado al enfocarse (calculadora,
+   2026-10-15): sin el contorno cuadrado general de arriba, que se veía doble. */
+.pvx .pvx-noring:focus-visible {
+  outline: none;
+}

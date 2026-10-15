@@ -111,7 +111,7 @@ function Field({
           inputMode="decimal"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="pvx-num min-h-[46px] w-full bg-transparent px-1.5 text-[17px] font-bold outline-none"
+          className="pvx-noring pvx-num min-h-[46px] w-full bg-transparent px-1.5 text-[17px] font-bold outline-none"
         />
         {suffix && <span className="text-[var(--pvx-ink-3)]">{suffix}</span>}
       </span>
@@ -336,7 +336,7 @@ export function PvxCalculator({
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Busca por nombre o ID de Dropi…"
                   aria-label="Buscar un producto de Provedix"
-                  className="mt-1.5 min-h-[46px] w-full rounded-2xl bg-white px-3.5 text-[16px] outline-none ring-1 ring-[var(--pvx-paper-3)] focus:ring-2 focus:ring-[var(--pvx-orange)]"
+                  className="pvx-noring mt-1.5 min-h-[46px] w-full rounded-2xl bg-white px-3.5 text-[16px] outline-none ring-1 ring-[var(--pvx-paper-3)] focus:ring-2 focus:ring-[var(--pvx-orange)]"
                 />
               )}
               {options.length > 0 && !card && (
@@ -591,7 +591,7 @@ export function PvxCalculator({
                     value={perDay}
                     onChange={(e) => setPerDay(e.target.value)}
                     aria-label="Pedidos generados al día"
-                    className="pvx-num w-16 rounded-xl bg-white/10 px-2 py-1 text-center font-bold outline-none focus:ring-2 focus:ring-[var(--pvx-orange)]"
+                    className="pvx-noring pvx-num w-16 rounded-xl bg-white/10 px-2 py-1 text-center font-bold outline-none focus:ring-2 focus:ring-[var(--pvx-orange)]"
                   />
                   pedidos al día:
                 </div>

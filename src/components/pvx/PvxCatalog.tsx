@@ -151,12 +151,21 @@ function Nav({ name }: { name: string | null }) {
         <a href="#productos" className="hidden text-[14px] font-semibold text-white/75 hover:text-white md:inline">
           Productos
         </a>
+        {/* Calculadora de ganancia (2026-10-15): siempre visible, también en celular. */}
+        <a
+          href="#calculadora"
+          aria-label="Calculadora de ganancia"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-2 text-[13.5px] font-bold text-white ring-1 ring-white/20 hover:bg-white/20 sm:px-3"
+        >
+          <span aria-hidden>🧮</span>
+          <span className="hidden sm:inline">Calcula tu ganancia</span>
+        </a>
         {name ? (
           <span className="text-[13px] font-semibold text-white/80">Hola, {name.split(" ")[0]}</span>
         ) : (
           <a
             href="#productos"
-            className="pvx-press pvx-shine inline-flex items-center gap-1.5 rounded-full bg-[var(--pvx-orange)] px-4 py-2 text-[13.5px] font-bold text-white hover:bg-[var(--pvx-orange-press)]"
+            className="pvx-press pvx-shine inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[var(--pvx-orange)] px-4 py-2 text-[13.5px] font-bold text-white hover:bg-[var(--pvx-orange-press)]"
           >
             Ver productos <IconArrow className="w-3.5 h-3.5" />
           </a>
@@ -378,6 +387,20 @@ function Hero({ cards, stats, name, query, onQuery, onOpen }: { cards: PublicCar
             <div className="mt-7">
               <HeroSearch cards={cards} query={query} onQuery={onQuery} onOpen={onOpen} />
             </div>
+            {/* Calculadora en la portada (2026-10-15): que se vea apenas entran que Provedix los ayuda a vender con ganancia. */}
+            <a
+              href="#calculadora"
+              className="pvx-press group mt-5 flex max-w-[580px] items-center gap-4 rounded-[22px] bg-white/[0.07] p-4 ring-1 ring-white/15 hover:bg-white/[0.12] hover:ring-[var(--pvx-orange)]"
+            >
+              <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-[var(--pvx-orange)] text-[24px]" aria-hidden>
+                🧮
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[16px] font-bold sm:text-[17px]">¿A cuánto lo vendo para ganar?</span>
+                <span className="block text-[13.5px] text-white/70">Calculadora gratis: tu precio rentable y cuánto puedes pagar de publicidad.</span>
+              </span>
+              <IconArrow className="w-5 h-5 shrink-0 text-[var(--pvx-orange)] transition-transform group-hover:translate-x-1" />
+            </a>
             <div className="mt-5">
               <AdvisorPicker
                 dark

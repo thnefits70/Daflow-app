@@ -55,7 +55,7 @@ const SUGGESTIONS = [
   "¿Qué productos van en subida?",
   "¿Cómo empiezo a vender con Provedix?",
   "¿A qué hora es el próximo corte?",
-  "Recomiéndame algo para el hogar",
+  "¿A cuánto vendo un producto para ganar?",
 ];
 
 function readChatId(): string | null {
