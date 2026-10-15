@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { AreaGateShell } from "@/components/dept/AreaGateShell";
 import { MarketingArrivalAlert } from "@/components/marketing/MarketingArrivalAlert";
+import { HandoffLockGate } from "@/components/marketanalysis/HandoffLockGate";
 import { CountedLotsGate } from "@/components/merchandise-outflow/CountedLots";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { RecognitionPersonDTO } from "@/components/recognition/RecognitionPanel";
@@ -180,6 +181,8 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       {children}
       {/* Pedido del usuario 2026-10-01: cortes contados sin confirmar +24 h. */}
       {ledDeptCode === "INV" && <CountedLotsGate />}
+      {/* Pedido del usuario 2026-10-15: ID madre (6 h) y liberar al Kardex (3 h). */}
+      {(currentUser.canPublishMarketProduct || ledDeptCode === "MKT") && <HandoffLockGate />}
       {(currentUser.canConfirmMarketingDesign || currentUser.canConfirmMarketingAdvisor) && (
         <MarketingArrivalAlert canConfirmDesign={currentUser.canConfirmMarketingDesign} canConfirmAdvisor={currentUser.canConfirmMarketingAdvisor} />
       )}

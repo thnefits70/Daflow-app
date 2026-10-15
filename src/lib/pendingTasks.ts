@@ -41,6 +41,7 @@ import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
 import { getLeaderTeamTaskPendingItems, getMyTeamTaskPendingItem } from "@/lib/teamTasks";
 import { getProvedixSuspiciousChatsPendingItem } from "@/lib/provedixSuspicion";
 import { getMichelleCancelPendingItems } from "@/lib/michelleCancellations";
+import { getIdDeadlinePendingItem, getReleaseDeadlineItems, timeLeftText } from "@/lib/handoffLocks";
 
 import { formatPurchaseRequestCode } from "@/lib/purchaseCode";
 
@@ -563,6 +564,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_aprobadas_sin_compra: "Análisis de Mercado — mis propuestas aprobadas sin compra",
   analisis_mercado_brandear: "Nuevos IDs por brandear",
   analisis_mercado_sin_id: "Productos de Compras sin ID de Dropi",
+  analisis_mercado_id_plazo: "ID madre de Dropi (6 h desde el pago)",
   analisis_mercado_subir_rocket: "Subir a Rocket (Solo Rocket por ahora)",
   analisis_mercado_rocket_atrasado: "SKU de Rocket atrasado (más de 24 h)",
   analisis_mercado_pasar_publico: "Pasar a público en Dropi",
@@ -600,7 +602,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
 // "analisis_mercado_liberar_kardex" (confirmado 2026-09-28, pedido explícito
 // del usuario): mercadería ya en bodega que no aparece en INVESTOCK hasta que
 // Bryan la libere — se le pasó por semanas porque solo tenía un aviso único.
-export const MANDATORY_PUSH_TYPES = new Set(["fulfillment_cortes_sin_confirmar", "kardex_atrasado_cortes", "kardex_atrasado_recepciones", "kardex_atrasado_liberar", "colaborador_del_mes", "cambio_proveedor_rechazo", "analisis_mercado_liberar_kardex", "analisis_mercado_rocket_atrasado", "combos_sin_marca"]);
+export const MANDATORY_PUSH_TYPES = new Set(["fulfillment_cortes_sin_confirmar", "kardex_atrasado_cortes", "kardex_atrasado_recepciones", "kardex_atrasado_liberar", "colaborador_del_mes", "cambio_proveedor_rechazo", "analisis_mercado_liberar_kardex", "analisis_mercado_id_plazo", "analisis_mercado_rocket_atrasado", "combos_sin_marca"]);
 
 // Each department's admin-leader feedback meeting falls on a different
 // weekday — confirmed by the user 2026-07-21: Análisis de Mercado (Bryan)
@@ -1513,17 +1515,17 @@ async function getMakePublicPendingItem(href: string): Promise<PendingItem | nul
 }
 
 async function getMarketProductKardexReleasePendingItem(href: string): Promise<PendingItem | null> {
-  const rows = await getMarketProductKardexReleasePendingRows();
+  // Pedido del usuario 2026-10-15 (ver handoffLocks.ts): 3 h laborables, con la hora del bloqueo.
+  const rows = await getReleaseDeadlineItems();
   if (rows.length === 0) return null;
-  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const overdue = rows.some((r) => r.since < cutoff);
+  const overdue = rows.some((r) => r.overdue);
   const units = rows.reduce((s, r) => s + r.units, 0);
 
   return {
     type: "analisis_mercado_liberar_kardex",
     icon: "📦",
     label: "Liberar al Kardex — mercadería en bodega sin INVESTOCK",
-    meta: `${rows.length} producto${rows.length === 1 ? "" : "s"} · ${units} un.${overdue ? " · atrasado" : ""}`,
+    meta: `${rows.length} producto${rows.length === 1 ? "" : "s"} · ${units} un. · ${timeLeftText(rows[0].deadline)}`,
     overdue,
     href,
   };
@@ -4274,6 +4276,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (missingIdItem) teamItems.push(missingIdItem);
       const inTransitItem = await getPurchaseInTransitUnpublishedPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
       if (inTransitItem) teamItems.unshift(inTransitItem);
+      // Pedido del usuario 2026-10-15 (ver handoffLocks.ts): 6 h laborables desde el pago.
+      const idDeadlineItem = await getIdDeadlinePendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
+      if (idDeadlineItem) teamItems.unshift(idDeadlineItem);
       const priceChangeItem = await getDropiPriceChangesPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
       if (priceChangeItem) teamItems.unshift(priceChangeItem);
       const missingPriceItem = await getMissingDropiPricesPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
@@ -4690,7 +4695,7 @@ export async function getPossiblePendingTypesForActor(
       // pero no su líder — mismo criterio que el resto de este bloque.
       if (me.department?.code === "MKT") types.push("analisis_mercado_listo_comprar", "analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");
       if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
-      if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "precio_dropi_faltante", "analisis_mercado_pasar_publico");
+      if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_id_plazo", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "precio_dropi_faltante", "analisis_mercado_pasar_publico");
       if (me.canUploadRocketSku) types.push("analisis_mercado_subir_rocket");
       if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca", "marcas_no_coinciden");
       if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
@@ -4703,7 +4708,7 @@ export async function getPossiblePendingTypesForActor(
 
     types.push("cumpleanos", "plan_mejora_evaluacion_pendiente", "plan_mejora_etapa_vencida", "tareas_por_revisar", "tareas_vencidas_equipo");
     if (me.canBrandMarketProduct || me.canConfirmMarketingDesign) types.push("analisis_mercado_brandear");
-    if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "precio_dropi_faltante");
+    if (me.canPublishMarketProduct) types.push("analisis_mercado_sin_id", "analisis_mercado_id_plazo", "analisis_mercado_compra_en_camino", "precio_dropi_cambio", "precio_dropi_faltante");
       if (me.canMarkComboCreatedInDropi) types.push("combos_semana", "combos_sin_marca", "marcas_no_coinciden");
     if (me.canLinkStoreProducts) types.push("seguimiento_tiendas_sin_tienda");
     if (me.leadsDept.code === "FIN") types.push("analisis_mercado_rechazadas", "analisis_mercado_aprobadas_sin_compra");

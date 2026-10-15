@@ -503,6 +503,28 @@ export type PhysicalCountAdjustmentResult =
   | { kind: "applied"; balanceAfter: number; avgCostAfter: number }
   | { kind: "requested"; requestId: string };
 
+// Pedido del usuario 2026-10-15 (caso Set billetera: se ajustó a mano a 100
+// y al liberarlo al Kardex se iban a sumar otras 100): no se ajusta a mano un
+// producto que todavía tiene algo por entrar o salir del Kardex solo. Primero
+// se libera / aprueba / confirma eso, y recién ahí se ajusta lo que sobre.
+async function pendingKardexBlocker(catalogItemId: string): Promise<string | null> {
+  const [item, unreleased, unapproved, picked] = await Promise.all([
+    prisma.purchaseCatalogItem.findUnique({ where: { id: catalogItemId }, select: { awaitingDropiId: true } }),
+    prisma.purchaseRequestReceipt.aggregate({ where: { stockKardexEntry: null, approvedAt: { not: null }, request: { catalogItemId, status: "RECEIVED" } }, _sum: { receivedQuantity: true } }),
+    prisma.purchaseRequestReceipt.aggregate({ where: { stockKardexEntry: null, request: { catalogItemId, status: "RECEIVED_PENDING_REVIEW" } }, _sum: { receivedQuantity: true } }),
+    prisma.fulfillmentLotPick.aggregate({ where: { catalogItemId, confirmedAt: null, lot: { status: "SENT" } }, _sum: { pickedQty: true } }),
+  ]);
+  const reasons: string[] = [];
+  const waiting = unreleased._sum.receivedQuantity ?? 0;
+  if (item?.awaitingDropiId && waiting > 0) reasons.push(`${waiting} un. recibidas que esperan el ID madre y que Bryan las libere al Kardex`);
+  const toApprove = unapproved._sum.receivedQuantity ?? 0;
+  if (toApprove > 0) reasons.push(`${toApprove} un. recibidas que falta aprobar (Recepciones)`);
+  const out = picked._sum.pickedQty ?? 0;
+  if (out > 0) reasons.push(`${out} un. sacadas en un corte que falta confirmar`);
+  if (reasons.length === 0) return null;
+  return `Todavía no se puede ajustar a mano: este producto tiene ${reasons.join("; ")}. Eso entra o sale del Kardex solo — resuélvelo primero y después ajusta lo que siga sin cuadrar, así no queda duplicado.`;
+}
+
 export async function submitPhysicalCountAdjustment(params: {
   catalogItemId: string;
   requestedQuantity: number;
@@ -515,6 +537,8 @@ export async function submitPhysicalCountAdjustment(params: {
   }
   const reason = params.reason.trim();
   if (!reason) throw new Error("Escribe el motivo del ajuste.");
+  const blocker = await pendingKardexBlocker(params.catalogItemId);
+  if (blocker) throw new Error(blocker);
 
   const current = await getCurrentStock(params.catalogItemId);
 
@@ -592,6 +616,8 @@ export async function reviewPhysicalCountAdjustment(params: { id: string; action
     return { ok: true };
   }
 
+  const blocker = await pendingKardexBlocker(request.catalogItemId);
+  if (blocker) throw new Error(blocker);
   const current = await getCurrentStock(request.catalogItemId);
   await prisma.$transaction([
     prisma.stockKardexEntry.create({
