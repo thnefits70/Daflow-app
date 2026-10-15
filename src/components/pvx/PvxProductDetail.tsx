@@ -7,6 +7,7 @@ import { PvxDailyBars, PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
 import { WhatsAppButton } from "@/components/pvx/PvxContact";
 import { PVX_CALC_EVENT } from "@/components/pvx/PvxCalculator";
 import {
+  IconCalc,
   IconCheck,
   IconClock,
   IconClose,
@@ -263,7 +264,7 @@ export function PvxProductDetail({
           }}
           className="pvx-press inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-[#d9dbe0] bg-white px-4 py-2 text-[13.5px] font-bold hover:border-[#F95B02] cursor-pointer"
         >
-          🧮 Calcular mi ganancia
+          <IconCalc className="w-4 h-4 text-[#F95B02]" /> Calcular mi ganancia
         </button>
       </div>
 

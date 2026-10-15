@@ -3,9 +3,21 @@
 
 type P = { className?: string };
 
-function Svg({ className = "w-4 h-4", children }: P & { children: React.ReactNode }) {
+function Svg({
+  className = "w-4 h-4",
+  children,
+}: P & { children: React.ReactNode }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
       {children}
     </svg>
   );
@@ -60,6 +72,17 @@ export const IconCopy = (p: P) => (
     <path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3" />
   </Svg>
 );
+// Calculadora de ganancia (2026-10-15): reemplaza el emoji 🧮, que en Android casi no se veía.
+export const IconCalc = (p: P) => (
+  <Svg {...p}>
+    <rect x="5" y="2.5" width="14" height="19" rx="2.5" />
+    <rect x="8" y="5.5" width="8" height="4" rx="1" />
+    <path
+      d="M8.5 13h.01M12 13h.01M15.5 13h.01M8.5 16.5h.01M12 16.5h.01M15.5 16.5h.01"
+      strokeWidth={2.6}
+    />
+  </Svg>
+);
 export const IconTruck = (p: P) => (
   <Svg {...p}>
     <path d="M3 6h11v10H3zM14 9h4l3 3.5V16h-7" />
@@ -93,24 +116,44 @@ export const IconTrendUp = (p: P) => (
 );
 
 export const IconWhatsApp = ({ className = "w-4 h-4" }: P) => (
-  <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="currentColor"
+    aria-hidden
+  >
     <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8s-.4-.1-.6.1-.7.8-.8 1-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.3-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6a2.7 2.7 0 0 0 1.8-1.2 2.2 2.2 0 0 0 .2-1.2c-.1-.1-.3-.2-.5-.3Z" />
   </svg>
 );
 
 // Logos de redes (relleno, 2026-10-13).
 export const IconInstagram = ({ className = "w-5 h-5" }: P) => (
-  <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="currentColor"
+    aria-hidden
+  >
     <path d="M12 2.2c3.2 0 3.6 0 4.8.1 1.2.1 1.8.2 2.2.4.6.2 1 .5 1.4.9.4.4.7.8.9 1.4.2.4.4 1 .4 2.2.1 1.3.1 1.6.1 4.8s0 3.6-.1 4.8c-.1 1.2-.2 1.8-.4 2.2-.2.6-.5 1-.9 1.4-.4.4-.8.7-1.4.9-.4.2-1 .4-2.2.4-1.3.1-1.6.1-4.8.1s-3.6 0-4.8-.1c-1.2-.1-1.8-.2-2.2-.4-.6-.2-1-.5-1.4-.9-.4-.4-.7-.8-.9-1.4-.2-.4-.4-1-.4-2.2C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.8c.1-1.2.2-1.8.4-2.2.2-.6.5-1 .9-1.4.4-.4.8-.7 1.4-.9.4-.2 1-.4 2.2-.4C8.4 2.2 8.8 2.2 12 2.2Zm0 4.7a5.1 5.1 0 1 0 0 10.2 5.1 5.1 0 0 0 0-10.2Zm0 8.4a3.3 3.3 0 1 1 0-6.6 3.3 3.3 0 0 1 0 6.6Zm5.3-9.8a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4Z" />
   </svg>
 );
 export const IconTikTok = ({ className = "w-5 h-5" }: P) => (
-  <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="currentColor"
+    aria-hidden
+  >
     <path d="M16.6 3c.3 2.2 1.6 3.6 3.9 3.8v2.6c-1.4.1-2.6-.3-3.9-1.1v5.5c0 6.9-7.5 9.1-10.5 4.1-1.9-3.2-.7-8.8 5.6-9v2.8c-.5.1-1 .2-1.4.4-1.4.5-2.2 1.4-2 3 .4 3 6 3.9 5.5-2V3h2.8Z" />
   </svg>
 );
 export const IconFacebook = ({ className = "w-5 h-5" }: P) => (
-  <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="currentColor"
+    aria-hidden
+  >
     <path d="M13.5 21v-7.6h2.6l.4-3h-3V8.5c0-.9.3-1.5 1.5-1.5h1.6V4.3c-.3 0-1.2-.1-2.3-.1-2.3 0-3.9 1.4-3.9 4v2.2H7.8v3h2.6V21h3.1Z" />
   </svg>
 );

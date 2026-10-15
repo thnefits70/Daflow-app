@@ -6,6 +6,7 @@ import { PVX_CALC_EVENT } from "@/components/pvx/PvxCalculator";
 import { PVX_SHARE_URLS, PvxShare } from "@/components/pvx/PvxShare";
 import {
   IconArrow,
+  IconCalc,
   IconClose,
   IconExternal,
   IconLock,
@@ -428,7 +429,8 @@ export function PvxChat({
                                   }}
                                   className="pvx-press inline-flex items-center gap-1.5 rounded-full bg-[var(--pvx-ink)] px-3.5 py-2 text-[13px] font-bold text-white hover:bg-[#25282f] cursor-pointer"
                                 >
-                                  🧮 Calcular mi ganancia · {a.code}
+                                  <IconCalc className="w-4 h-4" /> Calcular mi
+                                  ganancia · {a.code}
                                 </button>
                               ) : (
                                 <a

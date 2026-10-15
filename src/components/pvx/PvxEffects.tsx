@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
-import { IconArrow } from "@/components/pvx/PvxIcons";
+import { IconArrow, IconCalc } from "@/components/pvx/PvxIcons";
 
 // Efectos de provedix.com (pedido del usuario 2026-10-14, ideas de un video de
 // Cult UI hechas a mano, sin librerías): números que cuentan, ciudad que va
@@ -108,11 +108,21 @@ export function GlassBar() {
           <a href="#recursos" className="hidden text-[14px] font-semibold text-white/80 hover:text-white md:inline">
             Recursos
           </a>
+          {/* Calculadora de ganancia, también en la barra que aparece al bajar (2026-10-15). */}
+          <a
+            href="#calculadora"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/10 px-2.5 py-2 text-[13px] font-bold text-white ring-1 ring-white/20 hover:bg-white/20 sm:gap-1.5 sm:px-3 sm:text-[13.5px]"
+          >
+            <IconCalc className="w-4 h-4 text-[var(--pvx-orange)]" />
+            <span className="sm:hidden">Calculadora</span>
+            <span className="hidden sm:inline">Calcula tu ganancia</span>
+          </a>
           <a
             href="#productos"
-            className="pvx-press pvx-shine inline-flex items-center gap-1.5 rounded-full bg-[var(--pvx-orange)] px-4 py-2 text-[13.5px] font-bold text-white hover:bg-[var(--pvx-orange-press)]"
+            className="pvx-press pvx-shine inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-[var(--pvx-orange)] px-3 py-2 text-[13px] font-bold text-white hover:bg-[var(--pvx-orange-press)] sm:gap-1.5 sm:px-4 sm:text-[13.5px]"
           >
-            Ver productos <IconArrow className="w-3.5 h-3.5" />
+            <span className="sm:hidden">Productos</span>
+            <span className="hidden sm:inline">Ver productos</span> <IconArrow className="w-3.5 h-3.5" />
           </a>
         </nav>
       </div>
