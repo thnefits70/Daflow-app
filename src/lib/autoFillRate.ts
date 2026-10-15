@@ -71,16 +71,25 @@ export async function retainedGuideNumbers(): Promise<Set<string>> {
 export const SUBTRACT_OUT_OF_STOCK = false;
 export const DISPATCH_RULES_FROM_WEEK = "2026-W42";
 
-// Hora (Ecuador) en que se va cada transportadora — horario de despachos
-// del 2026-09-23, Gintracom 15:00 según Daniel. El sábado todas a las 12:00.
+// Hora (Ecuador) en que se va cada transportadora — confirmado por Daniel
+// 2026-10-15: Veloces 11:00, Urbano 13:00, Gintracom 15:00, Laar y
+// Servientrega 17:00. El sábado solo vienen Veloces, Gintracom y
+// Servientrega (hasta las 12:00); Urbano y Laar no vienen, así que sus guías
+// del sábado salen el siguiente día de trabajo.
 const CARRIER_LEAVES_AT: Record<string, string> = {
-  VELOCES: "13:30",
-  URBANO: "13:30",
+  VELOCES: "11:00",
+  URBANO: "13:00",
   GINTRACOM: "15:00",
   LAAR: "17:00",
   SERVIENTREGA: "17:00",
 };
-const SATURDAY_LEAVES_AT = "12:00";
+const SATURDAY_LEAVES_AT: Record<string, string> = {
+  VELOCES: "12:00",
+  GINTRACOM: "12:00",
+  SERVIENTREGA: "12:00",
+  URBANO: "00:00",
+  LAAR: "00:00",
+};
 
 // Día en que la guía realmente sale. Solo se mueve si el PDF se subió el
 // mismo día del corte (un manifiesto atrasado se queda en su día) y después
@@ -89,7 +98,7 @@ export function guideDispatchDay(lotDay: string, uploadedAt: Date, carrier: stri
   if (isoWeekOf(lotDay) < DISPATCH_RULES_FROM_WEEK) return lotDay;
   if (ecuadorDay(uploadedAt) !== lotDay) return lotDay;
   const saturday = new Date(`${lotDay}T12:00:00Z`).getUTCDay() === 6;
-  const leavesAt = saturday ? SATURDAY_LEAVES_AT : CARRIER_LEAVES_AT[carrier.trim().toUpperCase()];
+  const leavesAt = (saturday ? SATURDAY_LEAVES_AT : CARRIER_LEAVES_AT)[carrier.trim().toUpperCase()];
   if (!leavesAt) return lotDay;
   const uploadedTime = new Date(uploadedAt.getTime() - 5 * 3600000).toISOString().slice(11, 16);
   return uploadedTime > leavesAt ? nextWorkingDay(lotDay) : lotDay;

@@ -154,7 +154,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                   )}
                   {anyMoved && (
                     <div>
-                      ↪ Guías de un corte subido el día anterior cuando su transportadora ya se había ido (Veloces y Urbano 13:30, Gintracom 15:00, Laar y Servientrega 17:00; sábado todas 12:00): salen este día y cuentan aquí.
+                      ↪ Guías de un corte subido el día anterior cuando su transportadora ya se había ido (Veloces 11:00, Urbano 13:00, Gintracom 15:00, Laar y Servientrega 17:00; sábado Veloces, Gintracom y Servientrega 12:00, Urbano y Laar no vienen): salen este día y cuentan aquí.
                     </div>
                   )}
                   {anyRetained && <div><span style={{ color: "#D9A441" }}>Retenidas</span>: guías canceladas que Daniel o Allan confirmaron que retuvieron — no salieron, no cuentan.</div>}
