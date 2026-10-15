@@ -19,6 +19,7 @@ import { DropiPriceChangesQueue } from "./DropiPriceChangesQueue";
 import { DropiPriceMissingQueue } from "./DropiPriceMissingQueue";
 import { computePreviewPrice, computeCompetitorComparison } from "./PriceCalculator";
 import { AdvisorComboRegister } from "./AdvisorComboRegister";
+import { useSharedHandoffLock, setPublishTabOpen, requestHandoffLockRefresh } from "./handoffLockSignal";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -167,6 +168,16 @@ export function MarketProductPanel({
     ...(priceHelper && !canPublish ? [{ key: "preciodropi" as Tab, label: "Precio Dropi (provisional)" }] : []),
   ];
   const [tab, setTab] = useState<Tab>(tabs[0]?.key ?? "proponer");
+  // Pedido de Jariel 2026-10-15 (aprobado por el usuario): con el ID madre
+  // vencido (ver handoffLocks.ts) solo queda "Publicar en Dropi".
+  const handoffLock = useSharedHandoffLock();
+  const idLocked = canPublish && handoffLock?.kind === "id";
+  const shownTabs = idLocked ? tabs.filter((t) => t.key === "publicar") : tabs;
+  const shownTab: Tab = idLocked ? "publicar" : tab;
+  useEffect(() => {
+    setPublishTabOpen(shownTab === "publicar");
+    return () => setPublishTabOpen(false);
+  }, [shownTab]);
   const [proposePrefill, setProposePrefill] = useState<ProposePrefill | null>(null);
 
   useEffect(() => {
@@ -196,38 +207,45 @@ export function MarketProductPanel({
   return (
     <div>
       <div className="flex gap-5.5 border-b border-rule mb-5.5 overflow-x-auto">
-        {tabs.map((t) => (
+        {shownTabs.map((t) => (
           <button
             key={t.key}
             type="button"
-            className={`pb-2.5 text-[13px] font-semibold border-b-2 cursor-pointer whitespace-nowrap ${tab === t.key ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"}`}
+            className={`pb-2.5 text-[13px] font-semibold border-b-2 cursor-pointer whitespace-nowrap ${shownTab === t.key ? "text-ink border-teal" : "text-steel border-transparent hover:text-ink"}`}
             onClick={() => setTab(t.key)}
           >
             {t.label}
           </button>
         ))}
       </div>
-      {tab === "proponer" && (
+      {shownTab === "proponer" && (
         <ProposeForm
           key={proposePrefill?.unfoundId ?? "new"}
           prefill={proposePrefill}
           onClearPrefill={() => setProposePrefill(null)}
         />
       )}
-      {tab === "ganadores" && (
+      {shownTab === "ganadores" && (
         <UnfoundWinnersView
           onPropose={(p) => { setProposePrefill(p); setTab("proponer"); }}
         />
       )}
-      {tab === "sinstock" && <SupplierStockoutPanel canReport={canReportStockout} canResolve={canResolveStockout} />}
-      {tab === "despiertan" && <SuddenDemandPanel />}
-      {tab === "variantes" && <VariantSalesPanel />}
-      {tab === "mispropuestas" && <MyProposalsView />}
-      {tab === "listoparacomprar" && <ReadyToBuyQueue />}
-      {tab === "consulta" && <PricingConsultaTable />}
-      {tab === "aprobacion" && <ReviewQueue canAct={canActOnReview} />}
-      {tab === "publicar" && (
+      {shownTab === "sinstock" && <SupplierStockoutPanel canReport={canReportStockout} canResolve={canResolveStockout} />}
+      {shownTab === "despiertan" && <SuddenDemandPanel />}
+      {shownTab === "variantes" && <VariantSalesPanel />}
+      {shownTab === "mispropuestas" && <MyProposalsView />}
+      {shownTab === "listoparacomprar" && <ReadyToBuyQueue />}
+      {shownTab === "consulta" && <PricingConsultaTable />}
+      {shownTab === "aprobacion" && <ReviewQueue canAct={canActOnReview} />}
+      {shownTab === "publicar" && (
         <>
+          {idLocked && handoffLock && (
+            <div className="mb-4 rounded-md border border-red/50 bg-red/5 px-3.5 py-3 text-[12.5px] text-ink">
+              <div className="font-bold text-red mb-1">DAFLOW está bloqueado hasta que pongas el ID madre de Dropi</div>
+              Pasaron 6 horas laborables desde que se pagó la compra de:{" "}
+              <b>{handoffLock.items.map((i) => i.name).join(", ")}</b>. Créalos en Dropi y confirma su ID abajo. Apenas los pongas, vuelves a usar DAFLOW con normalidad.
+            </div>
+          )}
           <DropiPriceChangesQueue />
           <DropiPriceMissingQueue />
           <MakePublicQueue />
@@ -235,11 +253,11 @@ export function MarketProductPanel({
           <PublishQueue />
         </>
       )}
-      {tab === "mispublicados" && <PublishedHistoryView />}
-      {tab === "rocket" && <RocketUploadView />}
-      {tab === "preciodropi" && <DropiPriceMissingQueue />}
-      {tab === "registrarcombo" && <AdvisorComboRegister />}
-      {tab === "trazabilidad" && <TraceabilityView canDecidePurchase={canDecidePurchase} canCancel={canReview} canRequestPublic={canActOnReview} />}
+      {shownTab === "mispublicados" && <PublishedHistoryView />}
+      {shownTab === "rocket" && <RocketUploadView />}
+      {shownTab === "preciodropi" && <DropiPriceMissingQueue />}
+      {shownTab === "registrarcombo" && <AdvisorComboRegister />}
+      {shownTab === "trazabilidad" && <TraceabilityView canDecidePurchase={canDecidePurchase} canCancel={canReview} canRequestPublic={canActOnReview} />}
     </div>
   );
 }
@@ -959,6 +977,7 @@ function PublishQueue() {
     setBusy(null);
     setConfirmingId(null);
     if (!res.ok) { const d = await res.json().catch(() => ({})); setErr(d.error ?? "No se pudo publicar."); setErrId(id); return; }
+    requestHandoffLockRefresh();
     load();
   }
 

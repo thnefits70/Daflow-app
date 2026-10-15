@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { sendDuePublishNotices } from "@/lib/publishNotices";
 
 // Confirmado 2026-08-18: campanita de notificaciones — cada quien ve solo
 // las suyas (ownerId = su propio id, o "admin"). Más reciente primero.
@@ -9,6 +10,10 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "No autorizado." }, { status: 401 });
 
   const ownerId = session.user.role === "admin" ? "admin" : session.user.id;
+  // Pedido de Jariel 2026-10-15: avisos 2 y 3 de "crea el ID en Dropi" — se
+  // revisan (como mucho una vez por minuto) con la campanita de quien tenga
+  // DAFLOW abierto. Ver publishNotices.ts.
+  after(() => sendDuePublishNotices().catch(() => null));
   const notifications = await prisma.notification.findMany({
     where: { ownerId },
     orderBy: { createdAt: "desc" },

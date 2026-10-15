@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canActOnMarketProductReview } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
+import { notifyPublishersOfApproval } from "@/lib/publishNotices";
 import { suggestNichoIfMissing } from "@/lib/nichoAi";
 
 const schema = z.discriminatedUnion("decision", [
@@ -100,6 +101,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   if (parsed.data.decision === "APPROVED") {
+    // Pedido de Jariel 2026-10-15: aviso 1 a la asesora B2B (ver publishNotices.ts).
+    await notifyPublishersOfApproval(existing.code, existing.productName).catch(() => null);
+
     // Confirmado 2026-09-09: pedido explícito del usuario — en el mismo
     // instante que Bryan aprueba, Daniel recibe la misma info como
     // referencia (todavía sin ID de Dropi, no existe hasta que Heidy

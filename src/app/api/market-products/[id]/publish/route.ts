@@ -6,6 +6,7 @@ import { canPublishMarketProduct } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { getNewIdBrandingActorIds } from "@/lib/newIdBranding";
 import { productIdUsedByCombo } from "@/lib/comboBrand";
+import { markPublishNoticesDone } from "@/lib/publishNotices";
 
 const schema = z.object({
   quantity: z.number().int().positive().default(100),
@@ -50,6 +51,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     where: { id },
     data: { dropiProductId: parsed.data.dropiProductId, publishedById: session.user.id, publishedAt: new Date() },
   });
+
+  // Con el ID puesto, los avisos de "crea el ID" de este producto quedan leídos.
+  await markPublishNoticesDone(existing.code).catch(() => null);
 
   const inventoryLead = await prisma.user.findFirst({ where: { isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } });
   if (inventoryLead) {
