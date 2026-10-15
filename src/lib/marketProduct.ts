@@ -398,6 +398,9 @@ export function computeProposalTraceability(p: {
 // guardado, y aun así solo con UN producto por solicitud. Ahora cuenta como
 // comprado también si existe cualquier solicitud (no rechazada) del mismo
 // artículo creada después de marcarse listo.
+// Reportado por Bryan Ríos 2026-10-15 (AM-0020): Jariel lo compró el 24/9 y
+// Bryan lo marcó listo recién el 25/9, así que la compra no contaba y seguía
+// en la bandeja. Ahora vale cualquier compra hecha desde que se propuso.
 // Pedido del usuario 2026-10-05: cada quien compra lo que propuso. Lo que
 // propuso quien hace las compras frías le toca a esa lista; todo lo demás va
 // a compras calientes. Desde 2026-10-13 "compras frías" = el interruptor del
@@ -417,7 +420,7 @@ export async function getReadyToBuyPendingProposalIdsByBuyer(): Promise<{ hot: s
 export async function getReadyToBuyPendingProposalIds(): Promise<string[]> {
   const rows = await prisma.marketProductProposal.findMany({
     where: { readyToBuyAt: { not: null }, purchaseRequests: { none: {} } },
-    select: { id: true, catalogItemId: true, readyToBuyAt: true },
+    select: { id: true, catalogItemId: true, proposedAt: true },
   });
   const catalogItemIds = rows.map((r) => r.catalogItemId).filter((id): id is string => !!id);
   if (catalogItemIds.length === 0) return rows.map((r) => r.id);
@@ -426,7 +429,7 @@ export async function getReadyToBuyPendingProposalIds(): Promise<string[]> {
     select: { catalogItemId: true, createdAt: true },
   });
   return rows
-    .filter((r) => !requests.some((pr) => pr.catalogItemId === r.catalogItemId && pr.createdAt >= r.readyToBuyAt!))
+    .filter((r) => !requests.some((pr) => pr.catalogItemId === r.catalogItemId && pr.createdAt >= r.proposedAt))
     .map((r) => r.id);
 }
 
