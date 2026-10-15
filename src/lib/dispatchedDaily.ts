@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getCompiledLot, ecuadorDay, NO_BRAND } from "@/lib/fulfillmentGuides";
 import { guideBrandsOf } from "@/lib/guideBrands";
 import { brandLabel, sortBrands } from "@/lib/brandLabels";
-import { daysOfIsoWeek, isAutoFillRateWeek, FILL_RATE_DEPT_CODE, retainedGuideNumbers, guideDispatchDay, lotDaysFeeding, outOfStockSubtracted } from "@/lib/autoFillRate";
+import { daysOfIsoWeek, isAutoFillRateWeek, FILL_RATE_DEPT_CODE, retainedGuideNumbers, guideDispatchDay, lotDaysFeeding, outOfStockSubtracted, isWarrantyGuide, warrantyGuidesOf } from "@/lib/autoFillRate";
 
 // Pedido de Daniel 2026-10-13: al hacer clic en una semana de "Pedidos
 // despachados", el mismo número desglosado por día — guías de los cortes por
@@ -17,6 +17,8 @@ export type DispatchedDay = {
   guides: number;
   // Guías del corte que Daniel/Allan confirmaron retenidas (2026-10-14) — se restan.
   retained: number;
+  // Guías de garantías que salieron en el corte (2026-10-15) — no son pedidos, se restan.
+  warranties: number;
   outOfStock: number;
   // Guías de un corte del día anterior subido cuando su transportadora ya se
   // había ido (2026-10-14): salen este día y cuentan aquí.
@@ -52,7 +54,7 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
         requestedAt: true,
         lot: { select: { day: true } },
         guides: { select: { guideNumber: true, codes: true, manifestFile: true, carrier: true } },
-        items: { select: { sourceCode: true, fromComboCode: true, catalogItem: { select: { bodega: true } } } },
+        items: { select: { sourceCode: true, fromComboCode: true, warrantyGuide: true, catalogItem: { select: { bodega: true } } } },
       },
     }),
     prisma.fulfillmentLot.findMany({ where: { day: { in: days }, status: { in: ["SENT", "CLOSED"] } }, select: { id: true, day: true } }),
@@ -72,7 +74,7 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
   const byDay = new Map<string, { day: DispatchedDay; brandCounts: Record<string, number> }>();
   for (const day of days) {
     byDay.set(day, {
-      day: { day, brands: [], guides: 0, retained: 0, outOfStock: 0, movedIn: 0, externalSales: 0, dispatched: 0, cancelledInCut: 0, cancelledReported: 0 },
+      day: { day, brands: [], guides: 0, retained: 0, warranties: 0, outOfStock: 0, movedIn: 0, externalSales: 0, dispatched: 0, cancelledInCut: 0, cancelledReported: 0 },
       brandCounts: {},
     });
   }
@@ -81,6 +83,7 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
   const guideDay = new Map<string, string>();
   for (const b of batches) {
     if (!b.lot) continue;
+    const warrantyGuides = warrantyGuidesOf(b.items);
     for (const g of b.guides) {
       const outDay = guideDispatchDay(b.lot.day, b.requestedAt, g.carrier);
       const entry = byDay.get(outDay);
@@ -90,7 +93,8 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
       entry.brandCounts[brand] = (entry.brandCounts[brand] ?? 0) + 1;
       entry.day.guides++;
       const key = g.guideNumber.trim().toUpperCase();
-      if (retainedSet.has(key)) entry.day.retained++;
+      if (isWarrantyGuide(b.lot.day, g.guideNumber, warrantyGuides)) entry.day.warranties++;
+      else if (retainedSet.has(key)) entry.day.retained++;
       guideDay.set(key, entry.day.day);
     }
   }
@@ -120,8 +124,8 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
   const out: DispatchedDay[] = [];
   for (const { day: d, brandCounts } of byDay.values()) {
     d.brands = sortBrands(Object.keys(brandCounts)).map((b) => ({ label: brandLabel(b), value: brandCounts[b] }));
-    d.outOfStock = Math.min(d.outOfStock, d.guides - d.retained);
-    d.dispatched = d.guides - d.retained - (subtractOutOfStock ? d.outOfStock : 0) + d.externalSales;
+    d.outOfStock = Math.min(d.outOfStock, d.guides - d.retained - d.warranties);
+    d.dispatched = d.guides - d.retained - d.warranties - (subtractOutOfStock ? d.outOfStock : 0) + d.externalSales;
     out.push(d);
   }
 

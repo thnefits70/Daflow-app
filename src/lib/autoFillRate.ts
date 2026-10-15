@@ -113,6 +113,17 @@ export function lotDaysFeeding(week: string): string[] {
   return [...before, ...days];
 }
 
+// Pedido de Daniel 2026-10-15: las garantías que salen en el corte (la guía
+// del PDF es la de una garantía, FulfillmentRequestItem.warrantyGuide) no son
+// pedidos despachados — desde la S42 no cuentan. El lunes 12/10 eran 3.
+export function isWarrantyGuide(lotDay: string, guideNumber: string, warrantyGuides: Set<string>): boolean {
+  return isoWeekOf(lotDay) >= DISPATCH_RULES_FROM_WEEK && warrantyGuides.has(guideNumber.trim().toUpperCase());
+}
+
+export function warrantyGuidesOf(items: { warrantyGuide: string | null }[]): Set<string> {
+  return new Set(items.filter((i) => i.warrantyGuide).map((i) => i.warrantyGuide!.trim().toUpperCase()));
+}
+
 export function outOfStockSubtracted(week: string): boolean {
   return SUBTRACT_OUT_OF_STOCK || week < DISPATCH_RULES_FROM_WEEK;
 }
@@ -124,15 +135,22 @@ export async function computeAutoCounts(week: string): Promise<{ guides: number;
   const daySet = new Set(days);
   const batches = await prisma.fulfillmentRequestBatch.findMany({
     where: { lot: { day: { in: lotDaysFeeding(week) }, status: { in: ["SENT", "CLOSED"] } } },
-    select: { requestedAt: true, lot: { select: { day: true } }, guides: { select: { guideNumber: true, carrier: true } } },
+    select: {
+      requestedAt: true,
+      lot: { select: { day: true } },
+      guides: { select: { guideNumber: true, carrier: true } },
+      items: { where: { warrantyGuide: { not: null } }, select: { warrantyGuide: true } },
+    },
   });
   const retainedSet = await retainedGuideNumbers();
   let guides = 0;
   let retained = 0;
   for (const b of batches) {
     if (!b.lot) continue;
+    const warrantyGuides = warrantyGuidesOf(b.items);
     for (const g of b.guides) {
       if (!daySet.has(guideDispatchDay(b.lot.day, b.requestedAt, g.carrier))) continue;
+      if (isWarrantyGuide(b.lot.day, g.guideNumber, warrantyGuides)) continue;
       guides++;
       if (retainedSet.has(g.guideNumber.trim().toUpperCase())) retained++;
     }

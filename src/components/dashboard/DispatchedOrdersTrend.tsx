@@ -39,6 +39,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
   const anyCancelled = days.some((d) => d.cancelledInCut > 0 || d.cancelledReported > 0);
   const anyRetained = days.some((d) => d.retained > 0);
   const anyMoved = days.some((d) => d.movedIn > 0);
+  const anyWarranty = days.some((d) => d.warranties > 0);
   // Desde la S42 la falta de stock solo se muestra (pedido de Daniel 2026-10-14).
   const oosSubtracted = data?.subtractOutOfStock ?? true;
 
@@ -84,6 +85,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                           <th key={b} className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">{b}</th>
                         ))}
                         <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">Guías</th>
+                        {anyWarranty && <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">− Garantías</th>}
                         {anyRetained && <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">− Retenidas</th>}
                         <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">{oosSubtracted ? "− Falta de stock" : "Falta de stock*"}</th>
                         <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">+ Ventas externas</th>
@@ -107,6 +109,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                               {n(d.guides)}
                               {d.movedIn > 0 && <span className="text-steel font-normal"> ({n(d.movedIn)}↪)</span>}
                             </td>
+                            {anyWarranty && <td className="py-1.5 px-2 text-right font-mono">{d.warranties ? `−${n(d.warranties)}` : "0"}</td>}
                             {anyRetained && (
                               <td className="py-1.5 px-2 text-right font-mono" style={d.retained ? { color: "#D9A441" } : undefined}>
                                 {d.retained ? `−${n(d.retained)}` : "0"}
@@ -133,6 +136,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                           <td key={b} className="py-2 px-2 text-right font-mono">{n(sum((d) => d.brands.find((x) => x.label === b)?.value ?? 0))}</td>
                         ))}
                         <td className="py-2 px-2 text-right font-mono">{n(sum((d) => d.guides))}</td>
+                        {anyWarranty && <td className="py-2 px-2 text-right font-mono">−{n(sum((d) => d.warranties))}</td>}
                         {anyRetained && <td className="py-2 px-2 text-right font-mono">−{n(sum((d) => d.retained))}</td>}
                         <td className={`py-2 px-2 text-right font-mono ${oosSubtracted ? "" : "text-steel"}`}>{oosSubtracted ? "−" : ""}{n(sum((d) => d.outOfStock))}</td>
                         <td className="py-2 px-2 text-right font-mono">+{n(sum((d) => d.externalSales))}</td>
@@ -144,7 +148,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                 </div>
                 <div className="mt-3 flex flex-col gap-1 text-[11.5px] text-steel">
                   <div>
-                    Las columnas por marca son las guías que salen ese día. Despachados = guías − retenidas{oosSubtracted ? " − falta de stock" : ""} + ventas externas entregadas.
+                    Las columnas por marca son las guías que salen ese día. Despachados = guías{anyWarranty ? " − garantías" : ""} − retenidas{oosSubtracted ? " − falta de stock" : ""} + ventas externas entregadas.
                   </div>
                   {!oosSubtracted && (
                     <div>
@@ -157,6 +161,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                       ↪ Guías de un corte subido el día anterior cuando su transportadora ya se había ido (Veloces 11:00, Urbano 13:00, Gintracom 15:00, Laar y Servientrega 17:00; sábado Veloces, Gintracom y Servientrega 12:00, Urbano y Laar no vienen): salen este día y cuentan aquí.
                     </div>
                   )}
+                  {anyWarranty && <div>Garantías: guías del corte que son garantías — salen, pero no son pedidos, así que no cuentan.</div>}
                   {anyRetained && <div><span style={{ color: "#D9A441" }}>Retenidas</span>: guías canceladas que Daniel o Allan confirmaron que retuvieron — no salieron, no cuentan.</div>}
                   {data.manualWeekly > 0 && (
                     <div>Esta semana además resta {n(data.manualWeekly)} preparadas/generadas que se anotaron a mano para toda la semana (no se pueden repartir por día).</div>
