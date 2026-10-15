@@ -158,7 +158,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                   )}
                   {anyMoved && (
                     <div>
-                      ↪ Guías de un corte subido el día anterior cuando su transportadora ya se había ido (Veloces 11:00, Urbano 13:00, Gintracom 15:00, Laar y Servientrega 17:00; sábado Veloces, Gintracom y Servientrega 12:00, Urbano y Laar no vienen): salen este día y cuentan aquí.
+                      ↪ Guías de un corte subido el día anterior cuando su transportadora ya se había ido (Veloces 11:00, Urbano 13:00, Gintracom 15:00, Laar y Servientrega 17:00; sábado Veloces 10:30, Gintracom 11:00, Servientrega 12:00, Urbano y Laar no vienen): salen este día y cuentan aquí.
                     </div>
                   )}
                   {anyWarranty && <div>Garantías: guías del corte que son garantías — salen, pero no son pedidos, así que no cuentan.</div>}

@@ -73,8 +73,8 @@ export const DISPATCH_RULES_FROM_WEEK = "2026-W42";
 
 // Hora (Ecuador) en que se va cada transportadora — confirmado por Daniel
 // 2026-10-15: Veloces 11:00, Urbano 13:00, Gintracom 15:00, Laar y
-// Servientrega 17:00. El sábado solo vienen Veloces, Gintracom y
-// Servientrega (hasta las 12:00); Urbano y Laar no vienen, así que sus guías
+// Servientrega 17:00. El sábado solo vienen Veloces (hasta 10:30), Gintracom
+// (11:00) y Servientrega (12:00); Urbano y Laar no vienen, así que sus guías
 // del sábado salen el siguiente día de trabajo.
 const CARRIER_LEAVES_AT: Record<string, string> = {
   VELOCES: "11:00",
@@ -84,8 +84,8 @@ const CARRIER_LEAVES_AT: Record<string, string> = {
   SERVIENTREGA: "17:00",
 };
 const SATURDAY_LEAVES_AT: Record<string, string> = {
-  VELOCES: "12:00",
-  GINTRACOM: "12:00",
+  VELOCES: "10:30",
+  GINTRACOM: "11:00",
   SERVIENTREGA: "12:00",
   URBANO: "00:00",
   LAAR: "00:00",
