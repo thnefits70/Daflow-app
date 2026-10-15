@@ -1,4 +1,5 @@
 import { COLD_MAX, COLD_SOON_DAYS, COLD_WEEK_AHEAD_DAYS, COVER_DAYS_AFTER_ARRIVAL, DISCARD_VALID_DAYS, ESCALATE_DAYS, COLD_ESCALATE_DAYS, HOT_DAYS, HOT_SALES_WINDOW_DAYS, SUPPLIER_RECHECK_DAYS, URGENT_DAYS, URGENT_DAYS_CREDIT_SUPPLIER } from "@/lib/purchaseSuggestions";
+import { DISPATCHED_RULES } from "@/lib/dispatchedNotes";
 
 // "¿Qué significa?" (pedido del usuario 2026-10-14, Nairoby no entendía una
 // fila de Qué comprar): Mary explica en palabras sencillas lo que la persona
@@ -6,6 +7,13 @@ import { COLD_MAX, COLD_SOON_DAYS, COLD_WEEK_AHEAD_DAYS, COVER_DAYS_AFTER_ARRIVA
 // reglas de cómo se calcula cada cifra viven aquí en el servidor para que
 // Mary no las adivine. Para agregar el botón a otra pantalla: una entrada
 // nueva aquí + <ExplainButton topic="..."> en esa pantalla.
+// 2026-10-15: estas mismas reglas van en el mapa del chat de Mary (ver
+// maryHelp.ts), así lo que se explica aquí también lo sabe cuando le
+// preguntan en el chat. Si una pantalla tiene notas propias, que salgan de
+// un archivo compartido (como dispatchedNotes.ts) para no escribirlas dos
+// veces.
+const FILL_RATE_RULES = `FILL RATE (semanal): de todos los pedidos que había que despachar en la semana, qué porcentaje sí salió. Fill Rate = despachados ÷ (despachados + no despachados) × 100. "No despachados" son los que no salieron, por ejemplo por "Falta de stock" (no había la mercadería). Colores: 96% o más = Excelente (verde); 90 a 95% = Muy bueno (amarillo); menos de 90% = Alerta (rojo). Si baja de 95%, el Líder de Inventarios (Daniel) escribe una explicación para todo el equipo. "Manifiestos fuera de plazo": manifiestos que se subieron después del día que tocaba (no entran en el %). "Guías canceladas": guías de los cortes que se cancelaron, por motivo (no entran en el %).`;
+
 export const EXPLAIN_TOPICS = {
   "que-comprar": {
     label: "Control de Compras → Qué comprar",
@@ -37,7 +45,7 @@ Botones:
   kpis: {
     label: "Indicadores (KPIs) de DAFLOW",
     rules: `Indicadores que se calculan solos con lo que se registra en DAFLOW.
-FILL RATE (semanal): de todos los pedidos que había que despachar en la semana, qué porcentaje sí salió. Fill Rate = despachados ÷ (despachados + no despachados) × 100. "No despachados" son los que no salieron, por ejemplo por "Falta de stock" (no había la mercadería). Colores: 96% o más = Excelente (verde); 90 a 95% = Muy bueno (amarillo); menos de 90% = Alerta (rojo). Si baja de 95%, el Líder de Inventarios (Daniel) escribe una explicación para todo el equipo. "Manifiestos fuera de plazo": manifiestos que se subieron después del día que tocaba (no entran en el %). "Guías canceladas": guías de los cortes que se cancelaron, por motivo (no entran en el %).
+${FILL_RATE_RULES}
 TASA DE DEVOLUCIÓN (mensual): de cada 100 unidades que salieron en los cortes (sin contar garantías), cuántas regresaron (por Reingreso de mercadería, en buen estado o dañadas). Más bajo es mejor. Menos de 20% = Excelente; 21 a 27% = Muy bueno; 28% o más = Alerta. Las devoluciones tardan de 7 a 20 días en volver, por eso un mes se empieza a medir desde el día 15 y sale "Preliminar" hasta 20 días después de cerrar el mes. Se mide en unidades, por eso puede salir distinto de lo que dice ATOM (que cuenta pedidos). Por producto se marca ⚠️ desde 15% si tuvo al menos 10 salidas; con menos sale "pocas salidas" porque el % no sería confiable.
 GARANTÍAS (mensual): cuando a un cliente le llega un producto dañado, roto, incompleto o equivocado y se le manda otro. Tasa = garantías ÷ guías de pedidos del mes. Motivos en dos grupos: "Falla del producto" (no funciona, roto) y "Error de bodega" (incompleto, diferente). Las garantías locales de Guayaquil (GL-…) suman a los motivos pero no al total del mes. "Pérdidas por garantías": dinero que no regresa (el producto nuevo que se mandó al costo + flete de enviar y de recoger).
 KPIs DE INVENTARIO (mensuales, con el valor del inventario que carga Daniel):
@@ -46,6 +54,13 @@ KPIs DE INVENTARIO (mensuales, con el valor del inventario que carga Daniel):
 - GMROI: por cada $1 que hay en inventario, cuánta ganancia bruta deja. 2x = $2 de ganancia por cada $1 (bueno); menos de 1x = gana menos de lo que tiene guardado. Por ahora se mira si sube o baja (todavía no hay meta fija).
 - Productos sin movimiento: productos cuyo stock no bajó desde la semana anterior, o sea que no se vendieron. El % es cuánto del dinero en inventario está ahí parado (más de 15% se marca en rojo). Flechas: ↑ roja = el stock siguió subiendo; ↓ verde = empezó a moverse; — gris = no cambió.
 Líneas de tendencia: cada punto es una semana o un mes; en rojo cuando pasa la zona de alerta.`,
+  },
+  // Pedido del usuario 2026-10-15: Daniel le preguntó a Mary por la ↪ del
+  // desglose por día y no sabía qué era.
+  "pedidos-despachados": {
+    label: "Pedidos despachados (gráfico semanal y desglose por día)",
+    rules: `${DISPATCHED_RULES}
+${FILL_RATE_RULES}`,
   },
   "stock-actual": {
     label: "Stock Actual (INVESTOCK)",

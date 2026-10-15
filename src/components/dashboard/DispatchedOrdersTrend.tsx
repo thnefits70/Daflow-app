@@ -5,6 +5,8 @@ import { X } from "lucide-react";
 import { WeeklyTrendChart, formatIsoWeekRangeLabel, formatWeekShort, type WeeklyPoint } from "./WeeklyTrendChart";
 import { useBackButtonGuard } from "@/lib/useBackButtonGuard";
 import type { DispatchedDailyBreakdown } from "@/lib/dispatchedDaily";
+import { DISPATCHED_NOTES } from "@/lib/dispatchedNotes";
+import { ExplainButton } from "@/components/shared/ExplainButton";
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 const n = (v: number) => v.toLocaleString("es-MX");
@@ -58,7 +60,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
 
       {week && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setWeek(null)}>
-          <div className="bg-surface border border-rule rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto p-5" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface border border-rule rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto p-5" data-explain-scope onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3 mb-3">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-steel">Pedidos despachados por día</div>
@@ -148,31 +150,27 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                 </div>
                 <div className="mt-3 flex flex-col gap-1 text-[11.5px] text-steel">
                   <div>
-                    Las columnas por marca son las guías que salen ese día. Despachados = guías{anyWarranty ? " − garantías" : ""} − retenidas{oosSubtracted ? " − falta de stock" : ""} + ventas externas entregadas.
+                    {DISPATCHED_NOTES.brands} Despachados = guías{anyWarranty ? " − garantías" : ""} − retenidas{oosSubtracted ? " − falta de stock" : ""} + ventas externas entregadas.
                   </div>
                   {!oosSubtracted && (
-                    <div>
-                      * Falta de stock: solo se muestra, no se resta — mientras no termine el inventario, el stock del sistema no es confiable para saber qué guías no
-                      salieron.
-                    </div>
+                    <div>* {DISPATCHED_NOTES.outOfStockShownOnly}</div>
                   )}
                   {anyMoved && (
-                    <div>
-                      ↪ Guías de un corte subido el día anterior cuando su transportadora ya se había ido (Veloces 11:00, Urbano 13:00, Gintracom 15:00, Laar y Servientrega 17:00; sábado Veloces 10:30, Gintracom 11:00, Servientrega 12:00, Urbano y Laar no vienen): salen este día y cuentan aquí.
-                    </div>
+                    <div>{DISPATCHED_NOTES.movedIn}</div>
                   )}
-                  {anyWarranty && <div>Garantías: guías del corte que son garantías — salen, pero no son pedidos, así que no cuentan.</div>}
-                  {anyRetained && <div><span style={{ color: "#D9A441" }}>Retenidas</span>: guías canceladas que Daniel o Allan confirmaron que retuvieron — no salieron, no cuentan.</div>}
+                  {anyWarranty && <div>{DISPATCHED_NOTES.warranties}</div>}
+                  {anyRetained && <div><span style={{ color: "#D9A441" }}>Retenidas</span>: {DISPATCHED_NOTES.retained}</div>}
                   {data.manualWeekly > 0 && (
                     <div>Esta semana además resta {n(data.manualWeekly)} preparadas/generadas que se anotaron a mano para toda la semana (no se pueden repartir por día).</div>
                   )}
                   {anyCancelled && (
                     <div>
-                      <span style={{ color: "#D9A441" }}>Canceladas</span>: guías de los cortes de ese día que después se reportaron como canceladas — siguen
-                      sumando en despachados hasta que se confirme que se retuvieron. Entre paréntesis, las reportadas ese día en total (algunas pueden ser de otros días o de guías que no
-                      estaban en un corte).
+                      <span style={{ color: "#D9A441" }}>Canceladas</span>: {DISPATCHED_NOTES.cancelled}
                     </div>
                   )}
+                </div>
+                <div className="mt-3">
+                  <ExplainButton topic="pedidos-despachados" label="¿Cómo leer este desglose?" />
                 </div>
               </>
             )}

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { EXPLAIN_TOPICS, type ExplainTopic } from "@/lib/explainTopics";
 import {
   canManageStoreFeedback,
   canViewStoreFeedback,
@@ -218,7 +219,7 @@ async function getVisibleWorkspaceTabKeys(userId: string): Promise<WorkspaceTabK
 const WORKSPACE_TAB_HELP: Record<WorkspaceTabKey, string> = {
   kpis: "Dashboard de KPIs financieros del área. Sub-pestañas: Dashboard (los indicadores calculados) y Cargar plantilla (cada mes se sube la plantilla de ventas y costos y todo se recalcula solo). Hay una sub-pestaña Inventario con los KPIs de inventario.",
   pagos: "Pagos recordatorios: lista de pagos periódicos del área con su fecha, para que no se pase ninguno.",
-  semanal: "Pedidos despachados: el gráfico semanal de pedidos despachados y el Fill Rate. Si el Fill Rate baja del umbral se pide una justificación desde aquí.",
+  semanal: "Pedidos despachados: el gráfico semanal de pedidos despachados y el Fill Rate. Al hacer clic en una semana del gráfico se abre el desglose por día (ver DETALLE DE PANTALLAS). Si el Fill Rate baja del umbral se pide una justificación desde aquí.",
   feedback:
     "Feedback semanal: la bitácora del área con los reportes semanales que se hacen con Mary (problema, plan de acción y estado). El líder habla con Mary desde el botón redondo de abajo a la izquierda; el estado 'Solucionado' solo cambia cuando Mary recibe una explicación concreta. También aparece 'Reportes que me involucran' (reportes de otras áreas que nombran a tu equipo).",
   tareas:
@@ -261,7 +262,7 @@ const WORKSPACE_TAB_HELP: Record<WorkspaceTabKey, string> = {
 // Menú lateral. `show` decide si esa persona tiene ese ítem.
 type SidebarHelpItem = { label: string; help: string; show: (f: EmployeeSidebarFlags) => boolean };
 const SIDEBAR_HELP: SidebarHelpItem[] = [
-  { label: "Inicio", help: "Pantalla principal: tus Pendientes del día (cada uno con un botón 'Ir →' que lleva directo a donde se resuelve), avisos y accesos directos.", show: () => true },
+  { label: "Inicio", help: "Pantalla principal: tus Pendientes del día (cada uno con un botón 'Ir →' que lleva directo a donde se resuelve), avisos y accesos directos. Abajo están los gráficos de Pedidos despachados (clic en una semana → desglose por día) y Fill Rate.", show: () => true },
   { label: "Módulos", help: "Módulos de capacitación con sus documentos y exámenes.", show: () => true },
   { label: "Mi ruta", help: "Tu ruta de conocimiento asignada, paso a paso.", show: (f) => f.showMyLearningPath },
   { label: "Mi área de trabajo", help: "Aquí están las pestañas de trabajo de tu área (ver la lista de pestañas). Puedes fijar una como tu pestaña de inicio con 'Fijar como mi pestaña de inicio'. Un punto rojo en una pestaña significa que tiene algo pendiente.", show: () => true },
@@ -302,7 +303,24 @@ export async function buildMaryHelpMap(userId: string): Promise<string> {
   return formatMaryHelpMap(sidebarFlags, tabKeys, extraPages);
 }
 
+// El detalle de cada pantalla (cómo leerla, qué es cada columna o símbolo)
+// es el mismo del botón "¿Qué significa?" (explainTopics.ts) — así Mary
+// sabe en el chat lo mismo que explica en la pantalla (2026-10-15, Daniel
+// preguntó por la ↪ de Pedidos despachados y Mary no sabía). Solo va el de
+// las pantallas que esta persona tiene.
+const TOPIC_VISIBLE: Record<ExplainTopic, (f: EmployeeSidebarFlags, tabs: WorkspaceTabKey[]) => boolean> = {
+  "que-comprar": (_f, tabs) => tabs.includes("compras"),
+  kpis: (f, tabs) => f.showKpis || tabs.includes("kpis") || tabs.includes("inventoriokpis"),
+  // El gráfico está en el Inicio de todos.
+  "pedidos-despachados": () => true,
+  "stock-actual": (_f, tabs) => tabs.includes("stock-actual"),
+};
+
 export function formatMaryHelpMap(sidebarFlags: EmployeeSidebarFlags, tabKeys: WorkspaceTabKey[], extraPages: MaryExtraPageKey[] = []): string {
+  const details = (Object.keys(EXPLAIN_TOPICS) as ExplainTopic[])
+    .filter((k) => TOPIC_VISIBLE[k](sidebarFlags, tabKeys))
+    .map((k) => `[${EXPLAIN_TOPICS[k].label}]\n${EXPLAIN_TOPICS[k].rules}`)
+    .join("\n\n");
   const sidebar = SIDEBAR_HELP.filter((i) => i.show(sidebarFlags))
     .map((i) => `- ${i.label}: ${i.help}`)
     .join("\n");
@@ -313,7 +331,7 @@ export function formatMaryHelpMap(sidebarFlags: EmployeeSidebarFlags, tabKeys: W
 MENÚ LATERAL:
 ${sidebar}
 PESTAÑAS DE "MI ÁREA DE TRABAJO":
-${tabs || "- (ninguna pestaña adicional)"}${extraPages.length ? `\nOTRAS PANTALLAS (fuera del menú):\n${extraPages.map((k) => `- ${EXTRA_PAGE_HELP[k]}`).join("\n")}` : ""}`;
+${tabs || "- (ninguna pestaña adicional)"}${extraPages.length ? `\nOTRAS PANTALLAS (fuera del menú):\n${extraPages.map((k) => `- ${EXTRA_PAGE_HELP[k]}`).join("\n")}` : ""}${details ? `\nDETALLE DE PANTALLAS (cómo se lee cada una: columnas, símbolos, colores y botones):\n${details}` : ""}`;
 }
 
 // Reglas de Mary cuando le preguntan cómo usar DAFLOW — se agregan al
@@ -322,6 +340,7 @@ ${tabs || "- (ninguna pestaña adicional)"}${extraPages.length ? `\nOTRAS PANTAL
 export const MARY_HELP_RULES = `GUÍA DE DAFLOW: además de lo tuyo, cualquier persona puede preguntarte dónde está una opción o cómo se hace algo en DAFLOW. Para eso cada mensaje trae un "MAPA DE DAFLOW DE ESTA PERSONA" con lo único que su usuario tiene.
 - Escribe en texto plano: nada de asteriscos, almohadillas ni otros símbolos de formato (el chat los muestra tal cual). Puedes usar guiones para listas y flechas →.
 - Responde corto y en pasos simples, con la ruta exacta. Ejemplo: "Menú lateral → Mi área de trabajo → pestaña Control de Compras → Mis solicitudes".
+- Si pregunta qué significa algo que ve en una pantalla (una columna, un número, un símbolo como ↪, un color) o desde cuándo funciona así, búscalo en "DETALLE DE PANTALLAS" y explícalo como a alguien que nunca lo ha visto: frases cortas, palabras de todos los días y un ejemplo. Si está ahí, respóndelo tú; no lo mandes a preguntarle a otra persona.
 - Usa SOLO lo que dice el mapa. Nunca inventes botones, pantallas ni pasos. Si el mapa no lo dice con claridad, dilo con honestidad y sugiere preguntarle a su líder.
 - Si pregunta por algo que NO está en su mapa, responde que esa opción no aparece en su usuario y que, si cree que debería tenerla, se lo pida a su líder o al admin. No describas cómo es esa pantalla ni qué contiene. Si nombra una pantalla que no está en su mapa, no la cambies por otra que se parezca: dile primero, claramente, que esa no aparece en su usuario.
 - Las sub-pestañas también dependen de permisos: si no ve una que mencionas, es que su usuario no la tiene.
