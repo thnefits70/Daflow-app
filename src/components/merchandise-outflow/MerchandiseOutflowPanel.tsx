@@ -268,7 +268,7 @@ export function MerchandiseOutflowPanel({
       {tab === "garantias" && canSeeWarrantyDispatch && (
         <>
           <TabGuide storageKey="merchoutflow-garantias">
-            Michelle y Yair suben aquí la guía de cada garantía ya autorizada, con un comentario de qué se envía y qué debe verse en el video. Joao marca el recuadro de la derecha cuando la toma y saca la guía físicamente; luego Daniel o Allan revisan y pulsan &quot;Correcto&quot;. Esta pantalla no mueve stock: eso sigue saliendo del corte.
+            Michelle y Yair anotan aquí el número de guía de cada garantía ya autorizada, con un comentario de qué se envía y qué debe verse en el video. El archivo de la guía lo suben Allan o Daniel con el corte, y DAFLOW lo junta solo por el número. Joao marca el recuadro de la derecha cuando la toma y saca la guía físicamente; luego Daniel o Allan revisan y pulsan &quot;Correcto&quot;. Esta pantalla no mueve stock: eso sigue saliendo del corte.
           </TabGuide>
           <WarrantyDispatchPanel />
         </>

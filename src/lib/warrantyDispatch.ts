@@ -4,8 +4,10 @@ import { canActOnMerchandiseOutflow } from "@/lib/guards";
 import { notifyOwner, resolveNotifications } from "@/lib/notifications";
 
 // Garantías por despachar (pedido de Daniel 2026-10-14, ajustado por el
-// usuario): Michelle y Yair suben la guía de una garantía ya autorizada con
-// un comentario opcional; Joao la toma (visto) y saca la guía físicamente;
+// usuario): Michelle y Yair anotan el número de guía de una garantía ya
+// autorizada con un comentario opcional — el archivo ya no lo suben ellos
+// (pedido de Daniel 2026-10-15): llega en el corte que suben Allan o Daniel
+// y se cruza solo por el número (ver cutFile en la lista); Joao la toma (visto) y saca la guía físicamente;
 // Daniel o Allan revisan que esté correcto. No mueve stock — eso sigue
 // saliendo del corte. Para sumar a alguien, ampliar estas listas.
 const UPLOADER_USERNAMES = new Set(["mramirez", "yairurgilez"]);
@@ -102,11 +104,26 @@ export async function listWarrantyDispatchGuides() {
   const userIds = [...new Set(rows.flatMap((r) => [r.uploadedById, r.handledById, r.verifiedById]).filter((x): x is string => !!x))];
   const users = await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } });
   const nameOf = (id: string | null) => (id ? users.find((u) => u.id === id)?.name ?? "—" : null);
+  // Cruce con el corte: la misma guía subida por Allan o Daniel en
+  // Registro de Egresos → Solicitud. Abre el PDF del manifiesto donde vino.
+  const cutGuides = await prisma.fulfillmentRequestGuide.findMany({
+    where: { guideNumber: { in: [...new Set(rows.map((r) => r.guideNumber))], mode: "insensitive" } },
+    select: { guideNumber: true, manifestFile: true, manifestDay: true, createdAt: true, batch: { select: { fileUrls: true, requestedBy: { select: { name: true } } } } },
+  });
+  const cutOf = (guideNumber: string) => {
+    const g = cutGuides.find((c) => c.guideNumber.toUpperCase() === guideNumber.toUpperCase());
+    if (!g) return null;
+    const urls = g.batch.fileUrls;
+    const url = g.manifestFile !== null ? urls[g.manifestFile] : urls.length === 1 ? urls[0] : undefined;
+    return { url: url ?? null, day: g.manifestDay, uploadedAt: g.createdAt.toISOString(), uploadedByName: g.batch.requestedBy?.name ?? null };
+  };
   return rows.map((r) => ({
     id: r.id,
     guideNumber: r.guideNumber,
-    fileUrl: r.fileUrl,
+    // Guías anotadas antes del cambio traen su propio archivo; las nuevas, "".
+    fileUrl: r.fileUrl || null,
     fileName: r.fileName,
+    cutFile: cutOf(r.guideNumber),
     comment: r.comment,
     createdAt: r.createdAt.toISOString(),
     uploadedById: r.uploadedById,

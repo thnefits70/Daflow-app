@@ -12,12 +12,12 @@ export async function GET() {
 
 const createSchema = z.object({
   guideNumber: z.string().trim().min(3, "Escribe el número de guía.").max(60),
-  fileUrl: z.string().url("Sube la guía."),
-  fileName: z.string().max(300).optional().nullable(),
   comment: z.string().trim().max(2000).optional().nullable(),
 });
 
-// Solo Michelle y Yair suben guías de garantía ya autorizada.
+// Solo Michelle y Yair anotan guías de garantía ya autorizada: número +
+// comentario. El archivo ya no lo suben ellos (pedido de Daniel 2026-10-15):
+// llega con el corte que suben Allan o Daniel y se cruza por el número.
 export async function POST(req: NextRequest) {
   const role = await getWarrantyDispatchRole();
   if (!role?.canUpload) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -31,8 +31,7 @@ export async function POST(req: NextRequest) {
   const row = await prisma.warrantyDispatchGuide.create({
     data: {
       guideNumber,
-      fileUrl: parsed.data.fileUrl,
-      fileName: parsed.data.fileName ?? null,
+      fileUrl: "",
       comment: parsed.data.comment?.trim() || null,
       uploadedById: role.userId,
     },

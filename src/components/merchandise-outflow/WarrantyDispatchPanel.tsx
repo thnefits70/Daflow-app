@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Check, FileText, Trash2, Upload } from "lucide-react";
-import { uploadFile } from "@/lib/uploadFile";
+import { useEffect, useState } from "react";
+import { Check, FileText, Trash2 } from "lucide-react";
 import { formatDateTime } from "@/lib/formatDateTime";
-import { usePasteFile } from "@/lib/usePasteFile";
 
 type Guide = {
   id: string;
   guideNumber: string;
-  fileUrl: string;
+  fileUrl: string | null;
   fileName: string | null;
+  cutFile: { url: string | null; day: string | null; uploadedAt: string; uploadedByName: string | null } | null;
   comment: string | null;
   createdAt: string;
   uploadedById: string;
@@ -23,7 +22,7 @@ type Guide = {
 type Role = { userId: string; canUpload: boolean; canHandle: boolean; canVerify: boolean; isAdmin: boolean };
 
 // Garantías por despachar (pedido de Daniel 2026-10-14): Michelle y Yair
-// suben la guía + comentario; Joao marca el visto y saca la guía; Daniel o
+// anotan el número de guía + comentario (el archivo llega con el corte); Joao marca el visto y saca la guía; Daniel o
 // Allan revisan que esté correcto. Ver src/lib/warrantyDispatch.ts.
 export function WarrantyDispatchPanel() {
   const [role, setRole] = useState<Role | null>(null);
@@ -129,11 +128,26 @@ function GuideCard({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
           <span className="font-mono text-[13px] font-bold text-teal">{g.guideNumber}</span>
-          <a href={g.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11px] font-semibold text-blue">
-            <FileText size={12} /> Ver guía
-          </a>
+          {g.cutFile?.url ? (
+            <a href={g.cutFile.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11px] font-semibold text-blue">
+              <FileText size={12} /> Ver guía en el corte
+            </a>
+          ) : g.fileUrl ? (
+            <a href={g.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11px] font-semibold text-blue">
+              <FileText size={12} /> Ver guía
+            </a>
+          ) : null}
         </div>
-        <div className="text-[11px] text-steel mb-1.5">Subida por {g.uploadedByName} · {formatDateTime(g.createdAt)}</div>
+        <div className="text-[11px] text-steel">Anotada por {g.uploadedByName} · {formatDateTime(g.createdAt)}</div>
+        {/* Cruce con el corte (pedido de Daniel 2026-10-15): el archivo lo suben Allan o Daniel. */}
+        {g.cutFile ? (
+          <div className="text-[11px] text-green mb-1.5">
+            ✓ En el corte{g.cutFile.day ? ` del ${g.cutFile.day}` : ""}
+            {g.cutFile.uploadedByName ? ` · subido por ${g.cutFile.uploadedByName}` : ""}
+          </div>
+        ) : (
+          <div className="text-[11px] text-amber mb-1.5">Esperando archivo del corte (lo suben Allan o Daniel en Solicitud). Revisa que el número de guía esté bien escrito.</div>
+        )}
         {g.comment ? (
           <div className="text-[12.5px] whitespace-pre-wrap bg-cloud rounded-md p-2.5 mb-1.5">{g.comment}</div>
         ) : (
@@ -191,52 +205,32 @@ function GuideCard({
 function UploadForm({ onSent }: { onSent: () => void }) {
   const [guideNumber, setGuideNumber] = useState("");
   const [comment, setComment] = useState("");
-  const [file, setFile] = useState<{ url: string; name: string } | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Pedido de Michelle 2026-10-15: pegar (Ctrl+V) o arrastrar la guía, como
-  // en las otras cajas de DAFLOW.
-  const paste = usePasteFile((f) => void pick(f));
-
-  async function pick(f: File | null | undefined) {
-    if (!f) return;
-    setErr("");
-    setUploading(true);
-    const up = await uploadFile(f, "warranty-dispatch-guides");
-    setUploading(false);
-    if (!up.ok) {
-      setErr(up.error);
-      return;
-    }
-    setFile({ url: up.url, name: f.name });
-  }
-
+  // Pedido de Daniel 2026-10-15: Michelle y Yair ya no suben el archivo —
+  // solo número + comentario; el archivo llega con el corte (ver cutFile).
   async function send() {
     setErr("");
     if (guideNumber.trim().length < 3) return setErr("Escribe el número de guía.");
-    if (!file) return setErr("Sube la guía (PDF o foto).");
     setSaving(true);
     const res = await fetch("/api/warranty-dispatch-guides", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ guideNumber, fileUrl: file.url, fileName: file.name, comment }),
+      body: JSON.stringify({ guideNumber, comment }),
     });
     const d = await res.json().catch(() => null);
     setSaving(false);
     if (!res.ok) return setErr(d?.error ?? "No se pudo enviar.");
     setGuideNumber("");
     setComment("");
-    setFile(null);
-    if (inputRef.current) inputRef.current.value = "";
     onSent();
   }
 
   return (
     <div className="bg-surface border border-rule rounded-md p-4 flex flex-col gap-3">
-      <div className="font-display font-bold text-[14px]">Subir guía de garantía autorizada</div>
+      <div className="font-display font-bold text-[14px]">Anotar guía de garantía autorizada</div>
+      <div className="text-[11.5px] text-steel -mt-1.5">No hace falta subir el archivo: lo suben Allan o Daniel con el corte y DAFLOW lo junta por el número de guía. Escríbelo bien.</div>
       <label className="flex flex-col gap-1">
         <span className="text-[11.5px] font-semibold text-steel">Número de guía</span>
         <input
@@ -246,26 +240,6 @@ function UploadForm({ onSent }: { onSent: () => void }) {
           className="bg-cloud border border-rule rounded px-2.5 py-1.5 text-[13px] font-mono"
         />
       </label>
-      <div className="flex flex-col gap-1">
-        <span className="text-[11.5px] font-semibold text-steel">Etiqueta de la guía de garantía</span>
-        <span className="text-[11px] text-steel">La guía que se generó en Dropi para esta garantía (la etiqueta que Joao imprime y pega en el paquete): el PDF descargado o una captura donde se vea completa.</span>
-        <input ref={inputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
-        <div
-          tabIndex={0}
-          role="button"
-          onClick={() => inputRef.current?.click()}
-          onPaste={paste.onPaste}
-          onMouseEnter={paste.onMouseEnter}
-          onMouseLeave={paste.onMouseLeave}
-          onDragOver={paste.onDragOver}
-          onDragLeave={paste.onDragLeave}
-          onDrop={paste.onDrop}
-          className={`flex items-center gap-1.5 self-start border-[1.5px] border-dashed rounded px-3 py-2 text-[12px] cursor-pointer hover:border-teal focus:border-teal focus:outline-none ${paste.isDragOver ? "border-teal bg-teal/10" : "border-rule"}`}
-        >
-          <Upload size={13} /> {uploading ? "Subiendo…" : file ? "Cambiar archivo" : "Elegir, pegar (Ctrl+V) o arrastrar aquí"}
-        </div>
-        {file && <span className="text-[11.5px] text-green">✓ {file.name}</span>}
-      </div>
       <label className="flex flex-col gap-1">
         <span className="text-[11.5px] font-semibold text-steel">Comentario (opcional)</span>
         <textarea
@@ -279,7 +253,7 @@ function UploadForm({ onSent }: { onSent: () => void }) {
       {err && <div className="text-red text-[11.5px]">{err}</div>}
       <button
         type="button"
-        disabled={saving || uploading}
+        disabled={saving}
         onClick={send}
         className="self-start rounded border border-teal bg-teal px-4 py-1.5 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-60"
       >
