@@ -26,7 +26,7 @@ const JSON_LD = {
       address: { "@type": "PostalAddress", addressLocality: "Guayaquil", addressCountry: "EC" },
       areaServed: "EC",
       sameAs: ["https://www.instagram.com/provedix.ec/", "https://www.tiktok.com/@provedix.ec", "https://www.facebook.com/share/1FHzeG3XBR/"],
-      contactPoint: [{ "@type": "ContactPoint", telephone: "+593995147410", contactType: "customer service", areaServed: "EC", availableLanguage: "es" }],
+      contactPoint: [{ "@type": "ContactPoint", telephone: "+593983809912", contactType: "customer service", areaServed: "EC", availableLanguage: "es" }],
     },
     { "@type": "WebSite", "@id": "https://provedix.com/#web", url: "https://provedix.com/", name: "Provedix", inLanguage: "es-EC", publisher: { "@id": "https://provedix.com/#org" } },
   ],

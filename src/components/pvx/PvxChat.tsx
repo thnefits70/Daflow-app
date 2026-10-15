@@ -20,7 +20,9 @@ import {
 type Msg = { role: "user" | "assistant"; content: string };
 const CHAT_KEY = "pvx-chat-id";
 // Marca que pone la IA al final cuando ya no puede resolver el caso (ver provedixMichelle.ts).
-const HANDOFF_MARK = "[[ASESORA]]";
+const HANDOFF_MARK = "[[ASESORA";
+// [[ASESORA:MC-0007]] → caso con resumen para la asesora (2026-10-15).
+const caseCodeOf = (t: string) => t.match(/\[\[ASESORA:(MC-\d{4,})\]\]/)?.[1] ?? null;
 // Quita la marca (también a medio llegar mientras se escribe la respuesta).
 // [[BLOQUEAR]]: la IA cerró el chat por un intento de sacar información confidencial.
 const BLOCK_MARK = "[[BLOQUEAR]]";
@@ -47,7 +49,7 @@ const photoIdsOf = (t: string) =>
   [...t.matchAll(PHOTO_RE)].map((m) => m[1]).slice(0, 2);
 const cleanReply = (t: string) =>
   t
-    .replace(/\[\[(ASESORA|BLOQUEAR|SOSPECHA)\]\]/g, "")
+    .replace(/\[\[(ASESORA(:[A-Z0-9-]*)?|BLOQUEAR|SOSPECHA)\]\]/g, "")
     .replace(ACTION_RE, "")
     .replace(PHOTO_RE, "")
     // marca a medio llegar mientras se escribe la respuesta
@@ -109,7 +111,9 @@ function Avatar({ size = 36 }: { size?: number }) {
   );
 }
 
-function handoffUrl(phone: string, lastQuestion: string): string {
+function handoffUrl(phone: string, lastQuestion: string, code: string | null = null): string {
+  // Con código de caso: la asesora ve el resumen y la conversación en DAFLOW, no hace falta repetir nada.
+  if (code) return `https://wa.me/${phone}?text=${encodeURIComponent(`Hola Michelle, vengo del chat de Provedix. Mi caso es ${code}.`)}`;
   const text = lastQuestion
     ? `Hola Michelle, vengo del chat de Provedix y tengo un caso que necesita tu ayuda. Mi consulta: "${lastQuestion.slice(0, 300)}"`
     : "Hola Michelle, vengo del chat de Provedix y tengo un caso que necesita tu ayuda.";
@@ -133,6 +137,12 @@ export function PvxChat({
       return;
     const t = setTimeout(() => setOpen(true), 400);
     return () => clearTimeout(t);
+  }, []);
+  // Enlaces "#michelle" dentro de la página (p. ej. "Pedir garantía a Michelle IA") abren el chat.
+  useEffect(() => {
+    const onHash = () => window.location.hash === "#michelle" && setOpen(true);
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
   }, []);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [chatId, setChatId] = useState<string | null>(null);
@@ -385,6 +395,7 @@ export function PvxChat({
                                 .slice(0, i)
                                 .findLast((x) => x.role === "user")?.content ??
                                 "",
+                              caseCodeOf(m.content),
                             )}
                             target="_blank"
                             rel="noopener noreferrer"
@@ -392,6 +403,7 @@ export function PvxChat({
                           >
                             <IconWhatsApp className="w-4 h-4" /> Continuar con
                             Michelle por WhatsApp
+                            {caseCodeOf(m.content) ? ` · ${caseCodeOf(m.content)}` : ""}
                           </a>
                         )}
                         {photoIdsOf(m.content).map((pid) => (

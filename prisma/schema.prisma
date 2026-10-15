@@ -8216,10 +8216,49 @@ model ProvedixChat {
   createdAt DateTime              @default(now())
   updatedAt DateTime              @updatedAt
   messages  ProvedixChatMessage[]
+  cases     ProvedixCase[]
 
   @@index([visitorId])
   @@index([leadId])
   @@index([updatedAt])
+}
+
+// Casos que Michelle IA no pudo resolver y pasó a Michelle (la asesora
+// humana) con un resumen (pedido del usuario 2026-10-15). MC-0001… El
+// dropshipper le escribe por WhatsApp con ese código y ella ve aquí el
+// resumen y la conversación completa, sin volver a preguntar nada.
+model ProvedixCase {
+  id           String       @id @default(cuid())
+  number       Int          @unique
+  chatId       String
+  chat         ProvedixChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  topic        String // garantia | pedido | pago | negociacion | otro
+  summary      String
+  guideNumber  String?
+  status       String       @default("ABIERTO") // ABIERTO | RESUELTO
+  resolution   String?
+  resolvedAt   DateTime?
+  resolvedById String?
+  createdAt    DateTime     @default(now())
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Respuestas que Michelle (la asesora humana) le enseña a Michelle IA
+// (2026-10-15): cómo resolvió un caso o la respuesta a una duda nueva. Entran
+// al conocimiento de la IA para que la próxima vez lo resuelva sola.
+model ProvedixAnswer {
+  id          String   @id @default(cuid())
+  question    String
+  answer      String
+  active      Boolean  @default(true)
+  caseId      String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([active])
 }
 
 model ProvedixChatMessage {

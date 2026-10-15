@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import type { PublicStats } from "@/lib/provedixPublic";
 import { isWorkingDay, nextWorkingDay } from "@/lib/ecuadorHolidays";
-import { IconArrow, IconBox, IconCheck, IconClock, IconExternal, IconImage, IconSpark, IconTrendUp, IconTruck, IconWhatsApp } from "@/components/pvx/PvxIcons";
+import { IconArrow, IconBox, IconCheck, IconClock, IconExternal, IconImage, IconSpark, IconTrendUp, IconTruck } from "@/components/pvx/PvxIcons";
 
 // Secciones sacadas del "Manual de Trabajo Provedix – Actualizado 2026"
 // (pedido del usuario 2026-10-13): cortes y despachos, cómo empacamos,
@@ -250,7 +250,6 @@ const TRACKING = [
 ];
 // Línea de atención al cliente del manual (garantías), elegida por el usuario
 // 2026-10-13 — sin el correo.
-const SUPPORT_WHATSAPP = `https://wa.me/593995147410?text=${encodeURIComponent("Hola, necesito gestionar una garantía de Provedix. Mi número de guía es: ")}`;
 
 export function PvxResources() {
   return (
@@ -312,18 +311,17 @@ export function PvxResources() {
             </span>
             <h3 className="pvx-heading mt-8 text-[28px] sm:text-[36px]">Garantías claras</h3>
             <p className="mt-3 text-[16px] leading-relaxed text-white/75">Si la orden llegó incompleta, con un error o con un producto diferente al que pediste, lo resolvemos.</p>
+            {/* Garantías por el chat de Michelle IA (2026-10-15): el 099 514 7410 se quitó. */}
             <a
-              href={SUPPORT_WHATSAPP}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="pvx-press mt-7 inline-flex items-center gap-2 rounded-full bg-[#138a45] px-6 py-3.5 text-[15px] font-bold text-white hover:bg-[#0f7239]"
+              href="#michelle"
+              className="pvx-press mt-7 inline-flex items-center gap-2 rounded-full bg-[var(--pvx-orange)] px-6 py-3.5 text-[15px] font-bold text-white hover:bg-[var(--pvx-orange-press)]"
             >
-              <IconWhatsApp className="w-5 h-5" /> 099 514 7410
+              Pedir garantía a Michelle IA <IconArrow className="w-5 h-5" />
             </a>
           </div>
           <ol className="flex flex-col gap-3 self-center">
             {[
-              { icon: <IconClock className="w-5 h-5" />, title: "Escríbenos dentro de 48 horas", text: "Contadas desde que el cliente recibe el producto." },
+              { icon: <IconClock className="w-5 h-5" />, title: "Escríbele a Michelle IA dentro de 48 horas", text: "Contadas desde que el cliente recibe el producto. Ten a la mano tu número de guía." },
               { icon: <IconImage className="w-5 h-5" />, title: "Envía fotos o video", text: "Mejor si son del momento de la entrega o en la agencia de la transportadora." },
               { icon: <IconArrow className="w-5 h-5" />, title: "Regístrala en Dropi", text: "Cuando revisemos la evidencia y la aprobemos, la registras en Dropi y la gestionamos." },
             ].map((s) => (

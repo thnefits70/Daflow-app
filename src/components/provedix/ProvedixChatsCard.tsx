@@ -22,7 +22,7 @@ function when(iso: string) {
 
 const tidy = (t: string) =>
   t
-    .replace("[[ASESORA]]", "→ pasó a Michelle por WhatsApp")
+    .replace(/\[\[ASESORA(:([A-Z0-9-]+))?\]\]/g, (_m, _c, code) => `→ pasó a Michelle (asesora)${code ? ` · caso ${code}` : ""}`)
     .replace("[[BLOQUEAR]]", "→ cerró el chat")
     .replace("[[SOSPECHA]]", "→ ⚠️ le pareció raro")
     .replace(/\[\[FOTO:\w+\]\]/g, "[📸 foto de la guía retenida]")

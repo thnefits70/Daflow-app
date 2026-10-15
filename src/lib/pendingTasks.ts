@@ -41,6 +41,7 @@ import { fillRateJustificationIsDue } from "@/lib/fillRateJustificationDue";
 import { getLeaderTeamTaskPendingItems, getMyTeamTaskPendingItem } from "@/lib/teamTasks";
 import { getProvedixSuspiciousChatsPendingItem } from "@/lib/provedixSuspicion";
 import { getMichelleCancelPendingItems } from "@/lib/michelleCancellations";
+import { getCasesPendingItem } from "@/lib/provedixCases";
 import { getArrangementAdminPendingItems, getArrangementPendingItems } from "@/lib/warrantyArrangements";
 import { getDropiOutagePendingItem, getIdDeadlinePendingItem, getPendingIdExtensions, getReleaseDeadlineItems, timeLeftText } from "@/lib/handoffLocks";
 
@@ -494,6 +495,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   michelle_sospechosos: "Michelle — conversaciones sospechosas por revisar",
   michelle_por_retener: "Guías canceladas por retener (chat de provedix)",
   michelle_por_aprobar: "Cancelaciones fuera de horario por decidir",
+  michelle_casos: "Casos que te pasó Michelle IA",
   arreglo_verificar_flete: "Arreglos — verificar pago de flete del dropshipper",
   arreglo_pagar_cliente: "Arreglos — pagar arreglo en dinero al cliente",
   arreglo_aprobar: "Arreglos en dinero por aprobar",
@@ -4408,6 +4410,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     teamItems.unshift(...(await getSuddenDemandPendingItems(actor.userId)));
     // Guías canceladas por el chat de Michelle (2026-10-15): Joao las retiene.
     teamItems.unshift(...(await getMichelleCancelPendingItems(actor.userId).catch(() => [])));
+    // Casos que Michelle IA no pudo resolver (2026-10-15): Michelle, la asesora humana.
+    teamItems.unshift(...(await getCasesPendingItem(actor.userId).then((i) => (i ? [i] : [])).catch(() => [])));
     // Arreglos de garantía (2026-10-15): Bryan aprueba, Daniel anota la guía.
     teamItems.unshift(...(await getArrangementPendingItems(actor.userId).catch(() => [])));
     if (teamItems.length === 0) return null;
@@ -4666,6 +4670,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   // Guías canceladas por el chat de Michelle (2026-10-15): Daniel decide las de fuera de horario.
   items.unshift(...(await getMichelleCancelPendingItems(actor.userId).catch(() => [])));
+  items.unshift(...(await getCasesPendingItem(actor.userId).then((i) => (i ? [i] : [])).catch(() => [])));
   if (items.length === 0) return null;
   return {
     title: monthly ? "Pendientes de este mes" : "Pendientes de esta semana",

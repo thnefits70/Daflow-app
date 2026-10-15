@@ -7,6 +7,8 @@ import type { ProvedixChatRow, ProvedixLeadRow, ProvedixTraffic } from "@/lib/pr
 import { ProvedixTrafficCard } from "@/components/provedix/ProvedixTrafficCard";
 import { ProvedixLeadsTable } from "@/components/provedix/ProvedixLeadsTable";
 import { ProvedixChatsCard } from "@/components/provedix/ProvedixChatsCard";
+import { MichelleStatsCard } from "@/components/provedix/MichelleStatsCard";
+import type { MichelleWeekStat } from "@/lib/provedixCases";
 
 const STAGES: { title: string; detail: string; done: boolean }[] = [
   { title: "1. Leer las guías", detail: "Ciudad, valor cobrado, hombre/mujer y tienda de cada guía.", done: true },
@@ -34,12 +36,16 @@ export function ProvedixPanel({
   traffic,
   leads,
   chats,
+  michelleStats,
+  openCases,
 }: {
   overview: ProvedixOverview;
   snapshot: (ProvedixSnapshotData & { generatedAt: string }) | null;
   traffic: ProvedixTraffic;
   leads: ProvedixLeadRow[];
   chats: ProvedixChatRow[];
+  michelleStats: MichelleWeekStat[];
+  openCases: number;
 }) {
   const { progress, guides, byBrand, cities, gender, cod, stores, windowFrom } = overview;
   const readPct = pct(progress.read, progress.total);
@@ -78,6 +84,7 @@ export function ProvedixPanel({
 
       <ProvedixTrafficCard traffic={traffic} />
       <ProvedixLeadsTable leads={leads} />
+      <MichelleStatsCard stats={michelleStats} openCases={openCases} />
       <ProvedixChatsCard chats={chats} />
 
       <div className="bg-surface border border-rule rounded-lg p-5 mb-5">
