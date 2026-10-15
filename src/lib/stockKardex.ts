@@ -507,12 +507,24 @@ export type PhysicalCountAdjustmentResult =
 // y al liberarlo al Kardex se iban a sumar otras 100): no se ajusta a mano un
 // producto que todavía tiene algo por entrar o salir del Kardex solo. Primero
 // se libera / aprueba / confirma eso, y recién ahí se ajusta lo que sobre.
+// Ampliado el mismo día (pedido de Daniel): también reingresos, guías
+// canceladas, devoluciones de venta externa, ventas externas ya separadas
+// sin entregar, egresos sin enviar y excedentes confirmados sin ingresar.
 async function pendingKardexBlocker(catalogItemId: string): Promise<string | null> {
-  const [item, unreleased, unapproved, picked] = await Promise.all([
+  const [item, unreleased, unapproved, picked, reentry, cancelledGuides, saleReturns, salesSeparated, outflowDrafts, excess] = await Promise.all([
     prisma.purchaseCatalogItem.findUnique({ where: { id: catalogItemId }, select: { awaitingDropiId: true } }),
     prisma.purchaseRequestReceipt.aggregate({ where: { stockKardexEntry: null, approvedAt: { not: null }, request: { catalogItemId, status: "RECEIVED" } }, _sum: { receivedQuantity: true } }),
     prisma.purchaseRequestReceipt.aggregate({ where: { stockKardexEntry: null, request: { catalogItemId, status: "RECEIVED_PENDING_REVIEW" } }, _sum: { receivedQuantity: true } }),
     prisma.fulfillmentLotPick.aggregate({ where: { catalogItemId, confirmedAt: null, lot: { status: "SENT" } }, _sum: { pickedQty: true } }),
+    // Reingreso: lo bueno entra solo al aprobarse (lote abierto o en revisión).
+    prisma.merchandiseReentryItem.aggregate({ where: { catalogItemId, goodQty: { gt: 0 }, justUploadedAt: null }, _sum: { goodQty: true } }),
+    prisma.cancelledGuideItem.aggregate({ where: { catalogItemId, report: { reingresadoAt: null } }, _sum: { quantity: true } }),
+    // Venta externa devuelta: ya llegó a bodega pero Daniel no confirma.
+    prisma.externalSaleItem.aggregate({ where: { catalogItemId, sale: { deletedAt: null, returnReceivedAt: { not: null }, returnConfirmedAt: null } }, _sum: { quantity: true } }),
+    // Venta externa ya separada que todavía no se entrega (sale al entregarla).
+    prisma.externalSaleItem.aggregate({ where: { catalogItemId, sale: { deletedAt: null, prepReadyAt: { not: null }, outflowBatchId: null } }, _sum: { quantity: true } }),
+    prisma.merchandiseOutflowItem.aggregate({ where: { catalogItemId, sourceDeteriorItemId: null, batch: { submittedAt: null } }, _sum: { quantity: true } }),
+    prisma.purchaseRequestUrgentReport.aggregate({ where: { request: { catalogItemId }, excessQty: { gt: 0 }, excessConfirmedAt: { not: null }, excessKardexRecordedAt: null }, _sum: { excessQty: true } }),
   ]);
   const reasons: string[] = [];
   const waiting = unreleased._sum.receivedQuantity ?? 0;
@@ -521,6 +533,15 @@ async function pendingKardexBlocker(catalogItemId: string): Promise<string | nul
   if (toApprove > 0) reasons.push(`${toApprove} un. recibidas que falta aprobar (Recepciones)`);
   const out = picked._sum.pickedQty ?? 0;
   if (out > 0) reasons.push(`${out} un. sacadas en un corte que falta confirmar`);
+  const more: [number | null | undefined, string][] = [
+    [reentry._sum.goodQty, "en Reingreso de mercadería que todavía no entran al Kardex"],
+    [cancelledGuides._sum.quantity, "de guías canceladas que todavía no vuelven al stock"],
+    [saleReturns._sum.quantity, "de ventas externas devueltas que falta confirmar"],
+    [salesSeparated._sum.quantity, "separadas para ventas externas que todavía no se entregan"],
+    [outflowDrafts._sum.quantity, "en un egreso de mercadería que todavía no se envía"],
+    [excess._sum.excessQty, "de excedente confirmado que falta ingresar al Kardex"],
+  ];
+  for (const [qty, what] of more) if (qty && qty > 0) reasons.push(`${qty} un. ${what}`);
   if (reasons.length === 0) return null;
   return `Todavía no se puede ajustar a mano: este producto tiene ${reasons.join("; ")}. Eso entra o sale del Kardex solo — resuélvelo primero y después ajusta lo que siga sin cuadrar, así no queda duplicado.`;
 }
