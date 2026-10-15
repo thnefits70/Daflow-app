@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { canPublishMarketProduct } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { getNewIdBrandingActorIds } from "@/lib/newIdBranding";
+import { productIdUsedByCombo } from "@/lib/comboBrand";
 
 const schema = z.object({
   quantity: z.number().int().positive().default(100),
@@ -29,6 +30,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!existing) return NextResponse.json({ error: "No encontrada." }, { status: 404 });
   if (existing.status !== "APPROVED") return NextResponse.json({ error: "Este producto todavía no está aprobado." }, { status: 409 });
   if (existing.publishedAt) return NextResponse.json({ error: "Ya está publicado." }, { status: 409 });
+
+  // Pedido del usuario 2026-10-15: un ID madre nunca se repite. Antes este
+  // paso no lo revisaba y al liberar al Kardex el producto quedaba sin ID,
+  // sin aviso (ver releasePendingKardexForCatalogItem).
+  const dropiProductId = parsed.data.dropiProductId;
+  const idTaken = await prisma.purchaseCatalogItem.findUnique({ where: { justCode: dropiProductId }, select: { id: true, name: true } });
+  if (idTaken && idTaken.id !== existing.catalogItemId) {
+    return NextResponse.json({ error: `El ID ${dropiProductId} ya es de "${idTaken.name}". Revisa que sea el ID correcto de este producto.` }, { status: 409 });
+  }
+  const comboClash = await productIdUsedByCombo(dropiProductId);
+  if (comboClash) return NextResponse.json({ error: comboClash }, { status: 409 });
 
   // Cambiado 2026-09-30, pedido del usuario: Heidy ya no escribe el precio
   // que puso en Dropi (era doble trabajo). Lo copia con un botón desde la
