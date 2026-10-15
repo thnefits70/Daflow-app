@@ -165,7 +165,11 @@ function groupRows<T extends Row>(rows: T[]) {
 // el catálogo (ver checkPurchaseSubmission, ya no depende de una orden de
 // compra de respaldo). Solo dos cosas cuentan como "novedad" real: precio
 // sobre el historial, o código sin nombre de producto.
-function buildValidationSummary(g: Row[], quoteMismatch = false) {
+// Pedido del usuario 2026-10-15 (Bryan se asustaba con SC-196): el rojo queda
+// solo para lo grave — precio sobre el historial o cotización que no cuadra.
+// Una justificación porque otro proveedor lo vendió más barato antes (sin que
+// el precio suba) se muestra en amarillo: es para revisar, no una alarma.
+function buildValidationSummary(g: Row[], quoteMismatch = false, overHistoryCount = 0) {
   const total = g.reduce((s, r) => s + r.totalCost, 0);
   // Confirmado 2026-09-07 — ya no se cita UNA justificación como si
   // representara a todo el grupo (ese era justo el origen del bug reportado:
@@ -183,12 +187,19 @@ function buildValidationSummary(g: Row[], quoteMismatch = false) {
   } else if (!quoteMismatch) {
     parts.push(`Cotización verificada por IA — el total leído coincide con los $${total.toFixed(2)} escritos.`);
   }
-  if (justifiedCount > 0) {
-    parts.push(`${justifiedCount} producto${justifiedCount === 1 ? "" : "s"} superó el historial de precio o cambió de proveedor — justificación abajo.`);
+  const cheaperElsewhereCount = justifiedCount - overHistoryCount;
+  if (overHistoryCount > 0) {
+    parts.push(`${overHistoryCount} producto${overHistoryCount === 1 ? "" : "s"} ${overHistoryCount === 1 ? "subió" : "subieron"} sobre su historial de precio — justificación abajo.`);
+  }
+  if (cheaperElsewhereCount > 0) {
+    parts.push(
+      `${cheaperElsewhereCount === 1 ? "1 producto no subió" : `${cheaperElsewhereCount} productos no subieron`} de precio, pero otro proveedor lo vendió más barato antes — revisa la justificación abajo.`
+    );
   }
   const hasIssue = justifiedCount > 0 || quoteMismatch;
   if (!hasIssue) parts.push("Sin novedades — todo cuadra correctamente.");
-  return { text: parts.join(" "), hasIssue };
+  const tone: "ok" | "warn" | "alert" = quoteMismatch || overHistoryCount > 0 ? "alert" : hasIssue ? "warn" : "ok";
+  return { text: parts.join(" "), hasIssue, tone };
 }
 
 // Confirmado 2026-09-02: pedido explícito del usuario — corrección al
@@ -476,6 +487,14 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
     if (!stats || stats.last3Avg === null || stats.last3Avg <= 0) return null;
     const times = effectiveUnitCost(r) / stats.last3Avg;
     return times >= 2 ? { times, avg: stats.last3Avg } : null;
+  }
+
+  // Línea justificada cuyo precio efectivo de verdad supera sus últimas compras
+  // (rojo). Las demás justificadas son "otro proveedor fue más barato" (amarillo).
+  function isOverHistory(r: Row) {
+    if (!r.justification) return false;
+    const stats = statsByCatalogItem[r.catalogItemId];
+    return !!stats && stats.last3Avg !== null && effectiveUnitCost(r) > stats.last3Avg + 0.005;
   }
 
   function reservedTotalFor(groupId: string) {
@@ -829,7 +848,10 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
         const total = g.reduce((s, r) => s + r.totalCost, 0) + shippingDueWithMerchandise(g);
         const justification = g.find((r) => r.justification)?.justification ?? null;
         const quoteMismatch = quoteMismatchFor(g);
-        const summary = buildValidationSummary(g, !!quoteMismatch);
+        const summary = buildValidationSummary(g, !!quoteMismatch, g.filter(isOverHistory).length);
+        const anyOverHistory = g.some(isOverHistory);
+        // Etiquetas pequeñas dentro de la caja: rojo apagado en alerta, gris en aviso.
+        const subLabel = summary.tone === "alert" ? "text-red/70" : "text-steel";
         // El flete del mismo proveedor ya va sumado al total (misma transferencia).
         const canPayShippingNow = !g[0].shippingIncluded && g[0].shippingPaymentTiming === "WITH_PURCHASE" && g[0].carrierId !== g[0].supplierId;
         return (
@@ -867,8 +889,10 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                         // Confirmado 2026-09-07, pedido explícito del usuario — se ve rojo de
                         // un vistazo, sin abrir el gráfico, cuando este producto necesitó
                         // justificación (precio sobre su historial o proveedor no más barato).
-                        r.justification
+                        isOverHistory(r)
                           ? "text-red/80 bg-red/10 border border-red/25 hover:text-red hover:bg-red/20"
+                          : r.justification
+                          ? "bg-gold/10 border border-gold/35 hover:bg-gold/20 text-[var(--color-gold)]"
                           : "text-teal/80 bg-teal/10 border border-teal/25 hover:text-teal hover:bg-teal/20"
                       }`}
                     >
@@ -909,10 +933,14 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                   <button
                     type="button"
                     onClick={() => toggleHistory(groupId, g[0].catalogItemId)}
-                    className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide bg-red/15 text-red border border-red/40 rounded-full px-2.5 py-1 cursor-pointer hover:bg-red/25"
+                    className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide rounded-full px-2.5 py-1 cursor-pointer ${
+                      anyOverHistory
+                        ? "bg-red/15 text-red border border-red/40 hover:bg-red/25"
+                        : "bg-gold/10 border border-gold/35 hover:bg-gold/20 text-[var(--color-gold)]"
+                    }`}
                   >
                     <LineChart size={11} />
-                    Sobre el historial
+                    {anyOverHistory ? "Sobre el historial" : "Ver otros proveedores"}
                     <ChevronDown size={11} className={`transition-transform ${historyOpenGroup === groupId ? "rotate-180" : ""}`} />
                   </button>
                 )}
@@ -941,24 +969,30 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
               </div>
             )}
 
-            <div className={`rounded-md px-3 py-2 mb-2.5 text-[11.5px] ${summary.hasIssue ?"bg-red/25 text-red border-2 border-red font-semibold" : "bg-teal/10 text-teal border border-teal/30"}`}>
+            <div className={`rounded-md px-3 py-2 mb-2.5 text-[11.5px] ${
+              summary.tone === "alert"
+                ? "bg-red/25 text-red border-2 border-red font-semibold"
+                : summary.tone === "warn"
+                ? "bg-gold/10 border border-gold/40 font-semibold text-[var(--color-gold)]"
+                : "bg-teal/10 text-teal border border-teal/30"
+            }`}>
               <div className="flex items-start gap-1.5">
                 {summary.hasIssue ? <AlertTriangle size={15} className="mt-0.5 shrink-0" /> : <CheckCircle2 size={13} className="mt-0.5 shrink-0" />}
                 <span>{summary.text}</span>
               </div>
               {summary.hasIssue && g.some((r) => r.justification) && (
-                <div className="flex flex-wrap gap-x-5 gap-y-1.5 mt-2 pt-2 border-t border-red/25">
+                <div className={`flex flex-wrap gap-x-5 gap-y-1.5 mt-2 pt-2 border-t ${summary.tone === "alert" ? "border-red/25" : "border-gold/30"}`}>
                   {g.filter((r) => r.justification).map((r) => {
                     const stats = statsByCatalogItem[r.catalogItemId];
                     const eff = effectiveUnitCost(r);
                     return (
                       <div key={r.id} className="flex gap-4 flex-wrap">
                         <div>
-                          <div className="text-[9px] uppercase tracking-wide text-red/70">Precio efectivo — esta solicitud</div>
-                          <div className="text-[13.5px] font-bold">${eff.toFixed(2)} <span className="text-[9.5px] font-normal text-red/70">/un. con flete</span></div>
+                          <div className={`text-[9px] uppercase tracking-wide ${subLabel}`}>Precio efectivo — esta solicitud</div>
+                          <div className="text-[13.5px] font-bold">${eff.toFixed(2)} <span className={`text-[9.5px] font-normal ${subLabel}`}>/un. con flete</span></div>
                         </div>
                         {stats === undefined ? (
-                          <div className="text-[10px] text-red/70 self-center">Cargando historial…</div>
+                          <div className={`text-[10px] self-center ${subLabel}`}>Cargando historial…</div>
                         ) : stats === null || stats.last3Avg === null ? (
                           // Confirmado 2026-09-15, bug real reportado por el usuario: esto NO
                           // es un estado de carga — el fetch ya terminó, simplemente este
@@ -966,16 +1000,19 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                           // ningún proveedor (puede estar en justificación por otro motivo, ej.
                           // "proveedor no es el más barato conocido"). Antes se mostraba
                           // "Cargando historial…" para siempre en este caso.
-                          <div className="text-[10px] text-red/70 self-center">Sin historial previo — primera vez que se compra este producto.</div>
+                          <div className={`text-[10px] self-center ${subLabel}`}>Sin historial previo — primera vez que se compra este producto.</div>
                         ) : (
                           <>
                             <div>
-                              <div className="text-[9px] uppercase tracking-wide text-red/70">Historial reciente (últimas compras)</div>
-                              <div className="text-[13.5px] font-bold text-steel">${stats.last3Avg.toFixed(2)} <span className="text-[9.5px] font-normal text-red/70">/un. con flete</span></div>
+                              <div className={`text-[9px] uppercase tracking-wide ${subLabel}`}>Historial reciente (últimas compras)</div>
+                              <div className="text-[13.5px] font-bold text-steel">${stats.last3Avg.toFixed(2)} <span className={`text-[9.5px] font-normal ${subLabel}`}>/un. con flete</span></div>
                             </div>
                             <div>
-                              <div className="text-[9px] uppercase tracking-wide text-red/70">Diferencia</div>
-                              <div className="text-[13.5px] font-bold">{eff - stats.last3Avg >= 0 ? "+" : ""}${(eff - stats.last3Avg).toFixed(2)}/un.</div>
+                              <div className={`text-[9px] uppercase tracking-wide ${subLabel}`}>Diferencia</div>
+                              <div className={`text-[13.5px] font-bold ${eff < stats.last3Avg ? "text-teal" : ""}`}>
+                                {eff - stats.last3Avg >= 0 ? "+" : "−"}${Math.abs(eff - stats.last3Avg).toFixed(2)}/un.
+                                {eff < stats.last3Avg && <span className="text-[9.5px] font-normal"> más barato</span>}
+                              </div>
                             </div>
                           </>
                         )}
