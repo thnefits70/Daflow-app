@@ -366,7 +366,7 @@ export function PvxCalculator({
 
   // Entró por el enlace compartido provedix.com/calculadora: va directo aquí.
   useEffect(() => {
-    if (window.location.pathname !== "/calculadora") return;
+    if (!window.location.pathname.endsWith("/calculadora")) return;
     const t = setTimeout(
       () => ref.current?.scrollIntoView({ block: "start" }),
       300,

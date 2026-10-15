@@ -64,7 +64,9 @@ function provedixProxy(req: NextRequest): NextResponse {
   // Enlaces para compartir (2026-10-15): provedix.com/calculadora abre la
   // calculadora y provedix.com/michelle abre el chat de Michelle IA — es la
   // misma página; ella decide qué abrir según la dirección.
-  if (pathname === "/" || PROVEDIX_SHARE_PATHS.includes(pathname)) return withProvedixSecurity(NextResponse.rewrite(new URL("/pvx", req.nextUrl)));
+  if (pathname === "/") return withProvedixSecurity(NextResponse.rewrite(new URL("/pvx", req.nextUrl)));
+  // Cada enlace tiene su página (mismo contenido, título e imagen propios al compartir).
+  if (PROVEDIX_SHARE_PATHS.includes(pathname)) return withProvedixSecurity(NextResponse.rewrite(new URL(`/pvx${pathname}`, req.nextUrl)));
   const allowed = PROVEDIX_PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) || PROVEDIX_EXTRA_PATHS.includes(pathname);
   return allowed ? withProvedixSecurity(NextResponse.next()) : new NextResponse(null, { status: 404 });
 }

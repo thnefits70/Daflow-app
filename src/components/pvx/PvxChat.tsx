@@ -127,7 +127,7 @@ export function PvxChat({
   // Entró por el enlace compartido provedix.com/michelle: el chat se abre solo.
   useEffect(() => {
     if (
-      window.location.pathname !== "/michelle" &&
+      !window.location.pathname.endsWith("/michelle") &&
       window.location.hash !== "#michelle"
     )
       return;
