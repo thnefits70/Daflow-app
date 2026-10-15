@@ -139,6 +139,11 @@ type Report = {
   // Pedido del usuario 2026-10-10: no llegó nada y no se pagó nada — solo se
   // ofrece "Entrega de mercadería faltante" (ver nothingArrivedUnpaid).
   nothingArrivedUnpaid?: boolean;
+  // Pedido de Jariel 2026-10-15 (proveedores a crédito): "No llegará — solo
+  // se pagará lo que llegó". "cancel" = no llegó nada (se cancela la
+  // compra); número = unidades que dejan de pagarse. Lo calcula el servidor
+  // (ver purchaseWontArrive.ts).
+  wontArrive?: "cancel" | number | null;
 };
 
 // Confirmado 2026-09-29, pedido del usuario (antifraude): con un proveedor
@@ -276,6 +281,7 @@ export function PurchaseUrgentReportsPanel({
   const [confirmingStockoutId, setConfirmingStockoutId] = useState<string | null>(null);
   // Doble confirmación: paso 1 explica y pide el motivo, paso 2 "¿seguro?".
   const [cancelPurchase, setCancelPurchase] = useState<{ id: string; step: 1 | 2; note: string } | null>(null);
+  const [wontArriveForm, setWontArriveForm] = useState<{ id: string; step: 1 | 2; note: string } | null>(null);
 
   // Guardado automático: si sale a revisar otro reclamo antes de terminar
   // de coordinar la resolución, al volver la encuentra tal como la había
@@ -401,6 +407,22 @@ export function PurchaseUrgentReportsPanel({
     const data = await res.json().catch(() => null);
     if (!res.ok) { setErr(data?.error ?? "No se pudo cancelar."); return; }
     setCancelPurchase(null);
+    load();
+    router.refresh();
+  }
+
+  async function submitWontArrive(reportId: string, note: string) {
+    setBusy(true);
+    setErr("");
+    const res = await fetch(`/api/purchase-requests/urgent-reports/${reportId}/wont-arrive`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note: note.trim() }),
+    });
+    setBusy(false);
+    const data = await res.json().catch(() => null);
+    if (!res.ok) { setErr(data?.error ?? "No se pudo registrar."); return; }
+    setWontArriveForm(null);
     load();
     router.refresh();
   }
@@ -848,7 +870,7 @@ export function PurchaseUrgentReportsPanel({
                       🚫 Proveedor sin stock — marcado por {actorName(r.supplierStockoutBy?.name)} · {new Date(r.supplierStockoutAt).toLocaleString("es-MX")} · Marketing ya fue avisado
                     </div>
                   ) : (
-                    canAct && !r.isLateClaim && r.missingQty > 0 && remaining > 0 && (
+                    canAct && !r.isLateClaim && r.missingQty > 0 && remaining > 0 && r.request.supplier.paymentMode !== "CREDITO" && (
                       confirmingStockoutId === r.id ? (
                         <div className="bg-inset rounded-md p-3 mb-2">
                           <div className="text-[12.5px] font-bold mb-1">¿El proveedor confirmó que no tiene stock?</div>
@@ -880,7 +902,80 @@ export function PurchaseUrgentReportsPanel({
                   {/* Pedido del usuario 2026-10-10 (SC-118): no llegó nada y
                       el proveedor no la va a enviar — se cancela la compra,
                       sin saldo a favor ni descuento. Doble confirmación. */}
-                  {r.canCancelNotSent && (
+                  {/* Pedido de Jariel 2026-10-15: con proveedores a crédito,
+                      un solo botón. Si no llegó nada cancela la compra; si
+                      llegó una parte, lo que falta no se paga. Prueba: el
+                      conteo de Inventario confirmado por Daniel. */}
+                  {r.wontArrive != null && (
+                    wontArriveForm?.id === r.id ? (
+                      <div className="bg-inset border border-red/40 rounded-md p-3 mb-2">
+                        {wontArriveForm.step === 1 ? (
+                          <>
+                            <div className="text-[12.5px] font-bold mb-1">No llegará — solo se pagará lo que llegó</div>
+                            <div className="text-[11.5px] text-steel mb-2">
+                              {r.wontArrive === "cancel"
+                                ? `No llegó ninguna de las ${r.request.quantity} un. La compra se cancela: a ${r.request.supplier.name} no se le paga nada. En su hoja queda "Cancelado: sin stock".`
+                                : `${r.wontArrive} un. no van a llegar. A ${r.request.supplier.name} se le paga solo lo que llegó (${r.request.quantity - r.wontArrive} de ${r.request.quantity} un.): se descuentan ${money(r.wontArrive * r.request.unitCost)} al pagar esta compra. La prueba es el conteo de Inventario que confirmó Daniel.`}{" "}
+                              Se avisa a Marketing que no hay stock.
+                            </div>
+                            <textarea
+                              value={wontArriveForm.note}
+                              onChange={(e) => setWontArriveForm({ ...wontArriveForm, note: e.target.value })}
+                              rows={2}
+                              placeholder={`Motivo (ej. ${r.request.supplier.name} no tiene stock)`}
+                              className="w-full rounded border border-rule bg-cloud px-2 py-1.5 text-[11.5px] mb-2"
+                            />
+                            {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={wontArriveForm.note.trim().length < 3}
+                                className="rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-50"
+                                onClick={() => { setWontArriveForm({ ...wontArriveForm, step: 2 }); setErr(""); }}
+                              >
+                                Continuar
+                              </button>
+                              <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setWontArriveForm(null); setErr(""); }}>
+                                Volver
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-[12.5px] font-bold mb-1">¿Seguro? Esto no se puede deshacer.</div>
+                            <div className="text-[11.5px] text-steel mb-2">
+                              {r.request.requestNumber != null && <>SC-{String(r.request.requestNumber).padStart(3, "0")} · </>}
+                              {r.request.catalogItem.name} · {r.wontArrive === "cancel" ? `se cancela la compra (${r.request.quantity} un.)` : `${r.wontArrive} un. no se pagan`} — &quot;{wontArriveForm.note.trim()}&quot;
+                            </div>
+                            {err && <div className="text-red text-[11.5px] mb-2">{err}</div>}
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={busy}
+                                className="rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-60"
+                                onClick={() => submitWontArrive(r.id, wontArriveForm.note)}
+                              >
+                                Sí, no llegará
+                              </button>
+                              <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => { setWontArriveForm(null); setErr(""); }}>
+                                Volver
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="rounded border border-red/50 text-red px-2.5 py-1.5 text-[11px] font-semibold cursor-pointer mb-2"
+                        onClick={() => { setWontArriveForm({ id: r.id, step: 1, note: "" }); setErr(""); }}
+                      >
+                        🚫 No llegará — solo se pagará lo que llegó
+                      </button>
+                    )
+                  )}
+
+                  {r.canCancelNotSent && r.request.supplier.paymentMode !== "CREDITO" && (
                     cancelPurchase?.id === r.id ? (
                       <div className="bg-inset border border-red/40 rounded-md p-3 mb-2">
                         {cancelPurchase.step === 1 ? (
@@ -1016,7 +1111,7 @@ export function PurchaseUrgentReportsPanel({
                       </div>
                       {r.nothingArrivedUnpaid && (
                         <div className="text-[11px] text-steel mb-2.5">
-                          No llegó ninguna unidad y no se pagó nada: solo queda que el proveedor la envíe otro día.{r.canCancelNotSent ? " Si no la va a enviar, usa \"Cancelar compra\" arriba." : ""}
+                          No llegó ninguna unidad y no se pagó nada: solo queda que el proveedor la envíe otro día.{r.wontArrive != null ? " Si no la va a enviar, usa \"No llegará\" arriba." : r.canCancelNotSent ? " Si no la va a enviar, usa \"Cancelar compra\" arriba." : ""}
                         </div>
                       )}
                       <div className="grid grid-cols-2 gap-2.5 mb-2.5">

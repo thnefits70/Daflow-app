@@ -5,6 +5,7 @@ import { canSubmitPurchaseRequests, canConfirmPurchaseReceiving, canApprovePurch
 import { isWithinCreditClaimWindow, creditClaimDeadline } from "@/lib/purchaseUrgent";
 import { autoWriteOffApprovedLateClaims } from "@/lib/inventoryAutoFlows";
 import { cancelNotSentBlocker, nothingArrivedUnpaid } from "@/lib/purchaseCancelNotSent";
+import { wontArriveMode } from "@/lib/purchaseWontArrive";
 
 // Admin, o quien tenga delegación de Compras (hoy Bryan), coordina con el
 // proveedor y elige cómo se resuelve cada reporte de Daniel — acciones
@@ -121,6 +122,11 @@ export async function GET(_req: NextRequest) {
     },
   });
 
+  // "No llegará — solo se pagará lo que llegó" lo pulsan quien compró,
+  // Compras (canManagePurchases, hoy Jariel) o el admin.
+  const managesPurchases =
+    isAdmin || !!(await prisma.user.findUnique({ where: { id: session.user.id }, select: { canManagePurchases: true } }))?.canManagePurchases;
+
   const withDeadline = reports.map(({ request: { requestedById, status, debtPaymentId, receipt, urgentReports, ...request }, ...r }) => ({
     ...r,
     request,
@@ -133,6 +139,14 @@ export async function GET(_req: NextRequest) {
       (isAdmin || session.user.id === requestedById) &&
       !!r.reviewedByLeadAt &&
       cancelNotSentBlocker({ status, quantity: request.quantity, paidAt: request.paidAt, debtPaymentId, receipt, urgentReports }) === null,
+    // Pedido de Jariel 2026-10-15 (proveedores a crédito): "cancel" si no
+    // llegó nada, el número de unidades que dejan de pagarse si llegó una
+    // parte, o null si no aplica. Ver purchaseWontArrive.ts.
+    wontArrive: (() => {
+      if (!managesPurchases && session.user.id !== requestedById) return null;
+      const m = wontArriveMode({ ...r, request: { status, quantity: request.quantity, paidAt: request.paidAt, debtPaymentId, receipt, urgentReports, supplier: { paymentMode: request.supplier.paymentMode } } });
+      return m.mode === "cancel" ? "cancel" : m.mode === "partial" ? m.qty : null;
+    })(),
   }));
 
   return NextResponse.json(withDeadline);

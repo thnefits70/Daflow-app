@@ -309,7 +309,8 @@ function summarize(r: RequestRow): OrderSummary {
       parts.push(`${replacedQty} repuestas${lastDone ? ` el ${fmtDate(lastDone)}` : ""} ✓`);
     }
     if (excessQty) parts.push(`llegaron ${excessQty} de más`);
-    // Acá ya no retiene: Jariel registró el descuento con la captura.
+    // Acá ya no retiene: Jariel registró el descuento (con captura, o desde
+    // 2026-10-15 con "No llegará — solo se pagará lo que llegó").
     const settledStockout = stockoutText ? `${stockoutText} — no se cobran` : "";
     if (settledStockout) parts.push(settledStockout);
     // No llegó nada bueno: no hay nada en revisión, solo lo que no tenían.
