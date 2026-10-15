@@ -904,7 +904,7 @@ function RowCard({ r, data, onChanged, onRetry }: { r: Row; data: Data; onChange
               <button type="button" onClick={() => onRetry(r)} className="mt-1.5 block rounded bg-teal px-3.5 py-2 text-[12.5px] font-bold text-white cursor-pointer">
                 🔁 Cambiar proveedor y volver a enviar
               </button>
-              <div className="text-[11px] text-steel mt-1">Se abre el análisis de este producto arriba: elige el otro proveedor, pon su precio y se envía otra vez a Bryan como una recompra nueva.</div>
+              <div className="text-[11px] text-steel mt-1">Se abre el análisis de este producto arriba: elige el otro proveedor, pon su precio y se envía otra vez a Bryan como una recompra nueva. Si ya no se va a comprar (ej. ya se compró), no hagas nada: queda cerrada y no te sale ningún aviso.</div>
             </>
           )}
         </div>
@@ -1018,9 +1018,9 @@ function RowCard({ r, data, onChanged, onRetry }: { r: Row; data: Data; onChange
           type="button"
           disabled={busy}
           onClick={() => window.confirm(`¿Retirar la recompra ${r.code}? Bryan ya no la verá.`) && post(`/api/repurchase-reviews/${r.id}/cancel`)}
-          className="mt-2 text-[12px] text-steel hover:text-red cursor-pointer"
+          className="mt-2 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold text-steel hover:text-red cursor-pointer"
         >
-          Retirar esta recompra
+          ✕ Retirar esta recompra (ya no se va a comprar)
         </button>
       )}
       {error && <div className="text-[12px] text-red mt-1.5">{error}</div>}

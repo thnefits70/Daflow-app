@@ -890,7 +890,7 @@ export async function getRepurchasePendingItems(userId: string): Promise<Repurch
       type: "recompras_sin_respuesta",
       icon: "🗣️",
       label: "Bryan no ha respondido tus recompras",
-      meta: `${names}${mineWaiting.length > 3 ? ` y ${mineWaiting.length - 3} más` : ""} — habla con él en persona para que las confirme o las rechace`,
+      meta: `${names}${mineWaiting.length > 3 ? ` y ${mineWaiting.length - 3} más` : ""} — habla con él en persona para que las confirme o las rechace. Si ya no se van a comprar, ábrelas y pulsa "Retirar esta recompra"`,
       overdue: true,
       href: REPURCHASE_HREF,
     });
