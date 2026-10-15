@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, FileText, Trash2, Upload } from "lucide-react";
 import { uploadFile } from "@/lib/uploadFile";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { usePasteFile } from "@/lib/usePasteFile";
 
 type Guide = {
   id: string;
@@ -196,8 +197,11 @@ function UploadForm({ onSent }: { onSent: () => void }) {
   const [err, setErr] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  async function pick(list: FileList | null) {
-    const f = list?.[0];
+  // Pedido de Michelle 2026-10-15: pegar (Ctrl+V) o arrastrar la guía, como
+  // en las otras cajas de DAFLOW.
+  const paste = usePasteFile((f) => void pick(f));
+
+  async function pick(f: File | null | undefined) {
     if (!f) return;
     setErr("");
     setUploading(true);
@@ -243,16 +247,23 @@ function UploadForm({ onSent }: { onSent: () => void }) {
         />
       </label>
       <div className="flex flex-col gap-1">
-        <span className="text-[11.5px] font-semibold text-steel">Guía (PDF o foto)</span>
-        <input ref={inputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => pick(e.target.files)} />
-        <button
-          type="button"
-          disabled={uploading}
+        <span className="text-[11.5px] font-semibold text-steel">Etiqueta de la guía de garantía</span>
+        <span className="text-[11px] text-steel">La guía que se generó en Dropi para esta garantía (la etiqueta que Joao imprime y pega en el paquete): el PDF descargado o una captura donde se vea completa.</span>
+        <input ref={inputRef} type="file" accept="application/pdf,image/*" className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
+        <div
+          tabIndex={0}
+          role="button"
           onClick={() => inputRef.current?.click()}
-          className="flex items-center gap-1.5 self-start rounded border border-rule px-3 py-1.5 text-[12px] font-semibold cursor-pointer disabled:opacity-60"
+          onPaste={paste.onPaste}
+          onMouseEnter={paste.onMouseEnter}
+          onMouseLeave={paste.onMouseLeave}
+          onDragOver={paste.onDragOver}
+          onDragLeave={paste.onDragLeave}
+          onDrop={paste.onDrop}
+          className={`flex items-center gap-1.5 self-start border-[1.5px] border-dashed rounded px-3 py-2 text-[12px] cursor-pointer hover:border-teal focus:border-teal focus:outline-none ${paste.isDragOver ? "border-teal bg-teal/10" : "border-rule"}`}
         >
-          <Upload size={13} /> {uploading ? "Subiendo…" : file ? "Cambiar archivo" : "Elegir archivo"}
-        </button>
+          <Upload size={13} /> {uploading ? "Subiendo…" : file ? "Cambiar archivo" : "Elegir, pegar (Ctrl+V) o arrastrar aquí"}
+        </div>
         {file && <span className="text-[11.5px] text-green">✓ {file.name}</span>}
       </div>
       <label className="flex flex-col gap-1">

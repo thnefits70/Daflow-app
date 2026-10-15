@@ -54,7 +54,12 @@ export async function POST(req: NextRequest) {
   const client = getAnthropicClient();
   const stream = client.messages.stream({
     model: WEEKLY_CHECKIN_MODEL,
-    max_tokens: 800,
+    max_tokens: 2000,
+    // 2026-10-15: con el razonamiento por defecto del modelo, Mary gastaba
+    // todo el límite pensando y la respuesta llegaba vacía ("no alcancé a
+    // responder" — 2 de 3 respuestas en una semana). Es solo guía, sin
+    // herramientas: respuesta directa, igual que el botón "¿Qué significa?".
+    thinking: { type: "disabled" },
     system: MARY_HELP_SYSTEM_PROMPT,
     messages: [
       ...messages.slice(0, -1).map((m) => ({ role: m.role, content: m.content })),

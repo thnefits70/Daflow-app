@@ -145,7 +145,10 @@ export async function POST(req: NextRequest) {
   const client = getAnthropicClient();
   const stream = client.messages.stream({
     model: WEEKLY_CHECKIN_MODEL,
-    max_tokens: 1024,
+    // 2026-10-15: con 1024, la mitad de las respuestas se cortaban justo en
+    // el límite (el modelo razona antes de escribir y usar herramientas) —
+    // Mary se trababa o respondía a medias. Se deja espacio de sobra.
+    max_tokens: 8000,
     system: CHECKIN_SYSTEM_PROMPT,
     tools: [SUBMIT_WEEKLY_REPORT_TOOL, CLOSE_PREVIOUS_REPORT_TOOL],
     messages: [
