@@ -113,6 +113,39 @@ export async function startFullCount(userId: string | null) {
   return prisma.stockCount.create({ data: { kind: "FULL", startedById: userId } });
 }
 
+// Pedido de Daniel 2026-10-15 (caso Rodillo 154570): un producto ya
+// corregido con «Ajustar (conteo)» en Stock Actual desde que empezó este
+// conteo ya tiene su número real — al equipo no se le pide contarlo otra vez
+// (mismo criterio que countGate.ts). Solo cuenta si el ajuste es posterior a
+// lo contado; las líneas ya aplicadas (que también crean un ajuste) no.
+// catalogItemId → cuándo se hizo el último ajuste.
+async function manualAdjustmentsSince(since: Date, catalogItemIds?: string[]): Promise<Map<string, Date>> {
+  const rows = await prisma.stockKardexEntry.findMany({
+    where: { type: "PHYSICAL_COUNT_ADJUSTMENT", occurredAt: { gte: since }, ...(catalogItemIds ? { catalogItemId: { in: catalogItemIds } } : {}) },
+    select: { catalogItemId: true, occurredAt: true },
+    orderBy: { occurredAt: "asc" },
+  });
+  return new Map(rows.map((r) => [r.catalogItemId, r.occurredAt]));
+}
+
+function isAdjustedAfter(adj: Date | undefined, line: { countedAt: Date; decision: string | null } | undefined): boolean {
+  if (!adj) return false;
+  if (!line) return true;
+  return line.decision !== "APPROVED" && adj > line.countedAt;
+}
+
+// IDs ya ajustados a mano en este conteo (para el avance de cada asignación).
+export async function adjustedInCount(countId: string, catalogItemIds: string[]): Promise<Set<string>> {
+  const count = await prisma.stockCount.findUnique({ where: { id: countId }, select: { startedAt: true } });
+  if (!count || catalogItemIds.length === 0) return new Set();
+  const [adjusted, lines] = await Promise.all([
+    manualAdjustmentsSince(count.startedAt, catalogItemIds),
+    prisma.stockCountLine.findMany({ where: { countId, catalogItemId: { in: catalogItemIds } }, select: { catalogItemId: true, countedAt: true, decision: true } }),
+  ]);
+  const byItem = new Map(lines.map((l) => [l.catalogItemId, l]));
+  return new Set([...adjusted].filter(([id, at]) => isAdjustedAfter(at, byItem.get(id))).map(([id]) => id));
+}
+
 export type CountView = {
   id: string;
   kind: "FULL" | "WEEKLY_AREA";
@@ -120,7 +153,8 @@ export type CountView = {
   area: string | null;
   weekStart: string | null;
   // applied = ya se aplicó a INVESTOCK (2026-10-13): no se corrige desde aquí.
-  products: (CountableProduct & { countedQty: number | null; variantCounts: VariantCount[] | null; countedByName: string | null; countedAt: string | null; recount: boolean; applied: boolean })[];
+  // adjusted = ya corregido con «Ajustar (conteo)» después de lo contado: no se cuenta.
+  products: (CountableProduct & { countedQty: number | null; variantCounts: VariantCount[] | null; countedByName: string | null; countedAt: string | null; recount: boolean; applied: boolean; adjusted: boolean })[];
 };
 
 // Vista para quien cuenta / Daniel: NUNCA incluye lo que dice el sistema.
@@ -129,6 +163,7 @@ export async function getCountView(countId: string): Promise<CountView | null> {
   if (!count) return null;
   const list = await products(count.kind === "WEEKLY_AREA" ? count.area : null);
   const byItem = new Map(count.lines.map((l) => [l.catalogItemId, l]));
+  const adjusted = await manualAdjustmentsSince(count.startedAt, list.map((p) => p.id));
   const userIds = [...new Set(count.lines.map((l) => l.countedById).filter((x): x is string => !!x))];
   const users = await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } });
   const nameOf = new Map(users.map((u) => [u.id, u.name]));
@@ -140,7 +175,7 @@ export async function getCountView(countId: string): Promise<CountView | null> {
     weekStart: count.weekStart,
     products: list.map((p) => {
       const l = byItem.get(p.id);
-      return { ...p, countedQty: l?.countedQty ?? null, variantCounts: parseVariantCounts(l?.variantCounts), countedByName: l?.countedById ? (nameOf.get(l.countedById) ?? null) : null, countedAt: l?.countedAt.toISOString() ?? null, recount: l?.decision === RECOUNT, applied: l?.decision === "APPROVED" };
+      return { ...p, countedQty: l?.countedQty ?? null, variantCounts: parseVariantCounts(l?.variantCounts), countedByName: l?.countedById ? (nameOf.get(l.countedById) ?? null) : null, countedAt: l?.countedAt.toISOString() ?? null, recount: l?.decision === RECOUNT, applied: l?.decision === "APPROVED", adjusted: isAdjustedAfter(adjusted.get(p.id), l) };
     }),
   };
 }
@@ -163,6 +198,9 @@ export async function recordCount(params: { countId: string; catalogItemId: stri
   const isRecount = existing?.decision === RECOUNT;
   if (existing?.decision === "APPROVED") return { ok: false, error: "Este producto ya se aplicó a INVESTOCK. Si está mal, corrígelo con «Ajustar (conteo)» en Stock Actual." };
   if (count.status !== "COUNTING" && !(isRecount && count.status === "SUBMITTED")) return { ok: false, error: "Este conteo ya se envió: no se puede cambiar." };
+  if (!params.isLead && (await adjustedInCount(params.countId, [params.catalogItemId])).size > 0) {
+    return { ok: false, error: "Daniel ya ajustó este producto con su número real: no hace falta contarlo." };
+  }
   if (count.kind === "WEEKLY_AREA" && !isRecount) {
     const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: params.catalogItemId }, select: { warehouseArea: true } });
     if (item?.warehouseArea !== count.area) return { ok: false, error: `Este producto no es del área ${count.area}.` };
@@ -249,7 +287,19 @@ async function processCountedLines(countId: string): Promise<ApplySummary> {
   const lines = await prisma.stockCountLine.findMany({ where: { countId, decision: null }, orderBy: { countedAt: "asc" } });
   const out: ApplySummary = { applied: 0, withDifference: 0, valueUp: 0, valueDown: 0, recount: [] };
   const big: string[] = [];
+  // Contado y después ajustado a mano: el ajuste ya dejó el número real, la
+  // diferencia vieja no se aplica encima (se descontaría dos veces).
+  // También los que estaban para recontar: ya no los recuenta nadie.
+  const recounts = await prisma.stockCountLine.findMany({ where: { countId, decision: RECOUNT }, select: { id: true, catalogItemId: true } });
+  const superseded = await adjustedInCount(countId, [...lines, ...recounts].map((l) => l.catalogItemId));
+  for (const r of recounts.filter((r) => superseded.has(r.catalogItemId))) {
+    await prisma.stockCountLine.updateMany({ where: { id: r.id, decision: RECOUNT }, data: { decision: "REJECTED", decidedAt: new Date() } });
+  }
   for (const l of lines) {
+    if (superseded.has(l.catalogItemId)) {
+      await prisma.stockCountLine.updateMany({ where: { id: l.id, decision: null }, data: { decision: "REJECTED", decidedAt: new Date() } });
+      continue;
+    }
     if (isBigDifference(l.countedQty, l.expectedQty)) {
       const r = await prisma.stockCountLine.updateMany({ where: { id: l.id, decision: null }, data: { decision: RECOUNT, decidedAt: new Date(), prevDelta: l.countedQty - l.expectedQty } });
       if (r.count > 0) big.push(l.catalogItemId);

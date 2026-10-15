@@ -214,8 +214,20 @@ export async function startAssignment(id: string, userId: string): Promise<Resul
 export async function assignmentProgress(a: { countId: string; area: string; catalogItemIds: string[] }): Promise<{ done: number; total: number; ids: string[] }> {
   const ids = await assignmentProductIds(a);
   const where = a.area === RECOUNT ? { countId: a.countId, catalogItemId: { in: ids }, decision: { not: "RECOUNT" } } : { countId: a.countId, catalogItemId: { in: ids } };
-  const done = await prisma.stockCountLine.count({ where });
-  return { done, total: ids.length, ids };
+  const counted = await prisma.stockCountLine.findMany({ where, select: { catalogItemId: true } });
+  if (a.area === RECOUNT) return { done: counted.length, total: ids.length, ids };
+  // Ajustado a mano («Ajustar (conteo)») desde que empezó el conteo y sin
+  // contar: ya tiene su número real, cuenta como hecho (ver stockCount.ts).
+  const count = await prisma.stockCount.findUnique({ where: { id: a.countId }, select: { startedAt: true } });
+  const have = new Set(counted.map((l) => l.catalogItemId));
+  const adjusted = count
+    ? await prisma.stockKardexEntry.findMany({
+        where: { type: "PHYSICAL_COUNT_ADJUSTMENT", occurredAt: { gte: count.startedAt }, catalogItemId: { in: ids.filter((id) => !have.has(id)) } },
+        select: { catalogItemId: true },
+        distinct: ["catalogItemId"],
+      })
+    : [];
+  return { done: counted.length + adjusted.length, total: ids.length, ids };
 }
 
 // Cierra el turno de quien está contando: cuántos productos contó (de su

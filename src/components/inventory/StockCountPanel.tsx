@@ -296,14 +296,16 @@ export function StockCountPanel() {
     );
   }
 
-  const counted = count.products.filter((p) => p.countedQty !== null).length;
-  const toApply = count.products.filter((p) => p.countedQty !== null && !p.applied && !p.recount).length;
+  const counted = count.products.filter((p) => p.countedQty !== null || p.adjusted).length;
+  const toApply = count.products.filter((p) => p.countedQty !== null && !p.applied && !p.recount && !p.adjusted).length;
   const total = count.products.length;
   const locked = count.status !== "COUNTING";
   const mineIds = new Set(mine?.productIds ?? []);
   const recounting = mine?.area === "RECOUNT";
   const canEdit = (p: CountView["products"][number]) => {
     if (p.applied) return false;
+    // Ya ajustado por Daniel en Stock Actual: el equipo no lo cuenta.
+    if (p.adjusted && !isLead) return false;
     if (!isLead && !board?.window.inWindow) return false;
     if (recounting && mineIds.has(p.id)) return !!mine?.startedAt && p.recount;
     if (locked) return false;
@@ -350,7 +352,7 @@ export function StockCountPanel() {
                 {[...WAREHOUSE_AREAS, "NONE"].map((a) => {
                   const inArea = count.products.filter((p) => (a === "NONE" ? !p.area : p.area === a));
                   if (inArea.length === 0) return null;
-                  const done = inArea.filter((p) => p.countedQty !== null).length;
+                  const done = inArea.filter((p) => p.countedQty !== null || p.adjusted).length;
                   return (
                     <button key={a} type="button" className={`rounded-full border px-2.5 py-1 text-[12px] cursor-pointer ${area === a ? "bg-teal border-teal text-navy font-bold" : done === inArea.length ? "border-green bg-green/15" : "border-rule"}`} onClick={() => setArea(a)}>
                       {a === "NONE" ? "Sin área" : `Área ${a}`} <span className="font-mono">{done}/{inArea.length}</span>
@@ -368,7 +370,7 @@ export function StockCountPanel() {
           <div className="flex flex-col gap-1.5 max-w-3xl">
             {visible.map((p, i) => {
               const editable = canEdit(p);
-              const done = p.countedQty !== null && !(recounting && p.recount);
+              const done = (p.countedQty !== null || p.adjusted) && !(recounting && p.recount);
               const vRows = editable ? variantRows(p) : null;
               return (
                 <div key={p.id} className={`border rounded p-2 text-[12.5px] ${done ? "border-green/50 bg-green/5" : p.recount ? "border-gold/60 bg-gold/5" : "border-rule"}`}>
@@ -391,7 +393,8 @@ export function StockCountPanel() {
                       {p.justCode ? <span className="inline-flex items-center gap-1 align-middle"><CatalogCode code={p.justCode} size="text-[11px]" /></span> : "sin ID"} · {areaLabel(p.area)}
                       {p.recount && " · para recontar"}
                       {p.applied && " · ✓ aplicado a INVESTOCK"}
-                      {p.countedQty !== null && ` · contado ${p.countedQty}${p.countedByName && isLead ? ` por ${p.countedByName}` : ""}`}
+                      {p.adjusted && " · ✓ ya ajustado por Daniel, no hace falta contarlo"}
+                      {p.countedQty !== null && !p.adjusted && ` · contado ${p.countedQty}${p.countedByName && isLead ? ` por ${p.countedByName}` : ""}`}
                     </div>
                     {p.variantCounts && p.variantCounts.length > 0 && !vRows && <div className="text-steel text-[11.5px]">{variantSummary(p.variantCounts)}</div>}
                     {editable && !vRows && (
