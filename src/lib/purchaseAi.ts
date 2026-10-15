@@ -227,6 +227,11 @@ export type ReceiptPhotoComparisonResult = {
   // SCREEN_PHOTO_NOTE_PREFIX para que Daniel lo vea al aprobar y quede en
   // la auditoría, sin columna nueva.
   screenPhotoSuspected: boolean;
+  // Pedido de Bryan Ríos 2026-10-15 (caso SC-181, chalecos de CHEN): solo se
+  // fotografió la caja, igual a la de siempre, y adentro venía otro modelo.
+  // false = ninguna foto muestra el producto mismo fuera de su empaque
+  // individual; la recepción no se confirma hasta tomar esa foto.
+  productVisible: boolean;
 };
 
 // Confirmado 2026-08-06: cuando Daniel (líder de Inventario) confirma que
@@ -241,7 +246,7 @@ export async function compareReceiptPhotos(params: {
   deptId?: string;
 }): Promise<ReceiptPhotoComparisonResult> {
   if (params.referencePhotoUrls.length === 0) {
-    return { likelyMatch: null, minorDifferenceOnly: false, screenPhotoSuspected: false, note: "Este producto no tiene fotos de referencia en el catálogo — no se pudo comparar." };
+    return { likelyMatch: null, minorDifferenceOnly: false, screenPhotoSuspected: false, productVisible: true, note: "Este producto no tiene fotos de referencia en el catálogo — no se pudo comparar." };
   }
 
   const client = getAnthropicClient();
@@ -276,7 +281,16 @@ export async function compareReceiptPhotos(params: {
       "computadora o monitor (se ven bordes/marco del teléfono, barra de chat, botones como 'Responder' o " +
       "emojis, reflejos de vidrio, patrón de píxeles/moiré) en vez de a la mercadería física: en ese caso " +
       "screenPhotoSuspected debe ser true. Una foto normal del producto o sus cajas es false. " +
-      'Responde ÚNICAMENTE un JSON: {"likelyMatch": boolean, "minorDifferenceOnly": boolean, "screenPhotoSuspected": boolean, "note": string}. ' +
+      // Pedido de Bryan Ríos 2026-10-15 (caso SC-181): la caja era igual a la
+      // de siempre y adentro venía otro modelo.
+      "Revisa también si AL MENOS UNA foto de recepción muestra el PRODUCTO MISMO fuera de su caja, bolsa o " +
+      "empaque individual (la prenda extendida, el aparato, la pieza), no solo cartones, cajas o empaques " +
+      "cerrados: en ese caso productVisible es true. Si solo se ven cajas, bolsas o empaques cerrados, " +
+      "productVisible es false — la caja puede ser igual y el producto de adentro distinto. Excepción: si el " +
+      "producto no se puede sacar de su empaque sin dañarlo (sellado, líquido, cosmético, alimento, pilas), " +
+      "un empaque individual claramente visible cuenta como true. Si productVisible es false, compara solo lo " +
+      "que se ve y menciónalo en note (ej. \"Solo se ve la caja — falta una foto del producto fuera de ella\"). " +
+      'Responde ÚNICAMENTE un JSON: {"likelyMatch": boolean, "minorDifferenceOnly": boolean, "screenPhotoSuspected": boolean, "productVisible": boolean, "note": string}. ' +
       'note es una frase breve en español explicando tu conclusión, mencionando específicamente cuál foto no ' +
       'corresponde y qué cambia si aplica (ej. "Coincide — mismo empaque y forma" o "No coincide — la 3ra foto ' +
       'de recepción muestra un producto distinto (otra forma)" o "No coincide — mismo producto pero llegó en ' +
@@ -312,6 +326,7 @@ export async function compareReceiptPhotos(params: {
     ...result,
     minorDifferenceOnly: result.likelyMatch === false && !!result.minorDifferenceOnly,
     screenPhotoSuspected,
+    productVisible: result.productVisible !== false,
     note: screenPhotoSuspected ? `${SCREEN_PHOTO_NOTE_PREFIX}, no de la mercadería real. ${result.note}` : result.note,
   };
 }

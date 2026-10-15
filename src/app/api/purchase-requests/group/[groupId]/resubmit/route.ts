@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkSameProductConfirmed } from "@/lib/purchaseMoveToOtherId";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canSubmitPurchaseRequests } from "@/lib/guards";
@@ -75,6 +76,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
   // Pedido del usuario 2026-09-30: producto pequeño o normal (ver checkAndSaveFulfillmentSizes).
   const sizeError = await checkAndSaveFulfillmentSizes(d.items, session.user.role === "admin" ? null : session.user.id);
   if (sizeError) return NextResponse.json({ error: sizeError }, { status: 400 });
+  // Pedido de Bryan Ríos 2026-10-15 (ver purchaseMoveToOtherId.ts).
+  const sameProductError = await checkSameProductConfirmed(d.items);
+  if (sameProductError) return NextResponse.json({ error: sameProductError }, { status: 400 });
 
   if (d.appliedCreditIds && d.appliedCreditIds.length > 0) {
     const reserveResult = await reserveCreditsForGroup({
@@ -110,6 +114,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ gro
           quoteReadTotal: d.quoteReadTotal,
           quoteReferenceCode: it.quoteReferenceCode || null,
           quoteConfirmedAt: new Date(),
+          sameProductConfirmedAt: it.sameProductConfirmed ? new Date() : null,
           shippingIncluded: d.shippingIncluded,
           shippingCarrierPending: !d.shippingIncluded && !!d.shippingCarrierPending,
           carrierId: d.shippingIncluded || d.shippingCarrierPending ? null : d.carrierId,

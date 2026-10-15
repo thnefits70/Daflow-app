@@ -687,6 +687,9 @@ export const purchaseLineSchema = z.object({
   // $1.85 y pasó, porque con códigos no se comparaba nada más.
   quoteUnitPrice: z.number().nullable().optional(),
   quoteQuantity: z.number().nullable().optional(),
+  // Pedido de Bryan Ríos 2026-10-15: quien pide confirmó, viendo la foto,
+  // que es igual al producto que ya tenemos (ver purchaseMoveToOtherId.ts).
+  sameProductConfirmed: z.boolean().optional(),
 });
 
 // Confirmado 2026-08-08: compartido entre crear una solicitud nueva

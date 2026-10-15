@@ -537,6 +537,7 @@ model User {
   pettyCashReservationsCreated                     PettyCashReservation[]                @relation("PettyCashReservationCreatedBy")
   pettyCashReservationsReleased                    PettyCashReservation[]                @relation("PettyCashReservationReleasedBy")
   purchaseRequestsMade                             PurchaseRequest[]                     @relation("PurchaseRequestRequestedBy")
+  purchaseRequestsMovedToOtherId                   PurchaseRequest[]                     @relation("PurchaseRequestMovedToOtherIdBy")
   purchaseRequestsReviewed                         PurchaseRequest[]                     @relation("PurchaseRequestReviewedBy")
   purchaseRequestReceiptsConfirmed                 PurchaseRequestReceipt[]              @relation("PurchaseRequestReceiptConfirmedBy")
   purchaseRequestReceiptsApproved                  PurchaseRequestReceipt[]              @relation("PurchaseRequestReceiptApprovedBy")
@@ -3621,6 +3622,19 @@ model PurchaseRequest {
   // y la ruta group/[groupId]/review).
   isEmergency     Boolean @default(false)
   emergencyReason String?
+
+  // Pedido de Bryan Ríos 2026-10-15 (caso SC-181, chalecos de CHEN): un
+  // modelo distinto comprado como recompra se sumaba al mismo ID y en bodega
+  // se mezclaban los dos. Quien solicita confirma, viendo la foto del
+  // producto, que lo que compra es igual (null en compras anteriores o
+  // productos recién creados). Si no lo es, la compra se pasa a otro ID —
+  // ver lib/purchaseMoveToOtherId.ts; aquí queda de qué producto venía.
+  sameProductConfirmedAt DateTime?
+  movedFromItemName      String?
+  movedFromJustCode      String?
+  movedToOtherIdAt       DateTime?
+  movedToOtherIdById     String?
+  movedToOtherIdBy       User?     @relation("PurchaseRequestMovedToOtherIdBy", fields: [movedToOtherIdById], references: [id], onDelete: SetNull)
 
   status       PurchaseRequestStatus @default(PENDING_APPROVAL)
   rejectReason String?

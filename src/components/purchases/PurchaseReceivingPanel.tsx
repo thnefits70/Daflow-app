@@ -13,6 +13,7 @@ import { CatalogCode } from "@/components/shared/CatalogCode";
 import { PurchaseCode } from "@/components/shared/PurchaseCode";
 import { useFormDraft } from "@/lib/useFormDraft";
 import { isScreenPhotoNote } from "@/lib/receiptPhotoScreen";
+import { MoveToOtherIdButton } from "./MoveToOtherIdButton";
 import { WAREHOUSE_AREAS, areaLabel, type WarehouseArea } from "@/lib/warehouseAreas";
 import { isFullyReportedNotArrived } from "@/lib/purchaseFullyReported";
 import { needsOpenProductPhoto, OPEN_PRODUCT_PHOTO_HINT } from "@/lib/openProductPhoto";
@@ -45,6 +46,9 @@ type Row = {
   // traer también filas APPROVED cuando el proveedor es CREDITO, si no
   // Inventario nunca ve esos pedidos en ningún lado.
   status: "APPROVED" | "PAID" | "RECEIVED_PENDING_REVIEW" | "RECEIVED";
+  // Pedido de Bryan Ríos 2026-10-15: compra pasada a otro ID (otro modelo).
+  movedFromItemName?: string | null;
+  movedFromJustCode?: string | null;
   quantity: number;
   unitCost: number;
   totalCost: number;
@@ -286,7 +290,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
   const [receivedPhotoUrls, setReceivedPhotoUrls] = useState<string[]>([]);
   const [takingPhoto, setTakingPhoto] = useState(false);
   const [aiChecking, setAiChecking] = useState(false);
-  const [aiResult, setAiResult] = useState<{ likelyMatch: boolean | null; note: string; minorDifferenceOnly?: boolean; screenPhotoSuspected?: boolean } | null>(null);
+  const [aiResult, setAiResult] = useState<{ likelyMatch: boolean | null; note: string; minorDifferenceOnly?: boolean; screenPhotoSuspected?: boolean; productVisible?: boolean } | null>(null);
   const [minorDifferenceConfirmed, setMinorDifferenceConfirmed] = useState(false);
   const [comment, setComment] = useState("");
   const [busy, setBusy] = useState(false);
@@ -664,6 +668,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
         comment: comment.trim() || undefined,
         aiPhotoMatch: aiResult?.likelyMatch ?? null,
         aiPhotoNote: aiResult?.note ?? null,
+        aiProductVisible: aiResult?.productVisible ?? null,
         minorDifferenceOnly: aiResult?.minorDifferenceOnly ?? null,
         minorDifferenceConfirmed,
         hasExpiration: asksExpiration ? hasExpiration : undefined,
@@ -1672,6 +1677,11 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       </span>
                     )}
                   </div>
+                  {r.movedFromItemName && (
+                    <div className="text-[11px] text-blue mb-1">
+                      Pasada a este ID — antes era {r.movedFromItemName}{r.movedFromJustCode ? ` (${r.movedFromJustCode})` : ""}, otro modelo.
+                    </div>
+                  )}
                   {/* Confirmado 2026-08-18: pedido explícito del usuario — unidades y
                       valor pagado son exclusivos de Daniel (líder) y admin; el resto del
                       equipo de Inventario nunca los ve, en ningún lado de esta pantalla. */}
@@ -1790,7 +1800,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                             Fotos de lo recibido ({receivedPhotoUrls.length}/3, mínimo {needsOpenProductPhoto(r.catalogItem.name) ? 3 : 2})
                           </label>
                           <div className="text-[11px] text-steel mb-2">
-                            Foto 1: el producto encima o junto al cartón del bulto. Foto 2: el cartón abierto con una unidad de muestra encima, junto al bulto —
+                            Foto 1: el producto encima o junto al cartón del bulto. Foto 2: una unidad <b>fuera de su caja o bolsa</b> (el producto mismo, no solo el empaque), encima del cartón abierto —
                             compáralas contra las de referencia de arriba antes de confirmar; la IA también las revisa apenas subas la 2da.
                           </div>
                           {needsOpenProductPhoto(r.catalogItem.name) && (
@@ -1885,6 +1895,14 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                               🤖 {aiResult.note}
                             </div>
                           )}
+                          {/* Pedido de Bryan Ríos 2026-10-15 (caso SC-181): la caja era igual
+                              y adentro venía otro modelo — sin una foto del producto
+                              fuera de su empaque no se confirma. */}
+                          {aiResult?.productVisible === false && (
+                            <div className="text-[11.5px] text-red bg-red/10 border border-red/30 rounded-md px-2.5 py-2 mb-2">
+                              Falta una foto del producto <b>fuera de su caja o bolsa</b>: la caja puede ser igual y el producto de adentro distinto. Borra una foto con la ✕ y toma otra con el producto sacado de su empaque.
+                            </div>
+                          )}
                           {/* Confirmado 2026-09-22 (caso SC-017): solo avisa, no bloquea —
                               Daniel igual ve la nota al aprobar la recepción. */}
                           {aiResult?.screenPhotoSuspected && (
@@ -1920,7 +1938,7 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                           )}
                           {aiResult && aiResult.likelyMatch === false && !aiResult.minorDifferenceOnly && (
                             <div className="text-[11px] text-red mb-2.5">
-                              No se puede confirmar así — si de verdad llegó un producto distinto, usa &quot;🚨 Informar urgente&quot; (categoría Diferente) en vez de este botón.
+                              No se puede confirmar así — si de verdad llegó un producto distinto, usa &quot;🚨 Informar urgente&quot; (categoría Diferente) en vez de este botón. Si es otro modelo que sí se compró a propósito, avisa a Bryan para que pase la compra a su propio ID.
                             </div>
                           )}
 
@@ -1941,7 +1959,8 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                                 (!r.catalogItem.awaitingDropiId && expirationLotMissing(r.id, r.catalogItem.hasExpiration, receivedQty)) ||
                                 Number(receivedQty) !== (r.urgentReports.length > 0 ? goodQuantity(r) : r.quantity) ||
                                 ((r.variantNames?.length ?? 0) > 0 && receiptVariantRows(r).reduce((s, v) => s + (Number(v.qty) || 0), 0) !== Number(receivedQty)) ||
-                                (aiResult?.likelyMatch === false && !(aiResult.minorDifferenceOnly && minorDifferenceConfirmed))
+                                (aiResult?.likelyMatch === false && !(aiResult.minorDifferenceOnly && minorDifferenceConfirmed)) ||
+                                aiResult?.productVisible === false
                               }
                               title={aiChecking ? "Espera a que la IA termine de comparar las fotos" : undefined}
                               className="rounded border border-green bg-green px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
@@ -2495,6 +2514,14 @@ export function PurchaseReceivingPanel({ isAdmin = false, canReceiveTeam = false
                       >
                         ✓ Aprobar recepción
                       </button>
+                      {/* Pedido de Bryan Ríos 2026-10-15 (caso SC-181): si llegó
+                          otro modelo, no se aprueba sobre este ID — se pasa
+                          al suyo para que no se mezcle en bodega. */}
+                      {canApprove && (
+                        <div className="mt-2">
+                          <MoveToOtherIdButton requestId={r.id} itemName={r.catalogItem.name} onMoved={() => { load(); router.refresh(); }} />
+                        </div>
+                      )}
                     </div>
                   )}
 

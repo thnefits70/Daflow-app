@@ -85,7 +85,7 @@ export async function getIdDeadlineItems(now = new Date()): Promise<HandoffItem[
       id: true,
       productName: true,
       catalogItem: {
-        select: { requests: { where: { paidAt: { not: null }, status: { not: "REJECTED" } }, select: { paidAt: true, quantity: true } } },
+        select: { requests: { where: { paidAt: { not: null }, status: { not: "REJECTED" } }, select: { paidAt: true, quantity: true, movedToOtherIdAt: true } } },
       },
       handoffExtensions: { select: { hours: true, grantedAt: true, auto: true } },
     },
@@ -95,7 +95,10 @@ export async function getIdDeadlineItems(now = new Date()): Promise<HandoffItem[
   for (const p of proposals) {
     const paid = p.catalogItem?.requests ?? [];
     if (paid.length === 0) continue;
-    const firstPaid = paid.reduce((m, r) => (r.paidAt! < m ? r.paidAt! : m), paid[0].paidAt!);
+    // Pedido de Bryan Ríos 2026-10-15: una compra pasada a este modelo nuevo
+    // (ver purchaseMoveToOtherId.ts) cuenta desde que se pasó, no desde el pago.
+    const startOf = (r: (typeof paid)[number]) => (r.movedToOtherIdAt && r.movedToOtherIdAt > r.paidAt! ? r.movedToOtherIdAt : r.paidAt!);
+    const firstPaid = paid.reduce((m, r) => (startOf(r) < m ? startOf(r) : m), startOf(paid[0]));
     const ext = {
       extraHours: p.handoffExtensions.filter((e) => e.grantedAt).reduce((s, e) => s + e.hours, 0),
       autoExtensionUsed: p.handoffExtensions.some((e) => e.auto),

@@ -11,6 +11,7 @@ import { usePasteFile } from "@/lib/usePasteFile";
 import { PriceTrendChart, PriceHistoryBreakdownList } from "./PriceTrendChart";
 import type { SupplierPriceHistory, PriceHistoryStats, SupplierPricePoint } from "@/lib/purchases";
 import { CatalogCode, CopyValueButton } from "@/components/shared/CatalogCode";
+import { MoveToOtherIdButton } from "./MoveToOtherIdButton";
 import { PurchaseCode } from "@/components/shared/PurchaseCode";
 import { shippingDueWithMerchandise, groupShippingTotal } from "@/lib/purchaseShipping";
 import { quoteTotalMatchesLines } from "@/lib/quoteMatch";
@@ -63,7 +64,38 @@ type Row = {
   requestedAt: string;
   isEmergency: boolean;
   emergencyReason: string | null;
+  // Pedido de Bryan Ríos 2026-10-15 (ver lib/purchaseMoveToOtherId.ts).
+  sameProductConfirmedAt?: string | null;
+  movedFromItemName?: string | null;
+  movedFromJustCode?: string | null;
 };
+
+// Pedido de Bryan Ríos 2026-10-15 (caso SC-181): por producto, si quien
+// pidió confirmó que es igual al que ya tenemos, si se pasó a otro ID, y el
+// botón para pasarlo cuando es otro modelo.
+function SameProductLines({ rows, requesterName, canMove, onMoved }: { rows: Row[]; requesterName: string; canMove: boolean; onMoved: () => void }) {
+  const shown = rows.filter((r) => canMove || r.sameProductConfirmedAt || r.movedFromItemName);
+  if (shown.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1 mt-1.5">
+      {shown.map((r) => (
+        <div key={r.id} className="text-[10.5px]">
+          {r.movedFromItemName ? (
+            <div className="text-blue">↪ {r.catalogItem.name}: pasada a este ID — antes era {r.movedFromItemName}{r.movedFromJustCode ? ` (${r.movedFromJustCode})` : ""}, otro modelo.</div>
+          ) : r.sameProductConfirmedAt ? (
+            <div className="text-teal">✓ {requesterName} confirmó que {r.catalogItem.name} es igual al que ya tenemos.</div>
+          ) : null}
+          {canMove && (
+            <div className="mt-1">
+              {rows.length > 1 && <span className="text-steel mr-1.5">{r.catalogItem.name}:</span>}
+              <MoveToOtherIdButton requestId={r.id} itemName={r.catalogItem.name} onMoved={onMoved} />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // Confirmado 2026-09-03: pedido explícito del usuario — Bryan notó que al
 // aprobar una solicitud, esta desaparece de la bandeja sin dejar rastro
@@ -800,6 +832,12 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                         ))}
                       </div>
                       {isRejected && g[0].rejectReason && <div className="text-[11px] text-steel mt-1">Motivo: &quot;{g[0].rejectReason}&quot;</div>}
+                      <SameProductLines
+                        rows={g}
+                        requesterName={actorName(g[0].requestedBy?.name)}
+                        canMove={canAct && !g[0].isEmergency && (g[0].status === "APPROVED" || g[0].status === "PAID" || g[0].status === "RECEIVED_PENDING_REVIEW")}
+                        onMoved={() => loadHistory()}
+                      />
                     </div>
                     <div className="flex flex-col items-end gap-1.5">
                       <span className={`flex items-center gap-1 text-[9.5px] font-bold uppercase tracking-wide rounded-full px-2.5 py-1 border ${meta.cls}`} style={meta.style}>
@@ -914,6 +952,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                   Solicitada por {actorName(g[0].requestedBy?.name)}
                   {g[0].attemptNumber > 1 && <span className="text-gold"> — {attemptLabel(g[0].attemptNumber)}</span>}
                 </div>
+                <SameProductLines rows={g} requesterName={actorName(g[0].requestedBy?.name)} canMove={effectiveCanAct(groupId)} onMoved={load} />
                 {g[0].isEmergency && (
                   <div className="flex items-center gap-1 text-[10px] font-bold text-red mt-1">
                     <AlertTriangle size={11} /> Emergencia — {g[0].emergencyReason}

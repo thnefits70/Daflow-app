@@ -361,6 +361,11 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
   // confirmación, y queda guardado en el producto. Por id de producto.
   const [needsSizeByItem, setNeedsSizeByItem] = useState<Record<string, boolean>>({});
   const [sizeByItem, setSizeByItem] = useState<Record<string, "SMALL" | "NORMAL">>({});
+  // Pedido de Bryan Ríos 2026-10-15 (caso SC-181): producto que ya tenemos →
+  // quien pide confirma, viendo la foto, que lo que compra es igual. Si es
+  // otro modelo, va con su propio ID (ver purchaseMoveToOtherId.ts).
+  const [sameCheckByItem, setSameCheckByItem] = useState<Record<string, string[] | null>>({});
+  const [sameAnswerByItem, setSameAnswerByItem] = useState<Record<string, "yes" | "no">>({});
   const [sizeAsking, setSizeAsking] = useState<Record<string, "SMALL" | "NORMAL" | null>>({});
   // Tamaño ya guardado — quien compra lo puede corregir él mismo (2026-09-30).
   type SavedSize = { value: "SMALL" | "NORMAL"; setAt: string | null; setByName: string | null };
@@ -411,6 +416,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         setStockCoverByLine((m) => ({ ...m, [idx]: emergencyOnly ? null : (data?.stockCover ?? null) }));
         setNeedsSizeByItem((m) => ({ ...m, [catalogItemId]: !!data?.needsFulfillmentSize }));
         setSavedSizeByItem((m) => ({ ...m, [catalogItemId]: data?.fulfillmentSize ?? null }));
+        setSameCheckByItem((m) => ({ ...m, [catalogItemId]: data?.needsSameProductCheck ? (data.photos ?? []) : null }));
       })
       .catch(() => updateLine(idx, { stats: null }));
   }
@@ -662,6 +668,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
 
   function resetForm() {
     setLines([emptyLine()]);
+    setSameAnswerByItem({});
     setSupplier(null);
     setBankAccountId(null);
     setQuoteFile(null);
@@ -1031,6 +1038,16 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
         return;
       }
     }
+    const differentModel = lines.filter((l) => l.catalogItem && sameCheckByItem[l.catalogItem.id] && sameAnswerByItem[l.catalogItem.id] === "no");
+    if (differentModel.length > 0) {
+      setErr(`${differentModel.map((l) => l.catalogItem!.name).join(", ")}: es otro modelo — quita esa línea y créalo como producto nuevo con su propio ID, para que no se mezcle en bodega.`);
+      return;
+    }
+    const unansweredSame = lines.filter((l) => l.catalogItem && sameCheckByItem[l.catalogItem.id] && sameAnswerByItem[l.catalogItem.id] !== "yes");
+    if (unansweredSame.length > 0) {
+      setErr(`Confirma que lo que vas a comprar es igual al producto que ya tenemos: ${unansweredSame.map((l) => l.catalogItem!.name).join(", ")}.`);
+      return;
+    }
     const missingSize = lines.filter((l) => l.catalogItem && needsSizeByItem[l.catalogItem.id] && !sizeByItem[l.catalogItem.id]);
     if (missingSize.length > 0) {
       setErr(`Marca si es producto pequeño o normal: ${missingSize.map((l) => l.catalogItem!.name).join(", ")}.`);
@@ -1066,6 +1083,7 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
       items: lines.map((l, i) => ({
         catalogItemId: l.catalogItem!.id,
         fulfillmentSize: sizeByItem[l.catalogItem!.id] ?? null,
+        sameProductConfirmed: sameAnswerByItem[l.catalogItem!.id] === "yes",
         quantity: Number(l.quantity),
         unitCost: lineUnitCost(l),
         justification: justificationNeededIdx.has(i) ? l.justification.trim() : null,
@@ -1286,6 +1304,55 @@ export function PurchaseRequestForm({ deptId, isAdmin, emergencyOnly = false }: 
                         Cerrar sin enviar
                       </button>
                     </div>
+                  )}
+                </div>
+              );
+            })()}
+            {line.catalogItem && sameCheckByItem[line.catalogItem.id] && (() => {
+              const itemId = line.catalogItem.id;
+              const photos = sameCheckByItem[itemId] ?? [];
+              const answer = sameAnswerByItem[itemId];
+              return (
+                <div className={`rounded-md px-3 py-2.5 mb-2.5 text-[12.5px] border ${answer === "no" ? "bg-red/10 border-red/40" : answer === "yes" ? "bg-teal/10 border-teal/35" : "bg-gold/10 border-gold/35"}`}>
+                  {answer === "yes" ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <CheckCircle2 size={14} className="text-teal shrink-0" />
+                      <span>Confirmaste que es igual al producto que ya tenemos.</span>
+                      <button type="button" className="text-steel text-[11.5px] underline cursor-pointer" onClick={() => setSameAnswerByItem((m) => { const n = { ...m }; delete n[itemId]; return n; })}>Cambiar</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="font-semibold mb-1.5">¿Lo que vas a comprar es igual a este producto? (mismo modelo, material y tallas)</div>
+                      {photos.length > 0 && (
+                        <div className="flex gap-1.5 mb-2">
+                          {photos.slice(0, 3).map((p) => (
+                            <img key={p} loading="lazy" decoding="async" src={p} alt="" className="w-16 h-16 rounded object-cover border border-rule" />
+                          ))}
+                        </div>
+                      )}
+                      {answer === "no" ? (
+                        <>
+                          <div className="text-red mb-2">
+                            No lo pidas con este ID: en bodega se mezclaría con el que ya tenemos. Cambia de producto y crea el modelo nuevo con su propio ID de Dropi (escribe su nombre en el buscador → &quot;Crear&quot;). Si todavía no tiene ID de Dropi, propónlo en Análisis de Mercado.
+                          </div>
+                          <div className="flex gap-2 flex-wrap">
+                            <button type="button" className="rounded border border-red/50 bg-surface px-2.5 py-1 text-[12px] font-semibold text-red cursor-pointer" onClick={() => { setSameAnswerByItem((m) => { const n = { ...m }; delete n[itemId]; return n; }); setLineCatalogItem(idx, null); }}>
+                              Cambiar de producto
+                            </button>
+                            <button type="button" className="text-steel text-[11.5px] underline cursor-pointer" onClick={() => setSameAnswerByItem((m) => { const n = { ...m }; delete n[itemId]; return n; })}>Me equivoqué</button>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex gap-2 flex-wrap">
+                          <button type="button" className="rounded border border-teal bg-teal px-2.5 py-1 text-[12px] font-bold text-navy cursor-pointer" onClick={() => setSameAnswerByItem((m) => ({ ...m, [itemId]: "yes" }))}>
+                            Sí, es igual
+                          </button>
+                          <button type="button" className="rounded border border-red/50 bg-surface px-2.5 py-1 text-[12px] font-semibold text-red cursor-pointer" onClick={() => setSameAnswerByItem((m) => ({ ...m, [itemId]: "no" }))}>
+                            No, es diferente
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               );

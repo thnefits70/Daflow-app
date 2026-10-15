@@ -16,6 +16,8 @@ const schema = z.object({
   comment: z.string().trim().optional(),
   aiPhotoMatch: z.boolean().nullable().optional(),
   aiPhotoNote: z.string().nullable().optional(),
+  // Pedido de Bryan Ríos 2026-10-15: la IA no vio el producto fuera de su caja.
+  aiProductVisible: z.boolean().nullable().optional(),
   // Confirmado 2026-08-12 (ampliado el mismo día): si la IA marcó que sigue
   // siendo el MISMO producto con una diferencia MENOR (minorDifferenceOnly —
   // color, logo, empaque, etc.), el líder de Inventario puede confirmar con
@@ -89,6 +91,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // con la novedad). Defensa server-side del mismo chequeo que ya
   // deshabilita el botón en el cliente.
   const minorDifferenceOverride = parsed.data.aiPhotoMatch === false && !!parsed.data.minorDifferenceOnly && !!parsed.data.minorDifferenceConfirmed;
+  if (parsed.data.aiProductVisible === false) {
+    return NextResponse.json({ error: "Falta una foto del producto fuera de su caja o bolsa — la caja puede ser igual y el producto distinto." }, { status: 409 });
+  }
   if (parsed.data.aiPhotoMatch === false && !minorDifferenceOverride) {
     return NextResponse.json({ error: "La IA detectó que el producto no corresponde a la referencia — usa 'Informar urgente' en vez de confirmar." }, { status: 409 });
   }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { catalogItemsNeedingSameProductCheck } from "@/lib/purchaseMoveToOtherId";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -79,6 +80,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const stockCover = coverRows[0]?.message ?? null;
   const blockedBy = others.length > 0 ? otherOpenPurchaseMessage(others[0]) : null;
   const needsFulfillmentSize = (await getCatalogItemsNeedingFulfillmentSize([id])).has(id);
+  // Pedido de Bryan Ríos 2026-10-15: ya lo tenemos → preguntar si es igual.
+  const needsSameProductCheck = (await catalogItemsNeedingSameProductCheck([id])).length > 0;
   // Pedido del usuario 2026-09-30: si ya está marcado, quien compra lo ve y
   // lo puede corregir él mismo (ver fulfillment-size/route.ts).
   const setBy = item.fulfillmentSizeSetById ? await prisma.user.findUnique({ where: { id: item.fulfillmentSizeSetById }, select: { name: true } }) : null;
@@ -86,7 +89,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const fulfillmentSize = item.fulfillmentSize && item.bodega !== "MKT_SUMINISTROS"
     ? { value: item.fulfillmentSize as "SMALL" | "NORMAL", setAt: item.fulfillmentSizeSetAt, setByName: setBy?.name ?? null }
     : null;
-  return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats, blockedBy, uncounted, stockCover, needsFulfillmentSize, fulfillmentSize, repurchase, quantitySuggestion });
+  return NextResponse.json({ id: item.id, name: item.name, photos: item.photos, stats, blockedBy, uncounted, stockCover, needsFulfillmentSize, fulfillmentSize, repurchase, quantitySuggestion, needsSameProductCheck });
 }
 
 // Confirmado 2026-08-03/06: admin puede eliminar cualquier producto/
