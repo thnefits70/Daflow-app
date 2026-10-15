@@ -6,7 +6,7 @@ import { canActOnPurchaseReceiving } from "@/lib/guards";
 import { notifyOwner } from "@/lib/notifications";
 import { recordKardexEntry } from "@/lib/stockKardex";
 import { effectiveUnitCost, formatPurchaseRequestCode } from "@/lib/purchases";
-import { isWarehouseArea } from "@/lib/warehouseAreas";
+import { areaLabel, isWarehouseArea } from "@/lib/warehouseAreas";
 
 // Confirmado 2026-08-18: pedido explícito del usuario — la aprobación FINAL
 // de Daniel (líder de Inventario) sobre una recepción que ya hizo su equipo
@@ -185,6 +185,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await notifyOwner(existing.requestedById, {
       title: "Mercadería recibida",
       body: `${existing.requestNumber ? `${formatPurchaseRequestCode(existing.requestNumber)} · ` : ""}${existing.catalogItem.name} — Inventario confirmó ${existing.receipt.receivedQuantity} un. recibidas.${differenceNote}`,
+      url: "/area/workspace",
+    }).catch(() => null);
+  }
+
+  // Pedido de Daniel 2026-10-15: producto nuevo (sin área todavía) — quien
+  // lo recibió físicamente se entera en qué área perchar apenas Daniel la
+  // elige al aprobar. Si lo recibió el mismo que aprueba, no hace falta.
+  const receiverId = existing.receipt.confirmedById;
+  if (newArea && receiverId && receiverId !== session.user.id) {
+    await notifyOwner(receiverId, {
+      title: `📍 Perchar en ${areaLabel(newArea)}`,
+      body: `${existing.requestNumber ? `${formatPurchaseRequestCode(existing.requestNumber)} · ` : ""}${existing.catalogItem.name} (${existing.receipt.receivedQuantity} un.) es nuevo: va en ${areaLabel(newArea)} de la bodega.`,
       url: "/area/workspace",
     }).catch(() => null);
   }
