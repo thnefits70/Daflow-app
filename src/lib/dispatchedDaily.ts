@@ -85,7 +85,7 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
     if (!b.lot) continue;
     const warrantyGuides = warrantyGuidesOf(b.items);
     for (const g of b.guides) {
-      const outDay = guideDispatchDay(b.lot.day, b.requestedAt, g.carrier);
+      const outDay = guideDispatchDay(b.lot.day, b.requestedAt, g.carrier, g.guideNumber);
       const entry = byDay.get(outDay);
       if (!entry) continue;
       if (outDay !== b.lot.day) entry.day.movedIn++;

@@ -230,7 +230,7 @@ async function guidesByBrandPerWeek(fromWeek: string): Promise<Map<string, Recor
     for (const g of b.guides) {
       if (isWarrantyGuide(b.lot!.day, g.guideNumber, warrantyGuides)) continue;
       // Semana en que la guía sale de verdad (2026-10-14, guideDispatchDay).
-      const week = isoWeekOf(guideDispatchDay(b.lot!.day, b.requestedAt, g.carrier));
+      const week = isoWeekOf(guideDispatchDay(b.lot!.day, b.requestedAt, g.carrier, g.guideNumber));
       const counts = byWeek.get(week) ?? {};
       byWeek.set(week, counts);
       const brand = brandOf.get(g.guideNumber) ?? NO_BRAND;

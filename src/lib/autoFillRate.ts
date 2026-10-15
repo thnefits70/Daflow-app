@@ -91,10 +91,25 @@ const SATURDAY_LEAVES_AT: Record<string, string> = {
   LAAR: "00:00",
 };
 
+// Guías que Daniel confirmó que salieron otro día (se quedaron por falta de
+// stock y se fueron al día siguiente). Cuando el stock esté al 100% DAFLOW lo
+// sabrá solo, junto con la sugerencia de guías a retener.
+//   2026-10-15: 5 guías de Gintracom del corte 4 del lunes 12/10 (manifiesto
+//   ID 318286, subido 12:40) las recogieron el martes 13/10.
+const DISPATCH_DAY_OVERRIDES: Record<string, string> = {
+  D002121758: "2026-10-13",
+  D002121764: "2026-10-13",
+  D002121765: "2026-10-13",
+  D002121766: "2026-10-13",
+  D002121772: "2026-10-13",
+};
+
 // Día en que la guía realmente sale. Solo se mueve si el PDF se subió el
 // mismo día del corte (un manifiesto atrasado se queda en su día) y después
 // de la hora en que se fue su transportadora.
-export function guideDispatchDay(lotDay: string, uploadedAt: Date, carrier: string): string {
+export function guideDispatchDay(lotDay: string, uploadedAt: Date, carrier: string, guideNumber?: string): string {
+  const override = guideNumber ? DISPATCH_DAY_OVERRIDES[guideNumber.trim().toUpperCase()] : undefined;
+  if (override) return override;
   if (isoWeekOf(lotDay) < DISPATCH_RULES_FROM_WEEK) return lotDay;
   if (ecuadorDay(uploadedAt) !== lotDay) return lotDay;
   const saturday = new Date(`${lotDay}T12:00:00Z`).getUTCDay() === 6;
@@ -149,7 +164,7 @@ export async function computeAutoCounts(week: string): Promise<{ guides: number;
     if (!b.lot) continue;
     const warrantyGuides = warrantyGuidesOf(b.items);
     for (const g of b.guides) {
-      if (!daySet.has(guideDispatchDay(b.lot.day, b.requestedAt, g.carrier))) continue;
+      if (!daySet.has(guideDispatchDay(b.lot.day, b.requestedAt, g.carrier, g.guideNumber))) continue;
       if (isWarrantyGuide(b.lot.day, g.guideNumber, warrantyGuides)) continue;
       guides++;
       if (retainedSet.has(g.guideNumber.trim().toUpperCase())) retained++;
