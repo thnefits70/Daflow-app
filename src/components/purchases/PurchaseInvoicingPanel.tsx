@@ -860,8 +860,11 @@ export function PurchaseInvoicingPanel({
                               // Confirmado 2026-09-07, pedido explícito del usuario — se ve rojo de
                               // un vistazo, sin abrir el gráfico, cuando este producto necesitó
                               // justificación (precio sobre su historial o proveedor no más barato).
+                              // 2026-10-15 (SC-196): amarillo, no rojo — la justificación también
+                              // sale por "todavía hay stock" aunque el precio haya bajado, y aquí
+                              // ya está aprobada por Bryan.
                               r.justification
-                                ? "text-red/80 bg-red/10 border border-red/25 hover:text-red hover:bg-red/20"
+                                ? "bg-gold/10 border border-gold/35 hover:bg-gold/20 text-[var(--color-gold)]"
                                 : "text-teal/80 bg-teal/10 border border-teal/25 hover:text-teal hover:bg-teal/20"
                             }`}
                           >

@@ -167,8 +167,8 @@ function groupRows<T extends Row>(rows: T[]) {
 // sobre el historial, o código sin nombre de producto.
 // Pedido del usuario 2026-10-15 (Bryan se asustaba con SC-196): el rojo queda
 // solo para lo grave — precio sobre el historial o cotización que no cuadra.
-// Una justificación porque otro proveedor lo vendió más barato antes (sin que
-// el precio suba) se muestra en amarillo: es para revisar, no una alarma.
+// Una justificación sin que el precio suba (todavía hay stock, u otro proveedor
+// lo vendió más barato antes) se muestra en amarillo: para revisar, no alarma.
 function buildValidationSummary(g: Row[], quoteMismatch = false, overHistoryCount = 0) {
   const total = g.reduce((s, r) => s + r.totalCost, 0);
   // Confirmado 2026-09-07 — ya no se cita UNA justificación como si
@@ -193,7 +193,7 @@ function buildValidationSummary(g: Row[], quoteMismatch = false, overHistoryCoun
   }
   if (cheaperElsewhereCount > 0) {
     parts.push(
-      `${cheaperElsewhereCount === 1 ? "1 producto no subió" : `${cheaperElsewhereCount} productos no subieron`} de precio, pero otro proveedor lo vendió más barato antes — revisa la justificación abajo.`
+      `${cheaperElsewhereCount === 1 ? "1 producto no subió" : `${cheaperElsewhereCount} productos no subieron`} de precio, pero ${cheaperElsewhereCount === 1 ? "pidió" : "pidieron"} justificación (todavía hay stock u otro proveedor lo vendió más barato antes) — revisa el motivo abajo.`
     );
   }
   const hasIssue = justifiedCount > 0 || quoteMismatch;
@@ -940,7 +940,7 @@ export function PurchaseApprovalInbox({ canAct = true, canPayHere = true, canPay
                     }`}
                   >
                     <LineChart size={11} />
-                    {anyOverHistory ? "Sobre el historial" : "Ver otros proveedores"}
+                    {anyOverHistory ? "Sobre el historial" : "Ver historial"}
                     <ChevronDown size={11} className={`transition-transform ${historyOpenGroup === groupId ? "rotate-180" : ""}`} />
                   </button>
                 )}
