@@ -45,6 +45,7 @@ type Saved = {
   costs: Record<CostKey, string>;
   price: number;
   status: CalcStatus;
+  organic?: boolean;
 };
 type Market = { price: number; units: number; share: number };
 type Picked = { code: string; deliveryRate: number | null; market: Market[] };
@@ -258,6 +259,9 @@ export function PvxCalculator({
   const [picked, setPicked] = useState<Picked | null>(null);
   const [loading, setLoading] = useState(false);
   const [advanced, setAdvanced] = useState(false);
+  // Ventas orgánicas (2026-10-15): sin pauta no hay CPA — un cancelado no
+  // cuesta nada y un devuelto solo el flete.
+  const [organic, setOrganic] = useState(false);
   const [perDay, setPerDay] = useState("10");
   const [saved, setSaved] = useState<Saved[]>([]);
   const ref = useRef<HTMLElement>(null);
@@ -283,13 +287,13 @@ export function PvxCalculator({
       units: 1,
       unitCost: allPriced ? comboCost : 0,
       freight: num(costs.freight),
-      cpa: num(costs.cpa),
+      cpa: organic ? 0 : num(costs.cpa),
       admin: num(costs.admin),
       profit: num(costs.profit),
       cancelPct: num(costs.cancelPct),
       returnPct: num(costs.returnPct),
     }),
-    [costs, comboCost, allPriced],
+    [costs, comboCost, allPriced, organic],
   );
   const res = calcProfit(input);
   const f = funnel(input);
@@ -403,7 +407,8 @@ export function PvxCalculator({
     if (!res) return;
     const item: Saved = {
       id: `${saved.length}-${res.price}-${comboCost}-${lines.length}`,
-      name: nameOf(lines),
+      name: organic ? `${nameOf(lines)} (orgánico)` : nameOf(lines),
+      organic,
       lines,
       costs,
       price: res.price,
@@ -417,6 +422,7 @@ export function PvxCalculator({
     setLines(s.lines.map((l, i) => ({ ...l, id: i + 1 })));
     nextId.current = s.lines.length + 1;
     setCosts({ ...DEFAULT_COSTS, ...s.costs });
+    setOrganic(!!s.organic);
     setPicked(null);
   }
   function remove(id: string) {
@@ -459,6 +465,37 @@ export function PvxCalculator({
         <div className="mt-10 grid gap-6 lg:grid-cols-[1.05fr_1fr]">
           {/* Datos */}
           <div className="rounded-[28px] bg-[var(--pvx-paper-2)] p-5 sm:p-7">
+            {/* ¿Cómo vendes? Con pauta (Facebook/TikTok) u orgánico (sin pagar anuncios). */}
+            <div className="mb-5">
+              <p className="text-[13px] font-bold">¿Cómo vendes?</p>
+              <div
+                className="mt-1.5 grid grid-cols-2 gap-1 rounded-2xl bg-white p-1 ring-1 ring-[var(--pvx-paper-3)]"
+                role="group"
+                aria-label="Cómo vendes"
+              >
+                {[
+                  [false, "Con pauta", "Pagas anuncios"],
+                  [true, "Orgánico", "Sin pagar anuncios"],
+                ].map(([v, t, s]) => (
+                  <button
+                    key={String(t)}
+                    type="button"
+                    onClick={() => setOrganic(v as boolean)}
+                    aria-pressed={organic === v}
+                    className={`pvx-press rounded-xl px-3 py-2 text-left cursor-pointer ${organic === v ? "bg-[var(--pvx-ink)] text-white" : "hover:bg-[var(--pvx-paper-2)]"}`}
+                  >
+                    <span className="block text-[14px] font-bold">
+                      {t as string}
+                    </span>
+                    <span
+                      className={`block text-[11.5px] ${organic === v ? "text-white/70" : "text-[var(--pvx-ink-3)]"}`}
+                    >
+                      {s as string}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
             <p className="text-[15px] font-bold">
               {isCombo ? `Tu combo (${lines.length} productos)` : "Tu producto"}
             </p>
@@ -619,13 +656,15 @@ export function PvxCalculator({
                 onChange={setCost("freight")}
                 hint="Promedio en Ecuador: $7. Si solo envías a ciudades grandes, baja."
               />
-              <Field
-                label="CPA (publicidad por pedido)"
-                prefix="$"
-                value={costs.cpa}
-                onChange={setCost("cpa")}
-                hint="Lo que te cobra Facebook/TikTok por pedido. Promedio: $4–5."
-              />
+              {!organic && (
+                <Field
+                  label="CPA (publicidad por pedido)"
+                  prefix="$"
+                  value={costs.cpa}
+                  onChange={setCost("cpa")}
+                  hint="Lo que te cobra Facebook/TikTok por pedido. Promedio: $4–5."
+                />
+              )}
               <Field
                 label="Ganancia que quieres por pedido"
                 prefix="$"
@@ -707,13 +746,23 @@ export function PvxCalculator({
                   </span>
                 </div>
                 <p className="mt-2 text-[13.5px] text-white/70">
-                  {STATUS[res.status].text}
+                  {organic
+                    ? res.status === "NO_RENTABLE"
+                      ? "A ese precio pierdes dinero en cada pedido."
+                      : "Vendiendo orgánico, sin pagar anuncios: cancelados no te cuestan nada y devueltos solo el flete."
+                    : STATUS[res.status].text}
                 </p>
 
                 <div className="mt-6 grid grid-cols-2 gap-3">
                   {[
                     ["Precio mínimo (sin ganancia)", money(res.minPrice)],
-                    ["CPA máximo sin perder", money(res.breakEvenCpa)],
+                    // Orgánico: lo que podría pagar de pauta si un día decide anunciar.
+                    [
+                      organic
+                        ? "Si un día pautas, CPA máximo"
+                        : "CPA máximo sin perder",
+                      money(res.breakEvenCpa),
+                    ],
                     [
                       "Ganancia por pedido entregado",
                       money(res.profitPerDelivered),
@@ -731,7 +780,7 @@ export function PvxCalculator({
                     </div>
                   ))}
                 </div>
-                {res.cpaRoom >= 0 && (
+                {!organic && res.cpaRoom >= 0 && (
                   <p className="mt-3 text-[12.5px] text-white/70">
                     Te quedan <b className="text-white">{money(res.cpaRoom)}</b>{" "}
                     de espacio en el CPA para escalar.
@@ -774,8 +823,16 @@ export function PvxCalculator({
                   <div className="mt-2 grid grid-cols-4 gap-1.5 text-center">
                     {[
                       [f.generated, "generados", ""],
-                      [f.cancelled, "cancelados", "pierdes el CPA"],
-                      [f.returned, "devueltos", "CPA + flete"],
+                      [
+                        f.cancelled,
+                        "cancelados",
+                        organic ? "no pierdes nada" : "pierdes el CPA",
+                      ],
+                      [
+                        f.returned,
+                        "devueltos",
+                        organic ? "pierdes el flete" : "CPA + flete",
+                      ],
                       [f.delivered, "entregados", "aquí ganas"],
                     ].map(([n, l, s], i) => (
                       <div
