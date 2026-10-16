@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { addBusinessHours, businessHoursBetween } from "@/lib/businessHours";
 import { notifyOwner } from "@/lib/notifications";
+import { resumeNickAfterDropiBack } from "@/lib/nick/sync";
 
 // Pedido del usuario 2026-10-15 (caso Set billetera / Intercomunicador: la
 // mercadería llegaba y no entraba a INVESTOCK porque el ID madre y la
@@ -277,6 +278,8 @@ export async function setDropiOutage(params: { down: boolean; userId: string | n
   }
   if (!active) return { ok: false, error: "Dropi no estaba marcado como caído." };
   await prisma.dropiOutage.update({ where: { id: active.id }, data: { endedAt: new Date(), endedById: params.userId } });
+  // NICK (seguimiento de guías) estaba en pausa: retoma enseguida.
+  await resumeNickAfterDropiBack().catch(() => null);
   await tell("🟢 Dropi ya volvió", `${who} lo marcó. Los plazos siguen corriendo desde donde quedaron.`);
   return { ok: true, message: "Listo: los relojes siguen desde donde quedaron." };
 }

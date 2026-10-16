@@ -126,6 +126,8 @@ export function NickGuides() {
                   ? `leyendo órdenes del ${p.day ?? "…"}`
                   : p.state === "esperando"
                     ? "en fila"
+                    : p.state === "pausada"
+                    ? "en pausa: Dropi está marcado como caído (retoma cuando Bryan pulse «Dropi ya volvió»)"
                     : p.state === "desconectada"
                     ? "desconectada — vuelve a conectarla abajo"
                     : (p.message ?? "error")}

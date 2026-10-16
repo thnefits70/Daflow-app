@@ -106,7 +106,7 @@ async function saveRows(accountId: string, rows: Record<string, unknown>[]) {
 
 export type NickSyncProgress = {
   account: string;
-  state: "listo" | "en_curso" | "esperando" | "desconectada" | "error";
+  state: "listo" | "en_curso" | "esperando" | "desconectada" | "error" | "pausada";
   day: string | null;
   message: string | null;
 };
@@ -201,6 +201,12 @@ async function tickAccount(accountId: string, force: boolean, deadline: number):
 // sin leerse, para que ninguna acapare el tiempo; las demás solo informan
 // cómo van. force = "Actualizar ahora" (empieza vuelta aunque no toque).
 export async function runNickSyncTick({ force = false, budgetMs = 40_000 } = {}): Promise<NickSyncProgress[]> {
+  // Pedido del usuario 2026-10-16: mientras Bryan (o el admin) tenga marcado
+  // "Dropi está caído", NICK no le consulta nada a Dropi.
+  if (await isDropiMarkedDown()) {
+    const accs = await prisma.nickDropiAccount.findMany({ orderBy: { sortOrder: "asc" }, select: { name: true, syncDay: true } });
+    return accs.map((a) => ({ account: a.name, day: a.syncDay, state: "pausada" as const, message: "Dropi está marcado como caído" }));
+  }
   const accounts = await prisma.nickDropiAccount.findMany({
     orderBy: [{ lastReadAt: { sort: "asc", nulls: "first" } }, { sortOrder: "asc" }],
     select: { id: true, name: true, sortOrder: true, accessTokenEnc: true, needsReconnect: true, syncDay: true, lastSyncAt: true, syncLockUntil: true },
@@ -226,6 +232,7 @@ export async function runNickSyncFromBell() {
   if (!isWithinBusinessHours()) return;
   if (Date.now() - lastBellTick < 60_000) return;
   lastBellTick = Date.now();
+  if (await isDropiMarkedDown()) return;
   const pending = await prisma.nickDropiAccount.count({
     where: {
       accessTokenEnc: { not: null },
@@ -234,4 +241,15 @@ export async function runNickSyncFromBell() {
     },
   });
   if (pending) await runNickSyncTick({ budgetMs: 40_000 });
+}
+
+async function isDropiMarkedDown() {
+  return !!(await prisma.dropiOutage.findFirst({ where: { endedAt: null }, select: { id: true } }));
+}
+
+// Al pulsar "Dropi ya volvió": se quita la espera de 10 min por error para que
+// NICK retome en la siguiente revisión de la campanita (menos de 1 minuto) o
+// con "Actualizar ahora", desde donde quedó cada cuenta.
+export async function resumeNickAfterDropiBack() {
+  await prisma.nickDropiAccount.updateMany({ where: { lastError: { not: null } }, data: { syncLockUntil: null, lastError: null } });
 }
