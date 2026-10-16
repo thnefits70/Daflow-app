@@ -116,5 +116,8 @@ export const config = {
   // eso alcanzaba para el guard de sesión, pero dejaba pasar sin revisar
   // cualquier otra ruta (incluida /proveedor-ledger) en el dominio de CHEN.
   // Excluye solo los assets estáticos (no necesitan ningún chequeo).
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // 2026-10-16: /pvx/up y /pvx/dl (adjuntos del chat de Michelle IA) tampoco
+  // pasan: van directo a Supabase con enlace firmado (next.config.ts), y si
+  // pasaran por aquí chocarían con el límite de 4,5 MB (videos).
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|pvx/up/|pvx/dl/).*)"],
 };
