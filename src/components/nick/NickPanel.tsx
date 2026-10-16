@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Link2, RefreshCw, Unplug, ShieldCheck } from "lucide-react";
+import { Link2, Unplug, ShieldCheck } from "lucide-react";
 import type { NickAccountView } from "@/lib/nick/accounts";
-import type { NickReadResult } from "@/lib/nick/dropiMcp";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { NickGuides } from "@/components/nick/NickGuides";
 import { NickRankings } from "@/components/nick/NickRankings";
@@ -44,35 +43,15 @@ export function NickPanel({
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
-  const [reads, setReads] = useState<Record<string, NickReadResult>>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
   // Etapa 4: pestaña Rankings, solo para el admin.
   const [view, setView] = useState<"guias" | "score" | "rankings" | "pagos">("guias");
 
   const okName = notice?.ok ? accounts.find((a) => a.id === notice.ok)?.name : null;
 
-  const read = async (id: string) => {
-    setBusy(`read:${id}`);
-    setErrors((e) => ({ ...e, [id]: "" }));
-    const res = await fetch(`/api/nick/dropi/${id}/read`, { method: "POST" });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) setReads((r) => ({ ...r, [id]: data as NickReadResult }));
-    else {
-      setErrors((e) => ({ ...e, [id]: data.error ?? "No se pudo leer Dropi." }));
-      if (data.reconnect) router.refresh();
-    }
-    setBusy(null);
-  };
-
   const disconnect = async (a: NickAccountView) => {
     if (!confirm(`¿Desconectar ${a.name}? DAFLOW dejará de leer esa cuenta hasta que se vuelva a conectar.`)) return;
     setBusy(`off:${a.id}`);
     await fetch(`/api/nick/dropi/${a.id}/disconnect`, { method: "POST" });
-    setReads((r) => {
-      const next = { ...r };
-      delete next[a.id];
-      return next;
-    });
     setBusy(null);
     router.refresh();
   };
@@ -81,7 +60,7 @@ export function NickPanel({
     <div className="max-w-[1100px]">
       {okName && (
         <div className="mb-4 rounded-lg border border-green/40 bg-green/10 px-4 py-3 text-[12.5px]">
-          <b>{okName}</b> quedó conectada. Pulsa <b>Leer ahora</b> para ver sus últimas guías.
+          <b>{okName}</b> quedó conectada. NICK la va a leer sola en la próxima actualización (o pulsa <b>Actualizar ahora</b> arriba).
         </div>
       )}
       {notice?.error && (
@@ -130,7 +109,6 @@ export function NickPanel({
       <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel mb-2">Cuentas de Dropi</div>
       <div className="flex flex-col gap-4">
         {accounts.map((a) => {
-          const r = reads[a.id];
           return (
             <div key={a.id} className="bg-surface border border-rule rounded-lg p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -149,16 +127,6 @@ export function NickPanel({
                   {a.status === "por_reconectar" && a.lastError && <div className="text-[11.5px] text-amber mt-1">{a.lastError}</div>}
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {a.status === "conectada" && (
-                    <button
-                      type="button"
-                      onClick={() => read(a.id)}
-                      disabled={!!busy}
-                      className="inline-flex items-center gap-1.5 rounded-md bg-blue text-white px-3 py-1.5 text-[12.5px] font-semibold cursor-pointer disabled:opacity-50"
-                    >
-                      <RefreshCw size={13} className={busy === `read:${a.id}` ? "animate-spin" : ""} /> Leer ahora
-                    </button>
-                  )}
                   {a.status !== "conectada" && (
                     <a
                       href={`/api/nick/dropi/connect?account=${encodeURIComponent(a.id)}`}
@@ -179,98 +147,6 @@ export function NickPanel({
                   )}
                 </div>
               </div>
-
-              {errors[a.id] && <div className="mt-3 text-[12px] text-red">{errors[a.id]}</div>}
-
-              {r && (
-                <div className="mt-4 border-t border-rule pt-3">
-                  <div className="text-[13px] font-semibold mb-1">Últimas guías en Dropi</div>
-                  <div className="text-[11px] text-steel mb-2">
-                    Así las ve Dropi ahora mismo. Es una prueba: no cambia nada en DAFLOW y no muestra montos.
-                  </div>
-                  {r.note && <div className="text-[12px] text-amber mb-2">{r.note}</div>}
-                  {r.rows.length > 0 && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-[12px]">
-                        <thead>
-                          <tr className="text-left text-steel font-mono text-[10px] uppercase tracking-wide">
-                            <th className="py-1.5 pr-3">Orden</th>
-                            <th className="py-1.5 pr-3">Guía</th>
-                            <th className="py-1.5 pr-3">Estado</th>
-                            <th className="py-1.5 pr-3">Transportadora</th>
-                            <th className="py-1.5 pr-3">Ciudad</th>
-                            <th className="py-1.5 pr-3">Fecha</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {r.rows.map((g, i) => (
-                            <tr key={`${g.orderId ?? ""}-${i}`} className="border-t border-rule">
-                              <td className="py-1.5 pr-3 font-mono">{g.orderId ?? "—"}</td>
-                              <td className="py-1.5 pr-3 font-mono">{g.guide ?? "—"}</td>
-                              <td className="py-1.5 pr-3 font-semibold">{g.status ?? "—"}</td>
-                              <td className="py-1.5 pr-3">{g.carrier ?? "—"}</td>
-                              <td className="py-1.5 pr-3">{g.city ?? "—"}</td>
-                              <td className="py-1.5 pr-3 whitespace-nowrap">{g.date ?? "—"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  {isAdmin && (
-                    <details className="mt-3 text-[11px] text-steel">
-                      <summary className="cursor-pointer">Qué ofrece Dropi en esta cuenta (solo lo ves tú)</summary>
-                      <div className="mt-2">
-                        <b>Herramientas:</b> {r.tools.join(", ") || "ninguna"}
-                      </div>
-                      <div className="mt-1">
-                        <b>Usada para listar:</b> {r.orderTool ?? "ninguna"}
-                      </div>
-                      {r.fields.length > 0 && (
-                        <div className="mt-1 break-words">
-                          <b>Datos de cada orden en la lista (sin montos):</b> {r.fields.join(", ")}
-                        </div>
-                      )}
-                      <div className="mt-1">
-                        <b>Usada para el detalle:</b> {r.detailTool ?? "ninguna"}
-                      </div>
-                      {r.detailFields.length > 0 && (
-                        <div className="mt-1 break-words">
-                          <b>Datos del detalle de una orden (sin montos):</b> {r.detailFields.join(", ")}
-                        </div>
-                      )}
-                      <div className="mt-3 border-t border-rule pt-2">
-                        <b>Diagnóstico</b>
-                        <div className="mt-1">
-                          <b>La lista acepta:</b> {r.diag.listArgs.join(", ") || "nada (sin filtros)"}
-                        </div>
-                        <div className="mt-1">
-                          <b>El detalle pide:</b> {r.diag.detailArgs.join(", ") || "—"}
-                          {r.diag.detailIdUsed && <> · se probó con {r.diag.detailIdUsed}</>}
-                        </div>
-                        {r.diag.detailResult && (
-                          <div className="mt-1 break-words">
-                            <b>Resultado del detalle:</b> {r.diag.detailResult}
-                          </div>
-                        )}
-                        {r.diag.detailKeysSeen.length > 0 && (
-                          <div className="mt-1 break-words">
-                            <b>Claves que trae el detalle:</b> {r.diag.detailKeysSeen.join(", ")}
-                          </div>
-                        )}
-                        {r.diag.statuses && (
-                          <div className="mt-1">
-                            <b>Estados que existen en Dropi:</b>
-                            <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[10.5px] bg-cloud rounded p-2 max-h-[220px] overflow-y-auto">
-                              {r.diag.statuses}
-                            </pre>
-                          </div>
-                        )}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              )}
             </div>
           );
         })}
