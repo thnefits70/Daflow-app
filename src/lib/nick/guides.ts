@@ -54,7 +54,9 @@ export type NickGuidesResult = {
 const norm = (g: string) => g.toUpperCase().replace(/\s+/g, "");
 const isRocket = (codes: string[]) => codes.length > 0 && codes.every((c) => c.startsWith("R"));
 
-export async function getNickGuides(f: NickGuidesFilter): Promise<NickGuidesResult> {
+// isAdmin: el admin ve además las estimaciones por fecha de orden (pedido del
+// usuario 2026-10-16: "solo para ti", nadie más las ve).
+export async function getNickGuides(f: NickGuidesFilter, opts: { isAdmin?: boolean } = {}): Promise<NickGuidesResult> {
   const since = new Date(Date.now() - WINDOW_DAYS * 864e5);
   const dayAgo = new Date(Date.now() - 864e5);
   const page = Math.max(1, f.page ?? 1);
@@ -79,7 +81,7 @@ export async function getNickGuides(f: NickGuidesFilter): Promise<NickGuidesResu
     ...(dayGuides ? { guideNumber: { in: dayGuides } } : {}),
   };
   const grouped = await prisma.nickGuideStatus.groupBy({ by: ["statusGroup"], where, _count: true });
-  const attention = await getNickAttention();
+  const attention = await getNickAttention(new Date(), { estimates: !!opts.isAdmin });
   const attentionCounts = {} as Record<NickAttentionKey, number>;
   for (const a of NICK_ATTENTION) {
     const set = [...attention[a.key].keys()];

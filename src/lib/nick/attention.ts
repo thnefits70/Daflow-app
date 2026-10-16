@@ -19,12 +19,16 @@ const REENTRY_FROM = new Date("2026-09-19T05:00:00Z");
 // Si NICK no vio el cambio (la guía ya estaba en devolución al leerla por
 // primera vez), se toma la fecha de la orden + 15 días como referencia.
 const RETURN_FALLBACK_DAYS = 15;
+// Pedido del usuario 2026-10-16: para las guías que ya estaban en camino o con
+// novedad en la primera lectura (NICK no sabe desde cuándo), se estima con la
+// fecha de la orden: 7+ días laborables. SOLO lo ve el admin; nadie más ni avisos.
+const ESTIMATE_DAYS = 7;
 
 const due = (since: Date, days: number, now: Date) => addBusinessDays(since, days).getTime() <= now.getTime();
 const daysAgo = (d: Date, now: Date) => Math.max(0, Math.floor((now.getTime() - d.getTime()) / 864e5));
 
 // Devuelve, por cada lista, las guías que entran y el motivo en palabras.
-export async function getNickAttention(now = new Date()): Promise<Record<NickAttentionKey, Map<string, string>>> {
+export async function getNickAttention(now = new Date(), opts: { estimates?: boolean } = {}): Promise<Record<NickAttentionKey, Map<string, string>>> {
   const out: Record<NickAttentionKey, Map<string, string>> = {
     ESTANCADA: new Map(),
     NOVEDAD_ABIERTA: new Map(),
@@ -37,10 +41,20 @@ export async function getNickAttention(now = new Date()): Promise<Record<NickAtt
   // que ya estaban así en la primera lectura empieza a contar desde ese día
   // (así no salen cientos de avisos falsos el primer día).
   const moving = await prisma.nickGuideStatus.findMany({
-    where: { statusGroup: { in: ["EN_CAMINO", "NOVEDAD"] }, statusSince: { lte: new Date(now.getTime() - NOVELTY_DAYS * 864e5) } },
-    select: { guideNumber: true, statusGroup: true, status: true, statusSince: true },
+    where: {
+      statusGroup: { in: ["EN_CAMINO", "NOVEDAD"] },
+      ...(opts.estimates ? {} : { statusSince: { lte: new Date(now.getTime() - NOVELTY_DAYS * 864e5) } }),
+    },
+    select: { guideNumber: true, statusGroup: true, status: true, statusSince: true, firstSeenAt: true, orderCreatedAt: true },
   });
   for (const g of moving) {
+    const observed = g.statusSince.getTime() > g.firstSeenAt.getTime();
+    if (opts.estimates && !observed && g.orderCreatedAt && due(g.orderCreatedAt, ESTIMATE_DAYS, now)) {
+      const why = `Estimado (solo admin): orden de hace ${daysAgo(g.orderCreatedAt, now)} días y sigue «${g.status}»`;
+      if (g.statusGroup === "EN_CAMINO") out.ESTANCADA.set(g.guideNumber, why);
+      else out.NOVEDAD_ABIERTA.set(g.guideNumber, why);
+      continue;
+    }
     if (g.statusGroup === "EN_CAMINO" && due(g.statusSince, STUCK_DAYS, now))
       out.ESTANCADA.set(g.guideNumber, `${daysAgo(g.statusSince, now)} días sin movimiento («${g.status}»)`);
     if (g.statusGroup === "NOVEDAD" && due(g.statusSince, NOVELTY_DAYS, now))
