@@ -207,29 +207,67 @@ export function PvxOperation() {
 // Solo "Guayaquil, Ecuador", sin dirección ni mapa. Las fotos y su rotación
 // semanal están en src/lib/pvxTeamPhotos.ts.
 
+// Una sola foto que cambia sola (pedido del usuario 2026-10-16: la galería
+// de 6 ocupaba mucho). Con "reducir movimiento" no avanza sola; se cambia con
+// los puntos. Se pausa con el mouse encima.
+const TEAM_SLIDE_MS = 4500;
+
 export function PvxTeam({ photos }: { photos: TeamPhoto[] }) {
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (paused || photos.length < 2) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const t = setInterval(() => setActive((i) => (i + 1) % photos.length), TEAM_SLIDE_MS);
+    return () => clearInterval(t);
+  }, [paused, photos.length]);
   if (!photos.length) return null;
+  const current = photos[active % photos.length];
   return (
-    <section className="bg-[var(--pvx-paper)] py-24 sm:py-32" aria-labelledby="pvx-team">
-      <div className="mx-auto max-w-[1240px] px-4 sm:px-8">
-        <div data-r className="max-w-[720px]">
-          <h2 id="pvx-team" className="pvx-display text-[38px] sm:text-[60px]">
+    <section className="bg-[var(--pvx-paper)] py-16 sm:py-24" aria-labelledby="pvx-team">
+      <div className="mx-auto grid max-w-[1240px] items-center gap-8 px-4 sm:px-8 md:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:gap-16">
+        <div data-r>
+          <h2 id="pvx-team" className="pvx-display text-[38px] sm:text-[56px]">
             Un equipo que <span className="text-[var(--pvx-orange)]">sí existe</span>
           </h2>
-          <p className="mt-6 text-[17px] leading-relaxed text-[var(--pvx-ink-2)] sm:text-[19px]">
+          <p className="mt-5 max-w-[520px] text-[17px] leading-relaxed text-[var(--pvx-ink-2)] sm:text-[19px]">
             Recibimos, ordenamos, revisamos y despachamos tus pedidos desde nuestra bodega en Guayaquil, Ecuador.
           </p>
+          <p className="mt-6 text-[15px] font-semibold" aria-live="polite">
+            {current.title}
+          </p>
         </div>
-        <ul className="pvx-scroll-x -mx-4 mt-10 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:px-0">
-          {photos.map((p, i) => (
-            <li key={p.src} data-r style={{ ["--d" as string]: i % 3 }} className="w-[68%] shrink-0 snap-start sm:w-auto">
-              <div className="relative aspect-[3/4] overflow-hidden rounded-[22px] bg-[var(--pvx-paper-2)]">
-                <Image src={p.src} alt={p.alt} fill sizes="(max-width: 640px) 68vw, 33vw" className="object-cover" />
-              </div>
-              <p className="mt-3 text-[15px] font-semibold">{p.title}</p>
-            </li>
-          ))}
-        </ul>
+        <div data-r style={{ ["--d" as string]: 1 }} onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+          <div className="relative mx-auto aspect-[4/5] w-full max-w-[260px] overflow-hidden rounded-[24px] sm:max-w-[380px] bg-[var(--pvx-paper-2)]">
+            {photos.map((p, i) => (
+              <Image
+                key={p.src}
+                src={p.src}
+                alt={i === active ? p.alt : ""}
+                aria-hidden={i !== active}
+                fill
+                sizes="(max-width: 640px) 260px, 380px"
+                className={`object-cover transition-opacity duration-700 ease-out motion-reduce:transition-none ${i === active ? "opacity-100" : "opacity-0"}`}
+              />
+            ))}
+          </div>
+          {photos.length > 1 && (
+            <div className="mt-3 flex justify-center gap-1">
+              {photos.map((p, i) => (
+                <button
+                  key={p.src}
+                  type="button"
+                  onClick={() => setActive(i)}
+                  aria-label={`Ver foto ${i + 1} de ${photos.length}`}
+                  aria-current={i === active}
+                  className="grid h-8 w-8 place-items-center cursor-pointer"
+                >
+                  <span className={`block h-2 rounded-full transition-all duration-300 ${i === active ? "w-5 bg-[var(--pvx-orange)]" : "w-2 bg-[var(--pvx-paper-3)]"}`} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
