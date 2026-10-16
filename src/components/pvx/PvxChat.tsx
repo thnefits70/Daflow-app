@@ -158,6 +158,30 @@ function Avatar({ size = 36 }: { size?: number }) {
   );
 }
 
+// Límites de adjuntos (iguales a src/lib/provedixAttachments.ts). Se avisan
+// antes de adjuntar y se revisan al instante, sin esperar la subida (2026-10-16).
+const MAX_VIDEO_MB = 50;
+const MAX_IMAGE_MB = 15;
+
+// Fotos grandes se achican en el teléfono antes de enviarse (lado mayor 2000 px,
+// JPEG): así nunca pasan el límite y suben rápido. Si el navegador no puede
+// leerla (p. ej. HEIC en algunos), se envía tal cual.
+async function shrinkImage(file: File): Promise<File> {
+  if (!file.type.startsWith("image/") || file.size < 1.5 * 1024 * 1024) return file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext("2d")?.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.85));
+    return blob && blob.size < file.size ? new File([blob], "foto.jpg", { type: "image/jpeg" }) : file;
+  } catch {
+    return file;
+  }
+}
+
 function IconClip({ className = "w-5 h-5" }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
@@ -367,10 +391,26 @@ export function PvxChat({
 
   // Adjuntar foto o video (2026-10-16): pide un enlace firmado y sube directo.
   const attach = useCallback(
-    async (file: File) => {
+    async (picked: File) => {
       if (uploading != null) return;
       setError("");
+      const isVideo = picked.type.startsWith("video/");
+      // Video muy pesado: se avisa al instante con qué hacer, sin intentar subirlo.
+      if (isVideo && picked.size > MAX_VIDEO_MB * 1024 * 1024) {
+        setError(
+          `Ese video pesa ${Math.round(picked.size / 1024 / 1024)} MB y el máximo es ${MAX_VIDEO_MB} MB 🙏 Grábalo más corto (unos 30 segundos alcanzan) o envíalo en partes, un video por vez.`,
+        );
+        if (fileRef.current) fileRef.current.value = "";
+        return;
+      }
       setUploading(0);
+      const file = isVideo ? picked : await shrinkImage(picked);
+      if (!isVideo && file.size > MAX_IMAGE_MB * 1024 * 1024) {
+        setError(`Esa foto pesa más de ${MAX_IMAGE_MB} MB. Prueba con una captura de pantalla de la foto.`);
+        setUploading(null);
+        if (fileRef.current) fileRef.current.value = "";
+        return;
+      }
       try {
         const res = await fetch("/api/pvx/chat/upload", {
           method: "POST",
@@ -727,11 +767,11 @@ export function PvxChat({
                     Enviando archivo… {uploading}%
                   </div>
                 ) : (
-                  remaining != null && (
-                    <div className="mb-1.5 text-right text-[12.5px] text-[var(--pvx-ink-3)]">
-                      {remaining} mensajes hoy
-                    </div>
-                  )
+                  <div className="mb-1.5 flex items-center justify-between gap-2 text-[12.5px] text-[var(--pvx-ink-3)]">
+                    {/* El límite se ve antes de adjuntar (2026-10-16). */}
+                    <span>📎 Fotos o videos de hasta {MAX_VIDEO_MB} MB (unos 30 s)</span>
+                    {remaining != null && <span className="shrink-0">{remaining} mensajes hoy</span>}
+                  </div>
                 )}
                 <form
                   onSubmit={(e) => {

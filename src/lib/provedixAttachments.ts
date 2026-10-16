@@ -42,7 +42,7 @@ export async function createUploadSlot(chatId: string, file: { type: string; siz
   if (!kind) return { error: "Solo puedes adjuntar fotos (JPG, PNG) o videos (MP4, MOV)." };
   const max = kind === "image" ? MAX_IMAGE_BYTES : MAX_VIDEO_BYTES;
   if (!(file.size > 0) || file.size > max)
-    return { error: kind === "image" ? "La foto pesa demasiado (máximo 15 MB)." : "El video pesa demasiado (máximo 50 MB). Grábalo más corto, porfa." };
+    return { error: kind === "image" ? "La foto pesa demasiado (máximo 15 MB)." : "El video pesa demasiado (máximo 50 MB). Grábalo más corto (unos 30 segundos alcanzan) o envíalo en partes, un video por vez." };
   const today = await prisma.provedixChatAttachment.count({
     where: { chatId, createdAt: { gte: new Date(Date.now() - 86_400_000) } },
   });
