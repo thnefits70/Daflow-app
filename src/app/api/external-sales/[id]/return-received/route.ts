@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canCaptureMerchandiseOutflow } from "@/lib/guards";
-import { notifyInventoryLeadExternalSaleReturnReceived } from "@/lib/externalSales";
+import { notifyInventoryLeadExternalSaleReturnReceived, notifyPettyCashFreightPayable } from "@/lib/externalSales";
 
 const schema = z.object({ note: z.string().trim().max(500).optional() });
 
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const sale = await prisma.externalSale.findUnique({
     where: { id },
-    select: { returnedAt: true, returnReceivedAt: true, code: true },
+    select: { returnedAt: true, returnReceivedAt: true, code: true, kind: true, advisorId: true, pickupPersonName: true, returnFreightCost: true, freightPaidAt: true, deletedAt: true },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (!sale.returnedAt) return NextResponse.json({ error: "Esta venta no fue reportada como devuelta." }, { status: 409 });
@@ -34,6 +34,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
 
   await notifyInventoryLeadExternalSaleReturnReceived(sale.code);
+  // Pedido de Marcos 2026-10-16: con el paquete ya en bodega, el flete de la
+  // devolución queda listo para pagarse (Nairoby o Jariel, con comprobante).
+  if (sale.kind === "SALE" && !sale.deletedAt && !sale.freightPaidAt && (sale.returnFreightCost ?? 0) > 0) {
+    await notifyPettyCashFreightPayable({ code: sale.code, pickupPersonName: sale.pickupPersonName, freightCost: sale.returnFreightCost!, excludeUserId: sale.advisorId, isReturn: true });
+  }
 
   return NextResponse.json(updated);
 }

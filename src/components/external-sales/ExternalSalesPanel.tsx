@@ -12,6 +12,7 @@ import { ExternalSaleClosingInbox } from "./ExternalSaleClosingInbox";
 import { ExternalSaleAuditSummary } from "./ExternalSaleAuditSummary";
 import { ExternalSaleHistoryList } from "./ExternalSaleHistoryList";
 import { ExternalSaleReturnInbox } from "./ExternalSaleReturnInbox";
+import { ExternalSaleReturnsTab } from "./ExternalSaleReturnsTab";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { LocalWarrantyPanel } from "./LocalWarrantyPanel";
 import { WarrantyPickupInbox } from "./WarrantyPickupInbox";
@@ -31,6 +32,7 @@ export function ExternalSalesPanel({
   canPack,
   canReceiveReturn,
   canConfirmReturn,
+  canPayReturnFreight = false,
   canClose,
   isAdmin,
 }: {
@@ -45,6 +47,8 @@ export function ExternalSalesPanel({
   canPack: boolean;
   canReceiveReturn: boolean;
   canConfirmReturn: boolean;
+  // Nairoby/Jariel: pagan el flete de las devoluciones (pedido de Marcos 2026-10-16).
+  canPayReturnFreight?: boolean;
   canClose: boolean;
   isAdmin: boolean;
 }) {
@@ -53,6 +57,10 @@ export function ExternalSalesPanel({
   // quien agrupa sin ser el líder — el líder lo marca dentro de Despacho.
   const canDispatch = canAssignPrep || canAssignPack;
   const showPrepTab = canPrep && !canAssignPrep;
+  // Pedido de Marcos 2026-10-16: el asesor registra aquí la devolución y
+  // Nairoby/Jariel pagan el flete; Inventario sigue recibiendo el paquete.
+  const showReturnsTab = canDeclare || canPayReturnFreight || canReceiveReturn || canConfirmReturn;
+  const isInventoryReturns = canReceiveReturn || canConfirmReturn;
   const defaultTab: Tab = canDeclare ? "declarar" : canManageWarranties ? "garantias" : canReview ? "revision" : canDispatch ? "despacho" : "historial";
   const [tab, setTab] = useRememberedState<Tab>("tab", () => {
     if (typeof window === "undefined") return defaultTab;
@@ -74,7 +82,7 @@ export function ExternalSalesPanel({
     ...(canDispatch ? [{ id: "despacho" as const, label: "Despacho" }] : []),
     ...(showPrepTab ? [{ id: "preparar" as const, label: "Preparar" }] : []),
     ...(canPack ? [{ id: "entregas" as const, label: "Mis entregas" }] : []),
-    ...(canReceiveReturn || canConfirmReturn ? [{ id: "devoluciones" as const, label: "Devoluciones" }] : []),
+    ...(showReturnsTab ? [{ id: "devoluciones" as const, label: "Devoluciones" }] : []),
     ...(canClose ? [{ id: "cierre" as const, label: "Cierre" }] : []),
     ...(canClose ? [{ id: "auditoria" as const, label: "Auditoría" }] : []),
     { id: "historial" as const, label: "Historial" },
@@ -146,11 +154,17 @@ export function ExternalSalesPanel({
           <ExternalSalePackDeliveryPanel />
         </>
       )}
-      {tab === "devoluciones" && (canReceiveReturn || canConfirmReturn) && (
+      {tab === "devoluciones" && showReturnsTab && (
         <>
-          <TabGuide storageKey="externalsales-devoluciones">Ventas que el asesor reportó como devueltas por el cliente. Inventario confirma que llegó físicamente y completo; recién con la aprobación de Daniel se suma de nuevo a INVESTOCK.</TabGuide>
-          {canReceiveReturn && <WarrantyPickupInbox />}
-          <ExternalSaleReturnInbox canReceive={canReceiveReturn} canConfirm={canConfirmReturn} />
+          <TabGuide storageKey="externalsales-devoluciones-v2">Si un pedido salió de bodega y no llegó al cliente, el asesor registra aquí la devolución y cuánto se le debe al motorizado. Inventario confirma que el paquete volvió completo (y Daniel lo suma de nuevo a INVESTOCK). Recién ahí Nairoby o Jariel pagan el flete desde su Caja Chica y adjuntan el comprobante.</TabGuide>
+          {(canDeclare || canPayReturnFreight) && <ExternalSaleReturnsTab />}
+          {isInventoryReturns && (
+            <>
+              {(canDeclare || canPayReturnFreight) && <h2 className="font-display text-[15px] font-bold mb-2">Recibir en bodega</h2>}
+              {canReceiveReturn && <WarrantyPickupInbox />}
+              <ExternalSaleReturnInbox canReceive={canReceiveReturn} canConfirm={canConfirmReturn} />
+            </>
+          )}
         </>
       )}
       {tab === "cierre" && canClose && (

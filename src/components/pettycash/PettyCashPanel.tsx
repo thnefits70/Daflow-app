@@ -43,7 +43,7 @@ function monthFilterLabel(month: string) {
 // opción de cámara) en vez de un chooser con cámara — a Nairoby no le
 // abrió la cámara al tocar esa opción. "Tomar foto" evita ese selector
 // del todo y abre la cámara en vivo dentro de la página (getUserMedia).
-function UploadBox({ label, folder, onFile, onCaptured }: { label: string; folder: string; onFile: (file: File) => void; onCaptured: (url: string) => void }) {
+export function UploadBox({ label, folder, onFile, onCaptured }: { label: string; folder: string; onFile: (file: File) => void; onCaptured: (url: string) => void }) {
   const { onPaste, onMouseEnter, onMouseLeave } = usePasteFile(onFile);
   const inputRef = useRef<HTMLInputElement>(null);
   const [takingPhoto, setTakingPhoto] = useState(false);

@@ -288,7 +288,7 @@ export async function getEligiblePaymentOrdersForFreight(): Promise<EligiblePaym
   }));
 }
 
-export type PendingMotorizadoFreightDTO = { saleId: string; label: string; freightCost: number; deliveredAt: string };
+export type PendingMotorizadoFreightDTO = { saleId: string; label: string; freightCost: number; deliveredAt: string; isReturn: boolean };
 
 // Confirmado 2026-09-18, pedido explícito del usuario: ventas externas SIN
 // recaudo donde el cliente ya transfirió el total completo (paymentConfirmedAt)
@@ -303,35 +303,46 @@ export type PendingMotorizadoFreightDTO = { saleId: string; label: string; freig
 // Garantías locales (pedido del usuario 2026-10-02): el flete se paga
 // entregue o no — basta con que el asesor confirme el resultado — y quien
 // gestionó la garantía no ve la suya (no se paga a sí mismo): `viewerId`.
+// Devolución de venta externa (pedido de Marcos 2026-10-16): el motorizado
+// cobra lo que el asesor declaró al registrarla (returnFreightCost), apenas
+// Inventario confirma que el paquete volvió a bodega. Quien vendió no se
+// paga a sí mismo.
 export async function getPendingMotorizadoFreights(viewerId?: string | null): Promise<PendingMotorizadoFreightDTO[]> {
   const rows = await prisma.externalSale.findMany({
     where: {
       deletedAt: null,
-      freightCost: { gt: 0 },
       deliveredAt: { not: null },
       freightPaidAt: null,
       OR: [
         {
           kind: "SALE",
+          returnedAt: null,
+          freightCost: { gt: 0 },
           isContraEntrega: false,
           paymentConfirmedAt: { not: null },
           // Confirmado 2026-09-22 (pedido de Marcos): además, el asesor
           // confirmó que el cliente de verdad recibió el pedido.
           clientReceivedAt: { not: null },
         },
-        { kind: "WARRANTY", OR: [{ clientReceivedAt: { not: null } }, { returnedAt: { not: null } }] },
+        { kind: "WARRANTY", freightCost: { gt: 0 }, OR: [{ clientReceivedAt: { not: null } }, { returnedAt: { not: null } }] },
+        { kind: "SALE", returnedAt: { not: null }, returnReceivedAt: { not: null }, returnFreightCost: { gt: 0 } },
       ],
-      ...(viewerId ? { NOT: { kind: "WARRANTY", advisorId: viewerId } } : {}),
+      ...(viewerId ? { NOT: { advisorId: viewerId, OR: [{ kind: "WARRANTY" }, { returnedAt: { not: null } }] } } : {}),
     },
-    select: { id: true, code: true, pickupPersonName: true, freightCost: true, deliveredAt: true },
+    select: { id: true, code: true, pickupPersonName: true, freightCost: true, returnFreightCost: true, kind: true, returnedAt: true, deliveredAt: true },
     orderBy: { deliveredAt: "asc" },
   });
-  return rows.map((r) => ({
-    saleId: r.id,
-    label: `${r.code} — ${r.pickupPersonName} — $${r.freightCost!.toFixed(2)}`,
-    freightCost: r.freightCost!,
-    deliveredAt: r.deliveredAt!.toISOString(),
-  }));
+  return rows.map((r) => {
+    const isReturn = r.kind === "SALE" && !!r.returnedAt;
+    const amount = isReturn ? r.returnFreightCost! : r.freightCost!;
+    return {
+      saleId: r.id,
+      label: `${r.code}${isReturn ? " (devolución)" : ""} — ${r.pickupPersonName} — $${amount.toFixed(2)}`,
+      freightCost: amount,
+      deliveredAt: r.deliveredAt!.toISOString(),
+      isReturn,
+    };
+  });
 }
 
 export type FreightPaymentCheck =

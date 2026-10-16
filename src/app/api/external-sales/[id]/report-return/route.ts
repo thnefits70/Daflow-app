@@ -4,7 +4,12 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isFreightPayable, notifyInventoryLeadExternalSaleReturnReported, notifyPettyCashFreightPayable, saleItemsSummary } from "@/lib/externalSales";
 
-const schema = z.object({ reason: z.string().trim().min(3, "Contá brevemente qué pasó.") });
+const schema = z.object({
+  reason: z.string().trim().min(3, "Contá brevemente qué pasó."),
+  // Pedido de Marcos 2026-10-16: cuánto se le debe al motorizado por esta
+  // devolución (solo ventas, no garantías). 0/vacío = no se le debe nada.
+  returnFreightCost: z.number().min(0).max(1000).nullable().optional(),
+});
 
 // Confirmado 2026-09-16, pedido explícito del usuario: SOLO el asesor
 // dueño de la venta puede reportar que el cliente no recibió el pedido (lo
@@ -46,7 +51,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const updated = await prisma.externalSale.update({
     where: { id },
-    data: { returnedAt: new Date(), returnReason: parsed.data.reason },
+    data: {
+      returnedAt: new Date(),
+      returnReason: parsed.data.reason,
+      ...(sale.kind === "SALE" && (parsed.data.returnFreightCost ?? 0) > 0 ? { returnFreightCost: parsed.data.returnFreightCost } : {}),
+    },
   });
 
   await notifyInventoryLeadExternalSaleReturnReported(sale.code, saleItemsSummary(sale.items));

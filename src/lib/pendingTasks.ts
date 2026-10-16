@@ -1206,7 +1206,7 @@ async function getMyMotorizadoFreightPendingItems(userId: string, hrefBase: stri
     type: "caja_chica_flete_motorizado",
     icon: "🛵",
     label: `Pagar flete al motorizado: ${r.label}`,
-    meta: "El cliente ya recibió el pedido — págalo desde Caja Chica.",
+    meta: r.isReturn ? "Devolución: el paquete ya volvió a bodega — págalo desde Caja Chica." : "El cliente ya recibió el pedido — págalo desde Caja Chica.",
     overdue: false,
     href: `${hrefBase}?tab=cajachica&box=${box}`,
   }));

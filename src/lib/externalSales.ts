@@ -424,7 +424,10 @@ export async function createOutflowForExternalSale(sale: {
 // quienes pueden pagar el flete desde Caja Chica — Nairoby (Principal) y
 // quien tenga la Secundaria (Jariel). Paga el primero que lo vea; la lista
 // de Caja Chica deja de mostrarlo apenas uno lo paga (freightPaidAt).
-export async function notifyPettyCashFreightPayable(sale: { code: string; pickupPersonName: string; freightCost: number; excludeUserId?: string | null }): Promise<void> {
+// Devolución (pedido de Marcos 2026-10-16): mismo aviso cuando el paquete
+// devuelto ya llegó a bodega; lleva a Ventas Externas → Devoluciones, donde
+// se paga con comprobante.
+export async function notifyPettyCashFreightPayable(sale: { code: string; pickupPersonName: string; freightCost: number; excludeUserId?: string | null; isReturn?: boolean }): Promise<void> {
   const financeLeadId = await getFinanceLeadId();
   const secundaria = await prisma.user.findMany({ where: { canManagePettyCashSecundaria: true, isActive: true }, select: { id: true } });
   const recipients: { id: string; box: "principal" | "secundaria" }[] = [];
@@ -436,8 +439,10 @@ export async function notifyPettyCashFreightPayable(sale: { code: string; pickup
     recipients.map((r) =>
       notifyOwner(r.id, {
         title: "🛵 Flete por pagar al motorizado",
-        body: `${sale.code} — ${sale.pickupPersonName} — $${sale.freightCost.toFixed(2)}. El cliente ya recibió el pedido, págalo desde Caja Chica.`,
-        url: `/area/workspace?tab=cajachica&box=${r.box}`,
+        body: sale.isReturn
+          ? `Devolución ${sale.code} — ${sale.pickupPersonName} — $${sale.freightCost.toFixed(2)}. El paquete ya volvió a bodega, págalo con comprobante.`
+          : `${sale.code} — ${sale.pickupPersonName} — $${sale.freightCost.toFixed(2)}. El cliente ya recibió el pedido, págalo desde Caja Chica.`,
+        url: sale.isReturn ? "/area/workspace?tab=ventas-externas&etab=devoluciones" : `/area/workspace?tab=cajachica&box=${r.box}`,
       }).catch(() => null)
     )
   );
@@ -461,5 +466,7 @@ export function isFreightPayable(sale: {
 }): boolean {
   if (sale.deletedAt || sale.freightPaidAt || !((sale.freightCost ?? 0) > 0)) return false;
   if (sale.kind === "WARRANTY") return !!sale.deliveredAt && (!!sale.clientReceivedAt || !!sale.returnedAt);
+  // Venta devuelta: su flete va por returnFreightCost (ver return-received).
+  if (sale.returnedAt) return false;
   return !sale.isContraEntrega && !!sale.paymentConfirmedAt && !!sale.clientReceivedAt;
 }

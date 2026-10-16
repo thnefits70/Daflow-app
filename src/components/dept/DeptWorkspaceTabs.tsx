@@ -779,6 +779,7 @@ export function DeptWorkspaceTabs({
           canPack={canPackExternalSale}
           canReceiveReturn={canCaptureMerchandiseOutflow}
           canConfirmReturn={canActOnMerchandiseOutflow}
+          canPayReturnFreight={!!(pettyCashData?.canManagePrincipal || pettyCashData?.canManageSecundaria)}
           canClose={canCloseExternalSale}
           isAdmin={isAdmin}
         />

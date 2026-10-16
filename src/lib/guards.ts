@@ -1426,7 +1426,10 @@ export async function canViewExternalSales() {
     (await canReviewExternalSales()) ||
     (await canCloseExternalSale()) ||
     (await canCaptureMerchandiseOutflow()) ||
-    (await canPackExternalSale())
+    (await canPackExternalSale()) ||
+    // Jariel/Nairoby pagan el flete de las devoluciones (2026-10-16).
+    (await canManagePettyCashSecundaria()) ||
+    (await canManagePettyCashPrincipal())
   );
 }
 

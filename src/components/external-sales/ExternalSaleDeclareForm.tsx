@@ -9,6 +9,7 @@ import { uploadFile } from "@/lib/uploadFile";
 import { compressImage } from "@/lib/compressImage";
 import { usePasteFile } from "@/lib/usePasteFile";
 import { useFormDraft } from "@/lib/useFormDraft";
+import { ReportReturnForm } from "./ReportReturnForm";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { CatalogCode } from "@/components/shared/CatalogCode";
 import { ExpandableName } from "@/components/ui/ExpandableName";
@@ -381,63 +382,6 @@ function ClientReceivedButton({ saleId, onDone }: { saleId: string; onDone: () =
         {saving ? "Confirmando…" : "✓ El cliente recibió el pedido"}
       </button>
       {err && <div className="text-red text-[11px] mt-1">{err}</div>}
-    </div>
-  );
-}
-
-// Confirmado 2026-09-16, pedido explícito del usuario: si el cliente no
-// quiso recibir el pedido (o lo devolvió), SOLO el asesor dueño de la
-// venta lo reporta acá — reingresa el stock a INVESTOCK automático, sin
-// pasar por ninguna aprobación.
-function ReportReturnSection({ saleId, onDone }: { saleId: string; onDone: () => void }) {
-  const [reporting, setReporting] = useState(false);
-  const [reason, setReason] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
-
-  async function submit() {
-    setSaving(true);
-    setErr("");
-    try {
-      await postJson(`/api/external-sales/${saleId}/report-return`, { reason: reason.trim() });
-      onDone();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "No se pudo reportar la devolución.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  if (!reporting) {
-    return (
-      <button type="button" className="text-[11.5px] font-bold text-red cursor-pointer mt-1.5" onClick={() => setReporting(true)}>
-        El cliente no recibió el pedido
-      </button>
-    );
-  }
-
-  return (
-    <div className="bg-red/5 border border-red/30 rounded-md p-2.5 mt-1.5">
-      <div className="text-[11.5px] font-semibold mb-1.5">¿Qué pasó?</div>
-      <textarea
-        className="w-full rounded border border-rule bg-surface px-2.5 py-1.5 text-[12px] mb-2"
-        rows={2}
-        placeholder="Ej: el cliente no quiso recibirlo…"
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-      />
-      {err && <div className="text-red text-[11px] mb-1.5">{err}</div>}
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          disabled={saving || reason.trim().length < 3}
-          className="rounded border border-red bg-red px-3 py-1.5 text-[11.5px] font-bold text-white cursor-pointer disabled:opacity-40"
-          onClick={submit}
-        >
-          {saving ? "Reportando…" : "Confirmar devolución"}
-        </button>
-        <button type="button" className="text-steel text-[11.5px] cursor-pointer" onClick={() => setReporting(false)}>Cancelar</button>
-      </div>
     </div>
   );
 }
@@ -1358,7 +1302,7 @@ export function ExternalSaleDeclareForm() {
                     !s.deletedAt && s.deliveredAt && !s.clientReceivedAt && (
                       <>
                         {!s.isContraEntrega && (s.freightCost ?? 0) > 0 && <ClientReceivedButton saleId={s.id} onDone={load} />}
-                        {!s.nairobyClosedAt && <ReportReturnSection saleId={s.id} onDone={load} />}
+                        {!s.nairobyClosedAt && <ReportReturnForm saleId={s.id} declaredFreight={s.freightCost} isContraEntrega={s.isContraEntrega} onDone={load} />}
                       </>
                     )
                   )}
@@ -1382,7 +1326,7 @@ export function ExternalSaleDeclareForm() {
                       nunca se tocó en INVESTOCK, así que no hay nada que
                       reversar. Si ya se entregó al motorizado, esto
                       desaparece y en su lugar aplica "El cliente no recibió
-                      el pedido" (devolución real, ver ReportReturnSection). */}
+                      el pedido" (devolución real, ver ReportReturnForm). */}
                   {!s.deletedAt && s.reviewStatus === "APPROVED" && !s.deliveredAt && confirmDeleteSaleId !== s.id && (
                     <div className="mt-2">
                       <button type="button" className="text-[11.5px] font-bold border border-red text-red rounded px-2.5 py-1.5 cursor-pointer" onClick={() => { setConfirmDeleteSaleId(s.id); setDeleteSaleError(""); }}>

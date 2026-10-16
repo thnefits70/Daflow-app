@@ -72,11 +72,11 @@ export async function POST(req: NextRequest) {
   // Confirmado 2026-09-22 (pedido de Marcos): deliveredAt solo es la entrega
   // de bodega al motorizado — además hace falta que el asesor confirme que
   // el CLIENTE lo recibió (clientReceivedAt).
-  let externalSale: { id: string; isContraEntrega: boolean; paymentConfirmedAt: Date | null; deliveredAt: Date | null; clientReceivedAt: Date | null; freightPaidAt: Date | null; deletedAt: Date | null; kind: "SALE" | "WARRANTY"; advisorId: string; returnedAt: Date | null } | null = null;
+  let externalSale: { id: string; isContraEntrega: boolean; paymentConfirmedAt: Date | null; deliveredAt: Date | null; clientReceivedAt: Date | null; freightPaidAt: Date | null; deletedAt: Date | null; kind: "SALE" | "WARRANTY"; advisorId: string; returnedAt: Date | null; returnReceivedAt: Date | null; returnFreightCost: number | null } | null = null;
   if (d.linkedExternalSaleId) {
     externalSale = await prisma.externalSale.findUnique({
       where: { id: d.linkedExternalSaleId },
-      select: { id: true, isContraEntrega: true, paymentConfirmedAt: true, deliveredAt: true, clientReceivedAt: true, freightPaidAt: true, deletedAt: true, kind: true, advisorId: true, returnedAt: true },
+      select: { id: true, isContraEntrega: true, paymentConfirmedAt: true, deliveredAt: true, clientReceivedAt: true, freightPaidAt: true, deletedAt: true, kind: true, advisorId: true, returnedAt: true, returnReceivedAt: true, returnFreightCost: true },
     });
     if (!externalSale || externalSale.deletedAt) return NextResponse.json({ error: "Venta no encontrada." }, { status: 404 });
     // Garantía local (pedido del usuario 2026-10-02): el flete se paga
@@ -91,7 +91,17 @@ export async function POST(req: NextRequest) {
       if (w.freightPaidAt) return NextResponse.json({ error: "El flete de esta garantía ya fue pagado." }, { status: 409 });
     }
   }
-  if (externalSale && externalSale.kind !== "WARRANTY") {
+  // Devolución de venta externa (pedido de Marcos 2026-10-16): el flete que
+  // declaró el asesor, recién cuando el paquete volvió a bodega, con
+  // comprobante, y quien vendió no se lo paga a sí mismo.
+  if (externalSale && externalSale.kind !== "WARRANTY" && externalSale.returnedAt) {
+    const r = externalSale;
+    if (r.advisorId === session.user.id) return NextResponse.json({ error: "Tú hiciste esta venta: el flete de la devolución lo paga otra persona." }, { status: 403 });
+    if (!r.returnReceivedAt) return NextResponse.json({ error: "El paquete todavía no vuelve a bodega — Inventario debe confirmarlo primero." }, { status: 409 });
+    if (!((r.returnFreightCost ?? 0) > 0)) return NextResponse.json({ error: "Esta devolución no tiene flete por pagar." }, { status: 409 });
+    if (r.freightPaidAt) return NextResponse.json({ error: "El flete de esta devolución ya fue pagado." }, { status: 409 });
+    if (!d.proofUrl) return NextResponse.json({ error: "Adjunta el comprobante del pago al motorizado." }, { status: 400 });
+  } else if (externalSale && externalSale.kind !== "WARRANTY") {
     if (externalSale.isContraEntrega) return NextResponse.json({ error: "Esta venta es con recaudo — el motorizado ya se descuenta el flete solo, no hay nada que pagarle aparte." }, { status: 409 });
     if (!externalSale.paymentConfirmedAt) return NextResponse.json({ error: "Todavía no se confirmó que llegó el pago de esta venta." }, { status: 409 });
     if (!externalSale.deliveredAt) return NextResponse.json({ error: "El motorizado todavía no confirmó que entregó el pedido." }, { status: 409 });

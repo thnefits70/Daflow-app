@@ -7244,6 +7244,14 @@ model ExternalSale {
   returnedAt   DateTime?
   returnReason String?
 
+  // Pedido de Marcos 2026-10-16 (aprobado por el usuario): al registrar la
+  // devolución el asesor dice cuánto se le debe al motorizado por el viaje
+  // (ida y vuelta — en una venta con recaudo no cobró nada). Se paga desde
+  // Caja Chica (Nairoby o Jariel, con comprobante) recién cuando Inventario
+  // confirma que el paquete volvió (returnReceivedAt). El pago marca
+  // freightPaidAt, igual que el flete normal — nunca se paga dos veces.
+  returnFreightCost Float?
+
   // Paso 2 — mismo equipo que ya recibe mercadería de Compras
   // (canCaptureMerchandiseOutflow, isInventoryTeamMember): cuando el
   // motorizado de verdad devuelve el paquete a bodega, alguien de
