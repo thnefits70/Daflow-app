@@ -6,6 +6,7 @@ import { learnBrandsFromManifest, manifestBrandFor } from "@/lib/manifestBrand";
 import { alreadyUploadedMessage, alreadyUploadedWhere, findAlreadyUploadedGuides, resolveGuideLines, type AlreadyUploadedGuide } from "@/lib/fulfillmentGuides";
 import { getCurrentStockByItemIds } from "@/lib/stockKardex";
 import { fetchStoredFile, isPrivateFolder, privatePathOf } from "@/lib/privateFiles";
+import { linkRocketWarrantyGuides, openRocketWarrantiesForCorte } from "@/lib/rocketWarranty";
 
 // Un PDF de ~280 páginas tarda ~2-3 s en leerse; con 40 PDF hace falta más
 // de un minuto (pedido de Yair 2026-09-29: subir más de 20 de una vez).
@@ -54,7 +55,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  let read = readFiles(parsed.data.fileUrls, filePages, parsed.data.warrantyFileUrls ?? [], new Set());
+  // Garantías de Rocket enviadas como orden de Dropi (2026-10-16): NICK
+  // busca antes las guías que falten; las ya unidas salen como garantía.
+  await linkRocketWarrantyGuides({ budgetMs: 10_000 }).catch(() => 0);
+  const rocketOpen = await openRocketWarrantiesForCorte();
+  const rocketGuides = new Set(rocketOpen.flatMap((w) => (w.guideNumber ? [w.guideNumber.toUpperCase()] : [])));
+
+  let read = readFiles(parsed.data.fileUrls, filePages, parsed.data.warrantyFileUrls ?? [], new Set(), rocketGuides);
   if (read.error) return NextResponse.json({ error: read.error }, { status: 400 });
 
   // Pedido del usuario 2026-10-06: si Dropi vuelve a poner en el PDF una guía
@@ -69,7 +76,7 @@ export async function POST(req: NextRequest) {
   }
   if (removable) {
     const before = read.guides;
-    read = readFiles(parsed.data.fileUrls, filePages, parsed.data.warrantyFileUrls ?? [], new Set(already.map((a) => a.number)));
+    read = readFiles(parsed.data.fileUrls, filePages, parsed.data.warrantyFileUrls ?? [], new Set(already.map((a) => a.number)), rocketGuides);
     if (read.error) return NextResponse.json({ error: read.error }, { status: 400 });
     read.warnings.unshift(...already.map((a) => removedGuideNote(a, before.get(a.number))));
   }
@@ -107,6 +114,31 @@ export async function POST(req: NextRequest) {
   }
   const stock = await getCurrentStockByItemIds([...ids]);
 
+  // Garantías de Rocket: las que vienen en este PDF (motivo ya puesto) y las
+  // que todavía no tienen guía — para esas, las guías de este corte que
+  // llevan alguno de sus productos (Daniel elige cuál es).
+  const inUpload = new Set([...guides.keys()].map((g) => g.toUpperCase()));
+  const itemsOfCode = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const set = new Set<string>();
+    if (r.resolution.kind === "product") set.add(r.resolution.catalogItem.id);
+    if (r.resolution.kind === "combo") for (const c of r.resolution.components) set.add(c.catalogItem.id);
+    itemsOfCode.set(r.code, set);
+  }
+  const rocketWarranties = rocketOpen
+    .filter((w) => w.guideNumber && inUpload.has(w.guideNumber.toUpperCase()))
+    .map((w) => ({ id: w.id, code: w.code, guide: w.guideNumber!, reason: w.reason, originalGuide: w.originalGuide, dropiOrder: w.dropiOrder, approved: w.status === "APPROVED" }));
+  const rocketWaiting = rocketOpen
+    .filter((w) => !w.guideNumber)
+    .map((w) => {
+      const wanted = new Set(w.items.map((i) => i.catalogItemId));
+      const candidates = [...guides.entries()]
+        .filter(([, g]) => !g.warranty && g.codes.some((c) => [...(itemsOfCode.get(c) ?? [])].some((id) => wanted.has(id))))
+        .map(([number, g]) => ({ number, carrier: g.carrier, names: g.names }));
+      return { id: w.id, code: w.code, originalGuide: w.originalGuide, dropiOrder: w.dropiOrder, reason: w.reason, items: w.items.map((i) => `${i.quantity} ${i.name}`), candidates };
+    })
+    .filter((w) => w.candidates.length > 0);
+
   return NextResponse.json({
     manifestDate,
     carriers: [...new Set([...guides.values()].map((g) => g.carrier))].filter(Boolean),
@@ -116,6 +148,8 @@ export async function POST(req: NextRequest) {
     unreadWarrantyGuides: unreadWarranty,
     uncertainWarrantyGuides: uncertainWarranty,
     warnings,
+    rocketWarranties,
+    rocketWaiting,
     stockByItem: Object.fromEntries([...ids].map((id) => [id, stock.get(id)?.balance ?? 0])),
   });
 }
@@ -126,7 +160,7 @@ type GuideInfo = { carrier: string; warranty: boolean; codes: string[]; sender: 
 
 // Lee todos los PDF de la subida y los junta (sin tocar la base). `exclude`:
 // guías que ya están en otro corte y se quitan (solo PDF de Dropi).
-function readFiles(fileUrls: string[], filePages: PdfLine[][][], warrantyFileUrls: string[], exclude: Set<string>) {
+function readFiles(fileUrls: string[], filePages: PdfLine[][][], warrantyFileUrls: string[], exclude: Set<string>, rocketGuides: Set<string>) {
   const merged = new Map<string, ParsedGuidesLine>();
   const warranty: ParsedWarrantyLine[] = [];
   const unreadWarranty: string[] = [];
@@ -142,7 +176,7 @@ function readFiles(fileUrls: string[], filePages: PdfLine[][][], warrantyFileUrl
   for (const [idx, url] of fileUrls.entries()) {
     // Dropi o Rocket — se reconoce solo (confirmado 2026-09-25: Yair sube
     // solo PDFs, también las etiquetas de Rocket en vez del Excel).
-    const r = parseGuidesPages(filePages[idx], { warrantyFile: warrantyFileUrls.includes(url), excludeGuides: exclude });
+    const r = parseGuidesPages(filePages[idx], { warrantyFile: warrantyFileUrls.includes(url), excludeGuides: exclude, warrantyGuides: rocketGuides });
     if (r.lines.length === 0 && r.warranty.length === 0) emptyFiles.push(idx + 1);
     manifestDate = manifestDate ?? r.manifestDate;
     for (const g of r.guides) {

@@ -9,6 +9,7 @@ import { notifyOwner } from "@/lib/notifications";
 import { detectSuddenDemand } from "@/lib/suddenDemand";
 import { notifyDiscontinuedSales } from "@/lib/dropiDiscontinued";
 import { learnBrandsForNewCombos } from "@/lib/manifestBrand";
+import { markRocketWarrantiesShipped } from "@/lib/rocketWarranty";
 
 // Holgura para releer los PDF en segundo plano (marca de combos nuevos).
 export const maxDuration = 300;
@@ -78,6 +79,8 @@ export async function POST(req: NextRequest) {
   if (backfill && !input.manifestDate) return NextResponse.json({ error: "No se pudo leer la fecha del manifiesto en el PDF." }, { status: 400 });
   const result = await applyGuidesImport({ ...input, backfillDay: backfill ? input.manifestDate : null }, dbUserId(session.user.id));
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  // Garantías de Rocket por orden de Dropi (2026-10-16): su guía ya salió.
+  await markRocketWarrantiesShipped(input.warranty.map((w) => w.guide), result.batchId).catch(() => null);
   // Combos / IDs alternos recién registrados toman la marca de su manifiesto
   // (en segundo plano: no demora el guardado). Ver lib/manifestBrand.ts.
   const comboCodes = input.rows.flatMap((r) => (r.decision.kind === "combo" && r.decision.comboCode ? [r.code, r.decision.comboCode] : [r.code]));

@@ -554,20 +554,23 @@ function parseRocketPages(pages: PdfLine[][], warrantyFile = false): ParsedGuide
 // `excludeGuides` (solo Dropi): guías que ya salieron en otro corte y Dropi
 // volvió a poner en este PDF — se leen como si no estuvieran (ver
 // parseDropiPages).
-type ParseOpts = { warrantyFile?: boolean; excludeGuides?: Set<string> };
+// warrantyGuides: guías de un PDF de Pedidos que igual son garantía porque
+// ya se registraron así en DAFLOW (garantía de Rocket enviada como orden de
+// Dropi, 2026-10-16 — ver lib/rocketWarranty.ts).
+type ParseOpts = { warrantyFile?: boolean; excludeGuides?: Set<string>; warrantyGuides?: Set<string> };
 
 export async function parseGuidesPdf(bytes: Uint8Array, opts: ParseOpts = {}): Promise<ParsedGuidesPdf & { source: "DROPI" | "ROCKET" }> {
   return parseGuidesPages(await extractPages(bytes), opts);
 }
 
 // Igual que parseGuidesPdf, con las páginas ya extraídas.
-export function parseGuidesPages(pages: PdfLine[][], { warrantyFile = false, excludeGuides }: ParseOpts = {}): ParsedGuidesPdf & { source: "DROPI" | "ROCKET" } {
+export function parseGuidesPages(pages: PdfLine[][], { warrantyFile = false, excludeGuides, warrantyGuides }: ParseOpts = {}): ParsedGuidesPdf & { source: "DROPI" | "ROCKET" } {
   const hasDropiSummary = pages.some((lines) => lines.some((l) => summaryRowOf(l) !== null));
   // RKT…: un PDF con solo etiquetas de Gintracom de Rocket no trae "ROC." ni
   // "ROCKET" en ningún lado (caso real 2026-09-26: etiquetas_1790429953).
   const looksRocket = pages.some((lines) => lines.some((l) => /ROCKET ECOMFULLFILMENT|\bROC\.[a-z]|\bRKT\d{6,}\b/i.test(l.text)));
   if (!hasDropiSummary && looksRocket) return { ...parseRocketPages(pages, warrantyFile), source: "ROCKET" };
-  return { ...parseDropiPages(pages, warrantyFile, excludeGuides), source: "DROPI" };
+  return { ...parseDropiPages(pages, warrantyFile, excludeGuides, warrantyGuides), source: "DROPI" };
 }
 
 export async function parseDropiGuidesPdf(bytes: Uint8Array): Promise<ParsedGuidesPdf> {
@@ -631,7 +634,7 @@ export function senderMatches(sender: string | null | undefined, labelSender: st
   return !!b && (` ${a} `).includes(` ${b} `);
 }
 
-function parseDropiPages(allPages: PdfLine[][], warrantyFile = false, excludeGuides?: Set<string>): ParsedGuidesPdf {
+function parseDropiPages(allPages: PdfLine[][], warrantyFile = false, excludeGuides?: Set<string>, registeredWarranty?: Set<string>): ParsedGuidesPdf {
   const { pages, repeated } = dropRepeatedDropiBlocks(allPages);
 
   let manifestDate: string | null = null;
@@ -928,7 +931,7 @@ function parseDropiPages(allPages: PdfLine[][], warrantyFile = false, excludeGui
     if (g) garantiaGuides.add(g);
   }
   const uncertainWarrantyGuides: string[] = [];
-  for (const [n, g] of guides) g.warranty = warrantyFile || garantiaGuides.has(n);
+  for (const [n, g] of guides) g.warranty = warrantyFile || garantiaGuides.has(n) || !!registeredWarranty?.has(n.toUpperCase());
   const warrantyGuides = new Set([...guides.entries()].filter(([, g]) => g.warranty).map(([n]) => n));
   const warranty: ParsedWarrantyLine[] = [];
   const byLabel = new Map<string, Map<string, Map<string, number>>>(); // code → variante ("" = sin variante) → transportadora → unidades

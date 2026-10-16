@@ -260,6 +260,37 @@ function pagingArgs(tool: McpTool, size: number): Record<string, unknown> {
   return args;
 }
 
+// Guía de UNA orden (garantías de Rocket, 2026-10-16). get_order pide el id
+// como texto y trae tracking_code cuando Dropi ya generó la guía (visto
+// 2026-10-15). found=false: la orden no es de esta cuenta.
+export async function findOrderGuide(accountId: string, orderId: string): Promise<{ found: boolean; guide: string | null; status: string | null }> {
+  const token = await getValidAccessToken(accountId);
+  const mcp = new McpSession(accountId, token);
+  await mcp.init();
+  const tools = await mcp.listTools();
+  const detailTool =
+    tools.find((t) => /^get[_ ]?order$/i.test(t.name)) ?? tools.find((t) => /order/i.test(t.name) && /get|detail/i.test(t.name) && !/status|list/i.test(t.name));
+  if (!detailTool) return { found: false, guide: null, status: null };
+  const idKey = Object.keys(detailTool.inputSchema?.properties ?? {}).find((k) => /order_?id|^id$/i.test(k)) ?? detailTool.inputSchema?.required?.[0] ?? "id";
+  const d = await mcp.callTool(detailTool.name, { [idKey]: orderId }).catch(() => null);
+  if (!d || d.isError) return { found: false, guide: null, status: null };
+  const text = toolText(d);
+  let obj: Record<string, unknown>;
+  if (d.structuredContent && typeof d.structuredContent === "object") obj = d.structuredContent as Record<string, unknown>;
+  else {
+    try {
+      obj = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      obj = parseDropiDetail(text);
+    }
+  }
+  const id = pick(obj, /^(id|order_id|orderid)$/i);
+  if (!id || id.replace(/\D/g, "") !== orderId.replace(/\D/g, "")) return { found: false, guide: null, status: null };
+  const guide = pick(obj, /guia|guide|tracking/i);
+  await prisma.nickDropiAccount.update({ where: { id: accountId }, data: { lastReadAt: new Date(), lastError: null } }).catch(() => null);
+  return { found: true, guide: guide && /\w{5,}/.test(guide) ? guide.toUpperCase().replace(/\s+/g, "") : null, status: pick(obj, /^(status|estado)$/i) };
+}
+
 export async function readLatestGuides(accountId: string, size = 20): Promise<NickReadResult> {
   const token = await getValidAccessToken(accountId);
   const mcp = new McpSession(accountId, token);

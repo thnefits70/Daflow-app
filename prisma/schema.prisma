@@ -8538,3 +8538,46 @@ model NickOAuthClient {
   clientId    String
   createdAt   DateTime @default(now())
 }
+
+// Garantías de Rocket enviadas como orden de Dropi (pedido del usuario
+// 2026-10-16, aprobado por Bryan). Rocket no tiene sección de garantías: el
+// reemplazo sale como una orden normal "Sin Recaudo" en Dropi. Yair la
+// registra (guía de Rocket original + producto + motivo + n.º de orden de
+// Dropi), Bryan la aprueba, NICK encuentra sola la guía nueva de esa orden y
+// en el corte de Daniel esa guía sale como garantía, no como pedido.
+model RocketWarranty {
+  id                String    @id @default(cuid())
+  number            Int       @unique @default(autoincrement())
+  // APPROVAL → APPROVED (o REJECTED); CANCELLED. Que ya salió = shippedAt.
+  status            String
+  originalGuide     String
+  originalShippedAt DateTime
+  clientName        String?
+  city              String?
+  // [{ catalogItemId, name, quantity }]
+  items             Json
+  // Motivo = nombre de un WarrantyCategory (el mismo del KPI de Garantías).
+  reason            String
+  note              String?
+  evidenceUrls      String[]  @default([])
+  dropiOrder        String
+  // Guía de Dropi de la orden: la pone NICK solo, o Daniel en el corte si NICK no pudo.
+  guideNumber       String?
+  guideLinkedAt     DateTime?
+  guideLinkedBy     String? // "NICK" o id de quien la unió
+  dropiAccount      String?
+  nickCheckedAt     DateTime?
+  shippedAt         DateTime?
+  shippedBatchId    String?
+  createdById       String
+  createdAt         DateTime  @default(now())
+  reviewedById      String?
+  reviewedAt        DateTime?
+  reviewNote        String?
+  cancelledAt       DateTime?
+
+  @@index([status])
+  @@index([dropiOrder])
+  @@index([guideNumber])
+  @@index([originalGuide])
+}

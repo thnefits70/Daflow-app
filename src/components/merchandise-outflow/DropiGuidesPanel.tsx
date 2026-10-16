@@ -44,7 +44,13 @@ type ParseResult = {
   uncertainWarrantyGuides: string[];
   warnings: string[];
   stockByItem: Record<string, number>;
+  // Garantías de Rocket enviadas como orden de Dropi (2026-10-16): las que
+  // vienen en este PDF y las que esperan que Daniel elija su guía.
+  rocketWarranties?: RocketWarrantyInCorte[];
+  rocketWaiting?: RocketWaiting[];
 };
+type RocketWarrantyInCorte = { id: string; code: string; guide: string; reason: string; originalGuide: string; dropiOrder: string; approved: boolean };
+type RocketWaiting = { id: string; code: string; originalGuide: string; dropiOrder: string; reason: string; items: string[]; candidates: { number: string; carrier: string; names: string[] }[] };
 type ComboPart = { catalogItem: ItemLite; quantity: number };
 // comboCode = el combo de Dropi que corresponde (para un código de Rocket,
 // el combo al que Yair lo vinculó).
@@ -125,6 +131,7 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
   // guía) — de ahí sale solo el KPI de Garantías.
   const [warrantyReasons, setWarrantyReasons] = useState<Record<string, string>>({});
   const [reasonOptions, setReasonOptions] = useState<string[]>([]);
+  const [rocketPick, setRocketPick] = useState<Record<string, string>>({});
   const [err, setErr] = useState("");
 
   // Pedido del usuario 2026-09-25: al recargar la página se perdía todo lo
@@ -199,6 +206,14 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
       return;
     }
     const d = json as ParseResult;
+    // El motivo de una garantía de Rocket ya viene de su registro.
+    if (d.rocketWarranties?.length) {
+      setWarrantyReasons((prev) => {
+        const next = { ...prev };
+        for (const rw of d.rocketWarranties!) if (!next[rw.guide]?.trim()) next[rw.guide] = rw.reason;
+        return next;
+      });
+    }
     // Lo marcado en garantías va por posición: si la lista cambió (ej. Yair
     // cambió un PDF a Pedidos/Garantías), se empieza de cero para no dejar
     // una decisión en la garantía equivocada.
@@ -391,6 +406,20 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
     );
   }
 
+  const rocketOf = (guide: string) => data?.rocketWarranties?.find((r) => r.guide.toUpperCase() === guide.toUpperCase()) ?? null;
+
+  // NICK no encontró la guía de una garantía de Rocket: Daniel elige cuál
+  // de las guías de este corte es, y se vuelve a leer (sale como garantía).
+  async function linkRocket(id: string) {
+    const guideNumber = rocketPick[id];
+    if (!guideNumber) return;
+    setErr("");
+    const res = await fetch(`/api/rocket-warranties/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "link_guide", guideNumber }) });
+    const j = await res.json().catch(() => null);
+    if (!res.ok) return setErr(j?.error ?? "No se pudo unir la guía.");
+    await read(true);
+  }
+
   function renderWarranty(w: WarrantyLine, i: number) {
     const parts = partsOf(w.code);
     const wd = warrantyDecisions[i] ?? null;
@@ -413,6 +442,12 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
             {w.quantity} unid.
           </span>
         </div>
+        {rocketOf(w.guide) && (
+          <div className="mt-1 text-[11px] font-semibold text-blue">
+            🛡️ Garantía de Rocket {rocketOf(w.guide)!.code} · guía Rocket {rocketOf(w.guide)!.originalGuide} · orden Dropi {rocketOf(w.guide)!.dropiOrder}
+            {!rocketOf(w.guide)!.approved && <span style={{ color: "var(--color-gold)" }}> · Bryan todavía no la aprueba</span>}
+          </div>
+        )}
         {data?.uncertainWarrantyGuides.includes(w.guide) && (
           <div className="mt-1 text-[11px] flex items-center gap-2 flex-wrap" style={{ color: "var(--color-gold)" }}>
             <span>
@@ -928,6 +963,37 @@ export function DropiGuidesPanel({ onApplied }: { onApplied: (lotId: string) => 
               <div className="text-[11px] font-semibold text-steel mb-1.5">No son productos ({ignored.length})</div>
               <div className="flex flex-col gap-1.5 mb-3">{ignored.map(renderRow)}</div>
             </>
+          )}
+
+          {(data.rocketWaiting ?? []).length > 0 && (
+            <div className="border border-blue/40 bg-blue/5 rounded-md p-2.5 mb-3 flex flex-col gap-2">
+              <div className="text-[12px] font-semibold">🛡️ Garantías de Rocket sin guía todavía — ¿alguna de estas guías es la garantía?</div>
+              <div className="text-[11px] text-steel">NICK no pudo encontrar en Dropi la guía de estas órdenes. Elige la guía (son las de este corte que llevan ese producto) y saldrá como garantía, no como pedido. Si ninguna es, déjalo así.</div>
+              {data.rocketWaiting!.map((rw) => (
+                <div key={rw.id} className="text-[12px] bg-surface rounded px-2.5 py-2 flex flex-col gap-1.5">
+                  <div>
+                    <span className="font-mono font-bold text-teal">{rw.code}</span> · orden Dropi <span className="font-mono">{rw.dropiOrder}</span> · guía Rocket <span className="font-mono">{rw.originalGuide}</span> · {rw.items.join(", ")} · {rw.reason}
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <select
+                      value={rocketPick[rw.id] ?? ""}
+                      onChange={(e) => setRocketPick((p) => ({ ...p, [rw.id]: e.target.value }))}
+                      className="bg-cloud border border-rule rounded px-2 py-1 text-[12px] max-w-full"
+                    >
+                      <option value="">Elegir guía…</option>
+                      {rw.candidates.map((c) => (
+                        <option key={c.number} value={c.number}>
+                          {c.number} · {carrierLabel(c.carrier)}{c.names.length ? ` · ${c.names.join(", ")}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" disabled={!rocketPick[rw.id] || phase !== "preview"} onClick={() => linkRocket(rw.id)} className="rounded border border-teal bg-teal px-2.5 py-1 text-[11.5px] font-bold text-navy cursor-pointer disabled:opacity-50">
+                      Es esta guía
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
           {(warranty.length > 0 || data.unreadWarrantyGuides.length > 0) && (

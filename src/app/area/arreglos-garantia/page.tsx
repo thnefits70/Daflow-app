@@ -4,6 +4,7 @@ import { TopLine } from "@/components/ui/TopLine";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { getArrangementRole } from "@/lib/warrantyArrangements";
 import { WarrantyArrangementsPanel } from "@/components/warranty-arrangements/WarrantyArrangementsPanel";
+import { RocketWarrantiesPanel } from "@/components/warranty-arrangements/RocketWarrantiesPanel";
 
 // Arreglos de garantía (pedido de Bryan 2026-10-15): Michelle y Yair
 // registran, Bryan aprueba los arreglos en dinero, Daniel anota la guía de
@@ -19,6 +20,10 @@ export default async function ArreglosGarantiaPage() {
         Dos casos: (1) reenvío cuando el dropshipper gestionó mal — él paga el flete exacto antes (wallet de Dropi o transferencia), el admin verifica el pago y recién ahí Daniel genera la guía; (2) arreglo en dinero cuando el cliente acepta un monto en vez de la garantía y se queda con el producto — Bryan aprueba y el admin paga. El arreglo nunca puede costar más que 2 fletes + el producto.
       </TabGuide>
       <WarrantyArrangementsPanel />
+      {/* Garantías de Rocket por orden de Dropi (2026-10-16). */}
+      <div className="mt-8">
+        <RocketWarrantiesPanel />
+      </div>
     </div>
   );
 }
