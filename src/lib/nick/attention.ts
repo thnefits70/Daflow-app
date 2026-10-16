@@ -49,16 +49,21 @@ export async function getNickAttention(now = new Date(), opts: { estimates?: boo
   });
   for (const g of moving) {
     const observed = g.statusSince.getTime() > g.firstSeenAt.getTime();
+    // Primero el dato real (lo que NICK vio); la estimación solo si todavía no alcanza.
+    const since = observed ? "" : " desde que NICK empezó a mirar";
+    if (g.statusGroup === "EN_CAMINO" && due(g.statusSince, STUCK_DAYS, now)) {
+      out.ESTANCADA.set(g.guideNumber, `${daysAgo(g.statusSince, now)} días sin movimiento${since} («${g.status}»)`);
+      continue;
+    }
+    if (g.statusGroup === "NOVEDAD" && due(g.statusSince, NOVELTY_DAYS, now)) {
+      out.NOVEDAD_ABIERTA.set(g.guideNumber, `Novedad hace ${daysAgo(g.statusSince, now)} días${since}`);
+      continue;
+    }
     if (opts.estimates && !observed && g.orderCreatedAt && due(g.orderCreatedAt, ESTIMATE_DAYS, now)) {
       const why = `Estimado (solo admin): orden de hace ${daysAgo(g.orderCreatedAt, now)} días y sigue «${g.status}»`;
       if (g.statusGroup === "EN_CAMINO") out.ESTANCADA.set(g.guideNumber, why);
       else out.NOVEDAD_ABIERTA.set(g.guideNumber, why);
-      continue;
     }
-    if (g.statusGroup === "EN_CAMINO" && due(g.statusSince, STUCK_DAYS, now))
-      out.ESTANCADA.set(g.guideNumber, `${daysAgo(g.statusSince, now)} días sin movimiento («${g.status}»)`);
-    if (g.statusGroup === "NOVEDAD" && due(g.statusSince, NOVELTY_DAYS, now))
-      out.NOVEDAD_ABIERTA.set(g.guideNumber, `Novedad hace ${daysAgo(g.statusSince, now)} días`);
   }
 
   // 3. Devolución sin escanear en Reingresos.
