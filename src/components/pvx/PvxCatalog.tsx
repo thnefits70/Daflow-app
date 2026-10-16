@@ -1436,7 +1436,10 @@ export function PvxCatalog({
       {/* Michelle, asistente virtual (2026-10-15). Registrarse desde el chat abre el mismo registro, sin producto. */}
       <PvxChat
         registered={registered === true}
-        onRegister={() => setOpen({ code: "", mode: "register" })}
+        onRegistered={(n) => {
+          setRegistered(true);
+          setName(n);
+        }}
       />
       {/* Calificar las herramientas (2026-10-15): solo registrados; solo el admin lo ve. */}
       <PvxRating registered={registered === true} />

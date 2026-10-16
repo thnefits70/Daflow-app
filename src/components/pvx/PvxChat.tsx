@@ -16,6 +16,7 @@ import {
   IconLock,
 } from "@/components/pvx/PvxIcons";
 import { ADVISOR_RESPONSE_PROMISE, WORK_HOURS_TEXT } from "@/lib/pvxFaq";
+import { PvxChatRegister } from "@/components/pvx/PvxChatRegister";
 
 // Chat con Michelle, la asistente virtual de provedix.com (2026-10-15).
 // Se presenta siempre como asistente virtual con IA. Desde 2026-10-16 todo se
@@ -219,10 +220,13 @@ function Attachment({ id, kind }: { id: string; kind: string }) {
 
 export function PvxChat({
   registered,
-  onRegister,
+  onRegistered,
 }: {
   registered: boolean;
-  onRegister: () => void;
+  // Ya no se usa desde el chat (el registro es dentro del chat, 2026-10-17).
+  onRegister?: () => void;
+  // Se registró desde el chat: la página lo marca como registrado.
+  onRegistered?: (name: string) => void;
 }) {
   // Entró por el enlace provedix.com/michelle: el chat viene ABIERTO desde el
   // servidor (2026-10-17), se ve apenas llega la página, sin esperar al
@@ -274,14 +278,10 @@ export function PvxChat({
   const [uploading, setUploading] = useState<number | null>(null);
   // Respuesta nueva del equipo mientras el chat estaba cerrado (2026-10-16).
   const [unread, setUnread] = useState(false);
-  // Pidió registrarse desde el chat: al terminar el registro se anota (embudo).
-  const registerAskedRef = useRef(false);
-  useEffect(() => {
-    if (registered && registerAskedRef.current) {
-      registerAskedRef.current = false;
-      trackChat("chat_register");
-    }
-  }, [registered]);
+  // Sin registro (2026-10-17): 2 preguntas gratis y luego el registro aquí mismo.
+  const [trialLeft, setTrialLeft] = useState<number | null>(null);
+  const [regFlow, setRegFlow] = useState(false);
+  const showRegister = !registered && (regFlow || trialLeft === 0);
 
   // Sin abrir el chat: ¿el equipo respondió algo nuevo? (una sola consulta al cargar la página)
   useEffect(() => {
@@ -331,6 +331,7 @@ export function PvxChat({
           if (d.blockedText) setBlockedMsg(d.blockedText);
         }
         if (typeof d?.remaining === "number") setRemaining(d.remaining);
+        if (typeof d?.trialLeft === "number") setTrialLeft(d.trialLeft);
       })
       .catch(() => null)
       .finally(() => setLoaded(true));
@@ -373,6 +374,13 @@ export function PvxChat({
         if (!res.ok || !res.body) {
           const d = await res.json().catch(() => null);
           setMessages((m) => m.slice(0, -2));
+          // Se acabaron las preguntas gratis: pasa al registro dentro del chat.
+          if (d?.needsRegister) {
+            setTrialLeft(0);
+            setRegFlow(true);
+            setInput(text);
+            return;
+          }
           setError(
             d?.error ??
               "No pude responder ahora. Intenta de nuevo en un momento.",
@@ -392,6 +400,8 @@ export function PvxChat({
         }
         const rem = res.headers.get("X-Remaining");
         if (rem != null) setRemaining(Number(rem));
+        const tl = res.headers.get("X-Trial-Left");
+        if (tl != null) setTrialLeft(Number(tl));
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let acc = "";
@@ -573,18 +583,18 @@ export function PvxChat({
                     Cuéntame, ¿en qué te ayudo hoy? 💛
                   </>
                 ) : (
-                  // Sin registro no hay conversación ni datos (pedido 2026-10-14).
+                  // Sin registro: 2 preguntas generales gratis y luego registro aquí mismo (2026-10-17).
                   <>
                     ¡Hola! 👋 Soy <b>Michelle</b>, tu asistente virtual de
-                    Provedix 😊 Para conversar conmigo y darte toda la
-                    información de los productos, primero{" "}
-                    <b>regístrate gratis</b>. ¡Solo toma un minuto! 💛
+                    Provedix 😊 Pregúntame lo que quieras sobre cómo vender con
+                    nosotros. Para seguir conversando y ver toda la información,
+                    te registras gratis aquí mismo en un minuto 💛
                   </>
                 )}
               </div>
             </div>
 
-            {registered && !blocked && messages.length === 0 && loaded && (
+            {!blocked && !showRegister && messages.length === 0 && loaded && (
               <div className="mt-3 flex flex-wrap gap-1.5 pl-9">
                 {SUGGESTIONS.map((s) => (
                   <button
@@ -768,6 +778,21 @@ export function PvxChat({
                 </div>
               ),
             )}
+            {showRegister && !blocked && (
+              <PvxChatRegister
+                onDone={(name) => {
+                  trackChat("chat_register");
+                  setRegFlow(false);
+                  setTrialLeft(null);
+                  onRegistered?.(name);
+                  setMessages((m) => [
+                    ...m,
+                    { role: "assistant", content: `¡Listo, ${name.split(" ")[0]}! 🎉 Ya estás registrado. Ahora sí, pregúntame todo lo que necesites 💛` },
+                  ]);
+                  setTimeout(() => inputRef.current?.focus(), 200);
+                }}
+              />
+            )}
             {error && (
               <p
                 role="alert"
@@ -779,18 +804,10 @@ export function PvxChat({
           </div>
 
           <div className="border-t border-[var(--pvx-paper-3)] px-3 pb-3 pt-2">
-            {!registered ? (
-              <button
-                type="button"
-                onClick={() => {
-                  registerAskedRef.current = true;
-                  onRegister();
-                }}
-                className="pvx-press mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-[var(--pvx-orange)] px-4 py-3 text-[15px] font-bold text-white hover:bg-[var(--pvx-orange-press)] cursor-pointer"
-              >
-                <IconLock className="w-4 h-4" /> Regístrate gratis para
-                conversar
-              </button>
+            {showRegister && !blocked ? (
+              <p className="mt-1 flex items-center justify-center gap-1.5 text-center text-[12.5px] font-semibold text-[var(--pvx-ink-2)]">
+                <IconLock className="w-3.5 h-3.5" /> Tus datos están protegidos. Completa el registro arriba 👆
+              </p>
             ) : blocked ? (
               // Intento de sacar información confidencial: chat cerrado (pedido 2026-10-14).
               <p className="mt-1 rounded-xl bg-[var(--pvx-paper-2)] px-3 py-3 text-center text-[13.5px] font-semibold text-[var(--pvx-ink-2)]">
@@ -804,6 +821,16 @@ export function PvxChat({
                       <span className="block h-full rounded-full bg-[var(--pvx-orange)] transition-all" style={{ width: `${uploading}%` }} />
                     </span>
                     Enviando archivo… {uploading}%
+                  </div>
+                ) : !registered ? (
+                  // Prueba sin registro: cuántas preguntas gratis quedan y registro a un toque.
+                  <div className="mb-1.5 flex items-center justify-between gap-2 text-[12.5px] text-[var(--pvx-ink-3)]">
+                    <span>
+                      {trialLeft != null ? `${trialLeft} pregunta${trialLeft === 1 ? "" : "s"} gratis` : "Preguntas gratis"} sin registrarte
+                    </span>
+                    <button type="button" onClick={() => setRegFlow(true)} className="shrink-0 font-bold text-[var(--pvx-orange-text)] underline underline-offset-2 cursor-pointer">
+                      Registrarme gratis
+                    </button>
                   </div>
                 ) : (
                   <div className="mb-1.5 flex items-center justify-between gap-2 text-[12.5px] text-[var(--pvx-ink-3)]">
@@ -829,16 +856,19 @@ export function PvxChat({
                       if (file) attach(file);
                     }}
                   />
-                  <button
-                    type="button"
-                    onClick={() => fileRef.current?.click()}
-                    disabled={uploading != null}
-                    aria-label="Adjuntar foto o video"
-                    title="Adjuntar foto o video"
-                    className="pvx-press grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--pvx-paper-2)] text-[var(--pvx-ink-2)] hover:bg-[var(--pvx-paper-3)] disabled:opacity-40 cursor-pointer"
-                  >
-                    <IconClip />
-                  </button>
+                  {/* Adjuntar solo con registro (la subida lo exige). */}
+                  {registered && (
+                    <button
+                      type="button"
+                      onClick={() => fileRef.current?.click()}
+                      disabled={uploading != null}
+                      aria-label="Adjuntar foto o video"
+                      title="Adjuntar foto o video"
+                      className="pvx-press grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--pvx-paper-2)] text-[var(--pvx-ink-2)] hover:bg-[var(--pvx-paper-3)] disabled:opacity-40 cursor-pointer"
+                    >
+                      <IconClip />
+                    </button>
+                  )}
                   <label htmlFor="pvx-chat-input" className="sr-only">
                     Escribe tu pregunta para Michelle
                   </label>

@@ -215,7 +215,30 @@ const BLOCKED_TEXT = "Por seguridad, esta conversación quedó cerrada 🔒";
 const BLOCKED_24H_TEXT =
   "Por seguridad, este chat quedó bloqueado durante 24 horas porque la información de la guía no coincide 🔒";
 const REGISTER_TEXT =
-  "Para conversar conmigo primero regístrate gratis 😊 Así puedo darte toda la información de los productos.";
+  "Para seguir conversando, regístrate gratis aquí mismo en el chat 😊 Solo toma un minuto y te doy toda la información de los productos.";
+
+// Prueba sin registro (pedido del usuario 2026-10-17, "siempre con las medidas
+// de seguridad"): quien no está registrado puede hacer 2 preguntas GENERALES
+// para conocer a Michelle IA. Sin herramientas (no ve guías, no cancela, no
+// crea casos), solo con los datos públicos de la página, con límite por
+// navegador (7 días) y por conexión (6 por hora).
+const TRIAL_QUESTIONS = 2;
+const TRIAL_RULES = `MODO PRUEBA (persona NO registrada, le quedan pocas preguntas gratis)
+- Responde SOLO dudas generales: cómo funciona Provedix, cortes y despachos, cómo empezar a vender, la calculadora, garantías y cancelaciones en general, y los productos con los datos públicos de arriba (nombre, ID, ventas en rangos, tendencia, stock sí/no).
+- NO consultes ni des estado de guías o pedidos, no hagas cancelaciones, no pases casos al equipo ni pidas datos de guías: para eso tiene que registrarse.
+- Responde corto y útil, y al final invita en una frase a registrarse gratis aquí mismo en el chat para seguir (sin presionar).
+- Todas las reglas de seguridad de arriba siguen igual.`;
+
+async function trialUsed(visitorId: string): Promise<number> {
+  return prisma.provedixChatMessage.count({
+    where: {
+      role: "user",
+      createdAt: { gte: new Date(Date.now() - 7 * DAY) },
+      NOT: { content: { startsWith: "[[ADJUNTO:" } },
+      chat: { visitorId, leadId: null },
+    },
+  });
+}
 const INCOMPLETE_TEXT =
   "Antes de seguir, completa tus datos (nombre de tu tienda y dónde vendes) con el botón Regístrate, usando tu mismo WhatsApp 😊";
 
@@ -261,15 +284,18 @@ export async function GET(req: NextRequest) {
         select: { role: true, content: true },
       })
     : [];
-  const [used, blockMsg] = await Promise.all([
+  const [used, blockMsg, usedTrial] = await Promise.all([
     usedToday(visitorId, leadId),
     blockedText(visitorId, leadId),
+    leadId ? Promise.resolve(0) : trialUsed(visitorId),
   ]);
   const res = NextResponse.json({
     chatId: chat?.id ?? null,
     messages,
     remaining: Math.max(0, MICHELLE_DAILY_LIMIT - used),
     registered: !!leadId,
+    // Preguntas gratis que le quedan sin registro (2026-10-17).
+    trialLeft: leadId ? null : Math.max(0, TRIAL_QUESTIONS - usedTrial),
     blocked: !!blockMsg,
     blockedText: blockMsg,
   });
@@ -306,12 +332,17 @@ export async function POST(req: NextRequest) {
 
   const { visitorId, leadId: anyLead } = await readVisitor(req);
   const leadId = await completeLead(anyLead);
-  // Sin registro completo no se habla con la IA (pedido 2026-10-14): ni un dato, ni costo.
-  if (!leadId)
-    return NextResponse.json(
-      { error: anyLead ? INCOMPLETE_TEXT : REGISTER_TEXT, needsRegister: true },
-      { status: 401 },
-    );
+  // Sin registro completo: solo la prueba de 2 preguntas generales (2026-10-17).
+  let trialLeft = 0;
+  if (!leadId) {
+    trialLeft = TRIAL_QUESTIONS - (await trialUsed(visitorId));
+    if (trialLeft <= 0 || !hitAllowed(req, "trial", 6, 60 * 60_000))
+      return NextResponse.json(
+        { error: anyLead ? INCOMPLETE_TEXT : REGISTER_TEXT, needsRegister: true, trialLeft: 0 },
+        { status: 401 },
+      );
+  }
+  const trial = !leadId;
   const blockMsg = await blockedText(visitorId, leadId);
   if (blockMsg)
     return NextResponse.json(
@@ -381,14 +412,16 @@ ${content}`;
     else messages.push({ role, content });
   }
 
-  const system = await michelleSystem(true);
+  const system = await michelleSystem(!trial);
+  if (trial) system.push({ type: "text", text: `${TRIAL_RULES}\n- Preguntas gratis que le quedan después de esta: ${trialLeft - 1}.` });
   const client = getAnthropicClient();
   const params = {
     model: MICHELLE_MODEL,
     max_tokens: 2000,
     system,
     output_config: { effort: "low" },
-    tools: [GUIDE_TOOL, CANCEL_TOOL, HANDOFF_TOOL],
+    // En la prueba sin registro no hay herramientas (guías, cancelaciones, casos).
+    ...(trial ? {} : { tools: [GUIDE_TOOL, CANCEL_TOOL, HANDOFF_TOOL] }),
     // Si un filtro de seguridad de la IA rechaza por error una pregunta
     // normal, Anthropic la reintenta sola con otro modelo.
     betas: ["server-side-fallback-2026-07-01"],
@@ -549,6 +582,7 @@ ${content}`;
       "Cache-Control": "no-store",
       "X-Chat-Id": chatId,
       "X-Remaining": String(Math.max(0, MICHELLE_DAILY_LIMIT - used - 1)),
+      ...(trial ? { "X-Trial-Left": String(Math.max(0, trialLeft - 1)) } : {}),
     },
   });
   setVisitorCookies(res, visitorId);
