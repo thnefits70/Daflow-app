@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import {
   PVX_CALC_EVENT,
   PVX_PRODUCT_EVENT,
@@ -223,20 +224,24 @@ export function PvxChat({
   registered: boolean;
   onRegister: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-  // Entró por el enlace compartido provedix.com/michelle: el chat se abre solo.
+  // Entró por el enlace provedix.com/michelle: el chat viene ABIERTO desde el
+  // servidor (2026-10-17), se ve apenas llega la página, sin esperar al
+  // JavaScript ni a un retraso.
+  const viaLink = usePathname().endsWith("/michelle");
+  const [open, setOpen] = useState(viaLink);
   useEffect(() => {
-    if (
-      !window.location.pathname.endsWith("/michelle") &&
-      window.location.hash !== "#michelle"
-    )
+    if (viaLink) {
+      trackChat("chat_open", "enlace");
       return;
+    }
+    // Enlace con #michelle desde otra página: se abre al cargar.
+    if (window.location.hash !== "#michelle") return;
     const t = setTimeout(() => {
       setOpen(true);
-      trackChat("chat_open", window.location.pathname.endsWith("/michelle") ? "enlace" : "pagina");
-    }, 400);
+      trackChat("chat_open", "pagina");
+    }, 0);
     return () => clearTimeout(t);
-  }, []);
+  }, [viaLink]);
   // Enlaces "#michelle" dentro de la página (p. ej. "Pedir garantía a Michelle IA") abren el chat.
   useEffect(() => {
     const onHash = () => {
