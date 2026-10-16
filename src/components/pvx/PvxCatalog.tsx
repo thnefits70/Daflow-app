@@ -999,7 +999,7 @@ const WHATSAPP_CHANNELS = [
 function Footer() {
   return (
     <footer className="bg-[var(--pvx-night)] text-white">
-      <div className="mx-auto max-w-[1240px] px-4 pt-20 pb-10 sm:px-8 sm:pt-28">
+      <div className="mx-auto max-w-[1240px] px-4 pt-20 pb-32 sm:px-8 sm:pt-28 sm:pb-28">
         <div className="flex flex-col gap-8 sm:flex-row sm:items-end sm:justify-between">
           <p className="pvx-heading max-w-[560px] text-[28px] sm:text-[40px]">
             ¿Listo para vender lo que ya funciona?
@@ -1081,11 +1081,11 @@ function Footer() {
             te registras, guardamos tu nombre, WhatsApp, tienda, plataforma y
             correo (si lo das) solo para enviarte productos ganadores y
             atenderte mejor; puedes pedir que los borremos cuando quieras. Las
-            conversaciones con Michelle, nuestra asistente virtual, también se
-            guardan para atenderte mejor.{" "}
+            conversaciones con Michelle IA, nuestra asistente virtual, también se
+            guardan para atenderte mejor.
             <a
               href={PRIVACY_URL}
-              className="font-semibold text-white/80 underline underline-offset-4 hover:text-white"
+              className="mt-3 block w-fit py-1 font-semibold text-white/80 underline underline-offset-4 hover:text-white"
             >
               Política de privacidad
             </a>
