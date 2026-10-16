@@ -670,8 +670,7 @@ function AssignBoard({ count, board, busy, setBusy, post, reload }: {
     );
   }
 
-  const recountCounters = new Set(count.products.filter((p) => p.recount).map((p) => p.countedByName));
-  const recountExclude = new Set(board.team.filter((t) => recountCounters.has(t.name)).map((t) => t.id));
+  const recountExclude = new Set(board.recountBlocked);
 
   return (
     <section className="border border-rule rounded-md p-3 mb-4 max-w-4xl">
@@ -718,7 +717,7 @@ function AssignBoard({ count, board, busy, setBusy, post, reload }: {
           ))}
           {board.unassignedRecount > 0 && (
             <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
-              <span>{board.unassignedRecount} producto(s) sin asignar — elige a <b>otra persona</b> (no a quien los contó):</span>
+              <span>{board.unassignedRecount} producto(s) sin asignar — a cada persona le tocan solo los que <b>no contó</b> (los suyos quedan para otra):</span>
               {picker("RECOUNT", recountExclude)}
             </div>
           )}

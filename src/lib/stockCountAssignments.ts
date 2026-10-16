@@ -180,13 +180,15 @@ export async function assignArea(params: { countId: string; area: string; assign
 
   let catalogItemIds: string[] = [];
   if (isRecount) {
-    const taken = new Set((await prisma.stockCountAssignment.findMany({ where: { countId: count.id, area: RECOUNT, finishedAt: null }, select: { catalogItemIds: true } })).flatMap((a) => a.catalogItemIds));
-    const lines = await prisma.stockCountLine.findMany({ where: { countId: count.id, decision: "RECOUNT" }, select: { catalogItemId: true, countedById: true } });
-    const free = lines.filter((l) => !taken.has(l.catalogItemId));
+    const free = await freeRecountLines(count.id);
     if (free.length === 0) return { ok: false, error: "No hay productos por recontar sin asignar." };
     // Lo vuelve a contar OTRA persona (decisión del usuario 2026-10-05).
-    if (free.some((l) => l.countedById === person.id)) return { ok: false, error: `${person.name} contó alguno de estos productos: elige a otra persona para el recuento.` };
-    catalogItemIds = free.map((l) => l.catalogItemId);
+    // Pedido de Daniel 2026-10-16: se mira quién contó CADA producto, no el
+    // área (las áreas se reasignaron a varias personas). A esta persona le
+    // tocan solo los que no contó; los suyos quedan para otra.
+    const notHers = free.filter((l) => l.countedById !== person.id);
+    if (notHers.length === 0) return { ok: false, error: `${person.name} contó todos los productos que faltan recontar: elige a otra persona.` };
+    catalogItemIds = notHers.map((l) => l.catalogItemId);
   }
 
   const existing = isRecount ? null : await prisma.stockCountAssignment.findFirst({ where: { countId: count.id, area: params.area, finishedAt: null } });
@@ -316,10 +318,14 @@ export async function areasWithoutAssignment(countId: string): Promise<string[]>
 }
 
 // Productos que el admin mandó a recontar y que nadie tiene asignados.
-export async function unassignedRecountCount(countId: string): Promise<number> {
+async function freeRecountLines(countId: string) {
   const taken = new Set((await prisma.stockCountAssignment.findMany({ where: { countId, area: RECOUNT, finishedAt: null }, select: { catalogItemIds: true } })).flatMap((a) => a.catalogItemIds));
-  const lines = await prisma.stockCountLine.findMany({ where: { countId, decision: "RECOUNT" }, select: { catalogItemId: true } });
-  return lines.filter((l) => !taken.has(l.catalogItemId)).length;
+  const lines = await prisma.stockCountLine.findMany({ where: { countId, decision: "RECOUNT" }, select: { catalogItemId: true, countedById: true } });
+  return lines.filter((l) => !taken.has(l.catalogItemId));
+}
+
+export async function unassignedRecountCount(countId: string): Promise<number> {
+  return (await freeRecountLines(countId)).length;
 }
 
 // Meta de la asignación: el fin del bloque; si ya hay tiempo estimado y la
@@ -408,6 +414,8 @@ export type AssignmentBoard = {
   areas: { area: string; label: string; total: number; assignment: AssignmentView | null }[];
   recounts: AssignmentView[];
   unassignedRecount: number;
+  // Quienes contaron TODOS los productos que faltan recontar (no se pueden elegir).
+  recountBlocked: string[];
   team: { id: string; name: string }[];
   windows: CountWindow[];
   window: ReturnType<typeof windowStatus>;
@@ -418,7 +426,8 @@ export async function getAssignmentBoard(count: { id: string; kind: string; area
   const names = new Map(team.map((t) => [t.id, t.name]));
   const views = await Promise.all(all.map((a) => toView(a, names)));
   const mine = (userId && views.find((v) => v.assigneeId === userId && !v.finishedAt)) || null;
-  if (!isLead) return { mine, areas: [], recounts: [], unassignedRecount: 0, team: [], windows: [], window: windowStatus() };
+  if (!isLead) return { mine, areas: [], recounts: [], unassignedRecount: 0, recountBlocked: [], team: [], windows: [], window: windowStatus() };
+  const free = await freeRecountLines(count.id);
   const areas = await Promise.all(
     (await countAreas(count)).map(async (area) => ({
       area,
@@ -432,7 +441,8 @@ export async function getAssignmentBoard(count: { id: string; kind: string; area
     mine,
     areas,
     recounts: views.filter((v) => v.area === RECOUNT),
-    unassignedRecount: await unassignedRecountCount(count.id),
+    unassignedRecount: free.length,
+    recountBlocked: team.filter((t) => free.length > 0 && free.every((l) => l.countedById === t.id)).map((t) => t.id),
     team,
     windows: upcomingWindows(),
     window: windowStatus(),
