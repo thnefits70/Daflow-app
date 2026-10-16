@@ -138,9 +138,44 @@ function splitValues(s: string): string[] {
   return out;
 }
 
+// Cuando las filas no tienen todas los mismos campos (ej. unas con
+// tracking_code y otras sin guía todavía), Dropi cambia a lista:
+//   items[100]:
+//     - order_id: "7496338"
+//       status: PENDIENTE
+//       ...
+// (visto 2026-10-16 al pedir 100 por página).
+function parseDropiList(text: string): Record<string, unknown>[] | null {
+  const m = /([\w.]+)\[(\d+)\]:\s*\n/.exec(text);
+  if (!m) return null;
+  const rows: Record<string, unknown>[] = [];
+  let cur: Record<string, unknown> | null = null;
+  let itemIndent = -1;
+  for (const line of text.slice(m.index + m[0].length).split("\n")) {
+    const start = /^(\s*)-\s+([\w.]+):\s*(.*)$/.exec(line);
+    if (start) {
+      cur = {};
+      rows.push(cur);
+      itemIndent = start[1].length + 2;
+      cur[start[2]] = clean(start[3]);
+      continue;
+    }
+    const kv = /^(\s*)([\w.]+):\s*(.*)$/.exec(line);
+    if (kv && cur && kv[1].length >= itemIndent && !(kv[2] in cur)) cur[kv[2]] = clean(kv[3]);
+    else if (kv && kv[1].length < itemIndent) break; // terminó la lista
+  }
+  return rows.length ? rows : null;
+}
+
+function clean(v: string) {
+  return v.trim().replace(/^"(.*)"$/, "$1");
+}
+
 export function parseDropiTable(text: string): Record<string, unknown>[] | null {
   const m = /([\w.]+)\[(\d+)\]\{([^}]*)\}:\s*/.exec(text);
-  if (!m) return null;
+  const list = /([\w.]+)\[(\d+)\]:\s*\n/.exec(text);
+  // La cabecera que aparece primero manda (una lista puede traer tablas adentro).
+  if (!m || (list && list.index < m.index)) return parseDropiList(text);
   const fields = m[3].split(",").map((f) => f.trim());
   const count = Number(m[2]);
   // Cuerpo hasta la siguiente cabecera de tabla (si hubiera otra).
