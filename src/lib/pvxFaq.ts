@@ -38,6 +38,18 @@ export const PVX_FAQ: { q: string; a: string }[] = [
     a: "Pide la garantía a Michelle IA en esta misma página, dentro de las 48 horas de recibido el producto, con fotos o video (mejor al momento de la entrega). Si se aprueba, se registra en Dropi.",
   },
   {
+    q: "¿Cómo cancelo o retengo una guía?",
+    a: "Primero cancela el pedido en Dropi con su botón flotante. Luego pídele a Michelle IA que retenga la guía, con el número de guía, el nombre de tu tienda y el nombre completo de tu cliente. Se cancela de lunes a viernes hasta las 11:00 (Veloces hasta las 9:30); sábados, domingos y feriados no se cancelan guías.",
+  },
+  {
+    q: "¿Dónde encuentro fotos y videos para mis anuncios?",
+    a: "En Creativos ganadores, gratis: hay una hoja de Provedix y otra de Importadora Damián. Busca el producto por nombre o ID con Ctrl + F y abre el enlace de la columna \"Link de creativos\". Puedes publicarlos y editarlos libremente.",
+  },
+  {
+    q: "¿Viste un error en un producto o en un creativo?",
+    a: "Avísale de inmediato a Michelle IA en esta página para que el equipo lo corrija.",
+  },
+  {
     q: "¿En cuánto tiempo me responden?",
     a: `Michelle IA, nuestra asistente virtual, te responde al instante, a cualquier hora. Si tu caso necesita a una persona, Michelle, la asesora del equipo, te responde por WhatsApp en ${ADVISOR_RESPONSE_PROMISE} en horario de trabajo (${WORK_HOURS_TEXT}).`,
   },

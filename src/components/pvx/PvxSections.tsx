@@ -313,7 +313,12 @@ export function PvxCities({ stats }: { stats: PublicStats }) {
 
 // ---- Recursos: creativos, rastreo y garantías ----------------------------------
 
-const CREATIVES_URL = "https://docs.google.com/spreadsheets/d/1TrZRjyttpd8BaQoWtxz775hEB4Vu-iZMT8yCT2wtkJA/edit?gid=0#gid=0";
+// Una hoja por marca (manuales de trabajo, 2026-10-16: el manual ya no se
+// usa, todo va en la página).
+const CREATIVES = [
+  { name: "Provedix", url: "https://docs.google.com/spreadsheets/d/1TrZRjyttpd8BaQoWtxz775hEB4Vu-iZMT8yCT2wtkJA/edit?gid=0#gid=0" },
+  { name: "Importadora Damián", url: "https://docs.google.com/spreadsheets/d/1_B7-4XDGabH8UkL1dE5lo_oPFREmzDKAffgfJRnLRPw/edit?gid=0#gid=0" },
+];
 const TRACKING = [
   { name: "Servientrega", url: "https://www.servientrega.com.ec/" },
   { name: "Gintracom", url: "https://ec.gintracom.site/web/site/tracking" },
@@ -344,14 +349,19 @@ export function PvxResources() {
                 &ldquo;Link de creativos&rdquo;.
               </p>
             </div>
-            <a
-              href={CREATIVES_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="pvx-press inline-flex items-center gap-2 self-start rounded-full bg-white px-6 py-3.5 text-[15px] font-bold text-[var(--pvx-ink)] hover:bg-[var(--pvx-ink)] hover:text-white"
-            >
-              Abrir creativos <IconExternal className="w-4 h-4" />
-            </a>
+            <div className="flex flex-wrap gap-2">
+              {CREATIVES.map((c) => (
+                <a
+                  key={c.url}
+                  href={c.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="pvx-press inline-flex items-center gap-2 rounded-full bg-white px-5 py-3.5 text-[15px] font-bold text-[var(--pvx-ink)] hover:bg-[var(--pvx-ink)] hover:text-white"
+                >
+                  Creativos {c.name} <IconExternal className="w-4 h-4" />
+                </a>
+              ))}
+            </div>
           </div>
 
           <div data-r style={{ ["--d" as string]: 1 }} className="rounded-[28px] bg-white p-7 sm:p-10">
@@ -403,6 +413,42 @@ export function PvxResources() {
                 <span>
                   <span className="block text-[16px] font-bold">{s.title}</span>
                   <span className="mt-0.5 block text-[14.5px] leading-relaxed text-white/70">{s.text}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {/* Cancelar o retener una guía (del manual, 2026-10-16), con el proceso de hoy:
+            por el chat de Michelle IA. Mismos horarios que michelleCancelTiming.ts. */}
+        <div data-r className="mt-4 grid gap-8 rounded-[28px] bg-white p-7 sm:p-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-16">
+          <div>
+            <span className="grid h-14 w-14 place-items-center rounded-2xl bg-[var(--pvx-ink)] text-[var(--pvx-orange)]">
+              <IconClock className="w-7 h-7" />
+            </span>
+            <h3 className="pvx-heading mt-8 text-[28px] sm:text-[36px]">Cancelar o retener una guía</h3>
+            <p className="mt-3 text-[16px] leading-relaxed text-[var(--pvx-ink-2)]">
+              De lunes a viernes hasta las <b className="text-[var(--pvx-ink)]">11:00</b> (Veloces hasta las <b className="text-[var(--pvx-ink)]">9:30</b>). Sábados, domingos y feriados no se cancelan guías.
+            </p>
+            <a
+              href="#michelle"
+              className="pvx-press mt-7 inline-flex items-center gap-2 rounded-full bg-[var(--pvx-orange)] px-6 py-3.5 text-[15px] font-bold text-white hover:bg-[var(--pvx-orange-press)]"
+            >
+              Cancelar con Michelle IA <IconArrow className="w-5 h-5" />
+            </a>
+          </div>
+          <ol className="flex flex-col gap-3 self-center">
+            {[
+              { title: "Cancela primero el pedido en Dropi", text: "Usa el botón flotante de Dropi para pedir la anulación." },
+              { title: "Pídele a Michelle IA que retenga la guía", text: "Ten a la mano el número de guía, el nombre de tu tienda y el nombre completo de tu cliente." },
+              { title: "Te confirmamos con foto", text: "En el mismo chat te contamos si se retuvo, con una foto de la guía como respaldo." },
+              { title: "¿Guía rechazada?", text: "Envía la captura por el botón flotante de Dropi en máximo 48 horas." },
+            ].map((s, i) => (
+              <li key={s.title} className="grid grid-cols-[auto_1fr] gap-4 rounded-2xl bg-[var(--pvx-paper-2)] p-4 sm:p-5">
+                <span className="pvx-num grid h-10 w-10 place-items-center rounded-xl bg-[var(--pvx-orange)] text-[16px] font-extrabold text-white">{i + 1}</span>
+                <span>
+                  <span className="block text-[16px] font-bold">{s.title}</span>
+                  <span className="mt-0.5 block text-[14.5px] leading-relaxed text-[var(--pvx-ink-2)]">{s.text}</span>
                 </span>
               </li>
             ))}
