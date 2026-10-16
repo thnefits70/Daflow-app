@@ -14,8 +14,9 @@ import { TabGuide } from "@/components/shared/TabGuide";
 import { WarrantyDispatchPanel } from "./WarrantyDispatchPanel";
 import { MichelleCancellationsPanel } from "./MichelleCancellationsPanel";
 import { useRememberedState } from "@/lib/rememberedState";
+import { SuppliesOutflowPanel } from "./SuppliesOutflowPanel";
 
-type Tab = "deterioro" | "seguimiento" | "proveedor" | "guias" | "garantias" | "michelle" | "solicitud" | "historial";
+type Tab = "suministros" | "deterioro" | "seguimiento" | "proveedor" | "guias" | "garantias" | "michelle" | "solicitud" | "historial";
 
 export function MerchandiseOutflowPanel({
   canCapture,
@@ -143,6 +144,7 @@ export function MerchandiseOutflowPanel({
   const [tab, setTab] = useRememberedState<Tab>("tab", () => {
     if (typeof window === "undefined") return defaultTab;
     const t = new URLSearchParams(window.location.search).get("otab");
+    if (t === "suministros" && canCapture) return t;
     if (t === "deterioro" || t === "seguimiento" || t === "proveedor" || t === "guias") return t;
     // Avisos de cortes (Yair envió / faltaron productos) llegan con otab=solicitud.
     if (t === "solicitud" && (canSubmitFulfillmentRequest || canViewFulfillmentRequests)) return t;
@@ -171,6 +173,8 @@ export function MerchandiseOutflowPanel({
     // sin camino alterno. Ahora todo despacho y garantía llega como corte
     // en "Solicitud Fulfillment", primera pestaña.
     ...(canSubmitFulfillmentRequest || canViewFulfillmentRequests ? [{ id: "solicitud" as const, label: "Solicitud Fulfillment" }] : []),
+    // Pedido de Daniel 2026-10-16: salida directa de suministros, todo INVESTOCK.
+    ...(canCapture ? [{ id: "suministros" as const, label: "Suministros" }] : []),
     ...(canCapture ? [{ id: "deterioro" as const, label: "Deterioro" }] : []),
     // Confirmado 2026-09-23, pedido de Daniel: seguimiento de cada deterioro
     // de principio a fin (su decisión → gestión de Jariel → respuesta del
@@ -220,6 +224,14 @@ export function MerchandiseOutflowPanel({
             <DeteriorCapture allowUpload={canActDeterioro} onReported={() => setDeteriorRefreshKey((k) => k + 1)} />
             <DeteriorResolutionInbox key={deteriorRefreshKey} canAct={canActDeterioro} />
           </div>
+        </>
+      )}
+      {tab === "suministros" && canCapture && (
+        <>
+          <TabGuide storageKey="merchoutflow-suministros">
+            Cuando saques un suministro de bodega (fundas, plástico film, rollo de burbuja, cinta, etiquetas…), escanea su QR o búscalo por nombre o ID, escribe la cantidad y pulsa &quot;Registrar salida&quot;. No pide foto ni archivo y se descuenta solo de INVESTOCK.
+          </TabGuide>
+          <SuppliesOutflowPanel />
         </>
       )}
       {tab === "seguimiento" && canSeeSeguimientoTab && (

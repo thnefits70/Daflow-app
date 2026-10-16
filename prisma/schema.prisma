@@ -6731,6 +6731,9 @@ enum OutflowReason {
   // modelo ExternalSale) — el enganche automático a este batch pasa recién
   // cuando el colaborador de Inventario confirma la entrega física.
   VENTA_EXTERNA
+  // Pedido de Daniel 2026-10-16: salida directa de un suministro (fundas,
+  // film, burbuja…) por cualquiera de INVESTOCK — sin foto ni archivo.
+  SUMINISTRO
 }
 
 // Null mientras está pendiente de que Daniel resuelva un item de deterioro
