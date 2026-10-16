@@ -2,6 +2,7 @@ import { getPublicCatalog, getPublicStats } from "@/lib/provedixPublic";
 import { PvxCatalog } from "@/components/pvx/PvxCatalog";
 import { getPublicTestimonials } from "@/lib/provedixRatings";
 import { PVX_FAQ } from "@/lib/pvxFaq";
+import { pickTeamPhotos } from "@/lib/pvxTeamPhotos";
 
 // Página pública de provedix.com (etapa 3, pedido del usuario 2026-10-12).
 // Se arma como mucho una vez por minuto (antes 10: el "hay stock / agotado"
@@ -66,7 +67,7 @@ export default async function ProvedixPublicPage() {
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pageJsonLd(cards)).replace(/</g, "\\u003c") }} />
-      <PvxCatalog cards={cards} stats={stats} testimonials={testimonials} />
+      <PvxCatalog cards={cards} stats={stats} testimonials={testimonials} teamPhotos={pickTeamPhotos()} />
     </>
   );
 }

@@ -6,6 +6,7 @@ import type { PublicStats } from "@/lib/provedixPublic";
 import { isWorkingDay, nextWorkingDay } from "@/lib/ecuadorHolidays";
 import { ADVISOR_RESPONSE_PROMISE, PVX_FAQ, WORK_HOURS_TEXT } from "@/lib/pvxFaq";
 import type { PublicTestimonials } from "@/lib/provedixRatings";
+import type { TeamPhoto } from "@/lib/pvxTeamPhotos";
 import { IconArrow, IconBox, IconCheck, IconClock, IconExternal, IconImage, IconSpark, IconTrendUp, IconTruck } from "@/components/pvx/PvxIcons";
 
 // Secciones sacadas del "Manual de Trabajo Provedix – Actualizado 2026"
@@ -203,19 +204,11 @@ export function PvxOperation() {
 }
 
 // ---- Nuestro equipo (fotos del equipo, pedido del usuario 2026-10-16) ----------
-// Solo "Guayaquil, Ecuador", sin dirección ni mapa. No usar fotos con guías de
-// clientes ni etiquetas de proveedores.
+// Solo "Guayaquil, Ecuador", sin dirección ni mapa. Las fotos y su rotación
+// semanal están en src/lib/pvxTeamPhotos.ts.
 
-const TEAM = [
-  { src: "/pvx/team/equipo-1.webp", title: "Gente real detrás de cada pedido", alt: "Colaborador de Provedix sonriendo en la bodega" },
-  { src: "/pvx/team/preparando-pedido.webp", title: "Cada producto con su percha y su código", alt: "Colaborador tomando un producto de una percha con etiquetas QR" },
-  { src: "/pvx/team/revisando-producto.webp", title: "Revisamos antes de empacar", alt: "Colaborador revisando la caja de un producto" },
-  { src: "/pvx/team/acomodando-cajas.webp", title: "Mercadería ordenada al llegar", alt: "Colaborador acomodando cajas de producto en la bodega" },
-  { src: "/pvx/team/buscando-en-percha.webp", title: "Pedidos listos para el corte", alt: "Colaborador buscando un producto en la percha" },
-  { src: "/pvx/team/equipo-2.webp", title: "Listos para despachar contigo", alt: "Colaborador de Provedix con los brazos cruzados frente a las perchas" },
-];
-
-export function PvxTeam() {
+export function PvxTeam({ photos }: { photos: TeamPhoto[] }) {
+  if (!photos.length) return null;
   return (
     <section className="bg-[var(--pvx-paper)] py-24 sm:py-32" aria-labelledby="pvx-team">
       <div className="mx-auto max-w-[1240px] px-4 sm:px-8">
@@ -228,7 +221,7 @@ export function PvxTeam() {
           </p>
         </div>
         <ul className="pvx-scroll-x -mx-4 mt-10 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:px-0">
-          {TEAM.map((p, i) => (
+          {photos.map((p, i) => (
             <li key={p.src} data-r style={{ ["--d" as string]: i % 3 }} className="w-[68%] shrink-0 snap-start sm:w-auto">
               <div className="relative aspect-[3/4] overflow-hidden rounded-[22px] bg-[var(--pvx-paper-2)]">
                 <Image src={p.src} alt={p.alt} fill sizes="(max-width: 640px) 68vw, 33vw" className="object-cover" />

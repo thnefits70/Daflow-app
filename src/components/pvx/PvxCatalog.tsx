@@ -5,8 +5,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { PublicCard, PublicStats } from "@/lib/provedixPublic";
 import type { SnapshotProduct } from "@/lib/provedixSnapshot";
 import type { PublicTestimonials } from "@/lib/provedixRatings";
+import type { TeamPhoto } from "@/lib/pvxTeamPhotos";
 import { ADVISOR_RESPONSE_PROMISE, PRIVACY_URL } from "@/lib/pvxFaq";
-import { PvxPhoto } from "@/components/pvx/PvxPhoto";
+import { productAlt, PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxRegister } from "@/components/pvx/PvxRegister";
 import { DropiLink, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
 import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
@@ -431,7 +432,7 @@ function MarqueeItem({
       className="group mr-3 flex w-[248px] shrink-0 items-center gap-3 rounded-2xl bg-[var(--pvx-night-2)] p-2 pr-4 text-left hover:bg-[var(--pvx-night-3)] cursor-pointer sm:mr-4 sm:w-[300px]"
     >
       <span className="relative h-[72px] w-[72px] shrink-0 overflow-hidden rounded-xl bg-white sm:h-[84px] sm:w-[84px]">
-        <PvxPhoto src={c.photo} alt={hidden ? "" : c.name} sizes="84px" />
+        <PvxPhoto src={c.photo} alt={hidden ? "" : productAlt(c.name)} sizes="84px" />
       </span>
       <span className="min-w-0">
         <span className="pvx-num block text-[13px] font-extrabold italic text-[var(--pvx-orange)]">
@@ -886,7 +887,7 @@ function ProductCard({
         <div className="pvx-card-photo absolute inset-0">
           <PvxPhoto
             src={c.photo}
-            alt={c.name}
+            alt={productAlt(c.name)}
             sizes="(max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
             priority={index < 4}
           />
@@ -1103,10 +1104,12 @@ export function PvxCatalog({
   cards,
   stats,
   testimonials = null,
+  teamPhotos = [],
 }: {
   cards: PublicCard[];
   stats: PublicStats;
   testimonials?: PublicTestimonials | null;
+  teamPhotos?: TeamPhoto[];
 }) {
   const [registered, setRegistered] = useState<boolean | null>(null);
   const [name, setName] = useState<string | null>(null);
@@ -1282,7 +1285,7 @@ export function PvxCatalog({
       <Steps top={cards.find((c) => c.photo) ?? cards[0]} />
       <Promises />
       <PvxOperation />
-      <PvxTeam />
+      <PvxTeam photos={teamPhotos} />
       <PvxTestimonials data={testimonials} />
       <PvxCities stats={stats} />
 

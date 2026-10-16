@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { SnapshotProduct } from "@/lib/provedixSnapshot";
-import { PvxPhoto } from "@/components/pvx/PvxPhoto";
+import { productAlt, PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxDailyBars, PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
 import { WhatsAppButton } from "@/components/pvx/PvxContact";
 import { PVX_CALC_EVENT } from "@/components/pvx/PvxCalculator";
@@ -220,7 +220,7 @@ export function PvxProductDetail({
         <div className="relative aspect-square w-[44%] max-w-[210px] shrink-0 overflow-hidden rounded-2xl bg-white">
           <PvxPhoto
             src={p.photo}
-            alt={p.name}
+            alt={productAlt(p.name)}
             sizes="210px"
             priority
             fit="contain"
