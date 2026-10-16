@@ -7,6 +7,7 @@ import {
   PVX_PRODUCT_EVENT,
 } from "@/components/pvx/PvxCalculator";
 import { PVX_SHARE_URLS, PvxShare } from "@/components/pvx/PvxShare";
+import { markPvxUse } from "@/components/pvx/PvxRating";
 import {
   IconArrow,
   IconCalc,
@@ -209,6 +210,11 @@ export function PvxChat({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages, busy]);
 
+  // Con el chat abierto no se pide calificar (PvxRating lo mira).
+  useEffect(() => {
+    document.body.dataset.pvxChat = open ? "1" : "";
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
@@ -275,6 +281,7 @@ export function PvxChat({
               );
           }
         }
+        if (acc.trim()) markPvxUse("michelle");
       } catch {
         setError("Se perdió la conexión. Intenta de nuevo.");
       } finally {

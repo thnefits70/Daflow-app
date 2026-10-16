@@ -14,6 +14,7 @@ import {
 import { IconExternal, IconLock } from "@/components/pvx/PvxIcons";
 import { PVX_SHARE_URLS, PvxShare } from "@/components/pvx/PvxShare";
 import { PvxCalcDemo } from "@/components/pvx/PvxCalcDemo";
+import { markPvxUse } from "@/components/pvx/PvxRating";
 
 // Calculadora de ganancia de provedix.com (pedido del usuario 2026-10-15,
 // basada en la calculadora ECOMX que mandó; fórmulas en src/lib/pvxCalc.ts).
@@ -299,6 +300,17 @@ export function PvxCalculator({
   );
   const res = calcProfit(input);
   const f = funnel(input);
+  // Calculó de verdad (escribió su costo y vio el precio): cuenta para pedirle que califique.
+  const resPrice = allPriced ? (res?.price ?? null) : null;
+  const usedRef = useRef(false);
+  useEffect(() => {
+    if (resPrice == null || usedRef.current) return;
+    const t = setTimeout(() => {
+      usedRef.current = true;
+      markPvxUse("calculadora");
+    }, 4000);
+    return () => clearTimeout(t);
+  }, [resPrice]);
   const mainCard = first.code ? cards.find((c) => c.code === first.code) : null;
   // Precio de mercado: solo si es un producto (suelto o x2/x3), no un combo de varios.
   const market =

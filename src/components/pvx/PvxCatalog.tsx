@@ -25,6 +25,7 @@ import {
 import { PvxDemo, pickDemoCards } from "@/components/pvx/PvxDemo";
 import { PvxTour } from "@/components/pvx/PvxTour";
 import { PvxChat } from "@/components/pvx/PvxChat";
+import { markPvxUse, PvxRating } from "@/components/pvx/PvxRating";
 import {
   PvxCalculator,
   PVX_PRODUCT_EVENT,
@@ -1164,6 +1165,7 @@ export function PvxCatalog({
     const q = v.trim();
     if (q.length < 3) return;
     searchTimer.current = setTimeout(() => {
+      markPvxUse("catalogo");
       fetch("/api/pvx/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1206,6 +1208,7 @@ export function PvxCatalog({
       return;
     }
     const d = res?.ok ? await res.json().catch(() => null) : null;
+    if (d?.product) markPvxUse("datos");
     setOpen(
       d?.product
         ? { code, mode: "detail", product: d.product }
@@ -1424,6 +1427,8 @@ export function PvxCatalog({
         registered={registered === true}
         onRegister={() => setOpen({ code: "", mode: "register" })}
       />
+      {/* Calificar las herramientas (2026-10-15): solo registrados; solo el admin lo ve. */}
+      <PvxRating registered={registered === true} />
 
       {open && (
         <div
