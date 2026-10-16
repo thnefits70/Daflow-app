@@ -4,7 +4,7 @@ import { isAutoReturnRateMonth } from "@/lib/returnRateConstants";
 import { getMonthDispatchSummary } from "@/lib/commissionTiers";
 import { prevMonthStr } from "@/lib/pendingTasks";
 import { computeAutoStockoutWeeks, isAutoStockoutWeek } from "@/lib/autoStockout";
-import { isAutoFillRateWeek, isoWeekOf, daysOfIsoWeek, guideDispatchDay, isWarrantyGuide, warrantyGuidesOf } from "@/lib/autoFillRate";
+import { isAutoFillRateWeek, isoWeekOf, daysOfIsoWeek, guideDispatchDay, guideHoldDays, isWarrantyGuide, warrantyGuidesOf } from "@/lib/autoFillRate";
 import { isManifestLate, manifestDeadline } from "@/lib/ecuadorHolidays";
 import { brandLabel, sortBrands } from "@/lib/brandLabels";
 import { guideBrandsOf } from "@/lib/guideBrands";
@@ -222,7 +222,7 @@ async function guidesByBrandPerWeek(fromWeek: string): Promise<Map<string, Recor
     },
   });
   const inRange = batches.filter((b) => b.lot && isoWeekOf(b.lot.day) >= fromWeek);
-  const brandOf = await guideBrandsOf(inRange);
+  const [brandOf, holds] = await Promise.all([guideBrandsOf(inRange), guideHoldDays()]);
 
   const byWeek = new Map<string, Record<string, number>>();
   for (const b of inRange) {
@@ -230,7 +230,10 @@ async function guidesByBrandPerWeek(fromWeek: string): Promise<Map<string, Recor
     for (const g of b.guides) {
       if (isWarrantyGuide(b.lot!.day, g.guideNumber, warrantyGuides)) continue;
       // Semana en que la guía sale de verdad (2026-10-14, guideDispatchDay).
-      const week = isoWeekOf(guideDispatchDay(b.lot!.day, b.requestedAt, g.carrier, g.guideNumber));
+      // Retenida por falta de stock que todavía no sale: no cuenta aún.
+      const outDay = guideDispatchDay(b.lot!.day, b.requestedAt, g.carrier, g.guideNumber, holds);
+      if (!outDay) continue;
+      const week = isoWeekOf(outDay);
       const counts = byWeek.get(week) ?? {};
       byWeek.set(week, counts);
       const brand = brandOf.get(g.guideNumber) ?? NO_BRAND;

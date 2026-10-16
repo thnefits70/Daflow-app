@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getCompiledLot, ecuadorDay, NO_BRAND } from "@/lib/fulfillmentGuides";
 import { guideBrandsOf } from "@/lib/guideBrands";
 import { brandLabel, sortBrands } from "@/lib/brandLabels";
-import { daysOfIsoWeek, isAutoFillRateWeek, FILL_RATE_DEPT_CODE, retainedGuideNumbers, guideDispatchDay, lotDaysFeeding, outOfStockSubtracted, isWarrantyGuide, warrantyGuidesOf } from "@/lib/autoFillRate";
+import { daysOfIsoWeek, isAutoFillRateWeek, FILL_RATE_DEPT_CODE, retainedGuideNumbers, guideDispatchDay, guideHoldDays, lotDaysFeeding, outOfStockSubtracted, isWarrantyGuide, warrantyGuidesOf } from "@/lib/autoFillRate";
 
 // Pedido de Daniel 2026-10-13: al hacer clic en una semana de "Pedidos
 // despachados", el mismo número desglosado por día — guías de los cortes por
@@ -70,7 +70,7 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
   ]);
 
   const brandOf = await guideBrandsOf(batches);
-  const retainedSet = await retainedGuideNumbers();
+  const [retainedSet, holds] = await Promise.all([retainedGuideNumbers(), guideHoldDays()]);
   const byDay = new Map<string, { day: DispatchedDay; brandCounts: Record<string, number> }>();
   for (const day of days) {
     byDay.set(day, {
@@ -85,7 +85,7 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
     if (!b.lot) continue;
     const warrantyGuides = warrantyGuidesOf(b.items);
     for (const g of b.guides) {
-      const outDay = guideDispatchDay(b.lot.day, b.requestedAt, g.carrier, g.guideNumber);
+      const outDay = guideDispatchDay(b.lot.day, b.requestedAt, g.carrier, g.guideNumber, holds);
       const entry = byDay.get(outDay);
       if (!entry) continue;
       if (outDay !== b.lot.day) entry.day.movedIn++;

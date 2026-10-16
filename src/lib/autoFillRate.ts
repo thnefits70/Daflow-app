@@ -104,10 +104,21 @@ const DISPATCH_DAY_OVERRIDES: Record<string, string> = {
   D002121772: "2026-10-13",
 };
 
+// Guías retenidas por falta de stock (FulfillmentGuideHold, aprobado
+// 2026-10-16): cuentan el día en que salieron ("Ya salió"); mientras sigan
+// retenidas, día "" = todavía no sale (no cuenta en ningún día).
+export type GuideHoldDays = Map<string, string>;
+export async function guideHoldDays(): Promise<GuideHoldDays> {
+  const rows = await prisma.fulfillmentGuideHold.findMany({ select: { guideNumber: true, releasedAt: true } });
+  return new Map(rows.map((r) => [r.guideNumber.trim().toUpperCase(), r.releasedAt ? ecuadorDay(r.releasedAt) : ""]));
+}
+
 // Día en que la guía realmente sale. Solo se mueve si el PDF se subió el
 // mismo día del corte (un manifiesto atrasado se queda en su día) y después
 // de la hora en que se fue su transportadora.
-export function guideDispatchDay(lotDay: string, uploadedAt: Date, carrier: string, guideNumber?: string): string {
+export function guideDispatchDay(lotDay: string, uploadedAt: Date, carrier: string, guideNumber?: string, holds?: GuideHoldDays): string {
+  const held = guideNumber ? holds?.get(guideNumber.trim().toUpperCase()) : undefined;
+  if (held !== undefined) return held;
   const override = guideNumber ? DISPATCH_DAY_OVERRIDES[guideNumber.trim().toUpperCase()] : undefined;
   if (override) return override;
   if (isoWeekOf(lotDay) < DISPATCH_RULES_FROM_WEEK) return lotDay;
@@ -157,14 +168,14 @@ export async function computeAutoCounts(week: string): Promise<{ guides: number;
       items: { where: { warrantyGuide: { not: null } }, select: { warrantyGuide: true } },
     },
   });
-  const retainedSet = await retainedGuideNumbers();
+  const [retainedSet, holds] = await Promise.all([retainedGuideNumbers(), guideHoldDays()]);
   let guides = 0;
   let retained = 0;
   for (const b of batches) {
     if (!b.lot) continue;
     const warrantyGuides = warrantyGuidesOf(b.items);
     for (const g of b.guides) {
-      if (!daySet.has(guideDispatchDay(b.lot.day, b.requestedAt, g.carrier, g.guideNumber))) continue;
+      if (!daySet.has(guideDispatchDay(b.lot.day, b.requestedAt, g.carrier, g.guideNumber, holds))) continue;
       if (isWarrantyGuide(b.lot.day, g.guideNumber, warrantyGuides)) continue;
       guides++;
       if (retainedSet.has(g.guideNumber.trim().toUpperCase())) retained++;

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { listInventoryTeam } from "@/lib/fulfillmentPicking";
-import { dbUserId, fulfillmentPickScope, canAssignFulfillmentBlocks, canConfirmFulfillmentLot, canPrintFulfillmentManifest, canSubmitFulfillmentRequest, canViewFulfillmentRequests } from "@/lib/guards";
+import { canRetainCancelledGuides, dbUserId, fulfillmentPickScope, canAssignFulfillmentBlocks, canConfirmFulfillmentLot, canPrintFulfillmentManifest, canSubmitFulfillmentRequest, canViewFulfillmentRequests } from "@/lib/guards";
 import { getCompiledLot } from "@/lib/fulfillmentGuides";
+import { heldGuidesOfLot } from "@/lib/fulfillmentGuideHolds";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -18,7 +19,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const canAssign = await canAssignFulfillmentBlocks();
   return NextResponse.json({
     ...lot,
+    // Guías retenidas por falta de stock (2026-10-16).
+    heldGuides: await heldGuidesOfLot(id),
     viewer: {
+      canRetainGuides: await canRetainCancelledGuides(),
       canPrint: await canPrintFulfillmentManifest(),
       pickScope,
       canPick: pickScope !== null,

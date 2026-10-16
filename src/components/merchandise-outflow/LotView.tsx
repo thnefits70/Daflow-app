@@ -12,6 +12,7 @@ import { sourceLabel, type VariantNote } from "./fulfillmentRequestShared";
 import { PickingPanel } from "./PickingPanel";
 import { GuideHoldsBox } from "./GuideHoldsBox";
 import type { GuideCandidate } from "@/lib/fulfillmentHolds";
+import type { HeldGuide } from "@/lib/fulfillmentGuideHolds";
 import { LotComboRecipe, type LotComboRecipe as ComboRecipe } from "./LotComboRecipe";
 
 type ItemView = { catalogItemId: string; name: string; photos: string[]; justCode: string | null; area?: string | null };
@@ -85,8 +86,9 @@ export type CompiledLot = {
   blocks: LotBlock[];
   // 2026-10-16: guías exactas de cada producto, para sugerir cuáles retener.
   guideCandidates?: Record<string, GuideCandidate[]>;
+  heldGuides?: HeldGuide[];
   // team: solo le llega a Daniel (para asignar bloques).
-  viewer?: { canPrint: boolean; canPick: boolean; pickScope?: "ALL" | "ASSIGNED" | null; canConfirm: boolean; canAssign?: boolean; userId: string | null; team?: { id: string; name: string }[] };
+  viewer?: { canRetainGuides?: boolean; canPrint: boolean; canPick: boolean; pickScope?: "ALL" | "ASSIGNED" | null; canConfirm: boolean; canAssign?: boolean; userId: string | null; team?: { id: string; name: string }[] };
 };
 export type LotListItem = { id: string; day: string; corte: number; status: LotStatus; createdAt: string; backfill?: boolean; sentAt: string | null; uploads: number; guides: number; unassignedBlocks: number; unscanned: number };
 
@@ -503,7 +505,7 @@ export function LotView({
       )}
 
       {lot.backfill && lot.status !== "DRAFT" && <BackfillConfirmBox lot={lot} onChanged={onChanged} />}
-      {lot.status !== "DRAFT" && !lot.backfill && <GuideHoldsBox lot={lot} />}
+      {lot.status !== "DRAFT" && !lot.backfill && <GuideHoldsBox lot={lot} onChanged={onChanged} />}
       {lot.viewer?.canConfirm && lot.status !== "CLOSED" && !lot.backfill && <RereadVariantsButton lotId={lot.id} onChanged={onChanged} />}
       {lot.status !== "DRAFT" && !lot.backfill && <PickingPanel lot={lot} onChanged={onChanged} />}
 

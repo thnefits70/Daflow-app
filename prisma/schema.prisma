@@ -3151,6 +3151,25 @@ model FulfillmentRequestGuide {
   @@index([marketReadAt])
 }
 
+// Aprobado por el usuario 2026-10-16: guía que Daniel/Allan retuvieron porque
+// faltó stock en el corte (DAFLOW la sugiere en "Guías a retener"). Pedidos
+// despachados no la cuenta el día del corte sino el día en que salió
+// (releasedAt, cuando pulsan "Ya salió"). Una guía, una retención.
+model FulfillmentGuideHold {
+  id            String    @id @default(cuid())
+  guideNumber   String    @unique
+  lotId         String
+  catalogItemId String
+  carrier       String
+  retainedAt    DateTime  @default(now())
+  retainedById  String?
+  releasedAt    DateTime?
+  releasedById  String?
+
+  @@index([lotId])
+  @@index([releasedAt])
+}
+
 // Pedido del usuario 2026-09-28 (PROVISIONAL): productos de ALF con ID
 // provisional de Dropi (nombre termina en "- ALF") que están en bodega pero
 // todavía no existen en INVESTOCK. Salen en el corte y en la hoja de

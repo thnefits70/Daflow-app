@@ -32,6 +32,7 @@ import { getClaimFollowupRows, describeClaimRows } from "@/lib/purchaseClaimFoll
 import { formerLeaderIdsFor, isSummaryComplete } from "@/lib/formerLeaders";
 import { getUnlinkedShanghaiCount } from "@/lib/storeTracking";
 import { getCountedUnconfirmedLots, overdueCountedLots } from "@/lib/fulfillmentPicking";
+import { pendingHeldGuides } from "@/lib/fulfillmentGuideHolds";
 import { getDropiPriceChanges } from "@/lib/dropiPriceChanges";
 import { getMissingDropiPrices, PROVISIONAL_DROPI_PRICE_HELPERS } from "@/lib/dropiPriceMissing";
 import { getUnmatchedGuideVariants } from "@/lib/variantSales";
@@ -588,6 +589,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   combos_sin_marca: "Combos vendidos en Dropi sin marca — elegir su marca",
   marcas_no_coinciden: "Marcas que no coinciden con el manifiesto",
   fulfillment_corte_enviado: "Corte de Fulfillment enviado — falta despacharlo",
+  fulfillment_guias_retenidas: "Guías retenidas por falta de stock — marcar cuando salen",
   fulfillment_bloque_asignado: "Bloque del corte asignado — sacar de bodega",
   compras_calientes: "Compras calientes (se acaban en 3 días o menos)",
   compras_frias: "Compras frías (60 unidades o menos, alcanzan más de 3 días)",
@@ -2998,6 +3000,20 @@ async function getFulfillmentLotSentPendingItems(href: string): Promise<PendingI
       label: toPick.length === 1 ? "Corte por despachar" : `${toPick.length} cortes por despachar`,
       meta: `${toPick.map((t) => `${t.where}${t.total > 0 ? ` (${t.counted}/${t.total})` : t.pieces > 0 ? ` (solo falta confirmar ${t.pieces} garantía${t.pieces === 1 ? "" : "s"} de pieza)` : ""}`).join(" · ")} · asigna los bloques y confirma lo que salió${late ? " · atrasado" : ""}`,
       overdue: late,
+      href,
+    });
+  }
+  // 2026-10-16: guías retenidas por falta de stock que todavía no salen —
+  // Pedidos despachados las cuenta el día en que se marca «Ya salió».
+  const held = await pendingHeldGuides();
+  if (held.count > 0) {
+    const [, m, d] = (held.oldestDay ?? "").split("-");
+    items.push({
+      type: "fulfillment_guias_retenidas",
+      icon: "📦",
+      label: `${held.count} guía${held.count === 1 ? "" : "s"} retenida${held.count === 1 ? "" : "s"} por falta de stock — marca «Ya salió» cuando la${held.count === 1 ? "" : "s"} recojan`,
+      meta: `Desde el ${d}/${m} · en «Guías a retener» de su corte · hasta entonces no cuentan como despachadas`,
+      overdue: !!held.oldestDay && held.oldestDay < ecuadorDay(new Date(Date.now() - 2 * 86_400_000)),
       href,
     });
   }
