@@ -503,7 +503,7 @@ export function PvxFaq() {
             </span>
             <p className="pvx-heading mt-6 text-[24px]">Te respondemos en {ADVISOR_RESPONSE_PROMISE}</p>
             <p className="mt-2 text-[15px] leading-relaxed text-white/75">
-              Michelle IA te responde al instante. Si tu caso necesita a una persona, la asesora del equipo te escribe por WhatsApp en {ADVISOR_RESPONSE_PROMISE}, de {WORK_HOURS_TEXT}.
+              Michelle IA te responde al instante. Si tu caso necesita a una persona, el equipo te responde en el mismo chat en {ADVISOR_RESPONSE_PROMISE}, de {WORK_HOURS_TEXT}.
             </p>
             <a
               href="#michelle"

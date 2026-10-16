@@ -11,7 +11,7 @@ import { productAlt, PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxRegister } from "@/components/pvx/PvxRegister";
 import { DropiLink, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
 import { PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
-import { AdvisorPicker, WhatsAppButton } from "@/components/pvx/PvxContact";
+import { AskMichelleButton, AskProductButton } from "@/components/pvx/PvxContact";
 import { PvxRocketSku } from "@/components/pvx/PvxRocketSku";
 import {
   PvxCities,
@@ -623,13 +623,10 @@ function Hero({
               <IconArrow className="w-5 h-5 shrink-0 text-[var(--pvx-orange)] transition-transform group-hover:translate-x-1" />
             </a>
             <div className="mt-5">
-              <AdvisorPicker
-                dark
-                className="inline-flex items-center gap-2 py-2 text-left text-[14.5px] font-semibold text-white/75 underline decoration-white/30 underline-offset-4 hover:text-white hover:decoration-[var(--pvx-orange)] cursor-pointer"
-              >
-                <IconWhatsApp className="w-4.5 h-4.5 shrink-0 text-[#3ddc84]" />{" "}
-                ¿Dudas? Escríbele a un asesor por WhatsApp
-              </AdvisorPicker>
+              {/* Todo por Michelle IA, ya no por WhatsApp (2026-10-16). */}
+              <AskMichelleButton className="inline-flex items-center gap-2 py-2 text-left text-[14.5px] font-semibold text-white/75 underline decoration-white/30 underline-offset-4 hover:text-white hover:decoration-[var(--pvx-orange)] cursor-pointer">
+                ¿Dudas? Pregúntale a Michelle IA, te responde al instante
+              </AskMichelleButton>
             </div>
           </div>
           <PvxDemo cards={pickDemoCards(cards)} />
@@ -775,9 +772,9 @@ function Promises() {
       text: "Fotos del producto listas para tus anuncios y tu tienda.",
     },
     {
-      icon: <IconWhatsApp className="w-7 h-7" />,
-      title: "Un asesor por WhatsApp",
-      text: `Una persona real te responde en ${ADVISOR_RESPONSE_PROMISE} en horario de trabajo.`,
+      icon: <IconSpark className="w-7 h-7" />,
+      title: "Michelle IA te atiende",
+      text: `Te responde al instante. Si necesitas a una persona, el equipo te responde en el mismo chat en ${ADVISOR_RESPONSE_PROMISE}.`,
     },
   ];
   // Titular arriba a todo el ancho y las promesas en cuadrícula (2026-10-13:
@@ -798,9 +795,9 @@ function Promises() {
               Nosotros despachamos.
             </span>
           </h2>
-          <AdvisorPicker className="pvx-press inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-white px-6 py-3.5 text-[15px] font-bold text-[var(--pvx-ink)] hover:bg-[var(--pvx-ink)] hover:text-white cursor-pointer">
-            <IconWhatsApp className="w-5 h-5" /> Escribir al asesor
-          </AdvisorPicker>
+          <AskMichelleButton className="pvx-press inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-white px-6 py-3.5 text-[15px] font-bold text-[var(--pvx-ink)] hover:bg-[var(--pvx-ink)] hover:text-white cursor-pointer">
+            Preguntar a Michelle IA <IconArrow className="w-4 h-4" />
+          </AskMichelleButton>
         </div>
         <ul className="mt-14 grid gap-4 sm:mt-20 sm:grid-cols-2 lg:grid-cols-4">
           {rows.map((r, i) => (
@@ -936,7 +933,7 @@ function ProductCard({
           <div className="grid grid-cols-2 gap-1.5">
             <DropiLink code={c.code} compact block />
             <div data-tour={index === 0 ? "card-asesor" : undefined}>
-              <WhatsAppButton
+              <AskProductButton
                 p={c}
                 outOfStock={c.stock === "out"}
                 compact
@@ -1011,14 +1008,9 @@ function Footer() {
             >
               Ver productos <IconArrow className="w-4 h-4" />
             </a>
-            <AdvisorPicker
-              up
-              dark
-              alignRight
-              className="pvx-press inline-flex items-center gap-2 rounded-full bg-white/10 px-6 py-3.5 text-[15px] font-bold text-white hover:bg-white/15 cursor-pointer"
-            >
-              <IconWhatsApp className="w-4.5 h-4.5 text-[#3ddc84]" /> Asesor
-            </AdvisorPicker>
+            <AskMichelleButton className="pvx-press inline-flex items-center gap-2 rounded-full bg-white/10 px-6 py-3.5 text-[15px] font-bold text-white hover:bg-white/15 cursor-pointer">
+              Preguntar a Michelle IA
+            </AskMichelleButton>
           </div>
         </div>
         <div

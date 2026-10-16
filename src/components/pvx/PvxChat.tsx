@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
-import { ADVISORS } from "@/components/pvx/PvxContact";
 import {
   PVX_CALC_EVENT,
   PVX_PRODUCT_EVENT,
@@ -14,12 +13,19 @@ import {
   IconClose,
   IconExternal,
   IconLock,
-  IconWhatsApp,
 } from "@/components/pvx/PvxIcons";
+import { ADVISOR_RESPONSE_PROMISE, WORK_HOURS_TEXT } from "@/lib/pvxFaq";
 
 // Chat con Michelle, la asistente virtual de provedix.com (2026-10-15).
-// Se presenta siempre como asistente virtual con IA. El botón para seguir con
-// la asesora (persona) por WhatsApp sale solo cuando la IA ya no puede resolver.
+// Se presenta siempre como asistente virtual con IA. Desde 2026-10-16 todo se
+// atiende aquí, nada por WhatsApp: lo que la IA no resuelve lo responde el
+// equipo en este mismo chat (sale firmado), y el dropshipper adjunta fotos o
+// videos con el botón 📎.
+
+// Otras partes de la página abren el chat con una pregunta lista para enviar
+// (p. ej. "Preguntar a Michelle IA" en un producto).
+export const PVX_ASK_EVENT = "pvx-ask";
+const SEEN_KEY = "pvx-chat-seen";
 
 type Msg = { role: "user" | "assistant"; content: string };
 const CHAT_KEY = "pvx-chat-id";
@@ -64,8 +70,31 @@ function actionsOf(t: string): { kind: string; code: string }[] {
 const PHOTO_RE = /\[\[FOTO:([a-z0-9]{10,40})\]\]/gi;
 const photoIdsOf = (t: string) =>
   [...t.matchAll(PHOTO_RE)].map((m) => m[1]).slice(0, 2);
+// Respuesta escrita por la persona del equipo desde DAFLOW: [[EQUIPO:Michelle]] texto.
+const TEAM_RE = /^\[\[EQUIPO:([^\]]{1,40})\]\]\s*/;
+const teamOf = (t: string) => t.match(TEAM_RE)?.[1] ?? null;
+// Foto o video que adjuntó el dropshipper: [[ADJUNTO:id:image]].
+const ATTACH_RE = /\[\[ADJUNTO:([a-z0-9]{10,40}):(image|video)\]\]/gi;
+const attachmentsOf = (t: string) =>
+  [...t.matchAll(ATTACH_RE)].map((m) => ({ id: m[1], kind: m[2] }));
+function readSeen(): number {
+  try {
+    return Number(localStorage.getItem(SEEN_KEY) ?? 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+function saveSeen(n: number) {
+  try {
+    localStorage.setItem(SEEN_KEY, String(n));
+  } catch {
+    // sin almacenamiento: no se marca "respuesta nueva"
+  }
+}
 const cleanReply = (t: string) =>
   t
+    .replace(TEAM_RE, "")
+    .replace(ATTACH_RE, "")
     .replace(/\[\[(ASESORA(:[A-Z0-9-]*)?|BLOQUEAR|SOSPECHA)\]\]/g, "")
     .replace(ACTION_RE, "")
     .replace(SECTION_RE, "")
@@ -129,18 +158,25 @@ function Avatar({ size = 36 }: { size?: number }) {
   );
 }
 
-function handoffUrl(
-  phone: string,
-  lastQuestion: string,
-  code: string | null = null,
-): string {
-  // Con código de caso: la asesora ve el resumen y la conversación en DAFLOW, no hace falta repetir nada.
-  if (code)
-    return `https://wa.me/${phone}?text=${encodeURIComponent(`Hola Michelle, vengo del chat de Provedix. Mi caso es ${code}.`)}`;
-  const text = lastQuestion
-    ? `Hola Michelle, vengo del chat de Provedix y tengo un caso que necesita tu ayuda. Mi consulta: "${lastQuestion.slice(0, 300)}"`
-    : "Hola Michelle, vengo del chat de Provedix y tengo un caso que necesita tu ayuda.";
-  return `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+function IconClip({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  );
+}
+
+// Foto o video adjunto (solo lo ve el dueño del chat).
+function Attachment({ id, kind }: { id: string; kind: string }) {
+  const src = `/api/pvx/chat/file/${id}`;
+  return kind === "video" ? (
+    <video src={src} controls preload="metadata" className="mt-1 max-h-72 w-full rounded-xl bg-black" />
+  ) : (
+    <a href={src} target="_blank" rel="noopener noreferrer" className="mt-1 block overflow-hidden rounded-xl">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={src} alt="Foto que adjuntaste" className="max-h-72 w-full object-cover" loading="lazy" />
+    </a>
+  );
 }
 
 export function PvxChat({
@@ -184,6 +220,41 @@ export function PvxChat({
   // actualiza (así ve la respuesta del equipo sobre su guía, 2026-10-15).
   const lastLoadRef = useRef(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  // Subiendo un adjunto: porcentaje (null = nada subiendo).
+  const [uploading, setUploading] = useState<number | null>(null);
+  // Respuesta nueva del equipo mientras el chat estaba cerrado (2026-10-16).
+  const [unread, setUnread] = useState(false);
+
+  // Sin abrir el chat: ¿el equipo respondió algo nuevo? (una sola consulta al cargar la página)
+  useEffect(() => {
+    const id = readChatId();
+    if (!id || !registered) return;
+    fetch(`/api/pvx/chat?chatId=${encodeURIComponent(id)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const list: Msg[] = Array.isArray(d?.messages) ? d.messages : [];
+        const last = list[list.length - 1];
+        if (list.length > readSeen() && last?.role === "assistant" && teamOf(last.content)) setUnread(true);
+      })
+      .catch(() => null);
+  }, [registered]);
+  // Al ver la conversación, lo que hay queda como leído.
+  useEffect(() => {
+    if (open && loaded) saveSeen(messages.length);
+  }, [open, loaded, messages.length]);
+  // "Preguntar a Michelle IA" desde otra parte de la página: abre el chat con la pregunta lista.
+  useEffect(() => {
+    const onAsk = (e: Event) => {
+      const text = (e as CustomEvent<string>).detail;
+      setOpen(true);
+      setUnread(false);
+      if (text) setInput(text);
+      setTimeout(() => inputRef.current?.focus(), 300);
+    };
+    window.addEventListener(PVX_ASK_EVENT, onAsk);
+    return () => window.removeEventListener(PVX_ASK_EVENT, onAsk);
+  }, []);
 
   // Al abrir: retoma la conversación guardada (y la actualiza si pasó más de 1 minuto).
   useEffect(() => {
@@ -294,6 +365,63 @@ export function PvxChat({
     [busy, chatId],
   );
 
+  // Adjuntar foto o video (2026-10-16): pide un enlace firmado y sube directo.
+  const attach = useCallback(
+    async (file: File) => {
+      if (uploading != null) return;
+      setError("");
+      setUploading(0);
+      try {
+        const res = await fetch("/api/pvx/chat/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chatId: chatId ?? undefined, type: file.type || "application/octet-stream", size: file.size }),
+        });
+        const d = await res.json().catch(() => null);
+        if (!res.ok || !d?.uploadUrl) {
+          setError(d?.error ?? "No se pudo enviar el archivo.");
+          return;
+        }
+        if (d.chatId) {
+          setChatId(d.chatId);
+          saveChatId(d.chatId);
+        }
+        const ok = await new Promise<boolean>((resolve) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open("PUT", d.uploadUrl);
+          xhr.setRequestHeader("Content-Type", file.type);
+          xhr.setRequestHeader("x-upsert", "false");
+          xhr.upload.onprogress = (ev) => ev.lengthComputable && setUploading(Math.round((ev.loaded / ev.total) * 100));
+          xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300);
+          xhr.onerror = () => resolve(false);
+          xhr.send(file);
+        });
+        if (!ok) {
+          setError("Se cortó la subida. Revisa tu internet e intenta de nuevo.");
+          return;
+        }
+        const done = await fetch(`/api/pvx/chat/upload/${d.id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chatId: d.chatId }),
+        });
+        const dd = await done.json().catch(() => null);
+        if (!done.ok || !dd?.content) {
+          setError(dd?.error ?? "No se pudo enviar el archivo.");
+          return;
+        }
+        setMessages((m) => [...m, { role: "user", content: dd.content }]);
+        lastLoadRef.current = Date.now();
+      } catch {
+        setError("Se perdió la conexión. Intenta de nuevo.");
+      } finally {
+        setUploading(null);
+        if (fileRef.current) fileRef.current.value = "";
+      }
+    },
+    [chatId, uploading],
+  );
+
   const outOfMessages = remaining === 0;
 
   return (
@@ -301,7 +429,10 @@ export function PvxChat({
       <button
         type="button"
         data-tour="chat"
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          setOpen(!open);
+          setUnread(false);
+        }}
         aria-expanded={open}
         aria-label={
           open
@@ -310,13 +441,18 @@ export function PvxChat({
         }
         className="pvx-press fixed bottom-4 right-4 z-[46] inline-flex items-center gap-2.5 rounded-full bg-[var(--pvx-ink)] py-2 pl-2 pr-4 text-left text-white shadow-[0_14px_34px_-12px_rgb(0_0_0/0.65)] ring-1 ring-white/15 hover:bg-[#25282f] cursor-pointer sm:bottom-6 sm:right-6"
       >
-        <Avatar size={34} />
+        <span className="relative">
+          <Avatar size={34} />
+          {unread && !open && (
+            <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-[#3ddc84] ring-2 ring-[var(--pvx-ink)]" aria-hidden />
+          )}
+        </span>
         <span className="leading-tight">
           <span className="block text-[14px] font-bold">
-            {open ? "Cerrar chat" : "Pregúntale a Michelle"}
+            {open ? "Cerrar chat" : unread ? "Tienes una respuesta" : "Pregúntale a Michelle"}
           </span>
           <span className="block text-[12px] font-semibold text-white/60">
-            Asistente virtual · IA
+            {unread && !open ? "Del equipo de Provedix" : "Asistente virtual · IA"}
           </span>
         </span>
       </button>
@@ -403,39 +539,49 @@ export function PvxChat({
             {messages.map((m, i) =>
               m.role === "user" ? (
                 <div key={i} className="mt-3 flex justify-end">
-                  <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tr-md bg-[var(--pvx-ink)] px-3.5 py-2.5 text-[14.5px] leading-relaxed text-white">
-                    {m.content}
-                  </div>
+                  {attachmentsOf(m.content).length > 0 ? (
+                    <div className="w-[70%] max-w-[260px]">
+                      {attachmentsOf(m.content).map((a) => (
+                        <Attachment key={a.id} id={a.id} kind={a.kind} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-tr-md bg-[var(--pvx-ink)] px-3.5 py-2.5 text-[14.5px] leading-relaxed text-white">
+                      {m.content}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div key={i} className="mt-3 flex gap-2">
-                  <Avatar size={28} />
-                  <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[14.5px] leading-relaxed">
+                  {teamOf(m.content) ? (
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--pvx-ink)] text-[12px] font-black text-white" aria-hidden>
+                      {teamOf(m.content)!.slice(0, 1)}
+                    </span>
+                  ) : (
+                    <Avatar size={28} />
+                  )}
+                  <div className={`max-w-[85%] rounded-2xl rounded-tl-md px-3.5 py-2.5 text-[14.5px] leading-relaxed ${teamOf(m.content) ? "bg-[#fff1e8] ring-1 ring-[var(--pvx-orange)]/30" : "bg-white"}`}>
                     {m.content ? (
                       <>
+                        {teamOf(m.content) && (
+                          <span className="mb-0.5 block text-[12px] font-bold text-[var(--pvx-orange-text)]">
+                            {teamOf(m.content)} · equipo de Provedix
+                          </span>
+                        )}
                         <Rich text={cleanReply(m.content)} />
                         {/* La asistente pone la marca solo cuando ya no puede resolver el caso (pedido 2026-10-14):
                             recién ahí aparece el botón a Michelle, la asesora, con la consulta ya escrita. */}
+                        {/* Caso para el equipo (2026-10-16: sin WhatsApp, responden aquí mismo). */}
                         {m.content.includes(HANDOFF_MARK) && (
-                          <a
-                            href={handoffUrl(
-                              ADVISORS.dropi.phone,
-                              messages
-                                .slice(0, i)
-                                .findLast((x) => x.role === "user")?.content ??
-                                "",
-                              caseCodeOf(m.content),
-                            )}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="pvx-press mt-2.5 flex items-center justify-center gap-2 rounded-full bg-[#138a45] px-4 py-2.5 text-[14px] font-bold text-white hover:bg-[#0f7239]"
-                          >
-                            <IconWhatsApp className="w-4 h-4" /> Continuar con
-                            Michelle por WhatsApp
-                            {caseCodeOf(m.content)
-                              ? ` · ${caseCodeOf(m.content)}`
-                              : ""}
-                          </a>
+                          <div className="mt-2.5 rounded-xl bg-[var(--pvx-paper-2)] px-3 py-2.5 text-[13px] leading-snug">
+                            <b>
+                              {caseCodeOf(m.content) ? `Caso ${caseCodeOf(m.content)} · ` : ""}
+                              El equipo te responde aquí
+                            </b>
+                            <span className="block text-[var(--pvx-ink-2)]">
+                              En {ADVISOR_RESPONSE_PROMISE}, de {WORK_HOURS_TEXT}. Vuelve a abrir este chat para ver la respuesta. Si hace falta, adjunta fotos o video con 📎.
+                            </span>
+                          </div>
                         )}
                         {photoIdsOf(m.content).map((pid) => (
                           <a
@@ -573,10 +719,19 @@ export function PvxChat({
               </p>
             ) : (
               <>
-                {remaining != null && (
-                  <div className="mb-1.5 text-right text-[12.5px] text-[var(--pvx-ink-3)]">
-                    {remaining} mensajes hoy
+                {uploading != null ? (
+                  <div className="mb-1.5 flex items-center gap-2 text-[12.5px] font-semibold text-[var(--pvx-ink-2)]">
+                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--pvx-paper-2)]">
+                      <span className="block h-full rounded-full bg-[var(--pvx-orange)] transition-all" style={{ width: `${uploading}%` }} />
+                    </span>
+                    Enviando archivo… {uploading}%
                   </div>
+                ) : (
+                  remaining != null && (
+                    <div className="mb-1.5 text-right text-[12.5px] text-[var(--pvx-ink-3)]">
+                      {remaining} mensajes hoy
+                    </div>
+                  )
                 )}
                 <form
                   onSubmit={(e) => {
@@ -585,6 +740,26 @@ export function PvxChat({
                   }}
                   className="flex items-end gap-2"
                 >
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,video/quicktime,video/webm,video/3gpp"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) attach(file);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={uploading != null}
+                    aria-label="Adjuntar foto o video"
+                    title="Adjuntar foto o video"
+                    className="pvx-press grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--pvx-paper-2)] text-[var(--pvx-ink-2)] hover:bg-[var(--pvx-paper-3)] disabled:opacity-40 cursor-pointer"
+                  >
+                    <IconClip />
+                  </button>
                   <label htmlFor="pvx-chat-input" className="sr-only">
                     Escribe tu pregunta para Michelle
                   </label>

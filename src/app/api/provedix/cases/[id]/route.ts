@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { dbUserId } from "@/lib/guards";
 import {
+  canSeeCase,
   caseConversation,
   getCasesRole,
   resolveCase,
@@ -13,9 +14,10 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!(await getCasesRole()))
-    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const role = await getCasesRole();
   const { id } = await params;
+  if (!role || !(await canSeeCase(id, role.platforms)))
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   return NextResponse.json(await caseConversation(id));
 }
 
@@ -42,6 +44,8 @@ export async function POST(
       { status: 400 },
     );
   const { id } = await params;
+  if (!(await canSeeCase(id, role.platforms)))
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const error = await resolveCase(id, dbUserId(role.userId), parsed.data);
   if (error) return NextResponse.json({ error }, { status: 409 });
   return NextResponse.json({ ok: true });
@@ -52,7 +56,9 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (!(await getCasesRole()))
+  const role = await getCasesRole();
+  const { id } = await params;
+  if (!role || !(await canSeeCase(id, role.platforms)))
     return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   const parsed = z
     .object({ reply: z.string().trim().min(2, "Escribe el mensaje.").max(1000) })
@@ -62,7 +68,6 @@ export async function PUT(
       { error: parsed.error.issues[0]?.message ?? "Datos no válidos." },
       { status: 400 },
     );
-  const { id } = await params;
   const error = await sendCaseReply(id, parsed.data.reply);
   if (error) return NextResponse.json({ error }, { status: 404 });
   return NextResponse.json({ ok: true });

@@ -11,7 +11,8 @@ import { IconArrow, IconClose, IconSpark } from "@/components/pvx/PvxIcons";
 // CÓMO AGREGAR UNA NOVEDAD: sube TOUR_VERSION en 1, agrega el paso con
 // `since: <la nueva versión>` y pon `data-tour="<id>"` en el elemento.
 // Quien ya vio la guía verá solo los pasos nuevos (y el botón se ilumina).
-export const TOUR_VERSION = 3;
+// 4 (2026-10-16): todo se atiende por Michelle IA, ya no por WhatsApp.
+export const TOUR_VERSION = 4;
 const SEEN_KEY = "pvx-tour-seen";
 
 type Step = { id: string; since: number; title: string; text: string };
@@ -50,8 +51,8 @@ const STEPS: Step[] = [
   {
     id: "card-asesor",
     since: 1,
-    title: "Pregunta al asesor",
-    text: "Te abre WhatsApp con el producto ya escrito en el mensaje.",
+    title: "Pregúntale a Michelle IA",
+    text: "Te abre el chat con el producto ya escrito: te responde al instante.",
   },
   {
     id: "card-cta",
@@ -85,9 +86,9 @@ const STEPS: Step[] = [
   },
   {
     id: "chat",
-    since: 2,
-    title: "Pregúntale a Michelle",
-    text: "Nuestra asistente virtual te ayuda a elegir productos y resuelve tus dudas al instante. Y si tu caso necesita a una persona, ella misma te pasa con Michelle, del equipo, por WhatsApp.",
+    since: 4,
+    title: "Todo por Michelle IA",
+    text: "Dudas, garantías, cancelaciones y pedidos: todo aquí. Te responde al instante y, si tu caso necesita a una persona, el equipo te contesta en este mismo chat. Puedes adjuntar fotos o videos con 📎.",
   },
   {
     id: "help",

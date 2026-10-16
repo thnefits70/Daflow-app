@@ -35,7 +35,7 @@ export const PVX_FAQ: { q: string; a: string }[] = [
   },
   {
     q: "¿Qué hago si un producto llega incompleto, dañado o diferente?",
-    a: "Pide la garantía a Michelle IA en esta misma página, dentro de las 48 horas de recibido el producto, con fotos o video (mejor al momento de la entrega). Si se aprueba, se registra en Dropi.",
+    a: "Pide la garantía a Michelle IA en esta misma página, dentro de las 48 horas de recibido el producto, y adjunta en el chat fotos o video con el botón 📎 (mejor del momento de la entrega). Si se aprueba, se registra en Dropi.",
   },
   {
     q: "¿Cómo cancelo o retengo una guía?",
@@ -51,7 +51,7 @@ export const PVX_FAQ: { q: string; a: string }[] = [
   },
   {
     q: "¿En cuánto tiempo me responden?",
-    a: `Michelle IA, nuestra asistente virtual, te responde al instante, a cualquier hora. Si tu caso necesita a una persona, Michelle, la asesora del equipo, te responde por WhatsApp en ${ADVISOR_RESPONSE_PROMISE} en horario de trabajo (${WORK_HOURS_TEXT}).`,
+    a: `Michelle IA, nuestra asistente virtual, te responde al instante, a cualquier hora. Si tu caso necesita a una persona, el equipo te responde en el mismo chat en ${ADVISOR_RESPONSE_PROMISE}, en horario de trabajo (${WORK_HOURS_TEXT}). Toda la atención es por el chat: ya no atendemos por WhatsApp.`,
   },
 ];
 

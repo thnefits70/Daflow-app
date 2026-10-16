@@ -44,10 +44,17 @@ const nextConfig: NextConfig = {
   async rewrites() {
     const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
     if (!base) return [];
-    return ["purchase-catalog", "branded-photos", "market-product-reference", "provedix-team"].map((folder) => ({
-      source: `/pvx/f/${folder}/:path*`,
-      destination: `${base}/storage/v1/object/public/daflow-files/${folder}/:path*`,
-    }));
+    return [
+      ...["purchase-catalog", "branded-photos", "market-product-reference", "provedix-team"].map((folder) => ({
+        source: `/pvx/f/${folder}/:path*`,
+        destination: `${base}/storage/v1/object/public/daflow-files/${folder}/:path*`,
+      })),
+      // Adjuntos del chat de Michelle IA (2026-10-16, src/lib/provedixAttachments.ts):
+      // subida y descarga con enlace firmado, solo de la carpeta chat del bucket
+      // privado pvx-chat. Sin enlace firmado, Supabase no deja hacer nada.
+      { source: "/pvx/up/:path*", destination: `${base}/storage/v1/object/upload/sign/pvx-chat/chat/:path*` },
+      { source: "/pvx/dl/:path*", destination: `${base}/storage/v1/object/sign/pvx-chat/chat/:path*` },
+    ];
   },
   images: {
     remotePatterns: supabaseHost ? [{ protocol: "https", hostname: supabaseHost, pathname: "/storage/v1/object/public/**" }] : [],

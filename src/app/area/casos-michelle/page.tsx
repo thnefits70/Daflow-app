@@ -6,6 +6,7 @@ import { getCasesRole } from "@/lib/provedixCases";
 import { MichelleCasesPanel } from "@/components/provedix/MichelleCasesPanel";
 
 // Casos de Michelle IA (provedix.com) para Michelle, la asesora humana (pedido del usuario 2026-10-15).
+// Desde 2026-10-16 Yair ve aquí los casos de Rocket (cada quien los de su plataforma).
 export default async function CasosMichellePage() {
   const session = await auth();
   if (!session) redirect("/login");
@@ -13,14 +14,15 @@ export default async function CasosMichellePage() {
   return (
     <div>
       <TopLine eyebrow="provedix.com" title="Casos de Michelle IA" />
-      <TabGuide storageKey="casos-michelle">
+      <TabGuide storageKey="casos-michelle-chat">
         Michelle IA atiende a los dropshippers en el chat de provedix.com y
         resuelve casi todo sola. Aquí llega solo lo que ella no pudo resolver,
-        con un resumen y la conversación completa: el dropshipper te escribe por
-        WhatsApp con el código del caso (MC-0001), así no tienes que volver a
-        preguntar nada. Cuando lo resuelvas, márcalo y, si fue una duda que se
-        puede repetir, enséñale la respuesta a Michelle IA para que la próxima
-        vez la resuelva sola.
+        con un resumen y la conversación completa (incluidas las fotos o videos
+        que el dropshipper adjuntó). Ya no se atiende por WhatsApp: tu
+        respuesta le llega al dropshipper en el mismo chat de Michelle IA.
+        Respóndele en menos de 3 horas (es la promesa de la página). Cuando lo
+        resuelvas, márcalo y, si fue una duda que se puede repetir, enséñale la
+        respuesta a Michelle IA para que la próxima vez la resuelva sola.
       </TabGuide>
       <MichelleCasesPanel />
     </div>

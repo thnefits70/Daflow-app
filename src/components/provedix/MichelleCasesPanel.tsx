@@ -8,6 +8,7 @@ type Case = {
   code: string;
   topic: string;
   topicLabel: string;
+  platform: string;
   summary: string;
   guideNumber: string | null;
   status: string;
@@ -25,7 +26,7 @@ type Answer = {
   active: boolean;
   updatedAt: string;
 };
-type Msg = { role: string; content: string; at: string };
+type Msg = { role: string; content: string; at: string; attachments?: { id: string; kind: string }[]; team?: boolean };
 
 // Casos que Michelle IA pasa a Michelle (la asesora humana) y lo que ella le
 // enseña (2026-10-15). Ver src/lib/provedixCases.ts.
@@ -238,6 +239,7 @@ function CaseCard({
         <div>
           <div className="text-[14px] font-bold">
             <span className="font-mono">{c.code}</span> · {c.topicLabel}
+            <span className="ml-2 rounded-full bg-cloud px-2 py-0.5 align-middle text-[11px] font-semibold text-steel">{c.platform}</span>
           </div>
           <div className="text-[12px] text-steel">
             {c.who}
@@ -271,10 +273,21 @@ function CaseCard({
               <div
                 className={`mb-0.5 text-[10.5px] ${m.role === "user" ? "text-bg opacity-70" : "text-steel"}`}
               >
-                {m.role === "user" ? "Dropshipper" : "Michelle IA"} ·{" "}
+                {m.role === "user" ? "Dropshipper" : m.team ? "Equipo" : "Michelle IA"} ·{" "}
                 {formatDateTime(m.at)}
               </div>
               {m.content}
+              {/* Fotos y videos que adjuntó en el chat (2026-10-16). */}
+              {m.attachments?.map((a) =>
+                a.kind === "video" ? (
+                  <video key={a.id} src={`/api/provedix/cases/file/${a.id}`} controls preload="metadata" className="mt-1 max-h-64 w-full rounded-md" />
+                ) : (
+                  <a key={a.id} href={`/api/provedix/cases/file/${a.id}`} target="_blank" rel="noopener noreferrer" className="mt-1 block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/api/provedix/cases/file/${a.id}`} alt="Foto que adjuntó el dropshipper" className="max-h-64 rounded-md" loading="lazy" />
+                  </a>
+                ),
+              )}
             </div>
           ))}
         </div>

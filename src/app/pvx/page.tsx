@@ -14,7 +14,8 @@ import { getTeamPhotoPool } from "@/lib/provedixTeamPhotoSync";
 export const revalidate = 60;
 
 // Ficha de la empresa para Google (2026-10-13, Bryan preguntó por qué Provedix
-// no salía en el buscador): nombre, logo, Instagram y WhatsApp de atención.
+// no salía en el buscador): nombre, logo e Instagram. Sin teléfono de atención
+// desde 2026-10-16: todo se atiende por el chat de Michelle IA.
 const JSON_LD = {
   "@context": "https://schema.org",
   "@graph": [
@@ -30,7 +31,6 @@ const JSON_LD = {
       address: { "@type": "PostalAddress", addressLocality: "Guayaquil", addressCountry: "EC" },
       areaServed: "EC",
       sameAs: ["https://www.instagram.com/provedix.ec/", "https://www.tiktok.com/@provedix.ec", "https://www.facebook.com/share/1FHzeG3XBR/"],
-      contactPoint: [{ "@type": "ContactPoint", telephone: "+593983809912", contactType: "customer service", areaServed: "EC", availableLanguage: "es" }],
     },
     { "@type": "WebSite", "@id": "https://provedix.com/#web", url: "https://provedix.com/", name: "Provedix", inLanguage: "es-EC", publisher: { "@id": "https://provedix.com/#org" } },
   ],

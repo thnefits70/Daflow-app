@@ -12,8 +12,22 @@ import type { PendingItem } from "@/lib/pendingTasks";
 
 export const CASES_URL = "/area/casos-michelle";
 export const MICHELLE_ANSWERS_TAG = "provedix-michelle-answers";
-// Michelle Ramírez (asesora B2B). El admin también entra.
-const ADVISOR_USERNAMES = ["mramirez"];
+// Quién atiende cada plataforma (2026-10-16, ya no hay WhatsApp: responden
+// en el chat de Michelle IA desde aquí). Dropi: Michelle Ramírez (asesora
+// B2B). Rocket: Yair. El admin ve todo.
+const ADVISORS_BY_PLATFORM: Record<string, string[]> = {
+  dropi: ["mramirez"],
+  rocket: ["yairurgilez"],
+};
+const ADVISOR_USERNAMES = [...new Set(Object.values(ADVISORS_BY_PLATFORM).flat())];
+export const PLATFORM_LABEL: Record<string, string> = { dropi: "Dropi", rocket: "Rocket" };
+// Nombre con el que firma la respuesta en el chat del dropshipper.
+const PLATFORM_SIGNER: Record<string, string> = { dropi: "Michelle", rocket: "Yair" };
+function platformsOf(username: string | null | undefined): string[] {
+  return Object.entries(ADVISORS_BY_PLATFORM)
+    .filter(([, users]) => users.includes(username ?? ""))
+    .map(([p]) => p);
+}
 
 export const CASE_TOPICS: Record<string, string> = {
   garantia: "Garantía",
@@ -28,23 +42,30 @@ export const formatCaseCode = (n: number) => `MC-${String(n).padStart(4, "0")}`;
 export async function getCasesRole(): Promise<{
   userId: string;
   isAdmin: boolean;
+  platforms: string[];
 } | null> {
   const session = await auth();
   if (!session) return null;
   if (session.user.role === "admin")
-    return { userId: session.user.id, isAdmin: true };
+    return { userId: session.user.id, isAdmin: true, platforms: Object.keys(ADVISORS_BY_PLATFORM) };
   const me = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { username: true, isActive: true },
   });
   return me?.isActive && ADVISOR_USERNAMES.includes(me.username ?? "")
-    ? { userId: session.user.id, isAdmin: false }
+    ? { userId: session.user.id, isAdmin: false, platforms: platformsOf(me.username) }
     : null;
 }
 
-async function advisorIds(): Promise<string[]> {
+// ¿Puede esta persona ver o atender este caso? (su plataforma, o admin)
+export async function canSeeCase(caseId: string, platforms: string[]): Promise<boolean> {
+  const c = await prisma.provedixCase.findUnique({ where: { id: caseId }, select: { platform: true } });
+  return !!c && platforms.includes(c.platform);
+}
+
+async function advisorIds(platform: string): Promise<string[]> {
   const rows = await prisma.user.findMany({
-    where: { username: { in: ADVISOR_USERNAMES }, isActive: true },
+    where: { username: { in: ADVISORS_BY_PLATFORM[platform] ?? ADVISORS_BY_PLATFORM.dropi }, isActive: true },
     select: { id: true },
   });
   return rows.map((r) => r.id);
@@ -53,9 +74,15 @@ async function advisorIds(): Promise<string[]> {
 // Lo llama Michelle IA (herramienta pasar_a_asesora). Devuelve el código del caso.
 export async function createCaseFromChat(
   chatId: string,
-  input: { tema: string; resumen: string; guia?: string | null },
+  input: { tema: string; resumen: string; guia?: string | null; plataforma?: string | null },
 ): Promise<string> {
   const topic = CASE_TOPICS[input.tema] ? input.tema : "otro";
+  // Plataforma: la que dijo la IA; si no, la del registro (solo Rocket → rocket).
+  let platform = input.plataforma === "rocket" || input.plataforma === "dropi" ? input.plataforma : null;
+  if (!platform) {
+    const chat = await prisma.provedixChat.findUnique({ where: { id: chatId }, select: { lead: { select: { platform: true } } } });
+    platform = chat?.lead?.platform === "ROCKET" ? "rocket" : "dropi";
+  }
   // Si ese chat ya tiene un caso abierto del mismo tema, se actualiza el resumen (no se duplica).
   const open = await prisma.provedixCase.findFirst({
     where: { chatId, topic, status: "ABIERTO" },
@@ -83,17 +110,18 @@ export async function createCaseFromChat(
           number,
           chatId,
           topic,
+          platform,
           summary: input.resumen.slice(0, 1500),
           guideNumber: input.guia?.slice(0, 40) || null,
         },
       });
       const code = formatCaseCode(number);
-      const ids = await advisorIds();
+      const ids = await advisorIds(platform);
       await Promise.all(
         ids.map((id) =>
           notifyOwner(id, {
-            title: "Caso nuevo de Michelle IA",
-            body: `${code} · ${CASE_TOPICS[topic]}: ${input.resumen.slice(0, 120)}`,
+            title: `Caso nuevo de Michelle IA · ${PLATFORM_LABEL[platform]}`,
+            body: `${code} · ${CASE_TOPICS[topic]}: ${input.resumen.slice(0, 120)} · Responde en el chat (menos de 3 horas)`,
             url: CASES_URL,
           }).catch(() => null),
         ),
@@ -106,16 +134,17 @@ export async function createCaseFromChat(
   return "MC-????";
 }
 
-export async function listCases() {
+export async function listCases(platforms: string[]) {
   const since = new Date(Date.now() - 30 * 86_400_000);
   const rows = await prisma.provedixCase.findMany({
-    where: { OR: [{ status: "ABIERTO" }, { createdAt: { gte: since } }] },
+    where: { platform: { in: platforms }, OR: [{ status: "ABIERTO" }, { createdAt: { gte: since } }] },
     orderBy: [{ status: "asc" }, { createdAt: "desc" }],
     take: 150,
     select: {
       id: true,
       number: true,
       topic: true,
+      platform: true,
       summary: true,
       guideNumber: true,
       status: true,
@@ -135,6 +164,7 @@ export async function listCases() {
     code: formatCaseCode(r.number),
     topic: r.topic,
     topicLabel: CASE_TOPICS[r.topic] ?? r.topic,
+    platform: PLATFORM_LABEL[r.platform] ?? r.platform,
     summary: r.summary,
     guideNumber: r.guideNumber,
     status: r.status,
@@ -172,7 +202,13 @@ export async function caseConversation(caseId: string) {
       )
       .replace(/\[\[IR:([a-z-]+)\]\]/g, "[botón ir a $1]")
       .replace(/\[\[FOTO:\w+\]\]/g, "[📸 foto]")
+      .replace(/^\[\[EQUIPO:([^\]]+)\]\]\s*/, "($1, del equipo) ")
+      .replace(/\[\[ADJUNTO:[^\]]+\]\]/g, "")
       .trim(),
+    // Respuesta escrita por la persona del equipo (no por la IA).
+    team: m.content.startsWith("[[EQUIPO:"),
+    // Fotos y videos que adjuntó el dropshipper (2026-10-16): se abren desde el caso.
+    attachments: [...m.content.matchAll(/\[\[ADJUNTO:([a-z0-9]{10,40}):(image|video)\]\]/gi)].map((a) => ({ id: a[1], kind: a[2] })),
     at: m.createdAt.toISOString(),
   }));
 }
@@ -184,11 +220,12 @@ export async function sendCaseReply(caseId: string, reply: string): Promise<stri
   if (!text) return "Escribe el mensaje.";
   const k = await prisma.provedixCase.findUnique({
     where: { id: caseId },
-    select: { chatId: true },
+    select: { chatId: true, platform: true },
   });
   if (!k) return "No encontré ese caso.";
+  // Firmada por la persona del equipo: el chat la muestra distinta a la IA (2026-10-16).
   await prisma.provedixChatMessage.create({
-    data: { chatId: k.chatId, role: "assistant", content: text },
+    data: { chatId: k.chatId, role: "assistant", content: `[[EQUIPO:${PLATFORM_SIGNER[k.platform] ?? "Michelle"}]] ${text}` },
   });
   await prisma.provedixChat.update({
     where: { id: k.chatId },
@@ -300,9 +337,10 @@ export async function getCasesPendingItem(
     where: { id: userId },
     select: { username: true },
   });
-  if (!me || !ADVISOR_USERNAMES.includes(me.username ?? "")) return null;
+  const platforms = platformsOf(me?.username);
+  if (!platforms.length) return null;
   const open = await prisma.provedixCase.findMany({
-    where: { status: "ABIERTO" },
+    where: { status: "ABIERTO", platform: { in: platforms } },
     select: { createdAt: true },
   });
   if (open.length === 0) return null;
@@ -311,8 +349,9 @@ export async function getCasesPendingItem(
     icon: "💬",
     label: "Casos que te pasó Michelle IA",
     meta: `${open.length} caso${open.length === 1 ? "" : "s"} por atender`,
+    // Promesa de la página: respuesta en menos de 3 horas.
     overdue: open.some(
-      (c) => Date.now() - c.createdAt.getTime() > 4 * 3_600_000,
+      (c) => Date.now() - c.createdAt.getTime() > 3 * 3_600_000,
     ),
     href: CASES_URL,
   };

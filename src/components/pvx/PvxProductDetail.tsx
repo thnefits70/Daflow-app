@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { SnapshotProduct } from "@/lib/provedixSnapshot";
 import { productAlt, PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxDailyBars, PvxSalesCurve } from "@/components/pvx/PvxSalesCurve";
-import { WhatsAppButton } from "@/components/pvx/PvxContact";
+import { AskProductButton } from "@/components/pvx/PvxContact";
 import { PVX_CALC_EVENT } from "@/components/pvx/PvxCalculator";
 import {
   IconCalc,
@@ -329,14 +329,7 @@ export function PvxProductDetail({
       </div>
 
       <div className="flex flex-wrap gap-1.5 lg:mt-auto">
-        <WhatsAppButton p={p} outOfStock={p.stock === "out"} />
-        {(p.rocketSkus ?? []).length > 0 && (
-          <WhatsAppButton
-            p={p}
-            outOfStock={p.stock === "out"}
-            advisor="rocket"
-          />
-        )}
+        <AskProductButton p={p} outOfStock={p.stock === "out"} />
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAnthropicClient } from "@/lib/nancy";
 import { logAiUsage } from "@/lib/aiUsage";
+import { describeAttachments, describeTeamReply } from "@/lib/provedixAttachments";
 import {
   readVisitor,
   sameOriginRequest,
@@ -20,12 +21,14 @@ import { checkGuideForDropshipper } from "@/lib/provedixGuideCheck";
 import { requestCancellationFromChat } from "@/lib/michelleCancellations";
 import { createCaseFromChat } from "@/lib/provedixCases";
 
-// Pasar un caso a Michelle (la asesora humana) con resumen (2026-10-15): solo
-// lo que Michelle IA de verdad no puede resolver. Ver provedixCases.ts.
+// Pasar un caso al equipo con resumen (2026-10-15): solo lo que Michelle IA de
+// verdad no puede resolver. Desde 2026-10-16 ya no hay WhatsApp: la persona
+// del equipo (Michelle, la asesora, para Dropi; Yair para Rocket) responde en
+// este mismo chat desde DAFLOW. Ver provedixCases.ts.
 const HANDOFF_TOOL = {
   name: "pasar_a_asesora",
   description:
-    "Crea un caso para Michelle, la asesora humana del equipo, cuando ya intentaste y NO puedes resolverlo tú (garantía evidente, pedido perdido o con problema serio, pago, negociación, o la persona pide hablar con una persona). Devuelve el código del caso (MC-0001) para que el dropshipper lo mencione por WhatsApp. El resumen debe permitir que la asesora atienda sin volver a preguntar nada.",
+    "Crea un caso para el equipo humano (Michelle, la asesora, si vende en Dropi; Yair si vende en Rocket) cuando ya intentaste y NO puedes resolverlo tú (garantía evidente, pedido perdido o con problema serio, pago, negociación, o la persona pide hablar con una persona). Devuelve el código del caso (MC-0001). La persona del equipo le responde en este mismo chat. El resumen debe permitir atender sin volver a preguntar nada.",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -43,14 +46,20 @@ const HANDOFF_TOOL = {
         type: "string",
         description: "Número de guía verificado, si lo hay",
       },
+      plataforma: {
+        type: "string",
+        enum: ["dropi", "rocket"],
+        description: "Dónde vende el dropshipper este pedido: dropi o rocket",
+      },
     },
-    required: ["tema", "resumen"],
+    required: ["tema", "resumen", "plataforma"],
   },
 };
 const handoffInput = z.object({
   tema: z.string().max(30),
   resumen: z.string().min(10).max(1500),
   guia: z.string().max(40).optional().nullable(),
+  plataforma: z.enum(["dropi", "rocket"]).optional().nullable(),
 });
 
 // Herramienta de Michelle para consultar UNA guía (2026-10-14): solo con los
@@ -153,6 +162,8 @@ async function usedToday(
     where: {
       role: "user",
       createdAt: { gte: new Date(Date.now() - DAY) },
+      // Los adjuntos (fotos/videos) no cuentan como mensajes (2026-10-16).
+      NOT: { content: { startsWith: "[[ADJUNTO:" } },
       chat: leadId ? { OR: [{ visitorId }, { leadId }] } : { visitorId },
     },
   });
@@ -318,7 +329,7 @@ export async function POST(req: NextRequest) {
     );
   }
   const globalUsed = await prisma.provedixChatMessage.count({
-    where: { role: "user", createdAt: { gte: new Date(Date.now() - DAY) } },
+    where: { role: "user", createdAt: { gte: new Date(Date.now() - DAY) }, NOT: { content: { startsWith: "[[ADJUNTO:" } } },
   });
   if (globalUsed >= GLOBAL_DAILY_LIMIT) {
     return NextResponse.json(
@@ -353,13 +364,18 @@ export async function POST(req: NextRequest) {
   // Historial en orden, empezando siempre por un mensaje del usuario.
   const prior = history.reverse();
   while (prior.length && prior[0].role !== "user") prior.shift();
-  const messages: Anthropic.Beta.BetaMessageParam[] = [
-    ...prior.map((m) => ({
-      role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
-      content: m.content,
-    })),
-    { role: "user", content: parsed.data.message },
-  ];
+  // Adjuntos y respuestas del equipo van descritos en palabras; mensajes
+  // seguidos del mismo lado se juntan en uno (2026-10-16).
+  const messages: Anthropic.Beta.BetaMessageParam[] = [];
+  for (const m of [...prior, { role: "user", content: parsed.data.message }]) {
+    const role = m.role === "assistant" ? ("assistant" as const) : ("user" as const);
+    const content = describeTeamReply(describeAttachments(m.content));
+    const last = messages[messages.length - 1];
+    if (last && last.role === role && typeof last.content === "string") last.content += `
+
+${content}`;
+    else messages.push({ role, content });
+  }
 
   const system = await michelleSystem(true);
   const client = getAnthropicClient();

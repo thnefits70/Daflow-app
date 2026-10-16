@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages -- en provedix.com "/" la arma el proxy (reescritura a /pvx): se navega con recarga completa a propósito. */
 import type { Metadata } from "next";
 import { PvxPlainPage } from "@/components/pvx/PvxPlainPage";
 import { WORK_HOURS_TEXT } from "@/lib/pvxFaq";
@@ -13,9 +14,7 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-const UPDATED = "16 de octubre de 2026";
-const WHATSAPP = "+593 98 380 9912";
-const WHATSAPP_URL = "https://wa.me/593983809912";
+const UPDATED = "17 de octubre de 2026";
 
 const SECTIONS: { title: string; body: React.ReactNode }[] = [
   {
@@ -39,8 +38,9 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
           interesan más.
         </li>
         <li>
-          <b>Tus conversaciones con Michelle IA:</b> los mensajes que le escribes y, si pides revisar un pedido, los datos que des para encontrarlo (número de guía,
-          tu tienda o el nombre de tu cliente).
+          <b>Tus conversaciones con Michelle IA:</b> los mensajes que le escribes, las fotos o videos que adjuntes (por ejemplo, la evidencia de una garantía) y,
+          si pides revisar un pedido, los datos que des para encontrarlo (número de guía, tu tienda o el nombre de tu cliente). Los archivos se guardan en un
+          espacio privado: solo los ves tú y el equipo que atiende tu caso.
         </li>
         <li>
           <b>Tus calificaciones:</b> las estrellas y el comentario que dejes sobre la página.
@@ -65,7 +65,7 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
     body: (
       <p>
         Michelle IA es una asistente virtual con inteligencia artificial. Para responderte, tus mensajes se procesan con un servicio de inteligencia artificial. Si
-        tu caso necesita a una persona, la conversación pasa a la asesora de nuestro equipo. No escribas en el chat contraseñas ni datos de tarjetas: nunca te los
+        tu caso necesita a una persona, el equipo la lee y te responde en el mismo chat. No escribas en el chat contraseñas ni datos de tarjetas: nunca te los
         vamos a pedir.
       </p>
     ),
@@ -98,11 +98,8 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
       <>
         <p>
           Puedes pedir en cualquier momento ver tus datos, corregirlos, borrarlos, llevártelos o que dejemos de usarlos, y darte de baja de los mensajes de
-          WhatsApp. Escríbenos por WhatsApp al{" "}
-          <a href={WHATSAPP_URL} target="_blank" rel="noopener noreferrer">
-            {WHATSAPP}
-          </a>{" "}
-          ({WORK_HOURS_TEXT}). Te respondemos en un máximo de 15 días.
+          WhatsApp. Pídelo en el chat de Michelle IA en <a href="/#michelle">provedix.com</a> (botón abajo a la derecha); el equipo lo atiende en horario de
+          trabajo ({WORK_HOURS_TEXT}). Te respondemos en un máximo de 15 días.
         </p>
       </>
     ),

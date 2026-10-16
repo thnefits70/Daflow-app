@@ -8246,14 +8246,15 @@ model ProvedixLead {
 // del usuario 2026-10-14): se guardan para ver en la cartera qué pregunta
 // cada dropshipper. leadId solo si estaba registrado.
 model ProvedixChat {
-  id        String                @id @default(cuid())
-  visitorId String
-  leadId    String?
-  lead      ProvedixLead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  createdAt DateTime              @default(now())
-  updatedAt DateTime              @updatedAt
-  messages  ProvedixChatMessage[]
-  cases     ProvedixCase[]
+  id          String                   @id @default(cuid())
+  visitorId   String
+  leadId      String?
+  lead        ProvedixLead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+  messages    ProvedixChatMessage[]
+  attachments ProvedixChatAttachment[]
+  cases       ProvedixCase[]
 
   @@index([visitorId])
   @@index([leadId])
@@ -8270,6 +8271,9 @@ model ProvedixCase {
   chatId       String
   chat         ProvedixChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   topic        String // garantia | pedido | pago | negociacion | otro
+  // Plataforma del dropshipper (2026-10-16): "dropi" lo atiende Michelle, la
+  // asesora; "rocket" lo atiende Yair. Ya no hay WhatsApp: responden en el chat.
+  platform     String       @default("dropi")
   summary      String
   guideNumber  String?
   status       String       @default("ABIERTO") // ABIERTO | RESUELTO
@@ -8336,6 +8340,23 @@ model ProvedixTeamPhoto {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+}
+
+// Fotos y videos que el dropshipper adjunta en el chat de Michelle IA
+// (2026-10-16: todo por el chat, ya no por WhatsApp; p. ej. evidencia de una
+// garantía). Viven en el bucket privado pvx-chat (carpeta chat). done = ya
+// terminó de subir y se puso en la conversación.
+model ProvedixChatAttachment {
+  id        String       @id @default(cuid())
+  chatId    String
+  chat      ProvedixChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  path      String
+  kind      String // "image" | "video"
+  bytes     Int
+  done      Boolean      @default(false)
+  createdAt DateTime     @default(now())
+
+  @@index([chatId, createdAt])
 }
 
 model ProvedixChatMessage {
