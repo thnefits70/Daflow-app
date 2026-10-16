@@ -77,6 +77,9 @@ export type NewIdEntry = {
   dropiComboId: string | null;
   name: string;
   code: string | null;
+  // Pedido de Robert 2026-10-16 (aprobado por Bryan): filtrar el historial
+  // por empresa (Importadora Damián / Provedix).
+  bodega: string | null;
   referencePhotos: string[];
   arrivalPhotos: string[];
   arrivedAt: string | null;
@@ -114,7 +117,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
       where: { status: { in: [...ARRIVED] }, catalogItem: NOT_SUPPLY },
       select: {
         catalogItemId: true,
-        catalogItem: { select: { id: true, name: true, photos: true, justCode: true } },
+        catalogItem: { select: { id: true, name: true, photos: true, justCode: true, bodega: true } },
         receipt: { select: { photoUrls: true, confirmedAt: true } },
         marketingFollowUp: { select: { designConfirmedAt: true, designConfirmedBy: { select: { name: true } } } },
       },
@@ -124,6 +127,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
       select: {
         id: true,
         productName: true,
+        bodega: true,
         referenceImageUrl: true,
         dropiProductId: true,
         publishedAt: true,
@@ -136,7 +140,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
       include: {
         brandedBy: { select: { name: true } },
         channelUploadedBy: { select: { name: true } },
-        dropiCombo: { select: { code: true, label: true, createdAt: true, components: { select: { catalogItem: { select: { photos: true } } } } } },
+        dropiCombo: { select: { code: true, label: true, bodega: true, createdAt: true, components: { select: { catalogItem: { select: { photos: true } } } } } },
       },
     }),
   ]);
@@ -166,6 +170,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
         dropiComboId: null,
         name: a.catalogItem.name,
         code: a.catalogItem.justCode ?? prop?.dropiProductId ?? null,
+        bodega: a.catalogItem.bodega ?? prop?.bodega ?? null,
         referencePhotos: a.catalogItem.photos,
         arrivalPhotos: [],
         arrivedAt: null,
@@ -209,6 +214,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
         e.proposalId = p.id;
         e.dropiPublishedAt = p.publishedAt.toISOString();
         e.code = e.code ?? p.dropiProductId;
+        e.bodega = e.bodega ?? p.bodega;
       }
     }
     if (!e) {
@@ -219,6 +225,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
         dropiComboId: null,
         name: p.productName,
         code: p.dropiProductId,
+        bodega: p.bodega,
         referencePhotos: [p.referenceImageUrl],
         arrivalPhotos: [],
         arrivedAt: null,
@@ -251,6 +258,7 @@ export async function getNewIdBrandingBoard(): Promise<{ pending: NewIdEntry[]; 
       dropiComboId: r.dropiComboId,
       name: `Combo · ${r.dropiCombo.label ?? r.dropiCombo.code}`,
       code: r.dropiCombo.code,
+      bodega: r.dropiCombo.bodega,
       referencePhotos: r.dropiCombo.components.flatMap((c) => c.catalogItem.photos.slice(0, 1)),
       arrivalPhotos: [],
       arrivedAt: at,

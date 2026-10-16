@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Clock, Search } from "lucide-react";
 import { TabGuide } from "@/components/shared/TabGuide";
 import { CatalogCode } from "@/components/shared/CatalogCode";
+import { BodegaBadge } from "@/components/shared/BodegaBadge";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { actorName } from "@/lib/actorName";
 import { uploadFile } from "@/lib/uploadFile";
@@ -22,6 +23,7 @@ type Entry = {
   dropiComboId: string | null;
   name: string;
   code: string | null;
+  bodega: string | null;
   referencePhotos: string[];
   arrivalPhotos: string[];
   arrivedAt: string | null;
@@ -36,6 +38,12 @@ type Entry = {
 };
 
 // El brandeo se hace fuera de DAFLOW; acá solo se marca cada paso.
+type Empresa = "MKT_DAMIAN" | "MKT_PROVEDIX";
+const EMPRESAS: { key: Empresa; label: string }[] = [
+  { key: "MKT_DAMIAN", label: "Importadora Damián" },
+  { key: "MKT_PROVEDIX", label: "Provedix" },
+];
+
 const BRAND_STEPS: { key: "dropiImages" | "dropiInfo" | "driveVideo"; label: string }[] = [
   { key: "dropiImages", label: "Imágenes brandeadas subidas a Dropi" },
   { key: "dropiInfo", label: "Información (descripción) subida a Dropi" },
@@ -172,6 +180,10 @@ export function NewIdBrandingPanel() {
   const [data, setData] = useState<Board | null>(null);
   const [view, setView] = useRememberedState<View>("branding-view", "pending");
   const [search, setSearch] = useRememberedState("branding-search", "");
+  // Pedido de Robert 2026-10-16 (aprobado por Bryan): ver por separado los IDs
+  // de cada empresa, como el filtro de marca de Stock Actual. Clic de nuevo
+  // sobre la misma empresa lo quita.
+  const [empresa, setEmpresa] = useRememberedState<Empresa | "">("branding-empresa", "");
   const [err, setErr] = useState("");
 
   function load() {
@@ -204,7 +216,9 @@ export function NewIdBrandingPanel() {
 
   const query = search.trim().toLowerCase();
   const list = data[view].filter(
-    (e) => !query || e.name.toLowerCase().includes(query) || e.code?.toLowerCase().includes(query)
+    (e) =>
+      (!empresa || e.bodega === empresa) &&
+      (!query || e.name.toLowerCase().includes(query) || e.code?.toLowerCase().includes(query))
   );
   const notOnChannel = data.done.filter((e) => !e.channel).length;
   const privateCount = data.done.filter((e) => e.private).length;
@@ -241,7 +255,19 @@ export function NewIdBrandingPanel() {
             </button>
           </>
         )}
-        <div className="relative ml-auto" style={{ width: 280, maxWidth: "100%" }}>
+        <div className="flex items-center gap-1.5 ml-auto">
+          {EMPRESAS.map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              className={pill(empresa === m.key)}
+              onClick={() => setEmpresa(empresa === m.key ? "" : m.key)}
+            >
+              {m.label} ({data[view].filter((e) => e.bodega === m.key).length})
+            </button>
+          ))}
+        </div>
+        <div className="relative" style={{ width: 280, maxWidth: "100%" }}>
           <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-steel" />
           <input
             type="text"
@@ -257,7 +283,7 @@ export function NewIdBrandingPanel() {
 
       {list.length === 0 && (
         <div className="border-[1.5px] border-dashed border-rule rounded-md p-8 text-center text-steel text-[13.5px]">
-          {query ? <>No se encontró ningún producto con &quot;{search.trim()}&quot;.</> : view === "pending" ? "No hay IDs nuevos por brandear." : view === "realPhotos" ? "No hay productos esperando imágenes reales." : "Todavía no hay productos listos para el canal."}
+          {query ? <>No se encontró ningún producto con &quot;{search.trim()}&quot;.</> : empresa ? <>No hay productos de {EMPRESAS.find((m) => m.key === empresa)?.label} en esta sección.</> : view === "pending" ? "No hay IDs nuevos por brandear." : view === "realPhotos" ? "No hay productos esperando imágenes reales." : "Todavía no hay productos listos para el canal."}
         </div>
       )}
 
@@ -282,6 +308,7 @@ export function NewIdBrandingPanel() {
             <div className="text-[14.5px] font-bold mb-0.5 flex items-center gap-1.5 flex-wrap">
               <CatalogCode code={e.code} size="text-[11px]" />
               <span>{e.name}</span>
+              <BodegaBadge bodega={e.bodega} />
               {!e.code && <span className="text-[10.5px] font-semibold text-gold border border-gold/40 rounded px-1.5 py-0.5">Sin ID todavía</span>}
             </div>
             <Origin e={e} />

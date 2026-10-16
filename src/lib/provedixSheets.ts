@@ -91,7 +91,10 @@ function readSheet(csv: string): SheetProduct[] {
       landing: driveUrl(row[col.landing]),
       description:
         (row[col.description] ?? "")
-          .replace(/^\s*Desc\w*:\s*/i, "")
+          // Las hojas traen "Descricpción:" (mal escrito, con tilde) al inicio;
+          // \w no reconoce la "ó", por eso se acepta cualquier letra hasta ":".
+          // En algunas celdas viene repetido dos veces.
+          .replace(/^(\s*Desc[^\s:]{0,12}:\s*)+/i, "")
           .replace(/\s+/g, " ")
           .trim() || null,
       top10,
