@@ -276,7 +276,7 @@ export async function recordCount(params: { countId: string; catalogItemId: stri
     update: { countedQty: params.quantity, variantCounts: variantJson, countedById: params.userId, countedAt: now, expectedQty, ...(isRecount ? { decision: null, decidedAt: null } : {}), ...(firstTime ? { durationSec } : {}) },
     create: { countId: params.countId, catalogItemId: params.catalogItemId, countedQty: params.quantity, variantCounts: variantJson, countedById: params.userId, expectedQty, durationSec },
   });
-  if (isRecount) await settleRecount(params.countId, params.catalogItemId, existing.prevDelta, assignment?.id ?? null);
+  if (isRecount) await settleRecount(params.countId, params.catalogItemId, existing.prevDelta, assignment?.id ?? null, { qty: existing.countedQty, at: existing.countedAt });
   return { ok: true };
 }
 
@@ -402,11 +402,22 @@ export async function applyCountedSoFar(countId: string, who: string): Promise<{
 
 // Al recontar: si coincide con el conteo anterior se aplica; si no, otra
 // persona vuelve a contar (sale de esta asignación y queda sin asignar).
-async function settleRecount(countId: string, catalogItemId: string, prevDelta: number | null, assignmentId: string | null): Promise<void> {
+// 2026-10-16 (chaleco blanco 200271): una compra que llegó antes de contar
+// pero entró al Kardex DESPUÉS (con la fecha de llegada) cambia lo esperado
+// y la diferencia de antes ya no sirve para comparar — pedía recuentos sin
+// fin. Si desde el conteo anterior no se movió nada del producto, basta con
+// que las dos personas hayan contado lo mismo.
+async function sameCountNoMovement(catalogItemId: string, prev: { qty: number; at: Date } | undefined, counted: number): Promise<boolean> {
+  if (!prev || !recountMatches(prev.qty, counted)) return false;
+  const moved = await prisma.stockKardexEntry.count({ where: { catalogItemId, type: { in: ["IN", "OUT"] }, occurredAt: { gt: prev.at } } });
+  return moved === 0;
+}
+
+async function settleRecount(countId: string, catalogItemId: string, prevDelta: number | null, assignmentId: string | null, prevCount?: { qty: number; at: Date }): Promise<void> {
   const l = await prisma.stockCountLine.findUnique({ where: { countId_catalogItemId: { countId, catalogItemId } } });
   if (!l || l.decision !== null) return;
   const delta = l.countedQty - l.expectedQty;
-  const ok = prevDelta === null ? !isBigDifference(l.countedQty, l.expectedQty) : recountMatches(prevDelta, delta);
+  const ok = (prevDelta === null ? !isBigDifference(l.countedQty, l.expectedQty) : recountMatches(prevDelta, delta)) || (await sameCountNoMovement(catalogItemId, prevCount, l.countedQty));
   const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: catalogItemId }, select: { name: true } });
   if (ok) {
     const r = await applyLine(l);
