@@ -15,7 +15,7 @@ type Row = {
   id: string;
   requestNumber: number | null;
   quantity: number;
-  catalogItem: { name: string; photos: string[]; justCode: string | null };
+  catalogItem: { name: string; photos: string[]; justCode: string | null; bodega: string | null };
   receipt: { photoUrls: string[]; receivedQuantity: number; confirmedAt: string } | null;
   marketingFollowUp: {
     designConfirmedAt: string | null;
@@ -26,7 +26,7 @@ type Row = {
   repeatArrival: { lastConfirmedAt: string; costIncreased: boolean; costBefore?: number; costNow?: number; dropiPriceNow?: number | null; stockInWarehouse?: number } | null;
 };
 
-type Confirmer = { id: string; name: string; role: "design" | "advisor" };
+type Confirmer = { id: string; name: string; role: "design" | "advisor"; bodega: string | null };
 
 function PhotoRow({ label, urls }: { label: string; urls: string[] }) {
   if (urls.length === 0) return null;
@@ -41,6 +41,22 @@ function PhotoRow({ label, urls }: { label: string; urls: string[] }) {
         ))}
       </div>
     </div>
+  );
+}
+
+// Pedido de la asesora B2B 2026-10-16: recuadro azul para Importadora Damián
+// y naranja (color de provedix.com) para Provedix, para distinguir de un
+// vistazo de qué bodega es cada llegada.
+function BodegaBadge({ bodega }: { bodega: string | null }) {
+  if (bodega !== "MKT_DAMIAN" && bodega !== "MKT_PROVEDIX") return null;
+  const color = bodega === "MKT_DAMIAN" ? "#2563EB" : "#F95B02";
+  return (
+    <span
+      className="ml-1 rounded border px-2 py-0.5 text-[10.5px] font-bold leading-none"
+      style={{ color, borderColor: `${color}80`, backgroundColor: `${color}1F` }}
+    >
+      {bodega === "MKT_DAMIAN" ? "Importadora Damián" : "Provedix"}
+    </span>
   );
 }
 
@@ -114,10 +130,12 @@ export function MarketingArrivalsPanel({ canConfirmAdvisor }: { canConfirmAdviso
   const selected = filter === "all" ? null : confirmers.find((c) => `${c.role}:${c.id}` === filter) ?? null;
   const pendingKey = (r: Row, role: "design" | "advisor") =>
     role === "design" ? r.marketingFollowUp?.designConfirmedAt : r.marketingFollowUp?.advisorConfirmedAt;
+  // Pedido de la asesora B2B 2026-10-16: cada asesor solo ve lo de su bodega.
+  const isPendingFor = (r: Row, c: Confirmer) => !pendingKey(r, c.role) && (!c.bodega || r.catalogItem.bodega === c.bodega);
 
   const visibleRows = selected
     ? rows
-        .filter((r) => !pendingKey(r, selected.role))
+        .filter((r) => isPendingFor(r, selected))
         .sort((a, b) => {
           const ta = a.receipt?.confirmedAt ? new Date(a.receipt.confirmedAt).getTime() : 0;
           const tb = b.receipt?.confirmedAt ? new Date(b.receipt.confirmedAt).getTime() : 0;
@@ -164,7 +182,7 @@ export function MarketingArrivalsPanel({ canConfirmAdvisor }: { canConfirmAdviso
           </button>
           {confirmers.map((c) => {
             const key = `${c.role}:${c.id}`;
-            const pendingCount = rows.filter((r) => !pendingKey(r, c.role)).length;
+            const pendingCount = rows.filter((r) => isPendingFor(r, c)).length;
             return (
               <button
                 key={key}
@@ -203,6 +221,7 @@ export function MarketingArrivalsPanel({ canConfirmAdvisor }: { canConfirmAdviso
             <div className="text-[14.5px] font-bold mb-0.5 flex items-center gap-1.5">
               <CatalogCode code={r.catalogItem.justCode} size="text-[11px]" />
               <span>{r.catalogItem.name}</span>
+              <BodegaBadge bodega={r.catalogItem.bodega} />
             </div>
             <div className="text-[12px] text-steel mb-3">
               <PurchaseCode requestNumber={r.requestNumber} className="mr-1.5" />

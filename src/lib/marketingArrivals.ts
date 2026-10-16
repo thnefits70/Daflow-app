@@ -10,7 +10,7 @@ import { resolveCostBasisForCatalogItems, computeMarketProductSalePrice, DROPI_M
 export const MKT_DEPT_CODE = "MKT";
 
 const arrivalInclude = {
-  catalogItem: { select: { name: true, photos: true, justCode: true } },
+  catalogItem: { select: { name: true, photos: true, justCode: true, bodega: true } },
   receipt: { select: { id: true, photoUrls: true, receivedQuantity: true, confirmedAt: true } },
   marketingFollowUp: {
     include: {
@@ -94,15 +94,20 @@ export async function getMarketingArrivals() {
 // Confirmado 2026-08-18: lista de quién puede confirmar cada rol, para que
 // el panel arme filtros por persona ("lo que Jariel todavía no confirma") y
 // pueda priorizar lo más antiguo primero sin tener que adivinar nombres.
-export async function getMarketingArrivalConfirmers(): Promise<{ id: string; name: string; role: "design" | "advisor" }[]> {
+// Pedido de la asesora B2B 2026-10-16: cada asesor ve solo los productos de
+// SU bodega — la asesora B2B (isB2BAdvisor, hoy Michelle) los de Provedix y
+// el otro asesor (hoy Yair) los de Importadora Damián.
+export type ArrivalConfirmer = { id: string; name: string; role: "design" | "advisor"; bodega: "MKT_DAMIAN" | "MKT_PROVEDIX" | null };
+
+export async function getMarketingArrivalConfirmers(): Promise<ArrivalConfirmer[]> {
   const users = await prisma.user.findMany({
     where: { isActive: true, OR: [{ canConfirmMarketingDesign: true }, { canConfirmMarketingAdvisor: true }] },
-    select: { id: true, name: true, canConfirmMarketingDesign: true, canConfirmMarketingAdvisor: true },
+    select: { id: true, name: true, canConfirmMarketingDesign: true, canConfirmMarketingAdvisor: true, isB2BAdvisor: true },
   });
-  const confirmers: { id: string; name: string; role: "design" | "advisor" }[] = [];
+  const confirmers: ArrivalConfirmer[] = [];
   for (const u of users) {
-    if (u.canConfirmMarketingDesign) confirmers.push({ id: u.id, name: u.name, role: "design" });
-    if (u.canConfirmMarketingAdvisor) confirmers.push({ id: u.id, name: u.name, role: "advisor" });
+    if (u.canConfirmMarketingDesign) confirmers.push({ id: u.id, name: u.name, role: "design", bodega: null });
+    if (u.canConfirmMarketingAdvisor) confirmers.push({ id: u.id, name: u.name, role: "advisor", bodega: u.isB2BAdvisor ? "MKT_PROVEDIX" : "MKT_DAMIAN" });
   }
   return confirmers;
 }
