@@ -7,6 +7,7 @@ import type { NickAccountView } from "@/lib/nick/accounts";
 import type { NickReadResult } from "@/lib/nick/dropiMcp";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { NickGuides } from "@/components/nick/NickGuides";
+import { NickRankings } from "@/components/nick/NickRankings";
 
 // NICK — Etapa 0 (2026-10-15): conectar las 3 cuentas de Dropi con el
 // conector oficial y ver las últimas guías tal como las ve Dropi. Solo
@@ -43,6 +44,8 @@ export function NickPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [reads, setReads] = useState<Record<string, NickReadResult>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // Etapa 4: pestaña Rankings, solo para el admin.
+  const [view, setView] = useState<"guias" | "rankings">("guias");
 
   const okName = notice?.ok ? accounts.find((a) => a.id === notice.ok)?.name : null;
 
@@ -83,7 +86,29 @@ export function NickPanel({
         <div className="mb-4 rounded-lg border border-red/40 bg-red/10 px-4 py-3 text-[12.5px]">{NOTICES[notice.error] ?? "Algo salió mal al conectar."}</div>
       )}
 
-      <NickGuides isAdmin={isAdmin} />
+      {isAdmin && (
+        <div className="flex gap-2 mb-4">
+          {([
+            ["guias", "Guías"],
+            ["rankings", "Rankings"],
+          ] as const).map(([k, l]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setView(k)}
+              className={`rounded-md border px-3.5 py-1.5 text-[13px] cursor-pointer ${view === k ? "border-blue bg-blue/10 font-semibold" : "border-rule bg-surface"}`}
+            >
+              {l}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isAdmin && view === "rankings" ? (
+        <NickRankings accounts={accounts.map((a) => ({ id: a.id, name: a.name }))} />
+      ) : (
+        <NickGuides isAdmin={isAdmin} />
+      )}
 
       <div className="bg-surface border border-rule rounded-lg p-4 mb-5 flex gap-3 text-[12px] text-steel">
         <ShieldCheck size={18} className="shrink-0 text-teal mt-0.5" />
