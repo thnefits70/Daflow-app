@@ -8690,3 +8690,17 @@ model RocketWarranty {
   @@index([guideNumber])
   @@index([originalGuide])
 }
+
+// NICK Etapa 3 (2026-10-16, aprobada por el usuario): marcador diario de 100
+// puntos para la tendencia. Una fila por día (hora Ecuador). Cada parte es
+// null mientras "se empieza a medir". Sin montos ni datos de clientes.
+model NickScoreDay {
+  day       String   @id // YYYY-MM-DD
+  score     Float?
+  delivered Float? // hasta 40 puntos
+  movement  Float? // hasta 20 puntos
+  novelty   Float? // hasta 20 puntos
+  recovery  Float? // hasta 20 puntos
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

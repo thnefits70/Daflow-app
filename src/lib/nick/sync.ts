@@ -241,6 +241,9 @@ export async function runNickSyncFromBell() {
     },
   });
   if (pending) await runNickSyncTick({ budgetMs: 40_000 });
+  // Etapa 3: marcador del día para la tendencia (como mucho cada 3 horas).
+  const { saveNickScoreDay } = await import("@/lib/nick/score");
+  await saveNickScoreDay().catch(() => null);
 }
 
 async function isDropiMarkedDown() {

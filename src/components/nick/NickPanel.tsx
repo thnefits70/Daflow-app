@@ -8,6 +8,7 @@ import type { NickReadResult } from "@/lib/nick/dropiMcp";
 import { formatDateTime } from "@/lib/formatDateTime";
 import { NickGuides } from "@/components/nick/NickGuides";
 import { NickRankings } from "@/components/nick/NickRankings";
+import { NickScore } from "@/components/nick/NickScore";
 
 // NICK — Etapa 0 (2026-10-15): conectar las 3 cuentas de Dropi con el
 // conector oficial y ver las últimas guías tal como las ve Dropi. Solo
@@ -45,7 +46,7 @@ export function NickPanel({
   const [reads, setReads] = useState<Record<string, NickReadResult>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   // Etapa 4: pestaña Rankings, solo para el admin.
-  const [view, setView] = useState<"guias" | "rankings">("guias");
+  const [view, setView] = useState<"guias" | "score" | "rankings">("guias");
 
   const okName = notice?.ok ? accounts.find((a) => a.id === notice.ok)?.name : null;
 
@@ -90,6 +91,7 @@ export function NickPanel({
         <div className="flex gap-2 mb-4">
           {([
             ["guias", "Guías"],
+            ["score", "Score"],
             ["rankings", "Rankings"],
           ] as const).map(([k, l]) => (
             <button
@@ -104,7 +106,9 @@ export function NickPanel({
         </div>
       )}
 
-      {isAdmin && view === "rankings" ? (
+      {isAdmin && view === "score" ? (
+        <NickScore />
+      ) : isAdmin && view === "rankings" ? (
         <NickRankings accounts={accounts.map((a) => ({ id: a.id, name: a.name }))} />
       ) : (
         <NickGuides isAdmin={isAdmin} />
