@@ -13,6 +13,8 @@ import type { MichelleWeekStat } from "@/lib/provedixCases";
 import type { RatingsOverview } from "@/lib/provedixRatings";
 import { ProvedixRatingsCard } from "@/components/provedix/ProvedixRatingsCard";
 import { TeamPhotosCard } from "@/components/provedix/TeamPhotosCard";
+import { MichelleFunnelCard } from "@/components/provedix/MichelleFunnelCard";
+import type { MichelleFunnel } from "@/lib/provedixMichelleFunnel";
 import type { getTeamPhotosAdmin } from "@/lib/provedixTeamPhotoSync";
 
 const STAGES: { title: string; detail: string; done: boolean }[] = [
@@ -45,6 +47,7 @@ export function ProvedixPanel({
   openCases,
   ratings,
   teamPhotos,
+  funnel,
 }: {
   overview: ProvedixOverview;
   snapshot: (ProvedixSnapshotData & { generatedAt: string }) | null;
@@ -55,6 +58,7 @@ export function ProvedixPanel({
   openCases: number;
   ratings: RatingsOverview;
   teamPhotos: Awaited<ReturnType<typeof getTeamPhotosAdmin>>;
+  funnel: { week: MichelleFunnel; month: MichelleFunnel };
 }) {
   const { progress, guides, byBrand, cities, gender, cod, stores, windowFrom } = overview;
   const readPct = pct(progress.read, progress.total);
@@ -95,6 +99,7 @@ export function ProvedixPanel({
       <ProvedixLeadsTable leads={leads} />
       <ProvedixRatingsCard data={ratings} />
       <TeamPhotosCard data={teamPhotos} />
+      <MichelleFunnelCard week={funnel.week} month={funnel.month} />
       <MichelleStatsCard stats={michelleStats} openCases={openCases} />
       {/* /area/casos-michelle es solo para el equipo: el admin responde los casos aquí. */}
       <div id="casos-michelle" className="bg-surface border border-rule rounded-lg p-5 mb-5 scroll-mt-4">

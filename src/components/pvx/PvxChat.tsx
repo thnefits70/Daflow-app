@@ -27,6 +27,18 @@ import { ADVISOR_RESPONSE_PROMISE, WORK_HOURS_TEXT } from "@/lib/pvxFaq";
 export const PVX_ASK_EVENT = "pvx-ask";
 const SEEN_KEY = "pvx-chat-seen";
 
+// Embudo de Michelle IA (2026-10-17): por dónde se abrió el chat y si alguien
+// se registró desde el chat. Ver src/lib/provedixMichelleFunnel.ts.
+type OpenSource = "enlace" | "boton" | "producto" | "pagina";
+function trackChat(type: "chat_open" | "chat_register", source?: OpenSource) {
+  fetch("/api/pvx/chat/event", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type, source }),
+    keepalive: true,
+  }).catch(() => null);
+}
+
 type Msg = { role: "user" | "assistant"; content: string };
 const CHAT_KEY = "pvx-chat-id";
 // Marca que pone la IA al final cuando ya no puede resolver el caso (ver provedixMichelle.ts).
@@ -219,12 +231,19 @@ export function PvxChat({
       window.location.hash !== "#michelle"
     )
       return;
-    const t = setTimeout(() => setOpen(true), 400);
+    const t = setTimeout(() => {
+      setOpen(true);
+      trackChat("chat_open", window.location.pathname.endsWith("/michelle") ? "enlace" : "pagina");
+    }, 400);
     return () => clearTimeout(t);
   }, []);
   // Enlaces "#michelle" dentro de la página (p. ej. "Pedir garantía a Michelle IA") abren el chat.
   useEffect(() => {
-    const onHash = () => window.location.hash === "#michelle" && setOpen(true);
+    const onHash = () => {
+      if (window.location.hash !== "#michelle") return;
+      setOpen(true);
+      trackChat("chat_open", "pagina");
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -250,6 +269,14 @@ export function PvxChat({
   const [uploading, setUploading] = useState<number | null>(null);
   // Respuesta nueva del equipo mientras el chat estaba cerrado (2026-10-16).
   const [unread, setUnread] = useState(false);
+  // Pidió registrarse desde el chat: al terminar el registro se anota (embudo).
+  const registerAskedRef = useRef(false);
+  useEffect(() => {
+    if (registered && registerAskedRef.current) {
+      registerAskedRef.current = false;
+      trackChat("chat_register");
+    }
+  }, [registered]);
 
   // Sin abrir el chat: ¿el equipo respondió algo nuevo? (una sola consulta al cargar la página)
   useEffect(() => {
@@ -271,8 +298,10 @@ export function PvxChat({
   // "Preguntar a Michelle IA" desde otra parte de la página: abre el chat con la pregunta lista.
   useEffect(() => {
     const onAsk = (e: Event) => {
-      const text = (e as CustomEvent<string>).detail;
+      const d = (e as CustomEvent<string | { text: string; source: OpenSource }>).detail;
+      const text = typeof d === "string" ? d : d?.text;
       setOpen(true);
+      trackChat("chat_open", typeof d === "object" && d?.source ? d.source : "pagina");
       setUnread(false);
       if (text) setInput(text);
       setTimeout(() => inputRef.current?.focus(), 300);
@@ -471,6 +500,7 @@ export function PvxChat({
         type="button"
         data-tour="chat"
         onClick={() => {
+          if (!open) trackChat("chat_open", "boton");
           setOpen(!open);
           setUnread(false);
         }}
@@ -747,7 +777,10 @@ export function PvxChat({
             {!registered ? (
               <button
                 type="button"
-                onClick={onRegister}
+                onClick={() => {
+                  registerAskedRef.current = true;
+                  onRegister();
+                }}
                 className="pvx-press mt-1 flex w-full items-center justify-center gap-2 rounded-full bg-[var(--pvx-orange)] px-4 py-3 text-[15px] font-bold text-white hover:bg-[var(--pvx-orange-press)] cursor-pointer"
               >
                 <IconLock className="w-4 h-4" /> Regístrate gratis para

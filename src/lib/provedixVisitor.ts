@@ -162,7 +162,8 @@ export async function productViewAllowed(
 export async function logProvedixEvent(data: {
   visitorId: string;
   leadId: string | null;
-  type: "visit" | "search" | "product" | "whatsapp";
+  // chat_* (2026-10-17): embudo de Michelle IA (provedixMichelleFunnel.ts).
+  type: "visit" | "search" | "product" | "whatsapp" | "chat_open" | "chat_register" | "chat_limit" | "chat_busy" | "chat_error";
   query?: string;
   productCode?: string;
 }) {

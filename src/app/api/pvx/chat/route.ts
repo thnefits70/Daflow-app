@@ -11,6 +11,7 @@ import {
   hitAllowed,
   tooMany,
   setVisitorCookies,
+  logProvedixEvent,
 } from "@/lib/provedixVisitor";
 import {
   MICHELLE_DAILY_LIMIT,
@@ -319,6 +320,8 @@ export async function POST(req: NextRequest) {
     );
   const used = await usedToday(visitorId, leadId);
   if (used >= MICHELLE_DAILY_LIMIT || !ipAllowed(req)) {
+    // Embudo de Michelle IA: freno "llegó al límite" (2026-10-17).
+    await logProvedixEvent({ visitorId, leadId, type: "chat_limit" });
     return NextResponse.json(
       {
         error:
@@ -332,6 +335,7 @@ export async function POST(req: NextRequest) {
     where: { role: "user", createdAt: { gte: new Date(Date.now() - DAY) }, NOT: { content: { startsWith: "[[ADJUNTO:" } } },
   });
   if (globalUsed >= GLOBAL_DAILY_LIMIT) {
+    await logProvedixEvent({ visitorId, leadId, type: "chat_busy" });
     return NextResponse.json(
       {
         error:
@@ -495,6 +499,7 @@ ${content}`;
           emit(`\n\n${BLOCKED_24H_TEXT}\n${BLOCK_MARK}`);
       } catch (err) {
         console.error("[michelle]", err);
+        await logProvedixEvent({ visitorId, leadId, type: "chat_error" }).catch(() => null);
         emit(
           "\n\nUy, se me cortó la conexión 🙏 Intenta de nuevo en un momento, porfa.",
         );
