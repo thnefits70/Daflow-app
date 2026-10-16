@@ -61,7 +61,8 @@ async function loadPool(): Promise<PoolPhoto[]> {
 // Grupo de fotos activas para la página (se refresca al cambiar algo).
 export const getTeamPhotoPool = unstable_cache(
   async (): Promise<TeamPhoto[]> => (await loadPool()).map(({ kind, driveId, src, title, alt }) => ({ kind, driveId, src, title, alt })),
-  ["provedix-team-photo-pool"],
+  // La lista del código va en la clave: si se edita, la página la toma al subir (sin esperar la hora).
+  ["provedix-team-photo-pool", TEAM_PHOTOS.map((p) => p.src).join(",")],
   { tags: [TEAM_PHOTOS_TAG], revalidate: 3600 },
 );
 
