@@ -80,10 +80,37 @@ export type GuideCheckResult =
       fecha_despacho: string | null;
       enlace_rastreo: string | null;
       cancelacion?: string;
+      dropi?: DropiStatusForMichelle;
     }
   | { resultado: "no_coincide"; intentos_restantes: number }
   | { resultado: "no_encontrada"; intentos_restantes: number }
   | { resultado: "bloquear" };
+
+// Estado de la guía en Dropi (2026-10-16): NICK lo trae de las 3 cuentas
+// cada 2 horas (NickGuideStatus). Solo se da DESPUÉS de verificar al dueño.
+export type DropiStatusForMichelle = {
+  estado: string;
+  grupo: string;
+  desde: string;
+  dias_en_este_estado: number;
+  actualizado: string;
+};
+const ecDate = (d: Date) =>
+  new Intl.DateTimeFormat("es-EC", { timeZone: "America/Guayaquil", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }).format(d);
+
+async function dropiStatusOf(guideNumber: string): Promise<DropiStatusForMichelle | null> {
+  const s = await prisma.nickGuideStatus
+    .findUnique({ where: { guideNumber }, select: { status: true, statusGroup: true, statusSince: true, lastSeenAt: true } })
+    .catch(() => null);
+  if (!s) return null;
+  return {
+    estado: s.status,
+    grupo: s.statusGroup,
+    desde: ecDate(s.statusSince),
+    dias_en_este_estado: Math.floor((Date.now() - s.statusSince.getTime()) / 86_400_000),
+    actualizado: ecDate(s.lastSeenAt),
+  };
+}
 
 export type VerifiedGuide = {
   guideNumber: string;
@@ -248,8 +275,10 @@ export async function checkGuideForDropshipper(
     select: { retainedAt: true, michelleStatus: true },
   });
   const lot = row.batch.lot;
+  const dropi = await dropiStatusOf(row.guideNumber);
   return {
     resultado: "verificada",
+    ...(dropi ? { dropi } : {}),
     estado:
       cancelled &&
       cancelled.michelleStatus !== "NO_RETENIDA" &&

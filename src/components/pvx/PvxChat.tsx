@@ -41,13 +41,14 @@ const BLOCK_MARK = "[[BLOQUEAR]]";
 const ACTION_RE = /\[\[(DROPI|CREATIVOS|LANDING|CALC|FICHA):(\d{3,8})\]\]/g;
 // [[IR:cortes]] → botón que cierra el chat y lleva a esa parte de la página (2026-10-15).
 const SECTION_RE =
-  /\[\[IR:(cortes|recursos|calculadora|productos|como-funciona)\]\]/g;
+  /\[\[IR:(cortes|recursos|calculadora|productos|como-funciona|preguntas)\]\]/g;
 const SECTION_LABEL: Record<string, string> = {
   cortes: "Ver los cortes de hoy",
   recursos: "Rastreo, creativos y garantías",
   calculadora: "Abrir la calculadora",
   productos: "Ver los productos",
   "como-funciona": "Cómo funciona Provedix",
+  preguntas: "Ver preguntas frecuentes",
 };
 const sectionsOf = (t: string) =>
   [...new Set([...t.matchAll(SECTION_RE)].map((m) => m[1]))].slice(0, 3);
