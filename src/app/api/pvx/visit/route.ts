@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { logProvedixEvent, readDisplayName, readVisitor, sameOriginRequest, setVisitorCookies } from "@/lib/provedixVisitor";
+import {
+  logProvedixEvent,
+  readDisplayName,
+  readVisitor,
+  sameOriginRequest,
+  setVisitorCookies,
+  hitAllowed,
+  tooMany,
+} from "@/lib/provedixVisitor";
 import { checkProvedixSpike } from "@/lib/provedixTraffic";
 
 // Cada vez que alguien abre provedix.com: se cuenta la visita y se dice si
@@ -9,21 +17,41 @@ import { checkProvedixSpike } from "@/lib/provedixTraffic";
 const NEW_VISIT_MS = 30 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
-  if (!sameOriginRequest(req)) return NextResponse.json({ error: "Solicitud no permitida." }, { status: 403 });
+  if (!sameOriginRequest(req))
+    return NextResponse.json(
+      { error: "Solicitud no permitida." },
+      { status: 403 },
+    );
+  // Límite contra bots (2026-10-16): 30 por minuto por conexión.
+  if (!hitAllowed(req, "visit", 30, 60_000)) return tooMany();
   const { visitorId, leadId } = await readVisitor(req);
   let name: string | null = null;
   if (leadId) {
-    const lead = await prisma.provedixLead.findUnique({ where: { id: leadId }, select: { lastSeenAt: true } });
+    const lead = await prisma.provedixLead.findUnique({
+      where: { id: leadId },
+      select: { lastSeenAt: true },
+    });
     if (lead) {
       name = readDisplayName(req);
       const now = new Date();
-      const isNewVisit = now.getTime() - lead.lastSeenAt.getTime() > NEW_VISIT_MS;
-      await prisma.provedixLead.update({ where: { id: leadId }, data: { lastSeenAt: now, ...(isNewVisit ? { visits: { increment: 1 } } : {}) } }).catch(() => null);
+      const isNewVisit =
+        now.getTime() - lead.lastSeenAt.getTime() > NEW_VISIT_MS;
+      await prisma.provedixLead
+        .update({
+          where: { id: leadId },
+          data: {
+            lastSeenAt: now,
+            ...(isNewVisit ? { visits: { increment: 1 } } : {}),
+          },
+        })
+        .catch(() => null);
     }
   }
   await logProvedixEvent({ visitorId, leadId, type: "visit" });
   // Etapa 4: aviso al admin si hay un pico de visitas (después de responder).
-  after(() => checkProvedixSpike().catch((e) => console.error("[provedix spike]", e)));
+  after(() =>
+    checkProvedixSpike().catch((e) => console.error("[provedix spike]", e)),
+  );
   const res = NextResponse.json({ registered: !!leadId, name });
   setVisitorCookies(res, visitorId);
   return res;

@@ -1,16 +1,31 @@
 import { randomUUID } from "crypto";
-import type { NextRequest, NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { COOKIE_MAX_AGE, LEAD_COOKIE, VISITOR_COOKIE, verifyLead } from "@/lib/provedixPublic";
+import {
+  COOKIE_MAX_AGE,
+  LEAD_COOKIE,
+  VISITOR_COOKIE,
+  verifyLead,
+} from "@/lib/provedixPublic";
 
 // Quién está mirando provedix.com: visitante anónimo (cookie pvx_vid) y, si
 // ya se registró, su ficha de la cartera (cookie firmada pvx_lead).
-export async function readVisitor(req: NextRequest): Promise<{ visitorId: string; isNew: boolean; leadId: string | null }> {
+export async function readVisitor(
+  req: NextRequest,
+): Promise<{ visitorId: string; isNew: boolean; leadId: string | null }> {
   const existing = req.cookies.get(VISITOR_COOKIE)?.value;
-  const visitorId = existing && /^[\w-]{8,64}$/.test(existing) ? existing : randomUUID();
+  const visitorId =
+    existing && /^[\w-]{8,64}$/.test(existing) ? existing : randomUUID();
   let leadId = verifyLead(req.cookies.get(LEAD_COOKIE)?.value);
   // Registro borrado: la cookie ya no vale.
-  if (leadId && !(await prisma.provedixLead.findUnique({ where: { id: leadId }, select: { id: true } }))) leadId = null;
+  if (
+    leadId &&
+    !(await prisma.provedixLead.findUnique({
+      where: { id: leadId },
+      select: { id: true },
+    }))
+  )
+    leadId = null;
   return { visitorId, isNew: visitorId !== existing, leadId };
 }
 
@@ -19,11 +34,27 @@ export async function readVisitor(req: NextRequest): Promise<{ visitorId: string
 // el número de otra persona no puede ver su nombre real.
 export const NAME_COOKIE = "pvx_nm";
 
-export function setVisitorCookies(res: NextResponse, visitorId: string, leadCookie?: string, displayName?: string) {
-  const base = { httpOnly: true, sameSite: "lax" as const, secure: process.env.NODE_ENV === "production", path: "/", maxAge: COOKIE_MAX_AGE };
+export function setVisitorCookies(
+  res: NextResponse,
+  visitorId: string,
+  leadCookie?: string,
+  displayName?: string,
+) {
+  const base = {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: COOKIE_MAX_AGE,
+  };
   res.cookies.set(VISITOR_COOKIE, visitorId, base);
   if (leadCookie) res.cookies.set(LEAD_COOKIE, leadCookie, base);
-  if (displayName) res.cookies.set(NAME_COOKIE, encodeURIComponent(displayName.slice(0, 40)), base);
+  if (displayName)
+    res.cookies.set(
+      NAME_COOKIE,
+      encodeURIComponent(displayName.slice(0, 40)),
+      base,
+    );
 }
 
 export function readDisplayName(req: NextRequest): string | null {
@@ -47,7 +78,9 @@ const MAX_TOTAL_MIN = 600;
 async function eventAllowed(visitorId: string): Promise<boolean> {
   const since = new Date(Date.now() - MINUTE);
   const [mine, total] = await Promise.all([
-    prisma.provedixEvent.count({ where: { visitorId, createdAt: { gte: since } } }),
+    prisma.provedixEvent.count({
+      where: { visitorId, createdAt: { gte: since } },
+    }),
     prisma.provedixEvent.count({ where: { createdAt: { gte: since } } }),
   ]);
   return mine < MAX_PER_VISITOR_MIN && total < MAX_TOTAL_MIN;
@@ -58,14 +91,17 @@ async function eventAllowed(visitorId: string): Promise<boolean> {
 const registerHits = new Map<string, number[]>();
 
 export async function registerAllowed(req: NextRequest): Promise<boolean> {
-  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "?";
+  const ip =
+    (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "?";
   const now = Date.now();
   const hits = (registerHits.get(ip) ?? []).filter((t) => now - t < MINUTE);
   hits.push(now);
   registerHits.set(ip, hits);
   if (registerHits.size > 5000) registerHits.clear();
   if (hits.length > 5) return false;
-  const recent = await prisma.provedixLead.count({ where: { createdAt: { gte: new Date(now - 10 * MINUTE) } } });
+  const recent = await prisma.provedixLead.count({
+    where: { createdAt: { gte: new Date(now - 10 * MINUTE) } },
+  });
   return recent < 60;
 }
 
@@ -77,8 +113,14 @@ export function sameOriginRequest(req: NextRequest): boolean {
   if (!from) return false;
   try {
     const host = new URL(from).host.toLowerCase();
-    const own = (req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "").toLowerCase();
-    return host === own || host === "provedix.com" || host === "www.provedix.com";
+    const own = (
+      req.headers.get("x-forwarded-host") ??
+      req.headers.get("host") ??
+      ""
+    ).toLowerCase();
+    return (
+      host === own || host === "provedix.com" || host === "www.provedix.com"
+    );
   } catch {
     return false;
   }
@@ -91,23 +133,80 @@ const productHits = new Map<string, number[]>();
 const PRODUCT_WINDOW = 10 * MINUTE;
 const MAX_PRODUCTS_WINDOW = 40;
 
-export async function productViewAllowed(req: NextRequest, leadId: string): Promise<boolean> {
-  const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "?";
+export async function productViewAllowed(
+  req: NextRequest,
+  leadId: string,
+): Promise<boolean> {
+  const ip =
+    (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "?";
   const now = Date.now();
   for (const key of [`l:${leadId}`, `i:${ip}`]) {
-    const hits = (productHits.get(key) ?? []).filter((t) => now - t < PRODUCT_WINDOW);
+    const hits = (productHits.get(key) ?? []).filter(
+      (t) => now - t < PRODUCT_WINDOW,
+    );
     hits.push(now);
     productHits.set(key, hits);
     if (hits.length > MAX_PRODUCTS_WINDOW) return false;
   }
   if (productHits.size > 5000) productHits.clear();
-  const lastHour = await prisma.provedixEvent.count({ where: { leadId, type: "product", createdAt: { gte: new Date(now - 60 * MINUTE) } } });
+  const lastHour = await prisma.provedixEvent.count({
+    where: {
+      leadId,
+      type: "product",
+      createdAt: { gte: new Date(now - 60 * MINUTE) },
+    },
+  });
   return lastHour < 300;
 }
 
-export async function logProvedixEvent(data: { visitorId: string; leadId: string | null; type: "visit" | "search" | "product" | "whatsapp"; query?: string; productCode?: string }) {
+export async function logProvedixEvent(data: {
+  visitorId: string;
+  leadId: string | null;
+  type: "visit" | "search" | "product" | "whatsapp";
+  query?: string;
+  productCode?: string;
+}) {
   if (!(await eventAllowed(data.visitorId).catch(() => false))) return;
   await prisma.provedixEvent
-    .create({ data: { visitorId: data.visitorId, leadId: data.leadId, type: data.type, query: data.query?.slice(0, 120) ?? null, productCode: data.productCode ?? null } })
+    .create({
+      data: {
+        visitorId: data.visitorId,
+        leadId: data.leadId,
+        type: data.type,
+        query: data.query?.slice(0, 120) ?? null,
+        productCode: data.productCode ?? null,
+      },
+    })
     .catch((e) => console.error("[provedix event]", e));
 }
+
+// Límite general por conexión para el resto de provedix.com (2026-10-16,
+// pedido del usuario: que un bot no pueda abusar de ninguna parte). Cuenta en
+// la memoria de cada servidor, igual que los límites de arriba.
+const genericHits = new Map<string, number[]>();
+
+export function hitAllowed(
+  req: NextRequest,
+  bucket: string,
+  max: number,
+  windowMs: number,
+): boolean {
+  const ip =
+    (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || "?";
+  const key = `${bucket}:${ip}`;
+  const now = Date.now();
+  const hits = (genericHits.get(key) ?? []).filter((t) => now - t < windowMs);
+  hits.push(now);
+  genericHits.set(key, hits);
+  if (genericHits.size > 10000) genericHits.clear();
+  return hits.length <= max;
+}
+
+export const tooMany = () =>
+  NextResponse.json(
+    {
+      error:
+        "Demasiadas solicitudes seguidas. Espera un momento e intenta de nuevo.",
+    },
+    { status: 429 },
+  );

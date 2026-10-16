@@ -7,6 +7,8 @@ import { logAiUsage } from "@/lib/aiUsage";
 import {
   readVisitor,
   sameOriginRequest,
+  hitAllowed,
+  tooMany,
   setVisitorCookies,
 } from "@/lib/provedixVisitor";
 import {
@@ -27,17 +29,29 @@ const HANDOFF_TOOL = {
   input_schema: {
     type: "object" as const,
     properties: {
-      tema: { type: "string", enum: ["garantia", "pedido", "pago", "negociacion", "otro"], description: "Tema del caso" },
+      tema: {
+        type: "string",
+        enum: ["garantia", "pedido", "pago", "negociacion", "otro"],
+        description: "Tema del caso",
+      },
       resumen: {
         type: "string",
-        description: "Resumen para la asesora: quién es y su tienda, qué pasó, número de guía y producto, si está dentro de 48 horas, qué ya le explicaste y qué necesita.",
+        description:
+          "Resumen para la asesora: quién es y su tienda, qué pasó, número de guía y producto, si está dentro de 48 horas, qué ya le explicaste y qué necesita.",
       },
-      guia: { type: "string", description: "Número de guía verificado, si lo hay" },
+      guia: {
+        type: "string",
+        description: "Número de guía verificado, si lo hay",
+      },
     },
     required: ["tema", "resumen"],
   },
 };
-const handoffInput = z.object({ tema: z.string().max(30), resumen: z.string().min(10).max(1500), guia: z.string().max(40).optional().nullable() });
+const handoffInput = z.object({
+  tema: z.string().max(30),
+  resumen: z.string().min(10).max(1500),
+  guia: z.string().max(40).optional().nullable(),
+});
 
 // Herramienta de Michelle para consultar UNA guía (2026-10-14): solo con los
 // 3 datos que tiene el dueño de la tienda (ver provedixGuideCheck.ts).
@@ -221,6 +235,8 @@ async function findChat(
 }
 
 export async function GET(req: NextRequest) {
+  // Límite contra bots (2026-10-16): 60 lecturas del chat por minuto por conexión.
+  if (!hitAllowed(req, "chatget", 60, 60_000)) return tooMany();
   const { visitorId, leadId: anyLead } = await readVisitor(req);
   const leadId = await completeLead(anyLead);
   const chatId = req.nextUrl.searchParams.get("chatId") ?? undefined;
@@ -414,8 +430,14 @@ export async function POST(req: NextRequest) {
               // Caso para Michelle (la asesora humana), con resumen (2026-10-15).
               const input = handoffInput.safeParse(use.input);
               out = input.success
-                ? { resultado: "caso_creado", codigo: await createCaseFromChat(chatId, input.data) }
-                : { resultado: "faltan_datos", detalle: "Escribe el tema y un resumen del caso." };
+                ? {
+                    resultado: "caso_creado",
+                    codigo: await createCaseFromChat(chatId, input.data),
+                  }
+                : {
+                    resultado: "faltan_datos",
+                    detalle: "Escribe el tema y un resumen del caso.",
+                  };
             } else if (use.name === "cancelar_guia") {
               const input = cancelInput.safeParse(use.input);
               out = input.success
