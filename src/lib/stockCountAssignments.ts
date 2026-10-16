@@ -33,15 +33,17 @@ export function countAreaLabel(area: string): string {
 const EC_OFFSET_MS = 5 * 60 * 60 * 1000;
 const DAY_NAMES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 // Cambiado por el usuario 2026-10-05: solo dos horarios, y el conteo SOLO se
-// habilita dentro de ellos (fuera no se puede empezar ni guardar).
+// EMPIEZA dentro de ellos. Daniel 2026-10-16: de martes a viernes de 8:30 a
+// 9:30 y de 4:30 a 6:00 pm (los lunes no se cuenta); quien ya empezó puede
+// seguir guardando después de la hora hasta que pulse "Finalizar".
 const WEEKDAY_BLOCKS: [number, number, string][] = [
-  [8 * 60 + 45, 9 * 60 + 45, "Mañana"],
+  [8 * 60 + 30, 9 * 60 + 30, "Mañana"],
   [16 * 60 + 30, 18 * 60, "Tarde"],
 ];
 // Sábado: de 11:00 a 12:30 (pedido de Daniel 2026-10-08; se sale a las 12:30).
 const SATURDAY_BLOCKS: [number, number, string][] = [[11 * 60, 12 * 60 + 30, "Mañana"]];
 
-export const COUNT_HOURS_TEXT = "de 8:45 a 9:45 y de 4:30 a 6:00 pm (sábado de 11:00 a 12:30)";
+export const COUNT_HOURS_TEXT = "de martes a viernes de 8:30 a 9:30 y de 4:30 a 6:00 pm, y el sábado de 11:00 a 12:30";
 
 export type CountWindow = { label: string; start: string; end: string };
 
@@ -55,7 +57,14 @@ function hhmm(minutes: number): string {
 
 function blocksFor(day: string): [number, number, string][] {
   if (!isWorkingDay(day)) return [];
-  return new Date(`${day}T12:00:00Z`).getUTCDay() === 6 ? SATURDAY_BLOCKS : WEEKDAY_BLOCKS;
+  const dow = new Date(`${day}T12:00:00Z`).getUTCDay();
+  if (dow === 1) return [];
+  return dow === 6 ? SATURDAY_BLOCKS : WEEKDAY_BLOCKS;
+}
+
+// ¿Ese día hay horario de conteo? (lunes, domingos y feriados no).
+export function hasCountWindows(day: string): boolean {
+  return blocksFor(day).length > 0;
 }
 
 // Los próximos bloques que todavía no terminan (para que Daniel elija).

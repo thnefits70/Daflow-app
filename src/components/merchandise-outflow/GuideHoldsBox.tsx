@@ -45,7 +45,7 @@ export function GuideHoldsBox({ lot, onChanged }: { lot: CompiledLot; onChanged:
     if (h) {
       return (
         <span className="ml-1 text-[10.5px]">
-          <span className="text-gold font-semibold">retenida{h.retainedByName ? ` (${h.retainedByName})` : ""}</span>
+          <span className="text-gold font-semibold">retenida{h.retainedByName ? ` (${h.retainedByName})` : ""} · sale sola el {h.outDay.split("-").reverse().slice(0, 2).join("/")}</span>
           {canAct && (
             <>
               <button type="button" disabled={busy === guide} className={`${btn} border-teal text-teal`} onClick={() => act("release", guide)}>Ya salió</button>
@@ -113,7 +113,7 @@ export function GuideHoldsBox({ lot, onChanged }: { lot: CompiledLot; onChanged:
         </div>
       )}
       <div className="text-[10.5px] text-steel mt-1">
-        Se retienen primero las guías de la transportadora que sale al último (Servientrega, luego Laar, Gintracom, Urbano y Veloces), así lo que se va antes sale completo. Dentro de cada transportadora se retienen las de las ciudades más cercanas a Guayaquil: las lejanas salen primero. Si una guía lleva 2 o más unidades de este producto, cuenta por esas unidades. Una guía retenida cuenta en Pedidos despachados el día en que se marca «Ya salió».
+        Se retienen primero las guías de la transportadora que sale al último (Servientrega, luego Laar, Gintracom, Urbano y Veloces), así lo que se va antes sale completo. Dentro de cada transportadora se retienen las de las ciudades más cercanas a Guayaquil: las lejanas salen primero. Si una guía lleva 2 o más unidades de este producto, cuenta por esas unidades. Una guía retenida cuenta en Pedidos despachados el día de trabajo siguiente; si salió otro día, pulsa «Ya salió» ese día.
       </div>
     </div>
   );

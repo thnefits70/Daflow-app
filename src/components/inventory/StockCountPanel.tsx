@@ -319,7 +319,8 @@ export function StockCountPanel() {
     if (p.adjusted && !isLead) return false;
     // Llegó por primera vez durante el conteo: no se cuenta (Daniel puede si quiere).
     if (p.newArrival && !isLead) return false;
-    if (!isLead && !board?.window.inWindow) return false;
+    // Quien ya empezó su turno sigue guardando hasta "Finalizar" (Daniel 2026-10-16).
+    if (!isLead && !board?.window.inWindow && !(mine?.startedAt && mineIds.has(p.id))) return false;
     if (recounting && mineIds.has(p.id)) return !!mine?.startedAt && p.recount;
     if (locked) return false;
     if (mine && mineIds.has(p.id)) return !!mine.startedAt;
@@ -557,7 +558,11 @@ function MyAssignment({ a, now, board, busy, onAction }: { a: AssignmentView; no
         {a.total} producto(s) · Meta: terminar antes de las <b>{hour(a.deadline)}</b>
         {a.estimateSec !== null && <> · Tiempo estimado: <b>{minutes(a.estimateSec)}</b></>}
       </div>
-      {w && !w.inWindow && <div className="text-[12.5px] text-gold font-semibold mt-1">El conteo está cerrado ahora.{w.nextStart ? ` Se habilita a las ${hour(w.nextStart)}` : ""}; lo que ya contaste no se pierde.</div>}
+      {w && !w.inWindow && (a.startedAt ? (
+        <div className="text-[12.5px] text-gold font-semibold mt-1">Ya pasó la hora, pero puedes terminar de registrar lo que contaste. Cuando acabes, pulsa «Finalizar».</div>
+      ) : (
+        <div className="text-[12.5px] text-gold font-semibold mt-1">El conteo está cerrado ahora.{w.nextStart ? ` Se habilita a las ${hour(w.nextStart)}` : ""}; lo que ya contaste no se pierde.</div>
+      ))}
       {a.shifts.length > 0 && (
         <div className="text-[12px] text-steel mt-1">
           {a.shifts.map((x, i) => (

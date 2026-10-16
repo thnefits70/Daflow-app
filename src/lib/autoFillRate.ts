@@ -105,12 +105,15 @@ const DISPATCH_DAY_OVERRIDES: Record<string, string> = {
 };
 
 // Guías retenidas por falta de stock (FulfillmentGuideHold, aprobado
-// 2026-10-16): cuentan el día en que salieron ("Ya salió"); mientras sigan
-// retenidas, día "" = todavía no sale (no cuenta en ningún día).
+// 2026-10-16): Daniel eligió el modo automático — cuentan el día de trabajo
+// siguiente a la retención; si alguien marca "Ya salió", ese día manda.
 export type GuideHoldDays = Map<string, string>;
+export function heldGuideDay(h: { retainedAt: Date; releasedAt: Date | null }): string {
+  return h.releasedAt ? ecuadorDay(h.releasedAt) : nextWorkingDay(ecuadorDay(h.retainedAt));
+}
 export async function guideHoldDays(): Promise<GuideHoldDays> {
-  const rows = await prisma.fulfillmentGuideHold.findMany({ select: { guideNumber: true, releasedAt: true } });
-  return new Map(rows.map((r) => [r.guideNumber.trim().toUpperCase(), r.releasedAt ? ecuadorDay(r.releasedAt) : ""]));
+  const rows = await prisma.fulfillmentGuideHold.findMany({ select: { guideNumber: true, retainedAt: true, releasedAt: true } });
+  return new Map(rows.map((r) => [r.guideNumber.trim().toUpperCase(), heldGuideDay(r)]));
 }
 
 // Día en que la guía realmente sale. Solo se mueve si el PDF se subió el

@@ -8,7 +8,7 @@ import { resolveCountsByAlias } from "@/lib/variantEdit";
 import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId } from "@/lib/guards";
 import { isBigDifference } from "@/lib/stockCountRules";
-import { COUNTABLE_ITEM, COUNT_HOURS_TEXT, MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, closeShift, openAssignmentFor, recentMovement, windowStatus } from "@/lib/stockCountAssignments";
+import { COUNTABLE_ITEM, COUNT_HOURS_TEXT, MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, closeShift, hasCountWindows, openAssignmentFor, recentMovement, windowStatus } from "@/lib/stockCountAssignments";
 import { isWorkingDay } from "@/lib/ecuadorHolidays";
 import { DAILY_AREA, type DailyReason, dailyProductIds, dailySelection, isDailyCount } from "@/lib/stockCountDaily";
 
@@ -50,7 +50,7 @@ export function parseVariantCounts(json: unknown): VariantCount[] | null {
 export async function dailyCountDay(today = ecuadorDay(new Date())): Promise<string | null> {
   const settings = await prisma.platformSettings.findUnique({ where: { id: "singleton" }, select: { fullStockCountCompletedAt: true } });
   if (!settings?.fullStockCountCompletedAt) return null;
-  if (today <= ecuadorDay(settings.fullStockCountCompletedAt) || !isWorkingDay(today)) return null;
+  if (today <= ecuadorDay(settings.fullStockCountCompletedAt) || !isWorkingDay(today) || !hasCountWindows(today)) return null;
   return today;
 }
 
@@ -90,7 +90,11 @@ async function products(area: string | null, ids?: string[]): Promise<CountableP
 // (se crea solo al abrirlo; los de días anteriores se cierran al crear el nuevo).
 export async function getActiveCount(userId: string | null) {
   const open = await prisma.stockCount.findFirst({ where: { kind: "FULL", status: { not: "APPROVED" } }, orderBy: { startedAt: "desc" } });
-  if (open) return open;
+  if (open?.status === "SUBMITTED") {
+    await closeIfSettled(open.id);
+    const still = await prisma.stockCount.findUnique({ where: { id: open.id } });
+    if (still && still.status !== "APPROVED") return still;
+  } else if (open) return open;
   const day = await dailyCountDay();
   // Domingo/feriado: sigue a la vista el último del día que quedó abierto (recuentos).
   if (!day) return prisma.stockCount.findFirst({ where: { kind: "WEEKLY_AREA", area: DAILY_AREA, status: { not: "APPROVED" } }, orderBy: { startedAt: "desc" } });
@@ -249,8 +253,11 @@ export async function recordCount(params: { countId: string; catalogItemId: stri
     if (!mine) return { ok: false, error: "Este producto no es de tu área asignada." };
   }
   if (assignment && mine && !assignment.startedAt) return { ok: false, error: "Primero pulsa «Empezar conteo»." };
-  // Fuera de los dos horarios solo Daniel puede corregir.
-  if (!params.isLead && !windowStatus().inWindow) return { ok: false, error: `El conteo se habilita ${COUNT_HOURS_TEXT}.` };
+  // Fuera de los horarios solo Daniel puede corregir — salvo quien ya empezó
+  // su turno: sigue registrando hasta que pulse "Finalizar" (Daniel
+  // 2026-10-16: que nada contado se quede sin registrar por la hora).
+  const shiftOpen = !!assignment && mine && !!assignment.startedAt;
+  if (!params.isLead && !shiftOpen && !windowStatus().inWindow) return { ok: false, error: `El conteo se habilita ${COUNT_HOURS_TEXT}.` };
 
   const now = new Date();
   // Tiempo de este producto: desde el anterior que contó esta persona.
@@ -551,6 +558,14 @@ export async function approveDifferences(params: { countId: string; approveLineI
 export async function closeIfSettled(countId: string, adminId: string | null = null): Promise<void> {
   const count = await prisma.stockCount.findUnique({ where: { id: countId }, select: { status: true } });
   if (count?.status !== "SUBMITTED") return;
+  // 2026-10-16 (rollo burbuja, taladro, zapatera): lo que estaba para recontar
+  // y Daniel ya corrigió con «Ajustar (conteo)» ya no lo recuenta nadie — si
+  // no, el conteo general nunca se cerraba.
+  const recounts = await prisma.stockCountLine.findMany({ where: { countId, decision: RECOUNT }, select: { id: true, catalogItemId: true } });
+  const superseded = await adjustedInCount(countId, recounts.map((r) => r.catalogItemId));
+  for (const r of recounts.filter((r) => superseded.has(r.catalogItemId))) {
+    await prisma.stockCountLine.updateMany({ where: { id: r.id, decision: RECOUNT }, data: { decision: "REJECTED", decidedAt: new Date() } });
+  }
   const lines = await prisma.stockCountLine.findMany({ where: { countId, OR: [{ decision: null }, { decision: RECOUNT }] }, select: { decision: true, countedQty: true, expectedQty: true } });
   if (lines.some((l) => l.decision === RECOUNT || l.countedQty !== l.expectedQty)) return;
   await finishCount(countId, adminId);
