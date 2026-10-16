@@ -23,6 +23,7 @@ import { useSharedHandoffLock, setPublishTabOpen, requestHandoffLockRefresh } fr
 import { DropiDownRequest } from "./DropiDownRequest";
 import { DropiOutageBar } from "./DropiOutageBar";
 import { useRememberedState } from "@/lib/rememberedState";
+import { BodegaBadge } from "@/components/shared/BodegaBadge";
 
 type SupplierOption = { id: string; name: string; paymentMode: "PREPAGO" | "CREDITO" };
 
@@ -257,11 +258,13 @@ export function MarketProductPanel({
               ))}
             </div>
           )}
+          {/* Pedido de la asesora B2B 2026-10-16: lo pendiente por crear ID va
+              arriba, para no tener que bajar hasta el final a ver si hay nuevos. */}
+          <PublishQueue />
+          <CatalogMissingIdQueue />
           <DropiPriceChangesQueue />
           <DropiPriceMissingQueue />
           <MakePublicQueue />
-          <CatalogMissingIdQueue />
-          <PublishQueue />
         </>
       )}
       {shownTab === "mispublicados" && <PublishedHistoryView />}
@@ -919,7 +922,7 @@ function CatalogMissingIdQueue() {
             <div className="flex items-start gap-3 mb-2">
               {p.photos[0] && <img loading="lazy" decoding="async" src={p.photos[0]} alt="" className="w-16 h-16 rounded object-cover shrink-0" />}
               <div className="flex-1">
-                <div className="font-semibold text-[13.5px]">{p.name}</div>
+                <div className="font-semibold text-[13.5px] flex flex-wrap items-center gap-1.5">{p.name}<BodegaBadge bodega={p.bodega} /></div>
                 <div className="text-[12px] text-steel">Bodega: {BODEGA_LABELS[p.bodega ?? ""] ?? "—"} · Creado por {p.createdBy?.name ?? "—"}</div>
               </div>
             </div>
@@ -993,17 +996,18 @@ function PublishQueue() {
   }
 
   if (rows === null) return <div className="text-steel text-[13px]">Cargando…</div>;
-  if (rows.length === 0) return <div className="text-steel text-[13.5px]">No hay productos aprobados esperando publicarse.</div>;
+  if (rows.length === 0) return <div className="text-steel text-[13.5px] mb-6">No hay productos aprobados esperando publicarse.</div>;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-3 mb-6">
+      <div className="text-[13.5px] font-bold">Productos por crear ID en Dropi ({rows.length})</div>
       {err && !errId && <div className="text-red text-[12.5px]">{err}</div>}
       {rows.map((p) => (
         <div key={p.id} className="bg-surface border border-rule rounded-md p-3.5">
           <div className="flex items-start gap-3 mb-2">
             <img loading="lazy" decoding="async" src={p.referenceImageUrl} alt="" className="w-16 h-16 rounded object-cover shrink-0" />
             <div className="flex-1">
-              <div className="font-semibold text-[13.5px]">{p.code} — {p.productName}</div>
+              <div className="font-semibold text-[13.5px] flex flex-wrap items-center gap-1.5">{p.code} — {p.productName}<BodegaBadge bodega={p.bodega} /></div>
               {/* Pedido del usuario 2026-09-30 (Bryan, casco SC-124). */}
               {p.purchasesInTransit && p.purchasesInTransit.length > 0 && (
                 <div className="inline-block my-1 rounded-full px-2 py-0.5 text-[10.5px] font-bold uppercase bg-red/10 border border-red/40 text-red">

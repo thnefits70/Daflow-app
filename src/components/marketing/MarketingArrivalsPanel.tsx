@@ -10,6 +10,7 @@ import { PurchaseCode } from "@/components/shared/PurchaseCode";
 import { CopyDropiPrice } from "@/components/shared/CopyDropiPrice";
 import { recommendedDropiStock, DROPI_STOCK_MIN_RECOMMENDED } from "@/lib/dropiStockRecommendation";
 import { useRememberedState } from "@/lib/rememberedState";
+import { BodegaBadge } from "@/components/shared/BodegaBadge";
 
 type Row = {
   id: string;
@@ -41,22 +42,6 @@ function PhotoRow({ label, urls }: { label: string; urls: string[] }) {
         ))}
       </div>
     </div>
-  );
-}
-
-// Pedido de la asesora B2B 2026-10-16: recuadro azul para Importadora Damián
-// y naranja (color de provedix.com) para Provedix, para distinguir de un
-// vistazo de qué bodega es cada llegada.
-function BodegaBadge({ bodega }: { bodega: string | null }) {
-  if (bodega !== "MKT_DAMIAN" && bodega !== "MKT_PROVEDIX") return null;
-  const color = bodega === "MKT_DAMIAN" ? "#2563EB" : "#F95B02";
-  return (
-    <span
-      className="ml-1 rounded border px-2 py-0.5 text-[10.5px] font-bold leading-none"
-      style={{ color, borderColor: `${color}80`, backgroundColor: `${color}1F` }}
-    >
-      {bodega === "MKT_DAMIAN" ? "Importadora Damián" : "Provedix"}
-    </span>
   );
 }
 
@@ -221,7 +206,7 @@ export function MarketingArrivalsPanel({ canConfirmAdvisor }: { canConfirmAdviso
             <div className="text-[14.5px] font-bold mb-0.5 flex items-center gap-1.5">
               <CatalogCode code={r.catalogItem.justCode} size="text-[11px]" />
               <span>{r.catalogItem.name}</span>
-              <BodegaBadge bodega={r.catalogItem.bodega} />
+              <BodegaBadge bodega={r.catalogItem.bodega} className="ml-1" />
             </div>
             <div className="text-[12px] text-steel mb-3">
               <PurchaseCode requestNumber={r.requestNumber} className="mr-1.5" />
