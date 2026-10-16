@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { canConfirmFulfillmentLot, dbUserId } from "@/lib/guards";
 import { confirmPicks } from "@/lib/fulfillmentPicking";
+import { notifyNewHotUrgents } from "@/lib/purchaseSuggestions";
 
 const schema = z.object({ catalogItemIds: z.array(z.string().min(1)).min(1).max(1000), onlyMatching: z.boolean() });
 
@@ -16,5 +17,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { id } = await params;
   const result = await confirmPicks({ lotId: id, catalogItemIds: parsed.data.catalogItemIds, onlyMatching: parsed.data.onlyMatching, userId: dbUserId(session.user.id) });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 });
+  // 2026-10-16: con el stock que bajó, aviso inmediato de compras calientes nuevas.
+  after(() => notifyNewHotUrgents().then(() => undefined).catch(() => undefined));
   return NextResponse.json({ ok: true, confirmed: result.confirmed });
 }

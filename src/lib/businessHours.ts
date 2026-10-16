@@ -133,3 +133,11 @@ export function lastOfficeDayAtOrBefore(real: Date): Date {
   }
   return cur;
 }
+
+// ¿Ahora es horario laboral? (2026-10-16, avisos inmediatos de compras calientes).
+export function isWithinBusinessHours(now = new Date()): boolean {
+  const shifted = new Date(now.getTime() - ECUADOR_OFFSET_MS);
+  const w = dayWindow(shifted);
+  const h = hourOfDay(shifted);
+  return !!w && h >= w.start && h < w.end;
+}

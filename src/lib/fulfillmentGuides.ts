@@ -13,6 +13,8 @@ import { linkProductsFromGuides } from "@/lib/storeTracking";
 import { lotNoVariantUnits, soldOutVariantsOf } from "@/lib/variantStock";
 import { fetchStoredFile } from "@/lib/privateFiles";
 import { guideBrandsByManifest } from "@/lib/manifestGuideBrand";
+import { kmFromGuayaquil } from "@/lib/ecuadorDistance";
+import type { GuideCandidate } from "@/lib/fulfillmentHolds";
 
 export const NO_BRAND = "SIN_MARCA";
 
@@ -849,7 +851,7 @@ export async function getCompiledLot(lotId: string) {
           requestedBy: { select: { name: true } },
           items: { include: { catalogItem: { select: { id: true, name: true, photos: true, justCode: true, warehouseArea: true, bodega: true } } } },
           variantNotes: { select: { catalogItemId: true, carrier: true, label: true, quantity: true } },
-          guides: { select: { guideNumber: true, carrier: true, codes: true, labelProducts: true, manifestFile: true } },
+          guides: { select: { guideNumber: true, carrier: true, codes: true, labelProducts: true, manifestFile: true, destCity: true, destProvince: true } },
           provisionalLines: true,
           discontinuedSales: { select: { code: true, name: true, quantity: true, guideNumbers: true, carriers: true } },
         },
@@ -911,6 +913,41 @@ export async function getCompiledLot(lotId: string) {
       if (!entry) line.variantMap.set(v.label, (entry = { quantity: 0, byCarrier: {} }));
       entry.quantity += v.quantity;
       entry.byCarrier[carrier] = (entry.byCarrier[carrier] ?? 0) + v.quantity;
+    }
+  }
+
+  // 2026-10-16 (aprobado por el usuario): guías exactas de cada producto, con
+  // su ciudad, para sugerir cuáles retener si falta stock (GuideHoldsBox).
+  // Sale de los productos que se leyeron de cada etiqueta; un combo reparte
+  // sus unidades según la receta (lo pedido de ese código en el PDF ÷ lo que
+  // dicen sus etiquetas).
+  const guideCandidates: Record<string, GuideCandidate[]> = {};
+  for (const b of lot.batches) {
+    const warrantyGuideSet = new Set(b.items.map((i) => i.warrantyGuide).filter((g): g is string => !!g));
+    const unitsByCode = new Map<string, Map<string, number>>();
+    for (const it of b.items) {
+      if (it.warrantyGuide) continue;
+      const m = unitsByCode.get(it.sourceCode) ?? new Map<string, number>();
+      m.set(it.catalogItemId, (m.get(it.catalogItemId) ?? 0) + it.quantity);
+      unitsByCode.set(it.sourceCode, m);
+    }
+    const labelUnits = new Map<string, number>();
+    const labelOf = (g: (typeof b.guides)[number]) => ((g.labelProducts ?? []) as { code: string | null; qty: number }[]).filter((x) => x.code && x.qty > 0);
+    for (const g of b.guides) {
+      if (warrantyGuideSet.has(g.guideNumber)) continue;
+      for (const x of labelOf(g)) labelUnits.set(x.code!, (labelUnits.get(x.code!) ?? 0) + x.qty);
+    }
+    for (const g of b.guides) {
+      if (warrantyGuideSet.has(g.guideNumber)) continue;
+      for (const x of labelOf(g)) {
+        const items = unitsByCode.get(x.code!);
+        const total = labelUnits.get(x.code!) ?? 0;
+        if (!items || total <= 0) continue;
+        for (const [catalogItemId, units] of items) {
+          const qty = Math.max(1, Math.round((x.qty * units) / total));
+          (guideCandidates[catalogItemId] ??= []).push({ guide: g.guideNumber, carrier: g.carrier, city: g.destCity ?? null, km: kmFromGuayaquil(g.destCity, g.destProvince), qty });
+        }
+      }
     }
   }
 
@@ -1166,6 +1203,7 @@ export async function getCompiledLot(lotId: string) {
     // luego de mayor a menor — así el equipo saca junto lo del mismo lugar.
     picking: picking.sort((a, b) => areaRank(a.area) - areaRank(b.area) || b.needed - a.needed),
     blocks,
+    guideCandidates,
     stockByItem: Object.fromEntries([...needed.keys()].map((id) => [id, stock.get(id)?.balance ?? 0])),
   };
 }

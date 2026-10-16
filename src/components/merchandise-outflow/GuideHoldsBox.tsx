@@ -25,11 +25,24 @@ export function GuideHoldsBox({ lot }: { lot: CompiledLot }) {
             </span>
           </div>
           <div className="pl-2 mt-0.5">
-            {h.byCarrier.map((c) => (
-              <div key={c.carrier}>
-                ↳ Retener <b>{c.qty}</b> guía(s) de <b>{carrierLabel(c.carrier)}</b> que llevan este producto
-              </div>
-            ))}
+            {h.byCarrier.map((c) =>
+              c.guides.length > 0 ? (
+                <div key={c.carrier}>
+                  ↳ Retener de <b>{carrierLabel(c.carrier)}</b>:{" "}
+                  {c.guides.map((g, i) => (
+                    <span key={g.guide}>
+                      {i > 0 && ", "}
+                      <b className="font-mono">{g.guide}</b>
+                      {g.city ? ` (${g.city}${g.qty > 1 ? `, ${g.qty} u.` : ""})` : g.qty > 1 ? ` (${g.qty} u.)` : ""}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <div key={c.carrier}>
+                  ↳ Retener <b>{c.qty}</b> guía(s) de <b>{carrierLabel(c.carrier)}</b> que llevan este producto
+                </div>
+              ),
+            )}
             {h.warrantyGuides.map((w) => (
               <div key={w.guide}>
                 ↳ Retener la garantía <b className="font-mono">{w.guide}</b> ({carrierLabel(w.carrier)}
@@ -41,7 +54,7 @@ export function GuideHoldsBox({ lot }: { lot: CompiledLot }) {
         </div>
       ))}
       <div className="text-[10.5px] text-steel mt-1">
-        Se retienen primero las guías de la transportadora que sale al último (Servientrega, luego Laar, Gintracom, Urbano y Veloces), así lo que se va antes sale completo. Si una guía lleva 2 o más unidades de este producto, cuenta por esas unidades.
+        Se retienen primero las guías de la transportadora que sale al último (Servientrega, luego Laar, Gintracom, Urbano y Veloces), así lo que se va antes sale completo. Dentro de cada transportadora se retienen las de las ciudades más cercanas a Guayaquil: las lejanas salen primero. Si una guía lleva 2 o más unidades de este producto, cuenta por esas unidades.
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { countedBalance, findUncountedItems, getCountGate, getCountMarks, isUnco
 import { formatPurchaseRequestCode, OPEN_PURCHASE_STATUSES, openPurchaseWhere } from "@/lib/purchases";
 import { getReadyToBuyPendingProposalIdsByBuyer } from "@/lib/marketProduct";
 import { notifyOwner } from "@/lib/notifications";
+import { isWithinBusinessHours } from "@/lib/businessHours";
 import { getVariantSales, MIX_MIN_UNITS } from "@/lib/variantSales";
 
 // Confirmado 2026-09-29, idea de Daniel aprobada por el usuario: "Qué
@@ -946,4 +947,42 @@ export async function undoDiscard(params: { discardId: string; userId: string | 
   });
   if (updated.count === 0) return { ok: false, error: "Este descarte ya no está vigente." };
   return { ok: true };
+}
+
+// ---- Aviso inmediato de compra caliente (aprobado 2026-10-16) --------------
+// Apenas un producto pasa a "se acaba en HOT_DAYS días o menos" y nadie lo
+// está comprando, le llega un aviso a quien hace las compras calientes, sin
+// esperar al resumen de las 8:00. Una vez por producto al día; fuera de
+// horario o en domingo/feriado no se avisa (queda para el resumen de la
+// mañana). Solo con el conteo general cerrado: antes el stock no era real.
+// Se llama cuando Daniel confirma lo que salió en un corte (baja el stock).
+export async function notifyNewHotUrgents(now = new Date()): Promise<number> {
+  if (!isWithinBusinessHours(now)) return 0;
+  const settings = await prisma.platformSettings.findUnique({ where: { id: "singleton" }, select: { fullStockCountCompletedAt: true } });
+  if (!settings?.fullStockCountCompletedAt) return 0;
+  const buyers = await getHotBuyerIds();
+  if (buyers.length === 0) return 0;
+  const s = await getPurchaseSuggestions();
+  const urgent = s.hot.filter((r) => r.status === "urgente");
+  if (urgent.length === 0) return 0;
+  const dayStart = new Date(`${new Date(now.getTime() - 5 * 3_600_000).toISOString().slice(0, 10)}T05:00:00Z`);
+  const urlOf = (id: string) => `${PURCHASE_SUGGESTIONS_HREF}&hot=${id}`;
+  const sent = await prisma.notification.findMany({
+    where: { ownerId: { in: buyers }, createdAt: { gte: dayStart }, url: { in: urgent.map((r) => urlOf(r.catalogItemId)) } },
+    select: { url: true },
+  });
+  const already = new Set(sent.map((n) => n.url));
+  // Lo que ya salió en el resumen de las 8:00 de hoy tampoco se repite.
+  const fresh = urgent.filter((r) => r.newToday && !already.has(urlOf(r.catalogItemId))).slice(0, 5);
+  for (const r of fresh) {
+    const qty = r.suggestedQty ? ` Sugerido: comprar ~${r.suggestedQty}.` : "";
+    for (const ownerId of buyers) {
+      await notifyOwner(ownerId, {
+        title: "🔥 Compra caliente nueva",
+        body: `${r.name}: quedan ${Math.max(0, r.stock)} u. y ${daysText(r.daysLeft)} con lo que se vende.${qty}`,
+        url: urlOf(r.catalogItemId),
+      }).catch(() => null);
+    }
+  }
+  return fresh.length;
 }

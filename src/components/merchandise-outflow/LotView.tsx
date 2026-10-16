@@ -11,6 +11,7 @@ import { BlockAssignee } from "./BlockAssignee";
 import { sourceLabel, type VariantNote } from "./fulfillmentRequestShared";
 import { PickingPanel } from "./PickingPanel";
 import { GuideHoldsBox } from "./GuideHoldsBox";
+import type { GuideCandidate } from "@/lib/fulfillmentHolds";
 import { LotComboRecipe, type LotComboRecipe as ComboRecipe } from "./LotComboRecipe";
 
 type ItemView = { catalogItemId: string; name: string; photos: string[]; justCode: string | null; area?: string | null };
@@ -82,6 +83,8 @@ export type CompiledLot = {
   countedAfter?: (ItemView & { countedAt: string })[];
   picking: LotPickLine[];
   blocks: LotBlock[];
+  // 2026-10-16: guías exactas de cada producto, para sugerir cuáles retener.
+  guideCandidates?: Record<string, GuideCandidate[]>;
   // team: solo le llega a Daniel (para asignar bloques).
   viewer?: { canPrint: boolean; canPick: boolean; pickScope?: "ALL" | "ASSIGNED" | null; canConfirm: boolean; canAssign?: boolean; userId: string | null; team?: { id: string; name: string }[] };
 };

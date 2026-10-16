@@ -24,6 +24,9 @@ type PickIn = {
 };
 type LineIn = { catalogItemId: string; byCarrier: Record<string, number> };
 type WarrantyIn = { catalogItemId: string; guide: string; carrier: string; quantity: number; mode: string };
+// 2026-10-16: guías exactas de un producto (de las etiquetas del PDF) con su
+// ciudad y los km aproximados a Guayaquil (ecuadorDistance.ts).
+export type GuideCandidate = { guide: string; carrier: string; city: string | null; km: number; qty: number };
 
 export type GuideHold = {
   catalogItemId: string;
@@ -36,12 +39,28 @@ export type GuideHold = {
   // equipo (todavía puede cambiar).
   final: boolean;
   warrantyGuides: { guide: string; carrier: string; qty: number }[];
-  byCarrier: { carrier: string; qty: number }[];
+  // guides: cuáles retener (las de ciudades más cercanas a Guayaquil primero);
+  // vacío si las etiquetas no se leyeron.
+  byCarrier: { carrier: string; qty: number; guides: { guide: string; city: string | null; qty: number }[] }[];
 };
 
 const lastFirst = (carriers: string[]) => sortCarriers(carriers).reverse();
 
-export function computeGuideHolds(lot: { picking: PickIn[]; lines: LineIn[]; warranty: WarrantyIn[] }): GuideHold[] {
+// Dentro de una transportadora se retienen primero las guías de las ciudades
+// MÁS CERCANAS a Guayaquil (corrección de Daniel 2026-10-15): las lejanas
+// tienen prioridad para salir ese día.
+function pickGuides(candidates: GuideCandidate[], carrier: string, qty: number): { guide: string; city: string | null; qty: number }[] {
+  const out: { guide: string; city: string | null; qty: number }[] = [];
+  let left = qty;
+  for (const c of candidates.filter((x) => x.carrier === carrier).sort((a, b) => a.km - b.km || a.qty - b.qty || a.guide.localeCompare(b.guide))) {
+    if (left <= 0) break;
+    out.push({ guide: c.guide, city: c.city, qty: c.qty });
+    left -= c.qty;
+  }
+  return out;
+}
+
+export function computeGuideHolds(lot: { picking: PickIn[]; lines: LineIn[]; warranty: WarrantyIn[]; guideCandidates?: Record<string, GuideCandidate[]> }): GuideHold[] {
   const holds: GuideHold[] = [];
   for (const p of lot.picking) {
     const final = p.confirmedAt != null;
@@ -70,7 +89,7 @@ export function computeGuideHolds(lot: { picking: PickIn[]; lines: LineIn[]; war
         if (left <= 0) break;
         const qty = Math.min(left, line.byCarrier[carrier] ?? 0);
         if (qty <= 0) continue;
-        byCarrier.push({ carrier, qty });
+        byCarrier.push({ carrier, qty, guides: pickGuides(lot.guideCandidates?.[p.catalogItemId] ?? [], carrier, qty) });
         left -= qty;
       }
     }
@@ -82,7 +101,7 @@ export function computeGuideHolds(lot: { picking: PickIn[]; lines: LineIn[]; war
 // "1 de Servientrega y 1 de Gintracom" / "la garantía 745… (Servientrega)".
 export function holdSummary(h: GuideHold, label: (carrier: string) => string): string {
   const parts = [
-    ...h.byCarrier.map((c) => `${c.qty} de ${label(c.carrier)}`),
+    ...h.byCarrier.map((c) => (c.guides.length ? `${c.guides.map((g) => `${g.guide}${g.city ? ` (${g.city})` : ""}`).join(", ")} de ${label(c.carrier)}` : `${c.qty} de ${label(c.carrier)}`)),
     ...h.warrantyGuides.map((w) => `la garantía ${w.guide} (${label(w.carrier)}${w.qty > 1 ? `, ${w.qty} u.` : ""})`),
   ];
   if (parts.length <= 1) return parts.join("");
