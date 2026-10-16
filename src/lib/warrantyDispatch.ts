@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { canActOnMerchandiseOutflow } from "@/lib/guards";
 import { notifyOwner, resolveNotifications } from "@/lib/notifications";
+import type { PendingItem } from "@/lib/pendingTasks";
 
 // Garantías por despachar (pedido de Daniel 2026-10-14, ajustado por el
 // usuario): Michelle y Yair anotan el número de guía de una garantía ya
@@ -138,4 +139,74 @@ export async function listWarrantyDispatchGuides() {
 export async function userName(id: string): Promise<string> {
   const u = await prisma.user.findUnique({ where: { id }, select: { name: true } });
   return u?.name ?? "—";
+}
+
+// Pendientes en Inicio (pedido de Daniel 2026-10-16): apenas Michelle o Yair
+// anotan una garantía, Daniel y Allan la ven en "Pendientes" (no solo cuando
+// Joao la marca) — así saben que tienen que subir su corte. Joao ve las que
+// están sin tomar. Desaparecen solas al avanzar.
+export async function getWarrantyDispatchPendingItems(userId: string): Promise<PendingItem[]> {
+  const me = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { username: true, isActive: true, isLeader: true, leadsDept: { select: { code: true } } },
+  });
+  if (!me?.isActive) return [];
+  const name = me.username ?? "";
+  const isHandler = HANDLER_USERNAMES.has(name);
+  const isVerifier = VERIFIER_USERNAMES.has(name) || (me.isLeader && me.leadsDept?.code === "INV");
+  if (!isHandler && !isVerifier) return [];
+
+  const open = await prisma.warrantyDispatchGuide.findMany({
+    where: { verifiedAt: null },
+    select: { guideNumber: true, createdAt: true, handledAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (open.length === 0) return [];
+  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const metaOf = (rows: { guideNumber: string }[], tail: string) =>
+    `${rows.length === 1 ? `Guía ${rows[0].guideNumber}` : `${rows.length} garantías`} · ${tail}`;
+  const untaken = open.filter((g) => !g.handledAt);
+  const out: PendingItem[] = [];
+
+  if (isHandler && untaken.length) {
+    out.push({
+      type: "garantias_despachar_tomar",
+      icon: "🛡️",
+      label: "Garantías por despachar — sácalas y márcalas con el visto",
+      meta: metaOf(untaken, "sin tomar"),
+      overdue: untaken.some((g) => g.createdAt.getTime() < dayAgo),
+      href: WARRANTY_DISPATCH_URL,
+    });
+  }
+
+  if (isVerifier) {
+    if (untaken.length) {
+      const cut = await prisma.fulfillmentRequestGuide.findMany({
+        where: { guideNumber: { in: untaken.map((g) => g.guideNumber), mode: "insensitive" } },
+        select: { guideNumber: true },
+      });
+      const hasCut = new Set(cut.map((c) => c.guideNumber.toUpperCase()));
+      const waitingCut = untaken.filter((g) => !hasCut.has(g.guideNumber.toUpperCase()));
+      if (waitingCut.length)
+        out.push({
+          type: "garantias_despachar_corte",
+          icon: "🛡️",
+          label: "Garantías anotadas — falta subir su corte en Solicitud",
+          meta: metaOf(waitingCut, "revisa la lista de Garantías"),
+          overdue: waitingCut.some((g) => g.createdAt.getTime() < dayAgo),
+          href: WARRANTY_DISPATCH_URL,
+        });
+    }
+    const toReview = open.filter((g) => g.handledAt);
+    if (toReview.length)
+      out.push({
+        type: "garantias_despachar_revisar",
+        icon: "🛡️",
+        label: "Garantías por revisar — Joao ya las tomó",
+        meta: metaOf(toReview, "pulsa Correcto"),
+        overdue: toReview.some((g) => g.handledAt!.getTime() < dayAgo),
+        href: WARRANTY_DISPATCH_URL,
+      });
+  }
+  return out;
 }

@@ -44,8 +44,8 @@ import { getMichelleCancelPendingItems } from "@/lib/michelleCancellations";
 import { getCasesPendingItem } from "@/lib/provedixCases";
 import { getArrangementAdminPendingItems, getArrangementPendingItems } from "@/lib/warrantyArrangements";
 import { getRocketWarrantyPendingItems } from "@/lib/rocketWarranty";
+import { getWarrantyDispatchPendingItems } from "@/lib/warrantyDispatch";
 import { getDropiOutagePendingItem, getIdDeadlinePendingItem, getPendingIdExtensions, getReleaseDeadlineItems, timeLeftText } from "@/lib/handoffLocks";
-
 import { formatPurchaseRequestCode } from "@/lib/purchaseCode";
 
 // Pedido de Daniel 2026-10-14: el código SC-XXX de cada compra se ve en todo
@@ -58,6 +58,7 @@ function scList(nums: (number | null | undefined)[]): string {
 function withSc(code: string | null, name: string): string {
   return code ? `${code} ${name}` : name;
 }
+
 // ---------------- Date helpers ----------------
 // Deadline rule confirmed by the user 2026-07-20: work week is Mon-Sat, and
 // the deadline to have a week's data in is the following Monday — since ISO
@@ -533,6 +534,9 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   ventas_externas_agrupar: "Ventas Externas — asignar quién agrupa",
   ventas_externas_embalar: "Ventas Externas — asignar quién embala y entrega",
   garantia_local_recogida: "Garantía local — confirmar lo que trajo el motorizado",
+  garantias_despachar_tomar: "Garantías por despachar — sin tomar",
+  garantias_despachar_corte: "Garantías anotadas — falta subir su corte",
+  garantias_despachar_revisar: "Garantías por despachar — por revisar",
   garantia_local_resultado: "Tus garantías locales — confirmar si se entregaron",
   manifiestos_tras_feriado: "Manifiestos pendientes después de domingo o feriado",
   catalogo_posibles_duplicados: "Posibles productos duplicados por revisar",
@@ -1701,9 +1705,9 @@ async function getPurchaseRequesterPendingItems(userId: string, href: string): P
     where: { requestedById: userId },
     select: {
       groupId: true,
+      requestNumber: true,
       status: true,
       shippingCarrierPending: true,
-      requestNumber: true,
       bankAccountChangeRequestedAt: true,
       requestedAt: true,
       rejectionClosedAt: true,
@@ -4428,6 +4432,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     teamItems.unshift(...(await getSuddenDemandPendingItems(actor.userId)));
     // Guías canceladas por el chat de Michelle (2026-10-15): Joao las retiene.
     teamItems.unshift(...(await getMichelleCancelPendingItems(actor.userId).catch(() => [])));
+    // Garantías por despachar (pedido de Daniel 2026-10-16): Joao y Allan.
+    teamItems.unshift(...(await getWarrantyDispatchPendingItems(actor.userId).catch(() => [])));
     // Casos que Michelle IA no pudo resolver (2026-10-15): Michelle, la asesora humana.
     teamItems.unshift(...(await getCasesPendingItem(actor.userId).then((i) => (i ? [i] : [])).catch(() => [])));
     // Arreglos de garantía (2026-10-15): Bryan aprueba, Daniel anota la guía.
@@ -4691,6 +4697,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
 
   // Guías canceladas por el chat de Michelle (2026-10-15): Daniel decide las de fuera de horario.
   items.unshift(...(await getMichelleCancelPendingItems(actor.userId).catch(() => [])));
+  // Garantías por despachar (pedido de Daniel 2026-10-16): apenas se anotan.
+  items.unshift(...(await getWarrantyDispatchPendingItems(actor.userId).catch(() => [])));
   items.unshift(...(await getCasesPendingItem(actor.userId).then((i) => (i ? [i] : [])).catch(() => [])));
   if (items.length === 0) return null;
   return {
@@ -4778,7 +4786,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "variantes_guias_unir", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "conteo_inventario", "stock_negativo", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "arreglo_generar_guia");
+      types.push("compras_recepcion", "compras_cambios_verificar", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "variantes_guias_unir", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "conteo_inventario", "stock_negativo", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "arreglo_generar_guia", "garantias_despachar_corte", "garantias_despachar_revisar");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —
