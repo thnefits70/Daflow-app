@@ -2,6 +2,10 @@ import { NextResponse, after } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { sendDuePublishNotices } from "@/lib/publishNotices";
+import { runNickSyncFromBell } from "@/lib/nick/sync";
+
+// La actualización de NICK corre después de responder y puede tardar ~40 s.
+export const maxDuration = 60;
 
 // Confirmado 2026-08-18: campanita de notificaciones — cada quien ve solo
 // las suyas (ownerId = su propio id, o "admin"). Más reciente primero.
@@ -14,6 +18,9 @@ export async function GET() {
   // revisan (como mucho una vez por minuto) con la campanita de quien tenga
   // DAFLOW abierto. Ver publishNotices.ts.
   after(() => sendDuePublishNotices().catch(() => null));
+  // NICK etapa 1: estados de guías en Dropi cada 2 h en horario de trabajo
+  // (el plan de Vercel no permite tareas más seguidas que diarias).
+  after(() => runNickSyncFromBell().catch(() => null));
   const notifications = await prisma.notification.findMany({
     where: { ownerId },
     orderBy: { createdAt: "desc" },

@@ -8,7 +8,7 @@ const PROTOCOL_VERSION = "2025-06-18";
 type JsonRpcResponse = { id?: number; result?: unknown; error?: { code: number; message: string } };
 type McpTool = { name: string; description?: string; inputSchema?: { properties?: Record<string, unknown>; required?: string[] } };
 
-class McpSession {
+export class McpSession {
   private nextId = 1;
   private sessionId: string | null = null;
   constructor(private accountId: string, private token: string) {}
@@ -225,7 +225,7 @@ function keysSeen(text: string): string[] {
   return [...out].filter((k) => !MONEY_KEY.test(k)).slice(0, 150);
 }
 
-function toolText(r:{ content?: { type: string; text?: string }[] }) {
+export function toolText(r:{ content?: { type: string; text?: string }[] }) {
   return (r.content ?? []).map((c) => c.text ?? "").join("\n");
 }
 

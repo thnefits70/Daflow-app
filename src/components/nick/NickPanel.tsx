@@ -6,6 +6,7 @@ import { Link2, RefreshCw, Unplug, ShieldCheck } from "lucide-react";
 import type { NickAccountView } from "@/lib/nick/accounts";
 import type { NickReadResult } from "@/lib/nick/dropiMcp";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { NickGuides } from "@/components/nick/NickGuides";
 
 // NICK — Etapa 0 (2026-10-15): conectar las 3 cuentas de Dropi con el
 // conector oficial y ver las últimas guías tal como las ve Dropi. Solo
@@ -81,6 +82,8 @@ export function NickPanel({
       {notice?.error && (
         <div className="mb-4 rounded-lg border border-red/40 bg-red/10 px-4 py-3 text-[12.5px]">{NOTICES[notice.error] ?? "Algo salió mal al conectar."}</div>
       )}
+
+      <NickGuides />
 
       <div className="bg-surface border border-rule rounded-lg p-4 mb-5 flex gap-3 text-[12px] text-steel">
         <ShieldCheck size={18} className="shrink-0 text-teal mt-0.5" />

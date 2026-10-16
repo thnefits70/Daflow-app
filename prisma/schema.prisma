@@ -8566,8 +8566,54 @@ model NickDropiAccount {
   // Último error al leer o renovar (ej. "Dropi pidió volver a conectar").
   lastError       String?
   needsReconnect  Boolean   @default(false)
+  // Etapa 1 (2026-10-16): la actualización de estados va por partes (cada
+  // parte cabe en una llamada del servidor). syncDay = día de creación de
+  // órdenes que se está leyendo (null = no hay vuelta en curso), syncStart =
+  // página dentro de ese día, lastSyncAt = última vuelta completa,
+  // syncLockUntil = evita que dos personas la corran a la vez.
+  syncDay         String?
+  syncStart       Int       @default(0)
+  lastSyncAt      DateTime?
+  syncLockUntil   DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+}
+
+// NICK Etapa 1 (2026-10-16): estado en Dropi de cada guía, una fila por
+// número de guía (se une con FulfillmentRequestGuide.guideNumber, sin llave
+// para no tocar la tabla de los cortes). Sin montos ni datos del cliente.
+model NickGuideStatus {
+  guideNumber    String    @id
+  accountId      String
+  dropiOrderId   String
+  // Estado tal como lo dice Dropi (105 posibles) y su grupo en NICK:
+  // PREPARANDO | EN_CAMINO | NOVEDAD | ENTREGADA | DEVOLUCION | CANCELADA
+  status         String
+  statusGroup    String
+  carrier        String?
+  city           String?
+  // "SIN RECAUDO" sirve para reconocer garantías.
+  rateType       String?
+  orderCreatedAt DateTime?
+  // Desde cuándo NICK la ve en este estado (para "días sin movimiento").
+  statusSince    DateTime  @default(now())
+  firstSeenAt    DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
+
+  @@index([statusGroup])
+  @@index([accountId])
+  @@index([lastSeenAt])
+}
+
+// Historial de cambios de estado de cada guía en Dropi.
+model NickGuideStatusChange {
+  id          String   @id @default(cuid())
+  guideNumber String
+  fromStatus  String?
+  toStatus    String
+  at          DateTime @default(now())
+
+  @@index([guideNumber, at])
 }
 
 // Registro de DAFLOW como programa ante Dropi (uno por dirección de regreso:
