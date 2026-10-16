@@ -33,7 +33,7 @@ function GuideTable({ rows, showPaid = false, showEst = false }: { rows: Payment
               <th className="py-2 pr-3">Ciudad</th>
               {showPaid && <th className="py-2 pr-3 text-right">Pagado</th>}
               {showPaid && <th className="py-2 pr-3 text-right">Pagos</th>}
-              {showEst && <th className="py-2 pr-3 text-right">Debería pagar (aprox.)</th>}
+              {showEst && <th className="py-2 pr-3 text-right" title="Precio Dropi del producto; si la guía no tiene corte guardado, lo que Dropi pagó en promedio por guía ese mes">Debería pagar (aprox.)</th>}
             </tr>
           </thead>
           <tbody>

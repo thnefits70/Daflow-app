@@ -103,7 +103,11 @@ export async function getNickPayments({ account = null as string | null, month =
   const unpaidRaw = notPaid.filter((g) => g.orderCreatedAt && g.orderCreatedAt.getTime() <= coveredUntil);
   const waiting = notPaid.length - unpaidRaw.length;
   const { byGuide } = await productValues(unpaidRaw.map((g) => g.guideNumber));
-  const unpaid = unpaidRaw.map((g) => view(g, byGuide.get(g.guideNumber)?.price ?? null));
+  // Sin corte guardado (ej. órdenes de agosto) no hay productos ni precio: se
+  // usa lo que Dropi pagó en promedio por guía ese mes en esta cuenta.
+  const paidGuides = delivered.filter((g) => payBy.has(g.guideNumber));
+  const avgPaid = paidGuides.length ? paidGuides.reduce((a, g) => a + (payBy.get(g.guideNumber)?.sum ?? 0), 0) / paidGuides.length : null;
+  const unpaid = unpaidRaw.map((g) => view(g, byGuide.get(g.guideNumber)?.price ?? (avgPaid == null ? null : r2(avgPaid))));
   const paidTwice = guides.filter((g) => (payBy.get(g.guideNumber)?.times.size ?? 0) > 1).map((g) => view(g));
   const paidReturned = guides.filter((g) => payBy.has(g.guideNumber) && (g.statusGroup === "DEVOLUCION" || g.statusGroup === "CANCELADA")).map((g) => view(g));
 
