@@ -26,7 +26,8 @@ const tidy = (t: string) =>
     .replace("[[BLOQUEAR]]", "→ cerró el chat")
     .replace("[[SOSPECHA]]", "→ ⚠️ le pareció raro")
     .replace(/\[\[FOTO:\w+\]\]/g, "[📸 foto de la guía retenida]")
-    .replace(/\[\[(DROPI|CREATIVOS|LANDING):(\d+)\]\]/g, "[botón $1 · $2]");
+    .replace(/\[\[(DROPI|CREATIVOS|LANDING|CALC|FICHA):(\d+)\]\]/g, "[botón $1 · $2]")
+    .replace(/\[\[IR:([a-z-]+)\]\]/g, "[botón ir a $1]");
 
 const SYSTEM_ICON: Record<string, string> = {
   blocked: "🔒",

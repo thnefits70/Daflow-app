@@ -25,7 +25,10 @@ import {
 import { PvxDemo, pickDemoCards } from "@/components/pvx/PvxDemo";
 import { PvxTour } from "@/components/pvx/PvxTour";
 import { PvxChat } from "@/components/pvx/PvxChat";
-import { PvxCalculator } from "@/components/pvx/PvxCalculator";
+import {
+  PvxCalculator,
+  PVX_PRODUCT_EVENT,
+} from "@/components/pvx/PvxCalculator";
 import {
   IconFacebook,
   IconInstagram,
@@ -1214,6 +1217,20 @@ export function PvxCatalog({
     if (registered) loadDetail(code);
     else setOpen({ code, mode: "register" });
   }
+
+  // Michelle IA abre la ficha de un producto desde el chat (botón "Ver ficha", 2026-10-15).
+  const openCardRef = useRef(openCard);
+  useEffect(() => {
+    openCardRef.current = openCard;
+  });
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const code = (e as CustomEvent<string>).detail;
+      if (code) openCardRef.current(code);
+    };
+    window.addEventListener(PVX_PRODUCT_EVENT, onOpen);
+    return () => window.removeEventListener(PVX_PRODUCT_EVENT, onOpen);
+  }, []);
 
   useEffect(() => {
     document.body.style.overflow = open ? "hidden" : "";

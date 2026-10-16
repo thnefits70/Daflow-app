@@ -26,6 +26,8 @@ import { PvxCalcDemo } from "@/components/pvx/PvxCalcDemo";
 // guardados viven en este navegador.
 
 export const PVX_CALC_EVENT = "pvx-calc";
+// Abrir la ficha de un producto desde el chat de Michelle IA (2026-10-15).
+export const PVX_PRODUCT_EVENT = "pvx-open-product";
 const SAVED_KEY = "pvx-calc-saved";
 const MAX_LINES = 5;
 

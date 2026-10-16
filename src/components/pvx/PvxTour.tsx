@@ -17,19 +17,84 @@ const SEEN_KEY = "pvx-tour-seen";
 type Step = { id: string; since: number; title: string; text: string };
 
 const STEPS: Step[] = [
-  { id: "search", since: 1, title: "Busca cualquier producto", text: "Escribe un nombre o un ID de Dropi y ves al instante cuánto se vende." },
-  { id: "demo", since: 1, title: "Cómo funciona en 20 segundos", text: "Este video corto te muestra los 4 pasos: buscar, ver ventas, copiar el ID y vender." },
-  { id: "filters", since: 1, title: "Filtra el catálogo", text: "Por marca, por productos En subida o por los que acaban de recibir Nuevo stock." },
-  { id: "card", since: 1, title: "Cada producto en una tarjeta", text: "Cuánto se vende en 30 días, su puesto en el ranking y la gráfica de ventas día a día." },
-  { id: "card-id", since: 1, title: "Copia el ID con un toque", text: "Lo pegas en Dropi para publicarlo. El botón naranja de abajo lo abre directo en Dropi." },
-  { id: "card-asesor", since: 1, title: "Pregunta al asesor", text: "Te abre WhatsApp con el producto ya escrito en el mensaje." },
-  { id: "card-cta", since: 1, title: "La ficha completa", text: "Precio al que se vende, cuánto ganas, ciudades, quién compra y combos. Gratis al registrarte." },
-  { id: "cortes", since: 1, title: "Cortes en vivo", text: "Cuenta regresiva al próximo corte: tu pedido sale en menos de 3 horas." },
-  { id: "recursos", since: 1, title: "Todo para vender", text: "Creativos gratis para tus anuncios, rastreo de guías y cómo pedir una garantía." },
-  { id: "canales", since: 1, title: "Productos nuevos primero", text: "Únete a nuestros canales de WhatsApp para enterarte antes que nadie." },
-  { id: "calc", since: 3, title: "¿A cuánto lo vendo?", text: "Pon el precio en Dropi, tu flete y tu CPA, y te decimos el precio que te deja ganancia y cuánto puedes pagar de publicidad sin perder." },
-  { id: "chat", since: 2, title: "Pregúntale a Michelle", text: "Nuestra asistente virtual te ayuda a elegir productos y resuelve tus dudas al instante. Y si tu caso necesita a una persona, ella misma te pasa con Michelle, del equipo, por WhatsApp." },
-  { id: "help", since: 1, title: "Vuelve a ver esta guía", text: "Toca aquí cuando quieras. Cuando agreguemos mejoras, este botón se ilumina con las novedades." },
+  {
+    id: "search",
+    since: 1,
+    title: "Busca cualquier producto",
+    text: "Escribe un nombre o un ID de Dropi y ves al instante cuánto se vende.",
+  },
+  {
+    id: "demo",
+    since: 1,
+    title: "Cómo funciona en 20 segundos",
+    text: "Este video corto te muestra los 4 pasos: buscar, ver ventas, copiar el ID y vender.",
+  },
+  {
+    id: "filters",
+    since: 1,
+    title: "Filtra el catálogo",
+    text: "Por marca, por productos En subida o por los que acaban de recibir Nuevo stock.",
+  },
+  {
+    id: "card",
+    since: 1,
+    title: "Cada producto en una tarjeta",
+    text: "Cuánto se vende en 30 días, su puesto en el ranking y la gráfica de ventas día a día.",
+  },
+  {
+    id: "card-id",
+    since: 1,
+    title: "Copia el ID con un toque",
+    text: "Lo pegas en Dropi para publicarlo. El botón naranja de abajo lo abre directo en Dropi.",
+  },
+  {
+    id: "card-asesor",
+    since: 1,
+    title: "Pregunta al asesor",
+    text: "Te abre WhatsApp con el producto ya escrito en el mensaje.",
+  },
+  {
+    id: "card-cta",
+    since: 1,
+    title: "La ficha completa",
+    text: "Precio al que se vende, cuánto ganas, ciudades, quién compra y combos. Gratis al registrarte.",
+  },
+  {
+    id: "cortes",
+    since: 1,
+    title: "Cortes en vivo",
+    text: "Cuenta regresiva al próximo corte: tu pedido sale en menos de 3 horas.",
+  },
+  {
+    id: "recursos",
+    since: 1,
+    title: "Todo para vender",
+    text: "Creativos gratis para tus anuncios, rastreo de guías y cómo pedir una garantía.",
+  },
+  {
+    id: "canales",
+    since: 1,
+    title: "Productos nuevos primero",
+    text: "Únete a nuestros canales de WhatsApp para enterarte antes que nadie.",
+  },
+  {
+    id: "calc",
+    since: 3,
+    title: "¿A cuánto lo vendo?",
+    text: "Pon el precio en Dropi, tu flete y tu CPA, y te decimos el precio que te deja ganancia y cuánto puedes pagar de publicidad sin perder.",
+  },
+  {
+    id: "chat",
+    since: 2,
+    title: "Pregúntale a Michelle",
+    text: "Nuestra asistente virtual te ayuda a elegir productos y resuelve tus dudas al instante. Y si tu caso necesita a una persona, ella misma te pasa con Michelle, del equipo, por WhatsApp.",
+  },
+  {
+    id: "help",
+    since: 1,
+    title: "Vuelve a ver esta guía",
+    text: "Toca el ? cuando quieras. Cuando agreguemos mejoras, se marca con un punto naranja.",
+  },
 ];
 
 function readSeen(): number {
@@ -58,18 +123,28 @@ function Spotlight({ steps, onClose }: { steps: Step[]; onClose: () => void }) {
     const el = document.querySelector(`[data-tour="${step.id}"]`);
     if (!el) return;
     const r = el.getBoundingClientRect();
-    setRect({ top: r.top - 8, left: r.left - 8, width: r.width + 16, height: r.height + 16 });
+    setRect({
+      top: r.top - 8,
+      left: r.left - 8,
+      width: r.width + 16,
+      height: r.height + 16,
+    });
   }, [step.id]);
 
   // Lleva el elemento a la vista y lo mide.
   useLayoutEffect(() => {
     const el = document.querySelector(`[data-tour="${step.id}"]`);
     if (!el) return;
-    const behavior: ScrollBehavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    const behavior: ScrollBehavior = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches
+      ? "auto"
+      : "smooth";
     const r = el.getBoundingClientRect();
     // Si es muy alto (pasa del 55 % de la pantalla), se muestra desde su
     // inicio y la cajita queda abajo; si no, centrado.
-    if (r.height > window.innerHeight * 0.55) window.scrollTo({ top: window.scrollY + r.top - 24, behavior });
+    if (r.height > window.innerHeight * 0.55)
+      window.scrollTo({ top: window.scrollY + r.top - 24, behavior });
     else el.scrollIntoView({ block: "center", behavior });
     const t = setTimeout(measure, 450);
     return () => clearTimeout(t);
@@ -80,7 +155,8 @@ function Spotlight({ steps, onClose }: { steps: Step[]; onClose: () => void }) {
     window.addEventListener("scroll", measure, { passive: true });
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
-      if (e.key === "ArrowRight") setI((x) => Math.min(steps.length - 1, x + 1));
+      if (e.key === "ArrowRight")
+        setI((x) => Math.min(steps.length - 1, x + 1));
       if (e.key === "ArrowLeft") setI((x) => Math.max(0, x - 1));
     };
     window.addEventListener("keydown", onKey);
@@ -123,11 +199,25 @@ function Spotlight({ steps, onClose }: { steps: Step[]; onClose: () => void }) {
   const last = i === steps.length - 1;
 
   return (
-    <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label="Guía de Provedix">
+    <div
+      className="fixed inset-0 z-[70]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Guía de Provedix"
+    >
       {/* Fondo oscuro con el hueco iluminado sobre el elemento. */}
       <div
         className="pvx-tour-hole pointer-events-none absolute rounded-2xl"
-        style={rect ? { top: rect.top, left: rect.left, width: rect.width, height: rect.height } : { top: vh / 2, left: vw / 2, width: 0, height: 0 }}
+        style={
+          rect
+            ? {
+                top: rect.top,
+                left: rect.left,
+                width: rect.width,
+                height: rect.height,
+              }
+            : { top: vh / 2, left: vw / 2, width: 0, height: 0 }
+        }
       />
       <div className="absolute inset-0" onClick={(e) => e.stopPropagation()} />
       <div
@@ -146,20 +236,34 @@ function Spotlight({ steps, onClose }: { steps: Step[]; onClose: () => void }) {
             </div>
             <h3 className="pvx-heading mt-1 text-[20px]">{step.title}</h3>
           </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar la guía" className="pvx-press grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--pvx-paper-2)] hover:bg-[var(--pvx-paper-3)] cursor-pointer">
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar la guía"
+            className="pvx-press grid h-8 w-8 shrink-0 place-items-center rounded-full bg-[var(--pvx-paper-2)] hover:bg-[var(--pvx-paper-3)] cursor-pointer"
+          >
             <IconClose className="w-4 h-4" />
           </button>
         </div>
-        <p className="mt-2 text-[14.5px] leading-relaxed text-[var(--pvx-ink-2)]">{step.text}</p>
+        <p className="mt-2 text-[14.5px] leading-relaxed text-[var(--pvx-ink-2)]">
+          {step.text}
+        </p>
         <div className="mt-4 flex items-center justify-between gap-2">
           <div className="flex gap-1" aria-hidden>
             {steps.map((s, k) => (
-              <span key={s.id} className={`h-1.5 rounded-full transition-all duration-200 ${k === i ? "w-5 bg-[var(--pvx-orange)]" : "w-1.5 bg-[var(--pvx-paper-3)]"}`} />
+              <span
+                key={s.id}
+                className={`h-1.5 rounded-full transition-all duration-200 ${k === i ? "w-5 bg-[var(--pvx-orange)]" : "w-1.5 bg-[var(--pvx-paper-3)]"}`}
+              />
             ))}
           </div>
           <div className="flex gap-2">
             {i > 0 && (
-              <button type="button" onClick={() => setI(i - 1)} className="pvx-press rounded-full bg-[var(--pvx-paper-2)] px-4 py-2 text-[13.5px] font-bold hover:bg-[var(--pvx-paper-3)] cursor-pointer">
+              <button
+                type="button"
+                onClick={() => setI(i - 1)}
+                className="pvx-press rounded-full bg-[var(--pvx-paper-2)] px-4 py-2 text-[13.5px] font-bold hover:bg-[var(--pvx-paper-3)] cursor-pointer"
+              >
                 Atrás
               </button>
             )}
@@ -169,7 +273,8 @@ function Spotlight({ steps, onClose }: { steps: Step[]; onClose: () => void }) {
               onClick={() => (last ? onClose() : setI(i + 1))}
               className="pvx-press inline-flex items-center gap-1.5 rounded-full bg-[var(--pvx-orange)] px-4 py-2 text-[13.5px] font-bold text-white hover:bg-[var(--pvx-orange-press)] cursor-pointer"
             >
-              {last ? "Listo" : "Siguiente"} {!last && <IconArrow className="w-3.5 h-3.5" />}
+              {last ? "Listo" : "Siguiente"}{" "}
+              {!last && <IconArrow className="w-3.5 h-3.5" />}
             </button>
           </div>
         </div>
@@ -190,10 +295,15 @@ export function PvxTour({ autoStart }: { autoStart: boolean }) {
     return () => clearTimeout(t);
   }, []);
 
-  const available = () => STEPS.filter((s) => document.querySelector(`[data-tour="${s.id}"]`));
+  const available = () =>
+    STEPS.filter((s) => document.querySelector(`[data-tour="${s.id}"]`));
   const fresh = seen != null && seen > 0 && seen < TOUR_VERSION;
   const start = useCallback((onlyNew: boolean) => {
-    const list = STEPS.filter((s) => document.querySelector(`[data-tour="${s.id}"]`) && (!onlyNew || s.since > (readSeen() || 0)));
+    const list = STEPS.filter(
+      (s) =>
+        document.querySelector(`[data-tour="${s.id}"]`) &&
+        (!onlyNew || s.since > (readSeen() || 0)),
+    );
     if (list.length) setSteps(list);
     setMenu(false);
   }, []);
@@ -216,10 +326,19 @@ export function PvxTour({ autoStart }: { autoStart: boolean }) {
       <div className="fixed bottom-4 left-4 z-[45] sm:bottom-6 sm:left-6">
         {menu && fresh && (
           <div className="pvx-pop absolute bottom-full left-0 mb-2 w-[230px] overflow-hidden rounded-2xl bg-white p-1.5 text-[var(--pvx-ink)] shadow-[0_20px_50px_-15px_rgb(0_0_0/0.5)]">
-            <button type="button" onClick={() => start(true)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[14px] font-bold hover:bg-[var(--pvx-paper-2)] cursor-pointer">
-              <IconSpark className="w-4 h-4 text-[var(--pvx-orange)]" /> Ver novedades
+            <button
+              type="button"
+              onClick={() => start(true)}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[14px] font-bold hover:bg-[var(--pvx-paper-2)] cursor-pointer"
+            >
+              <IconSpark className="w-4 h-4 text-[var(--pvx-orange)]" /> Ver
+              novedades
             </button>
-            <button type="button" onClick={() => start(false)} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold hover:bg-[var(--pvx-paper-2)] cursor-pointer">
+            <button
+              type="button"
+              onClick={() => start(false)}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold hover:bg-[var(--pvx-paper-2)] cursor-pointer"
+            >
               Ver la guía completa
             </button>
           </div>
@@ -227,13 +346,24 @@ export function PvxTour({ autoStart }: { autoStart: boolean }) {
         <button
           type="button"
           data-tour="help"
-          onClick={() => (fresh ? setMenu(!menu) : available().length && start(false))}
-          aria-label={fresh ? "Guía: hay novedades" : "Ver la guía de la página"}
-          className="pvx-press relative inline-flex items-center gap-2 rounded-full bg-[var(--pvx-ink)] py-2.5 pl-3 pr-4 text-[14px] font-bold text-white shadow-[0_12px_30px_-10px_rgb(0_0_0/0.6)] ring-1 ring-white/15 hover:bg-[#25282f] cursor-pointer"
+          onClick={() =>
+            fresh ? setMenu(!menu) : available().length && start(false)
+          }
+          aria-label={
+            fresh ? "Guía: hay novedades" : "Ver la guía de la página"
+          }
+          // Solo el "?" (pedido del usuario 2026-10-15: la palabra ocupaba mucho); en computadora se ve al pasar el mouse.
+          className="pvx-press group relative inline-flex items-center rounded-full bg-[var(--pvx-ink)] p-2.5 text-[14px] font-bold text-white shadow-[0_12px_30px_-10px_rgb(0_0_0/0.6)] ring-1 ring-white/15 hover:bg-[#25282f] cursor-pointer"
         >
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--pvx-orange)] text-[13px] font-black">?</span>
-          {fresh ? "Novedades" : "Guía"}
-          {fresh && <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-[var(--pvx-orange)] ring-2 ring-[var(--pvx-ink)]" />}
+          <span className="grid h-6 w-6 place-items-center rounded-full bg-[var(--pvx-orange)] text-[13px] font-black">
+            ?
+          </span>
+          <span className="max-w-0 overflow-hidden whitespace-nowrap transition-[max-width,margin] duration-200 group-hover:ml-2 group-hover:mr-1.5 group-hover:max-w-[120px] group-focus-visible:ml-2 group-focus-visible:mr-1.5 group-focus-visible:max-w-[120px]">
+            {fresh ? "Novedades" : "Guía"}
+          </span>
+          {fresh && (
+            <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-[var(--pvx-orange)] ring-2 ring-[var(--pvx-ink)]" />
+          )}
         </button>
       </div>
       {steps && <Spotlight steps={steps} onClose={close} />}

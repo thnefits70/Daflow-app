@@ -167,9 +167,10 @@ export async function caseConversation(caseId: string) {
       .replace(/\[\[ASESORA(:[^\]]*)?\]\]/g, "→ pasó a la asesora")
       .replace(/\[\[(BLOQUEAR|SOSPECHA)\]\]/g, "")
       .replace(
-        /\[\[(DROPI|CREATIVOS|LANDING|CALC):(\d+)\]\]/g,
+        /\[\[(DROPI|CREATIVOS|LANDING|CALC|FICHA):(\d+)\]\]/g,
         "[botón $1 · $2]",
       )
+      .replace(/\[\[IR:([a-z-]+)\]\]/g, "[botón ir a $1]")
       .replace(/\[\[FOTO:\w+\]\]/g, "[📸 foto]")
       .trim(),
     at: m.createdAt.toISOString(),

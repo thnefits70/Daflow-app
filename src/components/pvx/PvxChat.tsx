@@ -2,7 +2,10 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { ADVISORS } from "@/components/pvx/PvxContact";
-import { PVX_CALC_EVENT } from "@/components/pvx/PvxCalculator";
+import {
+  PVX_CALC_EVENT,
+  PVX_PRODUCT_EVENT,
+} from "@/components/pvx/PvxCalculator";
 import { PVX_SHARE_URLS, PvxShare } from "@/components/pvx/PvxShare";
 import {
   IconArrow,
@@ -22,12 +25,25 @@ const CHAT_KEY = "pvx-chat-id";
 // Marca que pone la IA al final cuando ya no puede resolver el caso (ver provedixMichelle.ts).
 const HANDOFF_MARK = "[[ASESORA";
 // [[ASESORA:MC-0007]] → caso con resumen para la asesora (2026-10-15).
-const caseCodeOf = (t: string) => t.match(/\[\[ASESORA:(MC-\d{4,})\]\]/)?.[1] ?? null;
+const caseCodeOf = (t: string) =>
+  t.match(/\[\[ASESORA:(MC-\d{4,})\]\]/)?.[1] ?? null;
 // Quita la marca (también a medio llegar mientras se escribe la respuesta).
 // [[BLOQUEAR]]: la IA cerró el chat por un intento de sacar información confidencial.
 const BLOCK_MARK = "[[BLOQUEAR]]";
 // Botones de producto (2026-10-14): [[DROPI:ID]] precio en Dropi, [[CREATIVOS:ID]], [[LANDING:ID]].
-const ACTION_RE = /\[\[(DROPI|CREATIVOS|LANDING|CALC):(\d{3,8})\]\]/g;
+const ACTION_RE = /\[\[(DROPI|CREATIVOS|LANDING|CALC|FICHA):(\d{3,8})\]\]/g;
+// [[IR:cortes]] → botón que cierra el chat y lleva a esa parte de la página (2026-10-15).
+const SECTION_RE =
+  /\[\[IR:(cortes|recursos|calculadora|productos|como-funciona)\]\]/g;
+const SECTION_LABEL: Record<string, string> = {
+  cortes: "Ver los cortes de hoy",
+  recursos: "Rastreo, creativos y garantías",
+  calculadora: "Abrir la calculadora",
+  productos: "Ver los productos",
+  "como-funciona": "Cómo funciona Provedix",
+};
+const sectionsOf = (t: string) =>
+  [...new Set([...t.matchAll(SECTION_RE)].map((m) => m[1]))].slice(0, 3);
 const ACTION_LABEL: Record<string, string> = {
   DROPI: "Ver precio en Dropi",
   CREATIVOS: "Ver creativos",
@@ -51,6 +67,7 @@ const cleanReply = (t: string) =>
   t
     .replace(/\[\[(ASESORA(:[A-Z0-9-]*)?|BLOQUEAR|SOSPECHA)\]\]/g, "")
     .replace(ACTION_RE, "")
+    .replace(SECTION_RE, "")
     .replace(PHOTO_RE, "")
     // marca a medio llegar mientras se escribe la respuesta
     .replace(/\[(\[[A-Z]*(:\d*)?\]?)?$/, "")
@@ -111,9 +128,14 @@ function Avatar({ size = 36 }: { size?: number }) {
   );
 }
 
-function handoffUrl(phone: string, lastQuestion: string, code: string | null = null): string {
+function handoffUrl(
+  phone: string,
+  lastQuestion: string,
+  code: string | null = null,
+): string {
   // Con código de caso: la asesora ve el resumen y la conversación en DAFLOW, no hace falta repetir nada.
-  if (code) return `https://wa.me/${phone}?text=${encodeURIComponent(`Hola Michelle, vengo del chat de Provedix. Mi caso es ${code}.`)}`;
+  if (code)
+    return `https://wa.me/${phone}?text=${encodeURIComponent(`Hola Michelle, vengo del chat de Provedix. Mi caso es ${code}.`)}`;
   const text = lastQuestion
     ? `Hola Michelle, vengo del chat de Provedix y tengo un caso que necesita tu ayuda. Mi consulta: "${lastQuestion.slice(0, 300)}"`
     : "Hola Michelle, vengo del chat de Provedix y tengo un caso que necesita tu ayuda.";
@@ -403,7 +425,9 @@ export function PvxChat({
                           >
                             <IconWhatsApp className="w-4 h-4" /> Continuar con
                             Michelle por WhatsApp
-                            {caseCodeOf(m.content) ? ` · ${caseCodeOf(m.content)}` : ""}
+                            {caseCodeOf(m.content)
+                              ? ` · ${caseCodeOf(m.content)}`
+                              : ""}
                           </a>
                         )}
                         {photoIdsOf(m.content).map((pid) => (
@@ -423,10 +447,51 @@ export function PvxChat({
                             />
                           </a>
                         ))}
+                        {sectionsOf(m.content).length > 0 && (
+                          <div className="mt-2.5 flex flex-wrap gap-1.5">
+                            {sectionsOf(m.content).map((id) => (
+                              <button
+                                key={id}
+                                type="button"
+                                onClick={() => {
+                                  setOpen(false);
+                                  window.location.hash = id;
+                                  document
+                                    .getElementById(id)
+                                    ?.scrollIntoView({
+                                      behavior: "smooth",
+                                      block: "start",
+                                    });
+                                }}
+                                className="pvx-press inline-flex items-center gap-1.5 rounded-full border border-[var(--pvx-paper-3)] bg-white px-3.5 py-2 text-[13px] font-bold hover:border-[var(--pvx-orange)] cursor-pointer"
+                              >
+                                {SECTION_LABEL[id]}{" "}
+                                <IconArrow className="w-3.5 h-3.5" />
+                              </button>
+                            ))}
+                          </div>
+                        )}
                         {actionsOf(m.content).length > 0 && (
                           <div className="mt-2.5 flex flex-wrap gap-1.5">
                             {actionsOf(m.content).map((a) =>
-                              a.kind === "CALC" ? (
+                              a.kind === "FICHA" ? (
+                                // Abre la ficha completa del producto (2026-10-15).
+                                <button
+                                  key={a.kind + a.code}
+                                  type="button"
+                                  onClick={() => {
+                                    setOpen(false);
+                                    window.dispatchEvent(
+                                      new CustomEvent(PVX_PRODUCT_EVENT, {
+                                        detail: a.code,
+                                      }),
+                                    );
+                                  }}
+                                  className="pvx-press inline-flex items-center gap-1.5 rounded-full border border-[var(--pvx-paper-3)] bg-white px-3.5 py-2 text-[13px] font-bold hover:border-[var(--pvx-orange)] cursor-pointer"
+                                >
+                                  Ver ficha · {a.code}
+                                </button>
+                              ) : a.kind === "CALC" ? (
                                 // Abre la calculadora de la página con este producto (2026-10-15).
                                 <button
                                   key={a.kind + a.code}
