@@ -13,6 +13,7 @@ import { PvxRocketSku } from "@/components/pvx/PvxRocketSku";
 import {
   PvxCities,
   PvxOperation,
+  PvxTeam,
   PvxResources,
   titleCase,
 } from "@/components/pvx/PvxSections";
@@ -1269,6 +1270,7 @@ export function PvxCatalog({
       <Steps top={cards.find((c) => c.photo) ?? cards[0]} />
       <Promises />
       <PvxOperation />
+      <PvxTeam />
       <PvxCities stats={stats} />
 
       <section
