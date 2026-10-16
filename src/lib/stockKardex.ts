@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getInventoryLeadId } from "@/lib/guards";
 import { PRICED_STATUSES, effectiveUnitCost } from "@/lib/purchases";
 import { getZeroCostCorrections } from "@/lib/sellingCost";
-import { applyReceiptToVariants } from "@/lib/variantStock";
-import type { MarketProductBodega, StockMovementType } from "@/generated/prisma/client";
+import { applyCountToVariants, applyReceiptToVariants } from "@/lib/variantStock";
+import { Prisma, type MarketProductBodega, type StockMovementType } from "@/generated/prisma/client";
 
 // Fase 3 (INVESTOCK) — confirmado 2026-09-09: el número de stock propio de
 // DAFLOW, construido como un Kardex real. Cada movimiento (entrada o
@@ -554,18 +554,55 @@ async function pendingKardexBlocker(catalogItemId: string): Promise<string | nul
   return `Todavía no se puede ajustar a mano: este producto tiene ${reasons.join("; ")}. Eso entra o sale del Kardex solo — resuélvelo primero y después ajusta lo que siga sin cuadrar, así no queda duplicado.`;
 }
 
+// Pedido de Daniel 2026-10-17 (chaleco 200271): el ajuste puede venir por
+// talla/color. Las cantidades tienen que sumar el total, sin nombres
+// repetidos. Las tallas nuevas se crean al aplicarlo.
+export type AdjustmentVariantCount = { name: string; qty: number };
+
+function cleanAdjustmentVariants(raw: AdjustmentVariantCount[] | null | undefined, total: number): AdjustmentVariantCount[] | null {
+  if (!raw || raw.length === 0) return null;
+  const list = raw.map((v) => ({ name: v.name.replace(/s+/g, " ").trim(), qty: v.qty }));
+  if (list.some((v) => !v.name || v.name.length > 60)) throw new Error("Escribe el nombre de cada talla o color.");
+  if (list.some((v) => !Number.isInteger(v.qty) || v.qty < 0)) throw new Error("Cada talla debe tener un número entero, 0 o mayor.");
+  if (new Set(list.map((v) => v.name.toLowerCase())).size !== list.length) throw new Error("Hay una talla o color repetido.");
+  if (list.reduce((s, v) => s + v.qty, 0) !== total) throw new Error("La suma de las tallas no da el total contado.");
+  return list;
+}
+
+// Deja cada talla en lo contado. Las tallas nuevas quedan en el registro de
+// cambios de la lista de tallas. Si falla, el Kardex ya quedó bien: solo se
+// registra en el log (igual que el resto del stock por variante).
+async function applyAdjustmentVariants(catalogItemId: string, counts: AdjustmentVariantCount[], refId: string, userId: string | null): Promise<void> {
+  try {
+    const existing = await prisma.productVariant.findMany({ where: { catalogItemId }, select: { name: true } });
+    const known = new Set(existing.map((e) => e.name.toLowerCase()));
+    const added = counts.filter((c) => !known.has(c.name.toLowerCase()));
+    await applyCountToVariants(catalogItemId, counts, refId);
+    if (added.length > 0) {
+      const user = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }) : null;
+      await prisma.productVariantEdit.createMany({
+        data: added.map((a) => ({ catalogItemId, action: "ADD", detail: `Agregó «${a.name}» (ajuste de stock)`, userId, userName: user?.name ?? (userId ? null : "Admin") })),
+      });
+    }
+  } catch (e) {
+    console.error("[variant stock adjustment]", e);
+  }
+}
+
 export async function submitPhysicalCountAdjustment(params: {
   catalogItemId: string;
   requestedQuantity: number;
   reason: string;
   isAdmin: boolean;
   userId: string | null;
+  variantCounts?: AdjustmentVariantCount[] | null;
 }): Promise<PhysicalCountAdjustmentResult> {
   if (!Number.isInteger(params.requestedQuantity) || params.requestedQuantity < 0) {
     throw new Error("La cantidad contada debe ser un número entero, 0 o mayor.");
   }
   const reason = params.reason.trim();
   if (!reason) throw new Error("Escribe el motivo del ajuste.");
+  const variantCounts = cleanAdjustmentVariants(params.variantCounts, params.requestedQuantity);
   const blocker = await pendingKardexBlocker(params.catalogItemId);
   if (blocker) throw new Error(blocker);
 
@@ -586,13 +623,14 @@ export async function submitPhysicalCountAdjustment(params: {
     // Si Daniel ya tenía una solicitud pendiente de este mismo producto, el
     // admin acaba de resolverlo directo — esa solicitud ya no aplica.
     await prisma.stockPhysicalCountAdjustmentRequest.deleteMany({ where: { catalogItemId: params.catalogItemId } });
+    if (variantCounts) await applyAdjustmentVariants(params.catalogItemId, variantCounts, entry.id, null);
     return { kind: "applied", balanceAfter: entry.balanceAfter, avgCostAfter: entry.avgCostAfter };
   }
 
   const request = await prisma.stockPhysicalCountAdjustmentRequest.upsert({
     where: { catalogItemId: params.catalogItemId },
-    update: { currentQuantityAtRequest: current.balance, requestedQuantity: params.requestedQuantity, reason, requestedById: params.userId, requestedAt: new Date() },
-    create: { catalogItemId: params.catalogItemId, currentQuantityAtRequest: current.balance, requestedQuantity: params.requestedQuantity, reason, requestedById: params.userId },
+    update: { currentQuantityAtRequest: current.balance, requestedQuantity: params.requestedQuantity, reason, variantCounts: variantCounts ?? Prisma.DbNull, requestedById: params.userId, requestedAt: new Date() },
+    create: { catalogItemId: params.catalogItemId, currentQuantityAtRequest: current.balance, requestedQuantity: params.requestedQuantity, reason, variantCounts: variantCounts ?? Prisma.DbNull, requestedById: params.userId },
   });
   return { kind: "requested", requestId: request.id };
 }
@@ -605,6 +643,7 @@ export type PendingPhysicalCountAdjustmentRow = {
   currentQuantityAtRequest: number;
   currentQuantityNow: number;
   requestedQuantity: number;
+  variantCounts: AdjustmentVariantCount[] | null;
   reason: string;
   requestedByName: string | null;
   requestedAt: string;
@@ -626,6 +665,7 @@ export async function getPendingPhysicalCountAdjustments(): Promise<PendingPhysi
       currentQuantityAtRequest: r.currentQuantityAtRequest,
       currentQuantityNow: current.balance,
       requestedQuantity: r.requestedQuantity,
+      variantCounts: Array.isArray(r.variantCounts) ? (r.variantCounts as AdjustmentVariantCount[]) : null,
       reason: r.reason,
       requestedByName: r.requestedBy?.name ?? null,
       requestedAt: r.requestedAt.toISOString(),
@@ -648,7 +688,7 @@ export async function reviewPhysicalCountAdjustment(params: { id: string; action
   const blocker = await pendingKardexBlocker(request.catalogItemId);
   if (blocker) throw new Error(blocker);
   const current = await getCurrentStock(request.catalogItemId);
-  await prisma.$transaction([
+  const [entry] = await prisma.$transaction([
     prisma.stockKardexEntry.create({
       data: {
         catalogItemId: request.catalogItemId,
@@ -662,6 +702,9 @@ export async function reviewPhysicalCountAdjustment(params: { id: string; action
     }),
     prisma.stockPhysicalCountAdjustmentRequest.delete({ where: { id: params.id } }),
   ]);
+  if (Array.isArray(request.variantCounts) && request.variantCounts.length > 0) {
+    await applyAdjustmentVariants(request.catalogItemId, request.variantCounts as AdjustmentVariantCount[], entry.id, request.requestedById);
+  }
   return { ok: true };
 }
 

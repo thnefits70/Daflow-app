@@ -36,6 +36,7 @@ type PendingAdjustmentRow = {
   currentQuantityAtRequest: number;
   currentQuantityNow: number;
   requestedQuantity: number;
+  variantCounts: { name: string; qty: number }[] | null;
   reason: string;
   requestedByName: string | null;
   requestedAt: string;
@@ -370,16 +371,23 @@ function StockAdjustmentTrigger({
   currentBalance,
   isAdmin,
   pendingQuantity,
+  variants,
   onChanged,
 }: {
   catalogItemId: string;
   currentBalance: number;
   isAdmin: boolean;
   pendingQuantity: number | null | undefined;
+  variants: { name: string; stock: number }[] | null | undefined;
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [quantity, setQuantity] = useState(String(currentBalance));
+  // Pedido de Daniel 2026-10-17 (chaleco 200271): con tallas/colores, se
+  // cuenta cada una y el total sale de la suma. "+ talla" agrega una que
+  // todavía no está en la lista (se crea al aplicarse el ajuste).
+  const [sizes, setSizes] = useState<{ name: string; qty: string; isNew: boolean }[] | null>(null);
+  const sizesTotal = sizes ? sizes.reduce((s, v) => s + (Number(v.qty) || 0), 0) : 0;
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -393,7 +401,21 @@ function StockAdjustmentTrigger({
   }
 
   async function submit() {
-    const qty = Number(quantity);
+    const qty = sizes ? sizesTotal : Number(quantity);
+    if (sizes) {
+      if (sizes.length === 0) {
+        setError("Agrega al menos una talla o color.");
+        return;
+      }
+      if (sizes.some((v) => !v.name.trim())) {
+        setError("Escribe el nombre de cada talla o color.");
+        return;
+      }
+      if (sizes.some((v) => v.qty.trim() === "" || !Number.isInteger(Number(v.qty)) || Number(v.qty) < 0)) {
+        setError("Escribe cuántas hay de cada talla (0 si no hay).");
+        return;
+      }
+    }
     if (!Number.isInteger(qty) || qty < 0) {
       setError("La cantidad debe ser un número entero, 0 o mayor.");
       return;
@@ -405,6 +427,7 @@ function StockAdjustmentTrigger({
     const confirmMsg = isAdmin
       ? `¿Aplicar de una vez el ajuste? Stock pasa de ${currentBalance} a ${qty}.`
       : `¿Enviar la solicitud a Andrés? Stock actual: ${currentBalance}, contaste: ${qty}. No se aplica hasta que la apruebe.`;
+    const variantCounts = sizes ? sizes.map((v) => ({ name: v.name.trim(), qty: Number(v.qty) })) : undefined;
     if (!window.confirm(confirmMsg)) return;
     setBusy(true);
     setError("");
@@ -412,7 +435,7 @@ function StockAdjustmentTrigger({
       const res = await fetch(`/api/inventory-control/catalog-items/${catalogItemId}/physical-count-adjustment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestedQuantity: qty, reason: reason.trim() }),
+        body: JSON.stringify({ requestedQuantity: qty, reason: reason.trim(), variantCounts }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? "No se pudo procesar el ajuste.");
@@ -434,6 +457,8 @@ function StockAdjustmentTrigger({
         className="text-[9.5px] font-bold uppercase text-steel hover:text-ink cursor-pointer shrink-0"
         onClick={() => {
           setQuantity(String(currentBalance));
+          setSizes(variants && variants.length > 0 ? variants.map((v) => ({ name: v.name, qty: String(Math.max(0, v.stock)), isNew: false })) : null);
+          setError("");
           setOpen(true);
         }}
       >
@@ -448,18 +473,63 @@ function StockAdjustmentTrigger({
   // "Declarar costo" en la columna de Proveedor, 100px).
   return (
     <div className="flex flex-col items-end gap-1 shrink-0 w-full">
-      <input
-        autoFocus
-        type="number"
-        step="1"
-        min="0"
-        disabled={busy}
-        title="Cantidad real que contaste"
-        placeholder="Cantidad"
-        className="w-full rounded border border-teal bg-cloud px-1 py-0.5 text-[11px] font-mono disabled:opacity-60"
-        value={quantity}
-        onChange={(e) => setQuantity(e.target.value)}
-      />
+      {sizes ? (
+        <>
+          {sizes.map((v, i) => (
+            <div key={i} className="flex items-center gap-1 w-full">
+              {v.isNew ? (
+                <input
+                  type="text"
+                  disabled={busy}
+                  placeholder="Talla"
+                  className="w-[46%] min-w-0 rounded border border-rule bg-cloud px-1 py-0.5 text-[10px] disabled:opacity-60"
+                  value={v.name}
+                  onChange={(e) => setSizes((s) => s && s.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                />
+              ) : (
+                <span className="w-[46%] min-w-0 truncate text-[10px] font-semibold text-steel text-right" title={v.name}>{v.name}</span>
+              )}
+              <input
+                type="number"
+                step="1"
+                min="0"
+                disabled={busy}
+                title={`Cuántas contaste de ${v.name || "esta talla"}`}
+                className="flex-1 min-w-0 rounded border border-teal bg-cloud px-1 py-0.5 text-[11px] font-mono disabled:opacity-60"
+                value={v.qty}
+                onChange={(e) => setSizes((s) => s && s.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))}
+              />
+              {v.isNew && (
+                <button type="button" disabled={busy} title="Quitar" className="text-steel hover:text-red cursor-pointer" onClick={() => setSizes((s) => s && s.filter((_, j) => j !== i))}>
+                  <X size={10} />
+                </button>
+              )}
+            </div>
+          ))}
+          <button type="button" disabled={busy} className="text-[9.5px] font-bold text-teal cursor-pointer" onClick={() => setSizes((s) => [...(s ?? []), { name: "", qty: "", isNew: true }])}>
+            + talla
+          </button>
+          <span className="text-[10px] text-steel">Total: <span className="font-mono font-bold text-ink">{sizesTotal}</span></span>
+        </>
+      ) : (
+        <>
+          <input
+            autoFocus
+            type="number"
+            step="1"
+            min="0"
+            disabled={busy}
+            title="Cantidad real que contaste"
+            placeholder="Cantidad"
+            className="w-full rounded border border-teal bg-cloud px-1 py-0.5 text-[11px] font-mono disabled:opacity-60"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+          />
+          <button type="button" disabled={busy} title="Contar por talla o color" className="text-[9.5px] font-bold text-teal cursor-pointer" onClick={() => setSizes([{ name: "", qty: "", isNew: true }])}>
+            + por talla
+          </button>
+        </>
+      )}
       <input
         type="text"
         disabled={busy}
@@ -1162,6 +1232,9 @@ export function StockLevelsPanel({
                               {a.currentQuantityNow} → <span className="font-bold text-gold">{a.requestedQuantity}</span>
                             </span>
                           </div>
+                          {a.variantCounts && a.variantCounts.length > 0 && (
+                            <div className="text-[11px] text-teal font-semibold mb-1">Por talla: {a.variantCounts.map((v) => `${v.name} ${v.qty}`).join(" · ")}</div>
+                          )}
                           <div className="text-[11px] text-steel mb-1.5">
                             &quot;{a.reason}&quot; — pedido por {a.requestedByName ?? "—"} el {formatDateTime(a.requestedAt)}
                             {a.currentQuantityNow !== a.currentQuantityAtRequest && (
@@ -1458,6 +1531,7 @@ export function StockLevelsPanel({
                       currentBalance={r.balance}
                       isAdmin={isAdmin}
                       pendingQuantity={r.pendingAdjustmentQuantity}
+                      variants={r.variantStock?.variants ?? null}
                       onChanged={loadRows}
                     />
                   )}

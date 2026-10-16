@@ -3441,6 +3441,10 @@ model StockPhysicalCountAdjustmentRequest {
   currentQuantityAtRequest Int
   requestedQuantity        Int
   reason                   String
+  // Pedido de Daniel 2026-10-17 (chaleco 200271): ajuste por talla/color.
+  // [{ name, qty }] que suman requestedQuantity; null = ajuste sin tallas.
+  // Al aprobar, cada talla queda en lo contado (applyCountToVariants).
+  variantCounts            Json?
 
   requestedById String?
   requestedBy   User?    @relation("StockPhysicalCountAdjustmentRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)

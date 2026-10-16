@@ -6,7 +6,12 @@ import { notifyOwner } from "@/lib/notifications";
 import { submitPhysicalCountAdjustment } from "@/lib/stockKardex";
 import { prisma } from "@/lib/prisma";
 
-const schema = z.object({ requestedQuantity: z.number().int().min(0), reason: z.string().trim().min(1) });
+const schema = z.object({
+  requestedQuantity: z.number().int().min(0),
+  reason: z.string().trim().min(1),
+  // Pedido de Daniel 2026-10-17: ajuste por talla/color (opcional).
+  variantCounts: z.array(z.object({ name: z.string().trim().min(1).max(60), qty: z.number().int().min(0) })).max(60).optional(),
+});
 
 // Confirmado 2026-09-22, pedido explícito del usuario (admin): único punto
 // de entrada para ajustar el stock de INVESTOCK a mano por un conteo
@@ -30,6 +35,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       catalogItemId: id,
       requestedQuantity: parsed.data.requestedQuantity,
       reason: parsed.data.reason,
+      variantCounts: parsed.data.variantCounts,
       isAdmin,
       userId: isAdmin ? null : session.user.id,
     });
@@ -37,7 +43,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       const item = await prisma.purchaseCatalogItem.findUnique({ where: { id }, select: { name: true } });
       await notifyOwner("admin", {
         title: "📦 Ajuste de stock por conteo físico",
-        body: `Daniel pidió ajustar "${item?.name ?? ""}" a ${parsed.data.requestedQuantity} — ${parsed.data.reason}`,
+        body: `Daniel pidió ajustar "${item?.name ?? ""}" a ${parsed.data.requestedQuantity}${parsed.data.variantCounts?.length ? ` (${parsed.data.variantCounts.map((v) => `${v.name} ${v.qty}`).join(", ")})` : ""} — ${parsed.data.reason}`,
         url: "/admin",
       });
     }
