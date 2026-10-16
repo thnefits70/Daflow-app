@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { CatalogCode } from "@/components/shared/CatalogCode";
-import { anyReasonLabel } from "@/lib/localWarrantyConstants";
+import { anyReasonLabel, isManualWarrantyGuide } from "@/lib/localWarrantyConstants";
 
 type SaleItemDTO = {
   id: string;
@@ -239,6 +239,9 @@ function WarrantyDetails({ s }: { s: SaleDTO }) {
         {shipped && ` · salió el ${shipped}`}
         {s.warrantyLate && <span className="ml-1 font-semibold text-gold">· fuera de los 7 días (el asesor lo confirmó dos veces)</span>}
       </div>
+      {isManualWarrantyGuide(s.warrantySourceGuide) && (
+        <div className="font-semibold text-gold">Excepción del admin: esta guía no está en ningún corte de DAFLOW. El cliente y los productos los escribió el asesor a mano — revísalos con las fotos.</div>
+      )}
       <div className="text-steel">
         Cliente: <span className="text-ink font-semibold">{s.clientName ?? "—"}</span>
         {s.clientPhone && ` · ${s.clientPhone}`}

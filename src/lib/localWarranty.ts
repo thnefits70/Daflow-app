@@ -12,6 +12,7 @@ import {
   WARRANTY_MAX_DAYS,
   WARRANTY_NORMAL_DAYS,
   formatWarrantyCode,
+  isManualWarrantyGuide,
   reasonDiscountsStock,
   type ExtraReasonCode,
   type WarrantyReasonCode,
@@ -54,6 +55,9 @@ export type WarrantySource = {
   // Códigos de la etiqueta que no son nada físico de bodega (ni producto ni
   // provisional en el corte): se ignoran en silencio.
   notShipped?: number;
+  // Excepción del admin (MANUAL_WARRANTY_GUIDES): la guía no está en ningún
+  // corte, el asesor escribe el cliente y elige los productos del catálogo.
+  manual?: boolean;
 };
 
 export type LookupResult = { ok: true; source: WarrantySource } | { ok: false; error: string };
@@ -656,7 +660,39 @@ export async function lookupWarrantySource(rawRef: string): Promise<LookupResult
   const ref = cleanRef(rawRef);
   if (!ref) return { ok: false, error: "Escribe el número de guía o el código de la venta (VE-0000)." };
   if (/^VE-?\d+$/.test(ref)) return lookupSale(ref.includes("-") ? ref : `VE-${ref.slice(2)}`);
+  if (isManualWarrantyGuide(ref)) return lookupManualGuide(ref);
   return lookupGuide(ref);
+}
+
+// Guía autorizada a mano por el admin: lo poco que se sabe viene de NICK
+// (Dropi), el resto lo escribe el asesor.
+async function lookupManualGuide(ref: string): Promise<LookupResult> {
+  const nick = await prisma.nickGuideStatus.findUnique({ where: { guideNumber: ref }, select: { carrier: true, city: true, orderCreatedAt: true } });
+  const shippedAt = nick?.orderCreatedAt ?? new Date();
+  const city = nick?.city ?? WARRANTY_CITY;
+  return {
+    ok: true,
+    source: {
+      kind: "GUIDE",
+      ref,
+      saleId: null,
+      clientId: null,
+      carrier: nick?.carrier ?? null,
+      shippedAt: shippedAt.toISOString(),
+      daysSince: daysBetween(shippedAt, new Date()),
+      city,
+      isGuayaquil: isGuayaquilCity(city),
+      originalCharge: null,
+      clientName: null,
+      clientAddress: null,
+      clientPhone: null,
+      notes: null,
+      labelText: [],
+      lines: [],
+      warnings: [],
+      manual: true,
+    },
+  };
 }
 
 // ---- Crear la garantía -----------------------------------------------------
@@ -691,7 +727,7 @@ export async function createLocalWarranty(input: CreateWarrantyInput, advisorId:
   const src = looked.source;
 
   if (!src.isGuayaquil) return { ok: false, error: `Esta guía es para ${src.city ?? "otra ciudad"}: la garantía con motorizado propio es solo para Guayaquil.` };
-  if (src.daysSince > WARRANTY_MAX_DAYS) return { ok: false, error: `Ya pasaron ${src.daysSince} días desde que salió: el plazo máximo para una garantía es de ${WARRANTY_MAX_DAYS} días.` };
+  if (!src.manual && src.daysSince > WARRANTY_MAX_DAYS) return { ok: false, error: `Ya pasaron ${src.daysSince} días desde que salió: el plazo máximo para una garantía es de ${WARRANTY_MAX_DAYS} días.` };
   const late = src.daysSince > WARRANTY_NORMAL_DAYS;
   if (late && !input.acceptLate) return { ok: false, error: `Pasaron ${src.daysSince} días (más de ${WARRANTY_NORMAL_DAYS}): confirma que igual se acepta.` };
 
@@ -700,11 +736,12 @@ export async function createLocalWarranty(input: CreateWarrantyInput, advisorId:
   const requested = new Map<string, number>();
   for (const d of input.deliver) {
     const line = byId.get(d.catalogItemId);
-    if (!line) return { ok: false, error: "Uno de los productos no estaba en la guía original." };
-    if (!Number.isInteger(d.quantity) || d.quantity < 1) return { ok: false, error: `Cantidad inválida para ${line.name}.` };
+    if (!line && !src.manual) return { ok: false, error: "Uno de los productos no estaba en la guía original." };
+    if (!Number.isInteger(d.quantity) || d.quantity < 1) return { ok: false, error: `Cantidad inválida para ${line?.name ?? "un producto"}.` };
     requested.set(d.catalogItemId, (requested.get(d.catalogItemId) ?? 0) + d.quantity);
   }
-  for (const [id, qty] of requested) {
+  // A mano no hay guía original con qué comparar: no hay tope por producto.
+  if (!src.manual) for (const [id, qty] of requested) {
     const line = byId.get(id)!;
     const left = line.quantity - line.alreadyUsed;
     if (qty > left) return { ok: false, error: `${line.name}: la guía original llevaba ${line.quantity}${line.alreadyUsed ? ` y ya se usaron ${line.alreadyUsed} en otra garantía` : ""} — puedes entregar máximo ${left}.` };
@@ -738,6 +775,7 @@ export async function createLocalWarranty(input: CreateWarrantyInput, advisorId:
   const extraIds = input.extras.map((e) => e.catalogItemId);
   const catalog = await prisma.purchaseCatalogItem.findMany({ where: { id: { in: [...requested.keys(), ...extraIds] } }, select: { id: true, name: true } });
   const nameOf = new Map(catalog.map((c) => [c.id, c.name]));
+  if ([...requested.keys()].some((id) => !nameOf.has(id))) return { ok: false, error: "Uno de los productos a entregar no está en el catálogo." };
   if (extraIds.some((id) => !nameOf.has(id))) return { ok: false, error: "Uno de los productos recibidos por error no está en el catálogo." };
 
   const items = [

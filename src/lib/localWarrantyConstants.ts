@@ -12,6 +12,14 @@ export const WARRANTY_MAX_DAYS = 20;
 
 export const WARRANTY_CITY = "GUAYAQUIL";
 
+// Excepciones autorizadas por el admin, una por una: guías que salieron antes
+// de que DAFLOW guardara los cortes (no hay PDF ni productos registrados). El
+// asesor escribe a mano el cliente y los productos, no aplica el plazo de 20
+// días y Bryan la aprueba como siempre. 189780925: pedido de Yair, autorizado
+// por el usuario 2026-10-16 (pedido Dropi del 15/09, Servientrega, Guayaquil).
+export const MANUAL_WARRANTY_GUIDES: readonly string[] = ["189780925"];
+export const isManualWarrantyGuide = (guide: string | null | undefined) => !!guide && MANUAL_WARRANTY_GUIDES.includes(guide.trim().toUpperCase());
+
 // Pedido del usuario 2026-10-02: recoger el producto dañado es opcional y
 // solo conviene si vale más que el flete de recogida. El flete cambia según
 // distancia y sector — se usa este promedio ($7 para garantías locales o por

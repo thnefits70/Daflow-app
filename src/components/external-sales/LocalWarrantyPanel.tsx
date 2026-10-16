@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, Paperclip, Plus, Search, ShieldCheck, Trash2, X } from "lucide-react";
-import type { WarrantySource } from "@/lib/localWarranty";
+import type { WarrantySource, WarrantySourceLine } from "@/lib/localWarranty";
 import {
   EXTRA_REASONS,
   WARRANTY_MAX_DAYS,
@@ -49,6 +49,9 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
   const [catalog, setCatalog] = useState<CatalogItem[] | null>(null);
   const [extraQuery, setExtraQuery] = useState("");
   const [showExtras, setShowExtras] = useState(false);
+  // Guía autorizada a mano por el admin: los productos los elige el asesor.
+  const [manualLines, setManualLines] = useState<WarrantySourceLine[]>([]);
+  const [manualQuery, setManualQuery] = useState("");
   const [phone, setPhone] = useState("");
   const [nameIn, setNameIn] = useState("");
   const [addressIn, setAddressIn] = useState("");
@@ -69,6 +72,8 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
     setLines({});
     setExtras([]);
     setShowExtras(false);
+    setManualLines([]);
+    setManualQuery("");
     setPhone("");
     setNameIn("");
     setAddressIn("");
@@ -98,6 +103,20 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
     setSrc(s);
     setPhone(s.clientPhone ?? "");
     setLines(Object.fromEntries(s.lines.map((l) => [l.catalogItemId, { on: false, qty: "1", reason: "", pickupDefective: false }])));
+    if (s.manual) ensureCatalog();
+  }
+
+  function addManualLine(c: CatalogItem) {
+    setManualQuery("");
+    if (manualLines.some((l) => l.catalogItemId === c.id)) return;
+    // Sin guía original no hay tope: 999 solo para que no limite.
+    setManualLines((prev) => [...prev, { catalogItemId: c.id, name: c.name, code: c.justCode, photo: null, quantity: 999, alreadyUsed: 0 }]);
+    setLines((prev) => ({ ...prev, [c.id]: { on: true, qty: "1", reason: "", pickupDefective: false } }));
+  }
+
+  function removeManualLine(id: string) {
+    setManualLines((prev) => prev.filter((l) => l.catalogItemId !== id));
+    setLines((prev) => ({ ...prev, [id]: { ...prev[id], on: false } }));
   }
 
   function setLine(id: string, patch: Partial<LineState>) {
@@ -150,9 +169,11 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
   }
 
   const late = src.daysSince > WARRANTY_NORMAL_DAYS;
-  const tooLate = src.daysSince > WARRANTY_MAX_DAYS;
+  const manual = !!src.manual;
+  const tooLate = !manual && src.daysSince > WARRANTY_MAX_DAYS;
+  const srcLines = manual ? manualLines : src.lines;
   const blocked = !src.isGuayaquil || tooLate;
-  const chosen = src.lines.filter((l) => lines[l.catalogItemId]?.on);
+  const chosen = srcLines.filter((l) => lines[l.catalogItemId]?.on);
   const deliver = chosen.map((l) => ({ line: l, st: lines[l.catalogItemId] }));
   const qtyOk = deliver.every(({ line, st }) => {
     const q = Number(st.qty);
@@ -213,10 +234,12 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
     onCreated();
   }
 
-  const filteredCatalog = (catalog ?? []).filter((c) => {
-    const q = extraQuery.trim().toLowerCase();
-    return q.length >= 2 && (c.name.toLowerCase().includes(q) || (c.justCode ?? "").includes(q));
-  });
+  const searchCatalog = (raw: string) => {
+    const q = raw.trim().toLowerCase();
+    return (catalog ?? []).filter((c) => q.length >= 2 && (c.name.toLowerCase().includes(q) || (c.justCode ?? "").includes(q)));
+  };
+  const filteredCatalog = searchCatalog(extraQuery);
+  const manualCatalog = searchCatalog(manualQuery);
 
   return (
     <section>
@@ -244,6 +267,11 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
         {!src.isGuayaquil && <div className="text-red font-semibold">Esta guía no es de Guayaquil: la garantía con motorizado propio es solo para Guayaquil.</div>}
         {tooLate && <div className="text-red font-semibold">Ya pasaron más de {WARRANTY_MAX_DAYS} días: no se puede hacer la garantía.</div>}
         {late && !tooLate && <div className="text-gold font-semibold flex items-center gap-1"><AlertTriangle size={13} /> Pasaron más de {WARRANTY_NORMAL_DAYS} días: se pedirá confirmar que igual se acepta.</div>}
+        {manual && (
+          <div className="text-gold font-semibold flex gap-1">
+            <AlertTriangle size={13} className="shrink-0 mt-0.5" /> Excepción autorizada por el admin: esta guía salió antes de que DAFLOW guardara los cortes. Escribe el cliente y elige los productos a mano; no aplica el plazo de {WARRANTY_MAX_DAYS} días y Bryan la revisa igual.
+          </div>
+        )}
         {src.warnings.map((w, i) => (
           <div key={i} className="text-gold">{w}</div>
         ))}
@@ -253,21 +281,21 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
         <>
           {/* Cliente */}
           <div className="mb-4">
-            <div className="text-[12px] font-bold uppercase tracking-wide text-steel mb-1.5">Cliente (de la guía original)</div>
+            <div className="text-[12px] font-bold uppercase tracking-wide text-steel mb-1.5">Cliente {manual ? "(escríbelo a mano)" : "(de la guía original)"}</div>
             <div className="grid gap-2 text-[13px] max-w-xl">
               <div>
                 <span className="text-steel">Nombre: </span>
-                {src.clientName ? <b>{src.clientName}</b> : <input className="rounded border border-rule bg-surface px-2 py-1 text-[13px] w-72" placeholder="No se pudo leer: escribe el nombre" value={nameIn} onChange={(e) => setNameIn(e.target.value)} />}
+                {src.clientName ? <b>{src.clientName}</b> : <input className="rounded border border-rule bg-surface px-2 py-1 text-[13px] w-72" placeholder={manual ? "Nombre del cliente" : "No se pudo leer: escribe el nombre"} value={nameIn} onChange={(e) => setNameIn(e.target.value)} />}
               </div>
               <div>
                 <span className="text-steel">Dirección: </span>
-                {src.clientAddress ? <b>{src.clientAddress}</b> : <input className="rounded border border-rule bg-surface px-2 py-1 text-[13px] w-full" placeholder="No se pudo leer: escribe la dirección" value={addressIn} onChange={(e) => setAddressIn(e.target.value)} />}
+                {src.clientAddress ? <b>{src.clientAddress}</b> : <input className="rounded border border-rule bg-surface px-2 py-1 text-[13px] w-full" placeholder={manual ? "Dirección de entrega" : "No se pudo leer: escribe la dirección"} value={addressIn} onChange={(e) => setAddressIn(e.target.value)} />}
               </div>
               {src.notes && <div><span className="text-steel">Referencia: </span>{src.notes}</div>}
               <div>
                 <span className="text-steel">Celular: </span>
                 <input className="rounded border border-rule bg-surface px-2 py-1 text-[13px] font-mono w-40" placeholder="09…" value={phone} onChange={(e) => setPhone(e.target.value)} />
-                {!src.clientPhone && <span className="text-[11.5px] text-gold ml-2">La etiqueta no trae el celular del cliente: escríbelo, el motorizado lo necesita para coordinar y pedirle la ubicación.</span>}
+                {!src.clientPhone && !manual && <span className="text-[11.5px] text-gold ml-2">La etiqueta no trae el celular del cliente: escríbelo, el motorizado lo necesita para coordinar y pedirle la ubicación.</span>}
               </div>
             </div>
             {src.labelText.length > 0 && (
@@ -280,9 +308,29 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
 
           {/* Productos de la guía */}
           <div className="mb-4">
-            <div className="text-[12px] font-bold uppercase tracking-wide text-steel mb-1.5">¿Qué se le entrega? (solo lo que llevaba la guía)</div>
+            <div className="text-[12px] font-bold uppercase tracking-wide text-steel mb-1.5">¿Qué se le entrega? {manual ? "(busca cada producto que llevaba la guía)" : "(solo lo que llevaba la guía)"}</div>
+            {manual && (
+              <div className="relative max-w-md mb-2">
+                <input
+                  className="w-full rounded border border-rule bg-surface px-2 py-1.5 text-[12.5px]"
+                  placeholder="Busca el producto (nombre o ID)…"
+                  value={manualQuery}
+                  onFocus={ensureCatalog}
+                  onChange={(e) => setManualQuery(e.target.value)}
+                />
+                {manualCatalog.length > 0 && (
+                  <div className="absolute z-10 left-0 right-0 mt-1 max-h-56 overflow-auto bg-surface border border-rule rounded shadow">
+                    {manualCatalog.slice(0, 20).map((c) => (
+                      <button key={c.id} type="button" className="w-full text-left px-2 py-1.5 text-[12.5px] hover:bg-cloud cursor-pointer flex items-center gap-1.5" onClick={() => addManualLine(c)}>
+                        <Plus size={12} /> {c.name} <span className="text-steel font-mono text-[11px]">{c.justCode ?? ""}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="flex flex-col gap-2">
-              {src.lines.map((l) => {
+              {srcLines.map((l) => {
                 const st = lines[l.catalogItemId];
                 const left = l.quantity - l.alreadyUsed;
                 const r = WARRANTY_REASONS.find((x) => x.code === st?.reason);
@@ -296,8 +344,13 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
                       )}
                       <span className="flex-1">
                         <b>{l.name}</b> <span className="text-steel font-mono text-[11px]">{l.code ?? ""}</span>
-                        <span className="text-steel"> · la guía llevaba {l.quantity}{l.alreadyUsed ? ` · ya se usaron ${l.alreadyUsed} en otra garantía` : ""}</span>
+                        {!manual && <span className="text-steel"> · la guía llevaba {l.quantity}{l.alreadyUsed ? ` · ya se usaron ${l.alreadyUsed} en otra garantía` : ""}</span>}
                       </span>
+                      {manual && (
+                        <button type="button" className="text-steel cursor-pointer" title="Quitar" onClick={(e) => { e.preventDefault(); removeManualLine(l.catalogItemId); }}>
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </label>
                     {left <= 0 && <div className="text-[11.5px] text-steel pl-6">Ya no queda nada de este producto por cubrir con garantía.</div>}
                     {st?.on && (
@@ -305,7 +358,7 @@ function WarrantyForm({ onCreated }: { onCreated: () => void }) {
                         <div className="flex flex-wrap items-center gap-2 text-[12.5px]">
                           <span>Cantidad</span>
                           <input type="number" min={1} max={left} className="w-16 rounded border border-rule bg-surface px-2 py-1" value={st.qty} onChange={(e) => setLine(l.catalogItemId, { qty: e.target.value })} />
-                          <span className="text-steel">máx. {left}</span>
+                          {!manual && <span className="text-steel">máx. {left}</span>}
                           <select className="rounded border border-rule bg-surface px-2 py-1" value={st.reason} onChange={(e) => setLine(l.catalogItemId, { reason: e.target.value as WarrantyReasonCode, pickupDefective: false })}>
                             <option value="">Motivo…</option>
                             {WARRANTY_REASONS.map((x) => (
