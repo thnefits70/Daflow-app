@@ -4,9 +4,10 @@ import { useState } from "react";
 
 // Confirmado 2026-09-16, pedido explícito del usuario: si el cliente no
 // quiso recibir el pedido (o lo devolvió), SOLO el asesor dueño de la venta
-// lo reporta. Pedido de Marcos 2026-10-16: además dice cuánto se le debe al
-// motorizado por esta devolución — se le paga desde Caja Chica (Nairoby o
-// Jariel) cuando el paquete vuelve a bodega. Se usa en la tarjeta de la
+// lo reporta. Pedido de Marcos 2026-10-16: al motorizado se le paga el flete
+// normal declarado con la venta (viene escrito; solo se cambia si de verdad
+// es otro monto), desde Caja Chica (Nairoby o Jariel) cuando el paquete
+// vuelve a bodega. Se usa en la tarjeta de la
 // venta (Declarar) y en la pestaña Devoluciones.
 export function ReportReturnForm({
   saleId,
@@ -39,7 +40,7 @@ export function ReportReturnForm({
       const res = await fetch(`/api/external-sales/${saleId}/report-return`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: reason.trim(), returnFreightCost: freightNum > 0 ? freightNum : null }),
+        body: JSON.stringify({ reason: reason.trim(), returnFreightCost: freightNum }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? "No se pudo registrar la devolución.");
@@ -69,7 +70,7 @@ export function ReportReturnForm({
         value={reason}
         onChange={(e) => setReason(e.target.value)}
       />
-      <div className="text-[11.5px] font-semibold mb-1">¿Cuánto se le debe al motorizado por esta devolución?</div>
+      <div className="text-[11.5px] font-semibold mb-1">Flete a pagar al motorizado</div>
       <div className="flex items-center gap-1.5 mb-1">
         <span className="text-[12px] text-steel">$</span>
         <input
@@ -84,8 +85,8 @@ export function ReportReturnForm({
         />
       </div>
       <div className="text-[10.5px] text-steel mb-2">
-        {isContraEntrega ? "Con recaudo: el motorizado no cobró nada, así que pon lo que se le debe por ir y volver. " : ""}
-        Se le paga desde Caja Chica (Nairoby o Jariel) cuando el paquete vuelva a bodega. Déjalo vacío si no se le debe nada.
+        {declaredFreight && declaredFreight > 0 ? "Es el flete normal que declaraste con la venta. Cámbialo solo si de verdad es otro monto. " : "No declaraste flete con esta venta: escribe cuánto se le debe, o déjalo vacío si nada. "}
+        {isContraEntrega ? "Como no cobró nada al cliente, se le paga aparte. " : ""}Lo paga Nairoby o Jariel desde Caja Chica cuando el paquete vuelva a bodega.
       </div>
       {err && <div className="text-red text-[11px] mb-1.5">{err}</div>}
       <div className="flex items-center gap-2">

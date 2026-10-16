@@ -54,7 +54,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     data: {
       returnedAt: new Date(),
       returnReason: parsed.data.reason,
-      ...(sale.kind === "SALE" && (parsed.data.returnFreightCost ?? 0) > 0 ? { returnFreightCost: parsed.data.returnFreightCost } : {}),
+      // Solo se guarda si el asesor cambió el flete declarado (ver returnFreightAmount).
+      ...(sale.kind === "SALE" && parsed.data.returnFreightCost != null && parsed.data.returnFreightCost !== (sale.freightCost ?? 0) ? { returnFreightCost: parsed.data.returnFreightCost } : {}),
     },
   });
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { returnFreightAmount, HAS_RETURN_FREIGHT } from "@/lib/returnFreight";
 import { canDeclareExternalSales, canManagePettyCashPrincipal, canManagePettyCashSecundaria } from "@/lib/guards";
 
 const itemsSelect = { select: { id: true, declaredProductName: true, quantity: true, catalogItem: { select: { name: true } } } } as const;
@@ -46,7 +47,7 @@ export async function GET() {
           where: { advisorId: session.user.id, kind: "SALE", deletedAt: null, returnedAt: { gte: since } },
           select: {
             id: true, code: true, pickupPersonName: true, returnReason: true, returnedAt: true, returnReceivedAt: true, returnConfirmedAt: true,
-            returnFreightCost: true, freightPaidAt: true, freightPaidBy: { select: { name: true } },
+            returnFreightCost: true, freightCost: true, freightPaidAt: true, freightPaidBy: { select: { name: true } },
             client: { select: { name: true } }, items: itemsSelect,
             freightPettyCashEntries: { where: { archived: false }, select: { proofUrl: true }, orderBy: { createdAt: "desc" }, take: 1 },
           },
@@ -59,12 +60,11 @@ export async function GET() {
             kind: "SALE",
             deletedAt: null,
             returnedAt: { not: null },
-            returnFreightCost: { gt: 0 },
-            OR: [{ freightPaidAt: null }, { freightPaidAt: { gte: since } }],
+            AND: [HAS_RETURN_FREIGHT, { OR: [{ freightPaidAt: null }, { freightPaidAt: { gte: since } }] }],
           },
           select: {
             id: true, code: true, advisorId: true, pickupPersonName: true, returnReason: true, returnedAt: true, returnReceivedAt: true,
-            returnFreightCost: true, freightPaidAt: true, freightPaidBy: { select: { name: true } },
+            returnFreightCost: true, freightCost: true, freightPaidAt: true, freightPaidBy: { select: { name: true } },
             advisor: { select: { name: true } }, client: { select: { name: true } }, items: itemsSelect,
             freightPettyCashEntries: { where: { archived: false }, select: { proofUrl: true }, orderBy: { createdAt: "desc" }, take: 1 },
           },
@@ -79,7 +79,8 @@ export async function GET() {
     payBoxes: isAdmin ? [] : [...(canPrincipal ? ["PRINCIPAL"] : []), ...(canSecundaria ? ["SECUNDARIA"] : [])],
     canSeeFreights: isPayer,
     eligible,
-    myReturns,
-    freights: freights.map(({ advisorId, ...f }) => ({ ...f, isMine: advisorId === session.user.id })),
+    // returnFreightCost va ya resuelto: lo corregido o, si no, el flete declarado.
+    myReturns: myReturns.map((r) => ({ ...r, returnFreightCost: returnFreightAmount(r) })),
+    freights: freights.map(({ advisorId, ...f }) => ({ ...f, returnFreightCost: returnFreightAmount(f), isMine: advisorId === session.user.id })),
   });
 }

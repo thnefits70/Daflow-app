@@ -5,6 +5,7 @@ import {
   canManagePettyCashPrincipal, canManagePettyCashSecundaria,
   canViewPettyCashPrincipal, canViewPettyCashSecundaria,
 } from "@/lib/guards";
+import { returnFreightAmount, HAS_RETURN_FREIGHT } from "@/lib/returnFreight";
 
 // Estados que cuentan como "pago real" para elegir órdenes de pago a las
 // que se les puede cargar un flete — mismo criterio que PRICED_STATUSES en
@@ -304,7 +305,7 @@ export type PendingMotorizadoFreightDTO = { saleId: string; label: string; freig
 // entregue o no — basta con que el asesor confirme el resultado — y quien
 // gestionó la garantía no ve la suya (no se paga a sí mismo): `viewerId`.
 // Devolución de venta externa (pedido de Marcos 2026-10-16): el motorizado
-// cobra lo que el asesor declaró al registrarla (returnFreightCost), apenas
+// cobra el flete declarado con la venta (ver returnFreightAmount), apenas
 // Inventario confirma que el paquete volvió a bodega. Quien vendió no se
 // paga a sí mismo.
 export async function getPendingMotorizadoFreights(viewerId?: string | null): Promise<PendingMotorizadoFreightDTO[]> {
@@ -325,7 +326,7 @@ export async function getPendingMotorizadoFreights(viewerId?: string | null): Pr
           clientReceivedAt: { not: null },
         },
         { kind: "WARRANTY", freightCost: { gt: 0 }, OR: [{ clientReceivedAt: { not: null } }, { returnedAt: { not: null } }] },
-        { kind: "SALE", returnedAt: { not: null }, returnReceivedAt: { not: null }, returnFreightCost: { gt: 0 } },
+        { kind: "SALE", returnedAt: { not: null }, returnReceivedAt: { not: null }, ...HAS_RETURN_FREIGHT },
       ],
       ...(viewerId ? { NOT: { advisorId: viewerId, OR: [{ kind: "WARRANTY" }, { returnedAt: { not: null } }] } } : {}),
     },
@@ -334,7 +335,7 @@ export async function getPendingMotorizadoFreights(viewerId?: string | null): Pr
   });
   return rows.map((r) => {
     const isReturn = r.kind === "SALE" && !!r.returnedAt;
-    const amount = isReturn ? r.returnFreightCost! : r.freightCost!;
+    const amount = isReturn ? returnFreightAmount(r) : r.freightCost!;
     return {
       saleId: r.id,
       label: `${r.code}${isReturn ? " (devolución)" : ""} — ${r.pickupPersonName} — $${amount.toFixed(2)}`,

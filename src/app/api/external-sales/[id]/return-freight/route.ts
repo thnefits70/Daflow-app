@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { returnFreightAmount } from "@/lib/returnFreight";
 import { notifyPettyCashFreightPayable } from "@/lib/externalSales";
 
 const schema = z.object({ returnFreightCost: z.number().min(0).max(1000) });
@@ -19,18 +20,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const sale = await prisma.externalSale.findUnique({
     where: { id },
-    select: { advisorId: true, kind: true, code: true, pickupPersonName: true, returnedAt: true, returnReceivedAt: true, returnFreightCost: true, freightPaidAt: true, deletedAt: true },
+    select: { advisorId: true, kind: true, code: true, pickupPersonName: true, returnedAt: true, returnReceivedAt: true, returnFreightCost: true, freightCost: true, freightPaidAt: true, deletedAt: true },
   });
   if (!sale) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
   if (sale.advisorId !== session.user.id) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
   if (sale.kind !== "SALE" || !sale.returnedAt || sale.deletedAt) return NextResponse.json({ error: "Esta venta no tiene una devolución registrada." }, { status: 409 });
   if (sale.freightPaidAt) return NextResponse.json({ error: "El flete de esta devolución ya fue pagado." }, { status: 409 });
 
-  const amount = parsed.data.returnFreightCost > 0 ? parsed.data.returnFreightCost : null;
+  // 0 se guarda tal cual (no se le debe nada); null quedaría en el flete declarado.
+  const amount = parsed.data.returnFreightCost;
   await prisma.externalSale.update({ where: { id }, data: { returnFreightCost: amount } });
 
   // Si el paquete ya volvió y antes no había flete, recién ahora hay algo que pagar.
-  if (amount && sale.returnReceivedAt && !((sale.returnFreightCost ?? 0) > 0)) {
+  if (amount > 0 && sale.returnReceivedAt && !(returnFreightAmount(sale) > 0)) {
     await notifyPettyCashFreightPayable({ code: sale.code, pickupPersonName: sale.pickupPersonName, freightCost: amount, excludeUserId: sale.advisorId, isReturn: true });
   }
 
