@@ -68,6 +68,17 @@ export async function GET() {
     if (v && v.length > 0) countedVariantsByItem.set(l.catalogItemId, v);
     else countedVariantsByItem.delete(l.catalogItemId);
   }
+  // 2026-10-16 (conteo diario): las franjas verde/amarilla se cambiaron por
+  // "Contado hace X días" — último conteo que dejó el número real, o el
+  // último «Ajustar (conteo)».
+  const lastCountedByItem = new Map<string, Date>();
+  for (const l of recountedLines) lastCountedByItem.set(l.catalogItemId, l.countedAt);
+  const manualAdjustments = await prisma.stockKardexEntry.groupBy({ by: ["catalogItemId"], where: { type: "PHYSICAL_COUNT_ADJUSTMENT" }, _max: { occurredAt: true } });
+  for (const a of manualAdjustments) {
+    const at = a._max.occurredAt;
+    const prev = lastCountedByItem.get(a.catalogItemId);
+    if (at && (!prev || at > prev)) lastCountedByItem.set(a.catalogItemId, at);
+  }
   const pendingAdjustmentByItem = new Map(pendingAdjustments.map((a) => [a.catalogItemId, a.requestedQuantity]));
   // Cambiado 2026-09-30, pedido del usuario: el costo para los precios sale
   // de lo que queda de verdad en bodega (ver sellingCost.ts), no del
@@ -80,7 +91,7 @@ export async function GET() {
 
   const withPrices = rows.map((r) => {
     const variants = variantStock.get(r.catalogItemId) ?? null;
-    return withPrice({ ...r, variantStock: variants, countedVariants: countedVariantsByItem.get(r.catalogItemId) ?? null });
+    return withPrice({ ...r, variantStock: variants, countedVariants: countedVariantsByItem.get(r.catalogItemId) ?? null, lastCountedAt: lastCountedByItem.get(r.catalogItemId)?.toISOString() ?? null });
   });
 
   function withPrice<T extends (typeof rows)[number]>(r: T) {

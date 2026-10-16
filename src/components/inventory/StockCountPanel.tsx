@@ -10,7 +10,10 @@ import { BIG_DIFF_UNITS } from "@/lib/stockCountRules";
 import { OPEN_VARIANT_EDITOR, VARIANTS_CHANGED } from "@/components/inventory/VariantListEditor";
 import { useRememberedState } from "@/lib/rememberedState";
 
-type Data = { count: CountView | null; fullCompleted: boolean; weeklyArea: string | null; isLead: boolean; board: AssignmentBoard | null };
+type Data = { count: CountView | null; fullCompleted: boolean; dailyDay: string | null; isLead: boolean; board: AssignmentBoard | null };
+
+// Conteo del día (2026-10-16): por qué entra un producto, cuando no es su turno normal.
+const DAILY_REASON: Record<string, string> = { negativo: "Quedó en negativo", falto_en_corte: "Faltó en un corte", se_acaba: "Se acaba pronto" };
 
 function hour(iso: string): string {
   return new Date(iso).toLocaleTimeString("es-EC", { hour: "numeric", minute: "2-digit", timeZone: "America/Guayaquil" });
@@ -279,7 +282,7 @@ export function StockCountPanel() {
       <div className="text-[13px] max-w-xl">
         {msg && <div className="text-teal mb-2">{msg}</div>}
         {data.fullCompleted ? (
-          <div className="text-steel">No hay un conteo abierto esta semana.</div>
+          <div className="text-steel">Hoy no hay conteo (domingo o feriado).</div>
         ) : isLead ? (
           <>
             <p className="mb-2">Todavía no se hizo el conteo general. Antes de empezar, confirma todos los cortes pendientes: lo que ya salió debe estar descontado.</p>
@@ -307,6 +310,7 @@ export function StockCountPanel() {
   const toApply = count.products.filter((p) => p.countedQty !== null && !p.applied && !p.recount && !p.adjusted).length;
   const total = count.products.length;
   const locked = count.status !== "COUNTING";
+  const daily = count.kind === "WEEKLY_AREA" && count.area === "DAILY";
   const mineIds = new Set(mine?.productIds ?? []);
   const recounting = mine?.area === "RECOUNT";
   const canEdit = (p: CountView["products"][number]) => {
@@ -328,7 +332,7 @@ export function StockCountPanel() {
     <div>
       <div className="flex flex-wrap items-center gap-3 mb-2">
         <h2 className="font-display text-[17px] font-bold flex items-center gap-2">
-          <ClipboardList size={17} /> {count.kind === "FULL" ? "Conteo general" : `Conteo semanal · ${areaLabel(count.area)}`}
+          <ClipboardList size={17} /> {count.kind === "FULL" ? "Conteo general" : daily ? `Conteo del día · ${(count.weekStart ?? "").split("-").reverse().slice(0, 2).join("/")}` : `Conteo semanal · ${areaLabel(count.area)}`}
         </h2>
         {isLead && (
           <span className="text-[12.5px] text-steel">
@@ -407,6 +411,7 @@ export function StockCountPanel() {
                       <span>·</span>
                       <span>{areaLabel(p.area)}</span>
                     </div>
+                    {p.dailyReason && DAILY_REASON[p.dailyReason] && <div className="inline-block mt-1 mr-1 text-[11px] font-semibold rounded-full px-2 py-0.5 border border-gold/60 bg-gold/15">{DAILY_REASON[p.dailyReason]}</div>}
                     <CountStatus p={p} isLead={isLead} />
                     {p.variantCounts && p.variantCounts.length > 0 && !vRows && <div className="text-steel text-[11.5px] mt-1">{variantSummary(p.variantCounts)}</div>}
                   </div>
@@ -495,7 +500,7 @@ export function StockCountPanel() {
           )}
         </div>
       )}
-      {isLead && !locked && (
+      {isLead && !locked && !daily && (
         <div className="mt-4 max-w-2xl">
           {confirmSend ? (
             <div className="bg-cloud border border-gold/50 rounded p-3 text-[12.5px]">

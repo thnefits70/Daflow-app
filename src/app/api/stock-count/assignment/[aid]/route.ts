@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { dbUserId } from "@/lib/guards";
-import { closeIfSettled } from "@/lib/stockCount";
+import { afterAssignmentFinished } from "@/lib/stockCount";
 import { finishAssignment, startAssignment } from "@/lib/stockCountAssignments";
 
 // La persona asignada empieza (corre su tiempo) o finaliza su turno.
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ aid
   const { aid } = await params;
   const r =
     body?.action === "start" ? await startAssignment(aid, userId)
-    : body?.action === "finish" ? await finishAssignment(aid, userId, (countId) => closeIfSettled(countId))
+    : body?.action === "finish" ? await finishAssignment(aid, userId, (countId, who) => afterAssignmentFinished(countId, who))
     : { ok: false as const, error: "Datos inválidos." };
   if (!r.ok) return NextResponse.json({ error: r.error }, { status: 409 });
   return NextResponse.json(r);

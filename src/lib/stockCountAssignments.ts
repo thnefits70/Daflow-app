@@ -4,6 +4,7 @@ import { getInventoryLeadId } from "@/lib/guards";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
 import { isWorkingDay } from "@/lib/ecuadorHolidays";
 import { WAREHOUSE_AREAS, areaLabel } from "@/lib/warehouseAreas";
+import { DAILY_AREA, dailyProductIds } from "@/lib/stockCountDaily";
 
 // Conteo organizado por áreas — pedido del usuario 2026-10-05:
 // - Daniel asigna cada área a UNA persona del equipo de Inventario y elige
@@ -22,6 +23,7 @@ export const RECOUNT = "RECOUNT";
 
 export function countAreaLabel(area: string): string {
   if (area === RECOUNT) return "Recuento";
+  if (area === DAILY_AREA) return "Conteo del día";
   if (area === NO_AREA) return "Sin área";
   return areaLabel(area);
 }
@@ -138,6 +140,7 @@ export const COUNTABLE_ITEM = { stockKardexEntries: { some: {} } } as const;
 // Productos que cubre una asignación.
 export async function assignmentProductIds(a: { countId: string; area: string; catalogItemIds: string[] }): Promise<string[]> {
   if (a.area === RECOUNT) return a.catalogItemIds;
+  if (a.area === DAILY_AREA) return dailyProductIds(a.countId);
   const items = await prisma.purchaseCatalogItem.findMany({ where: { warehouseArea: a.area === NO_AREA ? null : a.area, ...COUNTABLE_ITEM }, select: { id: true } });
   return items.map((i) => i.id);
 }
@@ -253,7 +256,7 @@ function durationText(sec: number): string {
 // "Finalizar" (pedido de Daniel 2026-10-07): se puede pulsar aunque falten
 // productos. Queda el turno registrado; si contó todo, el área se termina; si
 // no, sigue a su nombre y en el próximo horario pulsa "Empezar" otra vez.
-export async function finishAssignment(id: string, userId: string, closeIfSettled: (countId: string) => Promise<void>): Promise<Result<{ counted: number; sec: number; complete: boolean }>> {
+export async function finishAssignment(id: string, userId: string, afterFinished: (countId: string, who: string) => Promise<void>): Promise<Result<{ counted: number; sec: number; complete: boolean }>> {
   const a = await prisma.stockCountAssignment.findUnique({ where: { id } });
   if (!a || a.assigneeId !== userId) return { ok: false, error: "Este conteo no está asignado a ti." };
   if (a.finishedAt) return { ok: true, counted: 0, sec: 0, complete: true };
@@ -287,7 +290,13 @@ export async function finishAssignment(id: string, userId: string, closeIfSettle
     if (danielId) {
       await notifyOwner(danielId, { title: "🔁 Recuento terminado", body: `${who} volvió a contar ${p.total} producto(s). Lo que coincidió ya se aplicó a INVESTOCK; lo que no, te sale para asignar otro recuento.`, url: "/area/conteo-inventario" }).catch(() => null);
     }
-    await closeIfSettled(a.countId);
+    await afterFinished(a.countId, who);
+  } else if (a.area === DAILY_AREA) {
+    // Conteo del día: lo contado se aplica solo (las diferencias grandes, a recuento).
+    await afterFinished(a.countId, who);
+    if (danielId) {
+      await notifyOwner(danielId, { title: "✅ Conteo del día terminado", body: `${who} contó ${p.total} producto(s) en ${durationText(totalSec)}. Ya se aplicó a INVESTOCK; si algo tuvo una diferencia grande, te sale para asignar el recuento.`, url: "/area/conteo-inventario" }).catch(() => null);
+    }
   } else if (danielId) {
     const left = await areasWithoutAssignment(a.countId);
     await notifyOwner(danielId, {

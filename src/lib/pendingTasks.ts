@@ -3091,7 +3091,8 @@ async function getStockCountPendingItems(forLead: boolean, userId: string | null
   const items: PendingItem[] = board.mine ? [myCountItem(board.mine)] : [];
   if (!forLead) return items;
 
-  const title = count.kind === "FULL" ? "Conteo general" : `Conteo semanal · Área ${count.area}`;
+  const daily = count.kind === "WEEKLY_AREA" && count.area === "DAILY";
+  const title = count.kind === "FULL" ? "Conteo general" : daily ? "Conteo del día" : `Conteo semanal · Área ${count.area}`;
   const late = [...board.areas.map((a) => a.assignment), ...board.recounts].filter((a): a is AssignmentView => !!a && a.late);
   if (board.unassignedRecount > 0) {
     items.push({ type: "conteo_inventario", icon: "🔁", label: `${board.unassignedRecount} producto(s) para recontar — asígnalos a otra persona`, meta: "Diferencia grande: si el recuento coincide, se aplica solo. No puede recontarlos quien los contó.", overdue: true, href: "/area/conteo-inventario" });
@@ -3110,12 +3111,27 @@ async function getStockCountPendingItems(forLead: boolean, userId: string | null
       href: "/area/conteo-inventario",
     });
   }
+  // Conteo del día (2026-10-16): una sola lista corta; se aplica sola al terminar.
+  if (daily) {
+    const today = board.areas[0];
+    if (!today || today.total === 0 || today.assignment?.finishedAt) return items;
+    const a = today.assignment;
+    items.push({
+      type: "conteo_inventario",
+      icon: "📋",
+      label: a ? `Conteo del día: ${a.assigneeName} lleva ${a.done} de ${a.total}` : `Conteo del día: asigna a alguien los ${today.total} producto(s) de hoy`,
+      meta: "Unos 25 minutos en uno de los horarios de conteo · lo contado se aplica solo al terminar",
+      overdue: !!a?.late,
+      href: "/area/conteo-inventario",
+    });
+    return items;
+  }
   const finished = board.areas.filter((a) => a.assignment?.finishedAt).length;
   const inProgress = board.areas.filter((a) => a.assignment && !a.assignment.finishedAt);
   const free = board.areas.filter((a) => !a.assignment && a.total > 0);
   const all = board.areas.every((a) => a.total === 0 || a.assignment?.finishedAt);
   // El semanal se atrasa desde el jueves de esa semana.
-  const weekLate = count.kind === "WEEKLY_AREA" && !!count.weekStart && ecuadorDay(new Date()) >= new Date(new Date(`${count.weekStart}T12:00:00Z`).getTime() + 3 * 86_400_000).toISOString().slice(0, 10);
+  const weekLate = count.kind === "WEEKLY_AREA" && !daily && !!count.weekStart && ecuadorDay(new Date()) >= new Date(new Date(`${count.weekStart}T12:00:00Z`).getTime() + 3 * 86_400_000).toISOString().slice(0, 10);
   const label = all
     ? `${title}: todas las áreas contadas — revísalo y envíalo`
     : free.length > 0

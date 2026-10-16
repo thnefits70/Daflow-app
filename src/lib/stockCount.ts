@@ -1,7 +1,6 @@
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentStock } from "@/lib/stockKardex";
-import { WAREHOUSE_AREAS } from "@/lib/warehouseAreas";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
 import { variantSuggestions } from "@/lib/variantSales";
 import { applyCountToVariants } from "@/lib/variantStock";
@@ -10,6 +9,8 @@ import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId } from "@/lib/guards";
 import { isBigDifference } from "@/lib/stockCountRules";
 import { COUNTABLE_ITEM, COUNT_HOURS_TEXT, MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, closeShift, openAssignmentFor, recentMovement, windowStatus } from "@/lib/stockCountAssignments";
+import { isWorkingDay } from "@/lib/ecuadorHolidays";
+import { DAILY_AREA, type DailyReason, dailyProductIds, dailySelection, isDailyCount } from "@/lib/stockCountDaily";
 
 // Conteo físico de inventario — pedido del usuario 2026-10-02.
 // - FULL: conteo general de toda la bodega (una vez). Cuando el admin lo
@@ -43,23 +44,14 @@ export function parseVariantCounts(json: unknown): VariantCount[] | null {
   return Array.isArray(json) ? (json as VariantCount[]) : null;
 }
 
-// Lunes (YYYY-MM-DD, Ecuador) de la semana de `day`.
-export function mondayOf(day: string): string {
-  const d = new Date(`${day}T12:00:00Z`);
-  const dow = d.getUTCDay();
-  return new Date(d.getTime() - ((dow + 6) % 7) * 86_400_000).toISOString().slice(0, 10);
-}
-
-// Área que toca contar esta semana, o null si el conteo general todavía no
-// se aprobó (la rotación empieza la semana SIGUIENTE a esa aprobación).
-export async function weeklyAreaFor(today = ecuadorDay(new Date())): Promise<{ area: string; weekStart: string } | null> {
+// Día de conteo diario (reemplazó al semanal por área el 2026-10-16), o null
+// si el conteo general todavía no se cerró o hoy no se trabaja. Empieza el
+// día de trabajo SIGUIENTE al cierre del general.
+export async function dailyCountDay(today = ecuadorDay(new Date())): Promise<string | null> {
   const settings = await prisma.platformSettings.findUnique({ where: { id: "singleton" }, select: { fullStockCountCompletedAt: true } });
   if (!settings?.fullStockCountCompletedAt) return null;
-  const firstWeek = new Date(`${mondayOf(ecuadorDay(settings.fullStockCountCompletedAt))}T12:00:00Z`).getTime() + 7 * 86_400_000;
-  const thisWeek = mondayOf(today);
-  const weeks = Math.floor((new Date(`${thisWeek}T12:00:00Z`).getTime() - firstWeek) / (7 * 86_400_000));
-  if (weeks < 0) return null;
-  return { area: WAREHOUSE_AREAS[weeks % WAREHOUSE_AREAS.length], weekStart: thisWeek };
+  if (today <= ecuadorDay(settings.fullStockCountCompletedAt) || !isWorkingDay(today)) return null;
+  return today;
 }
 
 export async function fullCountCompleted(): Promise<boolean> {
@@ -79,9 +71,9 @@ async function expectedNow(catalogItemId: string): Promise<number> {
   return stock.balance - (picked._sum.pickedQty ?? 0) + (received._sum.receivedQuantity ?? 0);
 }
 
-async function products(area: string | null): Promise<CountableProduct[]> {
+async function products(area: string | null, ids?: string[]): Promise<CountableProduct[]> {
   const items = await prisma.purchaseCatalogItem.findMany({
-    where: area ? { warehouseArea: area, ...COUNTABLE_ITEM } : COUNTABLE_ITEM,
+    where: ids ? { id: { in: ids }, ...COUNTABLE_ITEM } : area ? { warehouseArea: area, ...COUNTABLE_ITEM } : COUNTABLE_ITEM,
     select: { id: true, name: true, justCode: true, photos: true, warehouseArea: true },
     orderBy: [{ warehouseArea: "asc" }, { name: "asc" }],
   });
@@ -94,19 +86,50 @@ async function products(area: string | null): Promise<CountableProduct[]> {
     .map((x) => x.p);
 }
 
-// El conteo abierto: el general si existe uno sin aprobar; si no, el de la
-// semana (se crea solo al abrirlo).
+// El conteo abierto: el general si existe uno sin aprobar; si no, el del día
+// (se crea solo al abrirlo; los de días anteriores se cierran al crear el nuevo).
 export async function getActiveCount(userId: string | null) {
   const open = await prisma.stockCount.findFirst({ where: { kind: "FULL", status: { not: "APPROVED" } }, orderBy: { startedAt: "desc" } });
   if (open) return open;
-  const week = await weeklyAreaFor();
-  if (!week) return null;
-  return prisma.stockCount.upsert({
-    where: { kind_weekStart_area: { kind: "WEEKLY_AREA", weekStart: week.weekStart, area: week.area } },
+  const day = await dailyCountDay();
+  // Domingo/feriado: sigue a la vista el último del día que quedó abierto (recuentos).
+  if (!day) return prisma.stockCount.findFirst({ where: { kind: "WEEKLY_AREA", area: DAILY_AREA, status: { not: "APPROVED" } }, orderBy: { startedAt: "desc" } });
+  const count = await prisma.stockCount.upsert({
+    where: { kind_weekStart_area: { kind: "WEEKLY_AREA", weekStart: day, area: DAILY_AREA } },
     update: {},
-    create: { kind: "WEEKLY_AREA", weekStart: week.weekStart, area: week.area, startedById: userId },
+    create: { kind: "WEEKLY_AREA", weekStart: day, area: DAILY_AREA, startedById: userId },
   });
+  await rollOverDailyCounts(count.id, day);
+  return count;
 }
+
+// Cierra los conteos de días anteriores (y cualquier semanal viejo): aplica lo
+// contado, pasa al de hoy lo que sigue en recuento (con su asignación) y deja
+// el resto para cuando le vuelva a tocar.
+async function rollOverDailyCounts(todayId: string, day: string): Promise<void> {
+  const old = await prisma.stockCount.findMany({ where: { kind: "WEEKLY_AREA", status: { not: "APPROVED" }, id: { not: todayId }, OR: [{ area: { not: DAILY_AREA } }, { weekStart: { lt: day } }] }, select: { id: true } });
+  for (const c of old) {
+    const summary = await processCountedLines(c.id);
+    await notifyApplySummary(summary, DAILY_WHO, true);
+    const now = new Date();
+    for (const a of await prisma.stockCountAssignment.findMany({ where: { countId: c.id, finishedAt: null } })) {
+      if (a.area === RECOUNT) {
+        await prisma.stockCountAssignment.update({ where: { id: a.id }, data: { countId: todayId } });
+      } else {
+        if (a.startedAt) await closeShift(a, now);
+        await prisma.stockCountAssignment.update({ where: { id: a.id }, data: { finishedAt: now } });
+      }
+    }
+    const taken = new Set((await prisma.stockCountLine.findMany({ where: { countId: todayId }, select: { catalogItemId: true } })).map((l) => l.catalogItemId));
+    for (const r of await prisma.stockCountLine.findMany({ where: { countId: c.id, decision: RECOUNT }, select: { id: true, catalogItemId: true } })) {
+      if (taken.has(r.catalogItemId)) await prisma.stockCountLine.updateMany({ where: { id: r.id, decision: RECOUNT }, data: { decision: "REJECTED", decidedAt: now } });
+      else await prisma.stockCountLine.update({ where: { id: r.id }, data: { countId: todayId } });
+    }
+    await finishCount(c.id, null);
+  }
+}
+
+const DAILY_WHO = "El conteo del día";
 
 export async function startFullCount(userId: string | null) {
   const open = await prisma.stockCount.findFirst({ where: { kind: "FULL", status: { not: "APPROVED" } } });
@@ -155,14 +178,17 @@ export type CountView = {
   weekStart: string | null;
   // applied = ya se aplicó a INVESTOCK (2026-10-13): no se corrige desde aquí.
   // adjusted = ya corregido con «Ajustar (conteo)» después de lo contado: no se cuenta.
-  products: (CountableProduct & { countedQty: number | null; variantCounts: VariantCount[] | null; countedByName: string | null; countedAt: string | null; recount: boolean; applied: boolean; adjusted: boolean; newArrival: boolean })[];
+  // dailyReason: en el conteo del día, por qué le toca (null en el general).
+  products: (CountableProduct & { countedQty: number | null; variantCounts: VariantCount[] | null; countedByName: string | null; countedAt: string | null; recount: boolean; applied: boolean; adjusted: boolean; newArrival: boolean; dailyReason: DailyReason | null })[];
 };
 
 // Vista para quien cuenta / Daniel: NUNCA incluye lo que dice el sistema.
 export async function getCountView(countId: string): Promise<CountView | null> {
   const count = await prisma.stockCount.findUnique({ where: { id: countId }, include: { lines: true } });
   if (!count) return null;
-  const list = await products(count.kind === "WEEKLY_AREA" ? count.area : null);
+  const daily = isDailyCount(count);
+  const reasons = daily ? await dailySelection(count) : new Map<string, DailyReason>();
+  const list = daily ? await products(null, await dailyProductIds(count.id, true)) : await products(count.kind === "WEEKLY_AREA" ? count.area : null);
   const byItem = new Map(count.lines.map((l) => [l.catalogItemId, l]));
   const [adjusted, firstEntries] = await Promise.all([
     manualAdjustmentsSince(count.startedAt, list.map((p) => p.id)),
@@ -183,7 +209,7 @@ export async function getCountView(countId: string): Promise<CountView | null> {
     weekStart: count.weekStart,
     products: list.map((p) => {
       const l = byItem.get(p.id);
-      return { ...p, countedQty: l?.countedQty ?? null, variantCounts: parseVariantCounts(l?.variantCounts), countedByName: l?.countedById ? (nameOf.get(l.countedById) ?? null) : null, countedAt: l?.countedAt.toISOString() ?? null, recount: l?.decision === RECOUNT, applied: l?.decision === "APPROVED", adjusted: isAdjustedAfter(adjusted.get(p.id), l), newArrival: !l && newArrivals.has(p.id) };
+      return { ...p, countedQty: l?.countedQty ?? null, variantCounts: parseVariantCounts(l?.variantCounts), countedByName: l?.countedById ? (nameOf.get(l.countedById) ?? null) : null, countedAt: l?.countedAt.toISOString() ?? null, recount: l?.decision === RECOUNT, applied: l?.decision === "APPROVED", adjusted: isAdjustedAfter(adjusted.get(p.id), l), newArrival: !l && newArrivals.has(p.id), dailyReason: reasons.get(p.id) ?? null };
     }),
   };
 }
@@ -209,7 +235,9 @@ export async function recordCount(params: { countId: string; catalogItemId: stri
   if (!params.isLead && (await adjustedInCount(params.countId, [params.catalogItemId])).size > 0) {
     return { ok: false, error: "Daniel ya ajustó este producto con su número real: no hace falta contarlo." };
   }
-  if (count.kind === "WEEKLY_AREA" && !isRecount) {
+  if (isDailyCount(count) && !isRecount) {
+    if (!(await dailyProductIds(params.countId, true)).includes(params.catalogItemId)) return { ok: false, error: "Este producto no está en el conteo de hoy." };
+  } else if (count.kind === "WEEKLY_AREA" && !isRecount) {
     const item = await prisma.purchaseCatalogItem.findUnique({ where: { id: params.catalogItemId }, select: { warehouseArea: true } });
     if (item?.warehouseArea !== count.area) return { ok: false, error: `Este producto no es del área ${count.area}.` };
   }
@@ -333,13 +361,15 @@ async function adminStockHref(): Promise<string> {
   return inv ? `/admin/dept/${inv.id}?tab=stock-actual` : "/admin";
 }
 
-async function notifyApplySummary(s: ApplySummary, who: string): Promise<void> {
+// quiet (conteo del día): al admin solo si algo cambió, para no avisarle a diario por nada.
+async function notifyApplySummary(s: ApplySummary, who: string, quiet = false): Promise<void> {
   if (s.applied === 0 && s.recount.length === 0) return;
+  if (quiet && s.withDifference === 0 && s.recount.length === 0) return;
   const more = s.recount.length > 4 ? ` y ${s.recount.length - 4} más` : "";
   const recount = s.recount.length ? ` ${s.recount.length} con diferencia grande pasan a recuento por otra persona: ${s.recount.slice(0, 4).join("; ")}${more}.` : "";
   await notifyOwner("admin", {
     title: "📋 Conteo físico aplicado a INVESTOCK",
-    body: `${who} aplicó ${s.applied} producto(s) (${s.withDifference} con diferencia). Valor del inventario: +${money(s.valueUp)} / −${money(s.valueDown)}.${recount}`,
+    body: `${who === DAILY_WHO ? "Conteo del día:" : `${who} aplicó`} ${s.applied} producto(s) (${s.withDifference} con diferencia). Valor del inventario: +${money(s.valueUp)} / −${money(s.valueDown)}.${recount}`,
     url: await adminStockHref(),
   }).catch(() => null);
   const danielId = await getInventoryLeadId();
@@ -354,11 +384,11 @@ async function notifyApplySummary(s: ApplySummary, who: string): Promise<void> {
 
 // Botón de Daniel: aplica lo contado hasta ahora sin cerrar el conteo.
 export async function applyCountedSoFar(countId: string, who: string): Promise<{ ok: true; summary: ApplySummary } | { ok: false; error: string }> {
-  const count = await prisma.stockCount.findUnique({ where: { id: countId }, select: { status: true } });
+  const count = await prisma.stockCount.findUnique({ where: { id: countId }, select: { status: true, kind: true, area: true } });
   if (!count) return { ok: false, error: "Conteo no encontrado." };
   if (count.status === "APPROVED") return { ok: false, error: "Este conteo ya se cerró." };
   const summary = await processCountedLines(countId);
-  await notifyApplySummary(summary, who);
+  await notifyApplySummary(summary, who, isDailyCount(count));
   await closeIfSettled(countId);
   return { ok: true, summary };
 }
@@ -532,4 +562,12 @@ export async function recountPendingCount(countId: string): Promise<number> {
 
 export async function getSubmittedCounts() {
   return prisma.stockCount.findMany({ where: { status: "SUBMITTED" }, orderBy: { submittedAt: "asc" }, select: { id: true, kind: true, area: true, weekStart: true, submittedAt: true } });
+}
+
+// Al terminar una asignación: el conteo del día se aplica solo (no hay que
+// pulsar nada); en el general solo se revisa si ya quedó todo cuadrado.
+export async function afterAssignmentFinished(countId: string, who: string): Promise<void> {
+  const count = await prisma.stockCount.findUnique({ where: { id: countId }, select: { kind: true, area: true } });
+  if (count && isDailyCount(count)) await applyCountedSoFar(countId, who);
+  else await closeIfSettled(countId);
 }

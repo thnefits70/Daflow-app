@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { canActOnMerchandiseOutflow, canCaptureMerchandiseOutflow, dbUserId } from "@/lib/guards";
-import { fullCountCompleted, getActiveCount, getCountView, startFullCount, weeklyAreaFor } from "@/lib/stockCount";
+import { dailyCountDay, fullCountCompleted, getActiveCount, getCountView, startFullCount } from "@/lib/stockCount";
 import { getAssignmentBoard, notifyLateAssignments } from "@/lib/stockCountAssignments";
 
 // Conteo físico (pedido del usuario 2026-10-02): el equipo de Inventario
@@ -15,10 +15,10 @@ export async function GET() {
   const userId = dbUserId(session.user.id);
   await notifyLateAssignments().catch(() => null);
   const active = await getActiveCount(userId);
-  const [view, completed, week, board] = await Promise.all([
+  const [view, completed, dailyDay, board] = await Promise.all([
     active ? getCountView(active.id) : null,
     fullCountCompleted(),
-    weeklyAreaFor(),
+    dailyCountDay(),
     active ? getAssignmentBoard(active, userId, isLead) : null,
   ]);
   let count = view;
@@ -29,7 +29,7 @@ export async function GET() {
     const recounting = board?.mine?.area === "RECOUNT";
     count = { ...view, products: view.products.filter((p) => mine.has(p.id)).map((p) => (recounting && p.recount ? { ...p, countedQty: null, countedByName: null, countedAt: null } : p)) };
   }
-  return NextResponse.json({ count, fullCompleted: completed, weeklyArea: week?.area ?? null, isLead, board });
+  return NextResponse.json({ count, fullCompleted: completed, dailyDay, isLead, board });
 }
 
 export async function POST(req: NextRequest) {

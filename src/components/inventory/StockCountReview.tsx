@@ -55,7 +55,7 @@ export function StockCountReview({ onApproved }: { onApproved?: () => void }) {
         return (
           <div key={c.id} className="mb-3 last:mb-0">
             <div className="font-semibold text-[13px] flex items-center gap-2 mb-1 text-gold">
-              <ClipboardCheck size={14} /> {c.kind === "FULL" ? "Conteo general" : `Conteo semanal · ${areaLabel(c.area)}`} por aprobar — {c.differences.length} diferencia(s)
+              <ClipboardCheck size={14} /> {c.kind === "FULL" ? "Conteo general" : c.area === "DAILY" ? "Conteo del día" : `Conteo semanal · ${areaLabel(c.area)}`} por aprobar — {c.differences.length} diferencia(s)
             </div>
             <div className="text-[12px] text-steel mb-2">Lo marcado se corrige en el stock. Desmarca lo que veas raro: lo vuelve a contar otra persona y te regresa a esta lista.</div>
             <div className="overflow-x-auto">
