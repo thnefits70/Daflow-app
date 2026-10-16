@@ -27,7 +27,7 @@ class McpSession {
       headers,
       body: JSON.stringify({ jsonrpc: "2.0", method, ...(id !== undefined ? { id } : {}), ...(params !== undefined ? { params } : {}) }),
     });
-    if (res.status === 401 || res.status === 403) await markReconnect(this.accountId, "Dropi pidió volver a conectar la cuenta.");
+    if (res.status === 401) await markReconnect(this.accountId, "Dropi pidió volver a conectar la cuenta.");
     const sid = res.headers.get("mcp-session-id");
     if (sid) this.sessionId = sid;
     if (notify) return null;
@@ -94,6 +94,15 @@ export type NickReadResult = {
   detailFields: string[];
   rows: NickGuideRow[];
   note: string | null;
+  // Solo para la vista del admin: entender qué pide y qué responde Dropi.
+  diag: {
+    listArgs: string[];
+    detailArgs: string[];
+    detailIdUsed: string | null;
+    detailResult: string | null;
+    detailKeysSeen: string[];
+    statuses: string | null;
+  };
 };
 
 // Montos fuera: el equipo de Inventario no ve dinero (y NICK etapa 0 tampoco).
@@ -157,7 +166,31 @@ function parseDropiObject(text: string): Record<string, unknown> {
   return out;
 }
 
-function toolText(r: { content?: { type: string; text?: string }[] }) {
+// Detalle: líneas "clave: valor" + la primera fila de cada tabla que traiga
+// (ej. items[1]{...}), con el nombre de la tabla adelante.
+function parseDropiDetail(text: string): Record<string, unknown> {
+  const out = parseDropiObject(text);
+  const header = /([\w.]+)\[\d+\]\{[^}]*\}:/g;
+  let m: RegExpExecArray | null;
+  while ((m = header.exec(text))) {
+    const first = parseDropiTable(text.slice(m.index))?.[0];
+    if (first) for (const [k, v] of Object.entries(first)) out[`${m[1]}.${k}`] = v;
+    delete out[m[1]];
+  }
+  return out;
+}
+
+// Solo los NOMBRES de las claves que aparecen en la respuesta (nunca valores).
+function keysSeen(text: string): string[] {
+  const out = new Set<string>();
+  for (const m of text.matchAll(/(?:^|\n)\s*([A-Za-z_][\w.]*)(\[\d+\])?(\{([^}]*)\})?:/g)) {
+    out.add(m[1]);
+    if (m[4]) for (const f of m[4].split(",")) out.add(`${m[1]}.${f.trim()}`);
+  }
+  return [...out].filter((k) => !MONEY_KEY.test(k)).slice(0, 150);
+}
+
+function toolText(r:{ content?: { type: string; text?: string }[] }) {
   return (r.content ?? []).map((c) => c.text ?? "").join("\n");
 }
 
@@ -245,10 +278,18 @@ export async function readLatestGuides(accountId: string, size = 20): Promise<Ni
       detailFields: [],
       rows: [],
       note: null,
+      diag: { listArgs: [], detailArgs: [], detailIdUsed: null, detailResult: null, detailKeysSeen: [], statuses: null },
     };
     if (!orderTool) {
       result.note = "Dropi no ofrece una herramienta para listar órdenes en esta cuenta.";
     } else {
+      // Diagnóstico (solo admin): qué filtros acepta la lista y qué estados existen.
+      result.diag.listArgs = Object.keys(orderTool.inputSchema?.properties ?? {});
+      const statusTool = tools.find((t) => /^list[_ ]?(order[_ ]?)?statuses$/i.test(t.name));
+      if (statusTool) {
+        const s = await mcp.callTool(statusTool.name, {}).catch(() => null);
+        if (s && !s.isError) result.diag.statuses = toolText(s).slice(0, 1500);
+      }
       const r = await mcp.callTool(orderTool.name, pagingArgs(orderTool, size));
       const text = toolText(r);
       let list: Record<string, unknown>[] = [];
@@ -277,30 +318,51 @@ export async function readLatestGuides(accountId: string, size = 20): Promise<Ni
           Object.keys(detailTool.inputSchema?.properties ?? {}).find((k) => /order_?id|^id$/i.test(k)) ??
           detailTool.inputSchema?.required?.[0] ??
           "order_id";
-        const readDetail = async (row: NickGuideRow) => {
+        const idType = (detailTool.inputSchema?.properties?.[idKey] as { type?: string } | undefined)?.type;
+        const readDetail = async (row: NickGuideRow, diagnose = false) => {
           if (!row.orderId || row.guide) return null;
-          const d = await mcp.callTool(detailTool.name, { [idKey]: /^\d+$/.test(row.orderId) ? Number(row.orderId) : row.orderId }).catch(() => null);
-          if (!d || d.isError) return null;
+          const idValue = idType === "string" || !/^\d+$/.test(row.orderId) ? row.orderId : Number(row.orderId);
+          let d: Awaited<ReturnType<McpSession["callTool"]>> | null = null;
+          try {
+            d = await mcp.callTool(detailTool.name, { [idKey]: idValue });
+          } catch (e) {
+            if (diagnose) result.diag.detailResult = `Dropi dio error: ${(e instanceof Error ? e.message : "desconocido").slice(0, 200)}`;
+            return null;
+          }
           const dText = toolText(d);
+          if (d.isError) {
+            if (diagnose) result.diag.detailResult = `Dropi dio error: ${dText.slice(0, 200) || "sin mensaje"}`;
+            return null;
+          }
           let obj: Record<string, unknown> | null = null;
           if (d.structuredContent && typeof d.structuredContent === "object") obj = d.structuredContent as Record<string, unknown>;
           if (!obj) {
             try {
               obj = JSON.parse(dText) as Record<string, unknown>;
             } catch {
-              obj = parseDropiObject(dText);
+              obj = parseDropiDetail(dText);
             }
+          }
+          if (diagnose) {
+            result.diag.detailResult = Object.keys(obj).length
+              ? "Dropi respondió y NICK lo entendió."
+              : dText.trim()
+                ? "Dropi respondió, pero NICK no entendió el formato."
+                : "Dropi respondió vacío.";
+            result.diag.detailKeysSeen = keysSeen(dText);
           }
           row.guide = pick(obj, /guia|guide|tracking/i);
           return obj;
         };
         // Primero una para ver si el detalle trae guía; si la trae, el resto (de a 4).
         const first = result.rows.find((row) => row.orderId);
-        const firstObj = first ? await readDetail(first) : null;
+        result.diag.detailArgs = Object.keys(detailTool.inputSchema?.properties ?? {});
+        result.diag.detailIdUsed = first?.orderId ? `${idKey} = ${first.orderId}` : null;
+        const firstObj = first ? await readDetail(first, true) : null;
         if (firstObj) result.detailFields = fieldNames(firstObj).slice(0, 120);
         if (first?.guide) {
           const pending = result.rows.filter((row) => row !== first);
-          for (let i = 0; i < pending.length; i += 4) await Promise.all(pending.slice(i, i + 4).map(readDetail));
+          for (let i = 0; i < pending.length; i += 4) await Promise.all(pending.slice(i, i + 4).map((row) => readDetail(row)));
         }
       }
     }

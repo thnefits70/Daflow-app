@@ -203,6 +203,34 @@ export function NickPanel({
                           <b>Datos del detalle de una orden (sin montos):</b> {r.detailFields.join(", ")}
                         </div>
                       )}
+                      <div className="mt-3 border-t border-rule pt-2">
+                        <b>Diagnóstico</b>
+                        <div className="mt-1">
+                          <b>La lista acepta:</b> {r.diag.listArgs.join(", ") || "nada (sin filtros)"}
+                        </div>
+                        <div className="mt-1">
+                          <b>El detalle pide:</b> {r.diag.detailArgs.join(", ") || "—"}
+                          {r.diag.detailIdUsed && <> · se probó con {r.diag.detailIdUsed}</>}
+                        </div>
+                        {r.diag.detailResult && (
+                          <div className="mt-1 break-words">
+                            <b>Resultado del detalle:</b> {r.diag.detailResult}
+                          </div>
+                        )}
+                        {r.diag.detailKeysSeen.length > 0 && (
+                          <div className="mt-1 break-words">
+                            <b>Claves que trae el detalle:</b> {r.diag.detailKeysSeen.join(", ")}
+                          </div>
+                        )}
+                        {r.diag.statuses && (
+                          <div className="mt-1">
+                            <b>Estados que existen en Dropi:</b>
+                            <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-[10.5px] bg-cloud rounded p-2 max-h-[220px] overflow-y-auto">
+                              {r.diag.statuses}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
                     </details>
                   )}
                 </div>
