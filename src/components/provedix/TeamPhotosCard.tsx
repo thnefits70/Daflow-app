@@ -15,6 +15,8 @@ export function TeamPhotosCard({ data }: { data: Data }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // Oculta por defecto (2026-10-16): se abre con un clic en el título.
+  const [open, setOpen] = useState(false);
 
   async function syncNow() {
     setBusy("sync");
@@ -42,17 +44,27 @@ export function TeamPhotosCard({ data }: { data: Data }) {
 
   return (
     <div className="bg-surface border border-rule rounded-lg p-5 mb-5">
-      <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
-        <div className="text-[13px] font-semibold">Fotos del equipo en la página ({data.pool.length})</div>
+      <div className={`flex items-center justify-between gap-3 flex-wrap ${open ? "mb-1" : ""}`}>
         <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+          className="flex items-center gap-2 text-[13px] font-semibold cursor-pointer hover:opacity-80"
+        >
+          <span className={`inline-block text-[10px] text-steel transition-transform ${open ? "rotate-90" : ""}`}>▶</span>
+          Fotos del equipo en la página ({data.pool.length})
+          {!open && <span className="text-[12px] font-normal text-steel">· Ver fotos</span>}
+        </button>
+        {open && <button
           type="button"
           onClick={syncNow}
           disabled={busy !== null}
           className="rounded-full border border-rule bg-cloud px-3 py-1.5 text-[12px] font-semibold hover:bg-rule disabled:opacity-60 cursor-pointer"
         >
           {busy === "sync" ? "Revisando el Drive…" : "Revisar Drive ahora"}
-        </button>
+        </button>}
       </div>
+      {open && <>
       <p className="text-[12px] text-steel mb-4 max-w-[640px]">
         Los días 1 y 15 de cada mes el sistema revisa solo la carpeta de Drive, descarta las fotos con datos de clientes, proveedores o la ubicación, y
         publica solo las mejores (máximo 14). La página muestra 6 y las cambia cada lunes. Puedes quitar cualquier foto.
@@ -91,6 +103,7 @@ export function TeamPhotosCard({ data }: { data: Data }) {
           </ul>
         </div>
       )}
+      </>}
     </div>
   );
 }
