@@ -99,6 +99,7 @@ export function MichelleCasesPanel() {
                     {c.resolution}{" "}
                     {c.resolvedAt ? `· ${formatDateTime(c.resolvedAt)}` : ""}
                   </div>
+                  <ReplyBox caseId={c.id} />
                 </div>
               ))}
             </div>
@@ -107,6 +108,78 @@ export function MichelleCasesPanel() {
       ) : (
         <AnswersEditor answers={answers} onChanged={load} onError={setError} />
       )}
+    </div>
+  );
+}
+
+// Mensaje al dropshipper en su chat de Michelle IA, también en casos resueltos.
+function ReplyBox({ caseId }: { caseId: string }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [state, setState] = useState<"" | "busy" | "sent" | string>("");
+
+  async function send() {
+    setState("busy");
+    const res = await fetch(`/api/provedix/cases/${caseId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reply: text }),
+    });
+    const d = await res.json().catch(() => null);
+    if (res.ok) {
+      setText("");
+      setOpen(false);
+      setState("sent");
+    } else setState(d?.error ?? "No se pudo enviar.");
+  }
+
+  if (!open)
+    return (
+      <div className="mt-1 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="text-[12px] font-semibold text-teal hover:underline cursor-pointer"
+        >
+          Enviar mensaje al dropshipper
+        </button>
+        {state === "sent" && (
+          <span className="text-[12px] text-steel">
+            ✅ Enviado: lo verá en su chat cuando lo abra.
+          </span>
+        )}
+      </div>
+    );
+  return (
+    <div className="mt-1.5">
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={2}
+        maxLength={1000}
+        className="w-full rounded-md border border-rule bg-surface px-2.5 py-2 text-[13px]"
+        placeholder="Le aparece en su chat con Michelle IA. Escríbelo corto, como por WhatsApp."
+      />
+      {state && state !== "busy" && state !== "sent" && (
+        <div className="text-[12px] text-red">{state}</div>
+      )}
+      <div className="mt-1 flex gap-2">
+        <button
+          type="button"
+          disabled={state === "busy" || text.trim().length < 2}
+          onClick={send}
+          className="rounded border border-teal bg-teal px-3 py-1 text-[12px] font-bold text-navy cursor-pointer disabled:opacity-50"
+        >
+          {state === "busy" ? "Enviando…" : "Enviar"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="text-[12px] text-steel hover:text-ink cursor-pointer"
+        >
+          Cancelar
+        </button>
+      </div>
     </div>
   );
 }

@@ -190,6 +190,21 @@ const BLOCKED_24H_TEXT =
   "Por seguridad, este chat quedó bloqueado durante 24 horas porque la información de la guía no coincide 🔒";
 const REGISTER_TEXT =
   "Para conversar conmigo primero regístrate gratis 😊 Así puedo darte toda la información de los productos.";
+const INCOMPLETE_TEXT =
+  "Antes de seguir, completa tus datos (nombre de tu tienda y dónde vendes) con el botón Regístrate, usando tu mismo WhatsApp 😊";
+
+// Registro completo (2026-10-15): los registros viejos (antes del 14/10) no
+// tienen tienda ni plataforma. Sin esos datos no se habla con la IA: el botón
+// "Regístrate" abre el formulario y, con el mismo WhatsApp, solo completa lo
+// que faltaba.
+async function completeLead(leadId: string | null): Promise<string | null> {
+  if (!leadId) return null;
+  const lead = await prisma.provedixLead.findUnique({
+    where: { id: leadId },
+    select: { storeName: true, platform: true },
+  });
+  return lead?.storeName?.trim() && lead.platform ? leadId : null;
+}
 
 async function findChat(
   chatId: string | undefined,
@@ -206,7 +221,8 @@ async function findChat(
 }
 
 export async function GET(req: NextRequest) {
-  const { visitorId, leadId } = await readVisitor(req);
+  const { visitorId, leadId: anyLead } = await readVisitor(req);
+  const leadId = await completeLead(anyLead);
   const chatId = req.nextUrl.searchParams.get("chatId") ?? undefined;
   const chat = await findChat(chatId, visitorId, leadId);
   const messages = chat
@@ -260,11 +276,12 @@ export async function POST(req: NextRequest) {
       { status: 503 },
     );
 
-  const { visitorId, leadId } = await readVisitor(req);
-  // Sin registro no se habla con la IA (pedido 2026-10-14): ni un dato, ni costo.
+  const { visitorId, leadId: anyLead } = await readVisitor(req);
+  const leadId = await completeLead(anyLead);
+  // Sin registro completo no se habla con la IA (pedido 2026-10-14): ni un dato, ni costo.
   if (!leadId)
     return NextResponse.json(
-      { error: REGISTER_TEXT, needsRegister: true },
+      { error: anyLead ? INCOMPLETE_TEXT : REGISTER_TEXT, needsRegister: true },
       { status: 401 },
     );
   const blockMsg = await blockedText(visitorId, leadId);

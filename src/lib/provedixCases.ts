@@ -177,6 +177,26 @@ export async function caseConversation(caseId: string) {
   }));
 }
 
+// Respuesta para el dropshipper (2026-10-15): le aparece en su chat de
+// Michelle IA la próxima vez que lo abra. Sirve también en casos resueltos.
+export async function sendCaseReply(caseId: string, reply: string): Promise<string | null> {
+  const text = reply.trim().slice(0, 1000);
+  if (!text) return "Escribe el mensaje.";
+  const k = await prisma.provedixCase.findUnique({
+    where: { id: caseId },
+    select: { chatId: true },
+  });
+  if (!k) return "No encontré ese caso.";
+  await prisma.provedixChatMessage.create({
+    data: { chatId: k.chatId, role: "assistant", content: text },
+  });
+  await prisma.provedixChat.update({
+    where: { id: k.chatId },
+    data: { updatedAt: new Date() },
+  });
+  return null;
+}
+
 export async function resolveCase(
   caseId: string,
   userId: string | null,
@@ -196,23 +216,7 @@ export async function resolveCase(
     },
   });
   if (updated.count === 0) return "Este caso ya estaba resuelto.";
-  // Respuesta para el dropshipper: le aparece en su chat de Michelle IA
-  // la próxima vez que lo abra.
-  if (input.reply?.trim()) {
-    const k = await prisma.provedixCase.findUnique({
-      where: { id: caseId },
-      select: { chatId: true },
-    });
-    if (k) {
-      await prisma.provedixChatMessage.create({
-        data: { chatId: k.chatId, role: "assistant", content: input.reply.trim() },
-      });
-      await prisma.provedixChat.update({
-        where: { id: k.chatId },
-        data: { updatedAt: new Date() },
-      });
-    }
-  }
+  if (input.reply?.trim()) await sendCaseReply(caseId, input.reply);
   if (input.teach?.question.trim() && input.teach.answer.trim()) {
     await prisma.provedixAnswer.create({
       data: {

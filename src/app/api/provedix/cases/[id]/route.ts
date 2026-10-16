@@ -5,6 +5,7 @@ import {
   caseConversation,
   getCasesRole,
   resolveCase,
+  sendCaseReply,
 } from "@/lib/provedixCases";
 
 // GET: conversación completa del caso. POST: marcarlo resuelto (y enseñar la respuesta a Michelle IA).
@@ -43,5 +44,26 @@ export async function POST(
   const { id } = await params;
   const error = await resolveCase(id, dbUserId(role.userId), parsed.data);
   if (error) return NextResponse.json({ error }, { status: 409 });
+  return NextResponse.json({ ok: true });
+}
+
+// PUT: solo enviarle un mensaje al dropshipper en su chat (caso abierto o resuelto).
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  if (!(await getCasesRole()))
+    return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  const parsed = z
+    .object({ reply: z.string().trim().min(2, "Escribe el mensaje.").max(1000) })
+    .safeParse(await req.json().catch(() => null));
+  if (!parsed.success)
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Datos no válidos." },
+      { status: 400 },
+    );
+  const { id } = await params;
+  const error = await sendCaseReply(id, parsed.data.reply);
+  if (error) return NextResponse.json({ error }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
