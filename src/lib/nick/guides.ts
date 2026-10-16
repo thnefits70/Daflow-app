@@ -81,10 +81,12 @@ export async function getNickGuides(f: NickGuidesFilter, opts: { isAdmin?: boole
     ...(dayGuides ? { guideNumber: { in: dayGuides } } : {}),
   };
   const grouped = await prisma.nickGuideStatus.groupBy({ by: ["statusGroup"], where, _count: true });
-  const attention = await getNickAttention(new Date(), { estimates: !!opts.isAdmin });
+  // Pedido del usuario 2026-10-16: "Requiere atención" lo ve SOLO el admin
+  // mientras él hace sus pruebas; a los demás ni se les calcula.
+  const attention = opts.isAdmin ? await getNickAttention(new Date(), { estimates: true }) : null;
   const attentionCounts = {} as Record<NickAttentionKey, number>;
   for (const a of NICK_ATTENTION) {
-    const set = [...attention[a.key].keys()];
+    const set = attention ? [...attention[a.key].keys()] : [];
     attentionCounts[a.key] = set.length ? await prisma.nickGuideStatus.count({ where: { AND: [where, { guideNumber: { in: set } }] } }) : 0;
   }
   const counts: Record<string, number> = {};
@@ -125,7 +127,7 @@ export async function getNickGuides(f: NickGuidesFilter, opts: { isAdmin?: boole
       reason: null,
     }));
   } else {
-    const attSet = f.attention ? attention[f.attention] : null;
+    const attSet = f.attention && attention ? attention[f.attention] : null;
     const w: Prisma.NickGuideStatusWhereInput = {
       AND: [where, ...(f.group ? [{ statusGroup: f.group }] : []), ...(attSet ? [{ guideNumber: { in: [...attSet.keys()] } }] : [])],
     };

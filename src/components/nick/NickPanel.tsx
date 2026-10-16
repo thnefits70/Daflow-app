@@ -83,7 +83,7 @@ export function NickPanel({
         <div className="mb-4 rounded-lg border border-red/40 bg-red/10 px-4 py-3 text-[12.5px]">{NOTICES[notice.error] ?? "Algo salió mal al conectar."}</div>
       )}
 
-      <NickGuides />
+      <NickGuides isAdmin={isAdmin} />
 
       <div className="bg-surface border border-rule rounded-lg p-4 mb-5 flex gap-3 text-[12px] text-steel">
         <ShieldCheck size={18} className="shrink-0 text-teal mt-0.5" />
