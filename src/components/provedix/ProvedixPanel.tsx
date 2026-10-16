@@ -10,8 +10,6 @@ import { ProvedixChatsCard } from "@/components/provedix/ProvedixChatsCard";
 import { MichelleStatsCard } from "@/components/provedix/MichelleStatsCard";
 import { MichelleCasesPanel } from "@/components/provedix/MichelleCasesPanel";
 import type { MichelleWeekStat } from "@/lib/provedixCases";
-import type { RatingsOverview } from "@/lib/provedixRatings";
-import { ProvedixRatingsCard } from "@/components/provedix/ProvedixRatingsCard";
 
 const STAGES: { title: string; detail: string; done: boolean }[] = [
   { title: "1. Leer las guías", detail: "Ciudad, valor cobrado, hombre/mujer y tienda de cada guía.", done: true },
@@ -41,7 +39,6 @@ export function ProvedixPanel({
   chats,
   michelleStats,
   openCases,
-  ratings,
 }: {
   overview: ProvedixOverview;
   snapshot: (ProvedixSnapshotData & { generatedAt: string }) | null;
@@ -50,7 +47,6 @@ export function ProvedixPanel({
   chats: ProvedixChatRow[];
   michelleStats: MichelleWeekStat[];
   openCases: number;
-  ratings: RatingsOverview;
 }) {
   const { progress, guides, byBrand, cities, gender, cod, stores, windowFrom } = overview;
   const readPct = pct(progress.read, progress.total);
@@ -89,7 +85,6 @@ export function ProvedixPanel({
 
       <ProvedixTrafficCard traffic={traffic} />
       <ProvedixLeadsTable leads={leads} />
-      <ProvedixRatingsCard data={ratings} />
       <MichelleStatsCard stats={michelleStats} openCases={openCases} />
       {/* /area/casos-michelle es solo para el equipo: el admin responde los casos aquí. */}
       <div id="casos-michelle" className="bg-surface border border-rule rounded-lg p-5 mb-5 scroll-mt-4">
