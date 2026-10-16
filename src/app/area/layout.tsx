@@ -175,6 +175,7 @@ export default async function AreaLayout({ children }: { children: React.ReactNo
       showNomina={sidebarFlags.showNomina}
       showMyLearningPath={sidebarFlags.showMyLearningPath}
       showPersonalPurchasesInventory={sidebarFlags.showPersonalPurchasesInventory}
+      showNick={sidebarFlags.showNick}
       showWeeklyCheckinPanel={showWeeklyCheckinPanel}
       weeklyCheckinLockout={weeklyCheckinLockout}
     >

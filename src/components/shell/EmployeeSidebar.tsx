@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { LayoutDashboard, ClipboardList, Scale, LogOut, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints, ShoppingBag, Banknote } from "lucide-react";
+import { LayoutDashboard, ClipboardList, Scale, LogOut, Rocket, Wallet, FolderLock, Gauge, Menu, X, Trophy, Users, LayoutGrid, Waypoints, ShoppingBag, Banknote, Radar } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { PushSettingsToggle } from "@/components/shared/PushSettingsToggle";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
@@ -27,6 +27,7 @@ export function EmployeeSidebar({
   showNomina = false,
   showMyLearningPath = false,
   showPersonalPurchasesInventory = false,
+  showNick = false,
 }: {
   deptName: string;
   userName: string;
@@ -41,6 +42,7 @@ export function EmployeeSidebar({
   showNomina?: boolean;
   showMyLearningPath?: boolean;
   showPersonalPurchasesInventory?: boolean;
+  showNick?: boolean;
 }) {
   // Pasa tema/sonido guardados con el nombre viejo (ver legacyPrefs.ts).
   useEffect(() => migrateLegacyPrefs(), []);
@@ -122,6 +124,11 @@ export function EmployeeSidebar({
             </span>
           )}
         </Link>
+        {showNick && (
+          <Link href="/area/nick" className={`${NAV_ITEM} ${pathname.startsWith("/area/nick") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+            <Radar size={15} /> NICK
+          </Link>
+        )}
         <Link href="/area/leyes" className={`${NAV_ITEM} ${pathname.startsWith("/area/leyes") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Scale size={15} /> Leyes y Reglamentos
         </Link>

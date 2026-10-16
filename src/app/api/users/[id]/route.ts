@@ -61,6 +61,7 @@ const updateSchema = z.object({
   canManagePettyCashSecundaria: z.boolean().optional(),
   canDeclareExternalSales: z.boolean().optional(),
   canManageLocalWarranties: z.boolean().optional(),
+  canAccessNick: z.boolean().optional(),
   externalSaleContraEntrega: z.boolean().optional(),
   canConfirmMarketingDesign: z.boolean().optional(),
   canConfirmMarketingAdvisor: z.boolean().optional(),
@@ -210,6 +211,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (session.user.role !== "admin") return NextResponse.json({ error: "Solo el admin asigna quién hace las compras calientes y frías." }, { status: 403 });
     if (d.handlesHotPurchases !== undefined) data.handlesHotPurchases = d.handlesHotPurchases;
     if (d.handlesColdPurchases !== undefined) data.handlesColdPurchases = d.handlesColdPurchases;
+  }
+  // NICK: solo el admin da o quita el acceso (pedido del usuario 2026-10-15),
+  // ni siquiera quien gestiona Nómina.
+  if (d.canAccessNick !== undefined) {
+    if (session.user.role !== "admin") return NextResponse.json({ error: "Solo el admin da acceso a NICK." }, { status: 403 });
+    data.canAccessNick = d.canAccessNick;
   }
   if (d.resetTwoFactor) {
     if (session.user.role !== "admin") return NextResponse.json({ error: "No autorizado." }, { status: 403 });

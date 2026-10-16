@@ -266,6 +266,7 @@ const SIDEBAR_HELP: SidebarHelpItem[] = [
   { label: "Módulos", help: "Módulos de capacitación con sus documentos y exámenes.", show: () => true },
   { label: "Mi ruta", help: "Tu ruta de conocimiento asignada, paso a paso.", show: (f) => f.showMyLearningPath },
   { label: "Mi área de trabajo", help: "Aquí están las pestañas de trabajo de tu área (ver la lista de pestañas). Puedes fijar una como tu pestaña de inicio con 'Fijar como mi pestaña de inicio'. Un punto rojo en una pestaña significa que tiene algo pendiente.", show: () => true },
+  { label: "NICK", help: "Seguimiento de guías en Dropi. Aquí se conectan las 3 cuentas de Dropi (IMPORTADORA DAMIAN, PROVEDIX, IMPORTADORA SHANGHAI) con el botón Conectar, que abre la ventana oficial de Dropi (ahí van el usuario, la clave y el código 2FA; DAFLOW nunca guarda la clave). Con Leer ahora se ven las últimas guías y su estado tal como las ve Dropi. Por ahora es solo una prueba: no cambia nada en DAFLOW.", show: (f) => f.showNick },
   { label: "Leyes y Reglamentos", help: "Reglamento interno y leyes aplicables.", show: () => true },
   { label: "Carreras y Habilidades", help: "Plan de carrera y habilidades por puesto.", show: () => true },
   { label: "Roles de pago", help: "Tu propio rol de pago de cada mes (solo ves el tuyo).", show: () => true },

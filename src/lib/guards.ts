@@ -1249,6 +1249,17 @@ export async function canManageLocalWarranties() {
   return !!user?.canManageLocalWarranties;
 }
 
+// NICK (2026-10-15): el admin siempre entra; los demás solo si el admin les
+// prendió "Acceso a NICK" en Nómina. Quien entra también conecta las
+// cuentas de Dropi (hoy Daniel).
+export async function canAccessNick() {
+  const session = await auth();
+  if (!session) return false;
+  if (session.user.role === "admin") return true;
+  const user = await getGuardUser(session.user.id);
+  return !!user?.canAccessNick && !!user?.isActive;
+}
+
 export async function canReviewExternalSales() {
   const session = await auth();
   if (!session) return false;

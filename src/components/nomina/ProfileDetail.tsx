@@ -56,6 +56,7 @@ type UserProfile = {
   canManagePettyCashSecundaria: boolean;
   canDeclareExternalSales: boolean;
   canManageLocalWarranties: boolean;
+  canAccessNick: boolean;
   externalSaleContraEntrega: boolean;
   canConfirmMarketingDesign: boolean;
   canConfirmMarketingAdvisor: boolean;
@@ -1210,6 +1211,19 @@ export function ProfileDetail({
                 alguien, se le quita a quien lo tenía. Si nadie lo tiene, lo hace el líder de Inventario.
               </div>
               <PermToggle value={p.isReentryResponsible} busy={busy} onChange={(v) => save({ isReentryResponsible: v })} />
+            </div>
+          )}
+
+          {isAdmin && (
+            <div className="bg-cloud border border-rule rounded p-3.5 mt-3.5">
+              <label className="flex items-center gap-1 mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-steel">
+                <Truck size={11} /> Acceso a NICK
+              </label>
+              <div className="text-[11px] text-steel mb-2">
+                Le aparece NICK en su menú: ahí conecta las 3 cuentas de Dropi (en la ventana oficial de Dropi) y ve el estado de las guías. Solo tú puedes
+                prenderlo o apagarlo; si lo apagas, le desaparece NICK.
+              </div>
+              <PermToggle value={p.canAccessNick} busy={busy} onChange={(v) => save({ canAccessNick: v })} />
             </div>
           )}
 

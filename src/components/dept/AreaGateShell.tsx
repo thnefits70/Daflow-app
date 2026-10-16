@@ -79,6 +79,7 @@ export function AreaGateShell({
   showNomina = false,
   showMyLearningPath = false,
   showPersonalPurchasesInventory = false,
+  showNick = false,
   showWeeklyCheckinPanel = false,
   weeklyCheckinLockout = null,
   children,
@@ -104,6 +105,7 @@ export function AreaGateShell({
   showNomina?: boolean;
   showMyLearningPath?: boolean;
   showPersonalPurchasesInventory?: boolean;
+  showNick?: boolean;
   showWeeklyCheckinPanel?: boolean;
   weeklyCheckinLockout?: WeeklyCheckinLockout | null;
   children: React.ReactNode;
@@ -242,6 +244,7 @@ export function AreaGateShell({
           showNomina={showNomina}
           showMyLearningPath={showMyLearningPath}
           showPersonalPurchasesInventory={showPersonalPurchasesInventory}
+          showNick={showNick}
         />
         <main className="flex-1 overflow-y-auto bg-bg p-4 md:p-9 print:overflow-visible print:p-0">
           <WeeklyCheckinLockGate weeksStale={weeklyCheckinLockout.weeksStale} reason={weeklyCheckinLockout.reason} />
@@ -267,6 +270,7 @@ export function AreaGateShell({
         showNomina={showNomina}
         showMyLearningPath={showMyLearningPath}
         showPersonalPurchasesInventory={showPersonalPurchasesInventory}
+        showNick={showNick}
       />
       {/* Confirmado 2026-09-09: sin esto, imprimir desde cualquier pantalla
           (ej. Etiquetas de percha) recortaba el contenido al alto visible de

@@ -30,6 +30,7 @@ import {
   TrendingUp,
   UserCog,
   Globe,
+  Radar,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand/DaflowMark";
 import { NotificationBell } from "@/components/shared/NotificationBell";
@@ -176,6 +177,9 @@ export function AdminSidebar({
         </Link>
         <Link href="/admin/provedix" className={`${NAV_ITEM} ${pathname.startsWith("/admin/provedix") ? NAV_ACTIVE : NAV_INACTIVE}`}>
           <Globe size={15} /> Provedix
+        </Link>
+        <Link href="/admin/nick" className={`${NAV_ITEM} ${pathname.startsWith("/admin/nick") ? NAV_ACTIVE : NAV_INACTIVE}`}>
+          <Radar size={15} /> NICK
         </Link>
 
         {specialDepartments.map((d) => (

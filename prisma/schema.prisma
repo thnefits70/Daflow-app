@@ -296,6 +296,11 @@ model User {
   // persona (hoy Michelle, Jariel, Yair, Marcos). Admin siempre puede.
   canManageLocalWarranties Boolean @default(false)
 
+  // NICK (2026-10-15): seguimiento de guías leyendo Dropi. Vive en el menú
+  // principal; el admin siempre lo ve y solo el admin prende este
+  // interruptor por persona (primero Daniel).
+  canAccessNick Boolean @default(false)
+
   // Confirmado 2026-08-29, pedido explícito del usuario: hoy solo Marcos
   // vende contra entrega (cobra después de despachar); los demás asesores
   // de Ventas Externas venden con pago anticipado. Se congela en
@@ -451,6 +456,7 @@ model User {
   milestones                                       Milestone[]
   ackUpdates                                       UserAckUpdate[]
   suppliersCreated                                 Supplier[]                            @relation("SupplierCreatedBy")
+  nickDropiAccountsConnected                       NickDropiAccount[]                    @relation("NickDropiAccountConnectedBy")
   suppliersApproved                                Supplier[]                            @relation("SupplierApprovedBy")
   supplierBankAccountsCreated                      SupplierBankAccount[]                 @relation("SupplierBankAccountCreatedBy")
   supplierDebtPaymentsCreated                      SupplierDebtPayment[]                 @relation("SupplierDebtPaymentCreatedBy")
@@ -8468,4 +8474,38 @@ model WarrantyArrangement {
 
   @@index([status])
   @@index([kind, createdAt])
+}
+
+// NICK — Etapa 0 (2026-10-15). Las 3 cuentas de proveedor en Dropi que NICK
+// lee con el conector oficial (mcp.dropi.co, OAuth). Nunca se guarda la
+// clave de Dropi: Daniel entra en la ventana oficial de Dropi y aquí solo
+// queda el permiso de lectura, cifrado con AUTH_SECRET (ver lib/nick/crypto).
+model NickDropiAccount {
+  id            String    @id @default(cuid())
+  // "IMPORTADORA DAMIAN" | "PROVEDIX" | "IMPORTADORA SHANGHAI"
+  name          String    @unique
+  sortOrder     Int       @default(0)
+  // Permiso de Dropi, cifrado. null = sin conectar.
+  accessTokenEnc  String?
+  refreshTokenEnc String?
+  tokenExpiresAt  DateTime?
+  // Lo que Dropi dice de la cuenta conectada (para confirmar que es la correcta).
+  dropiIdentity String?
+  connectedAt   DateTime?
+  connectedById String?
+  connectedBy   User?     @relation("NickDropiAccountConnectedBy", fields: [connectedById], references: [id], onDelete: SetNull)
+  lastReadAt    DateTime?
+  // Último error al leer o renovar (ej. "Dropi pidió volver a conectar").
+  lastError     String?
+  needsReconnect Boolean  @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Registro de DAFLOW como programa ante Dropi (uno por dirección de regreso:
+// www.daflow.app en producción, localhost al probar).
+model NickOAuthClient {
+  redirectUri String   @id
+  clientId    String
+  createdAt   DateTime @default(now())
 }

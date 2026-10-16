@@ -26,10 +26,11 @@ export type EmployeeSidebarFlags = {
   showPersonalPurchasesInventory: boolean;
   showMyLearningPath: boolean;
   showConfidential: boolean;
+  showNick: boolean;
 };
 
 export async function getEmployeeSidebarFlags(
-  user: { id: string; username: string; isB2BAdvisor: boolean; isLeader: boolean; leadsDeptId: string | null },
+  user: { id: string; username: string; isB2BAdvisor: boolean; isLeader: boolean; leadsDeptId: string | null; canAccessNick?: boolean },
   deptCode: string,
 ): Promise<EmployeeSidebarFlags> {
   // 2026-09-30: además de la lista, quien tenga el rol
@@ -56,5 +57,7 @@ export async function getEmployeeSidebarFlags(
     showPersonalPurchasesInventory,
     showMyLearningPath: learningPathCount > 0,
     showConfidential: confidentialAccessCount > 0,
+    // NICK: solo si el admin le prendió "Acceso a NICK" en Nómina.
+    showNick: !!user.canAccessNick,
   };
 }
