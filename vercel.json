@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/combo-suggestions",
       "schedule": "0 5 * * 1"
+    },
+    {
+      "path": "/api/cron/provedix-team-photos",
+      "schedule": "0 12 1,15 * *"
     }
   ]
 }

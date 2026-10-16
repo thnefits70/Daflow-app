@@ -8296,6 +8296,26 @@ model ProvedixRating {
   @@index([leadId, tool])
 }
 
+// Fotos del equipo en provedix.com que llegan del Drive (2026-10-16): el
+// servidor revisa la carpeta los días 1 y 15 y la IA aprueba o descarta cada
+// foto. Las 10 primeras viven en el código (src/lib/pvxTeamPhotos.ts); una
+// fila "retired" con su driveId la saca de la página.
+model ProvedixTeamPhoto {
+  id        String   @id @default(cuid())
+  driveId   String   @unique
+  status    String // "approved" | "rejected" | "retired"
+  kind      String? // "portrait" | "work"
+  url       String?
+  title     String?
+  alt       String?
+  score     Int?
+  reason    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
 model ProvedixChatMessage {
   id        String       @id @default(cuid())
   chatId    String

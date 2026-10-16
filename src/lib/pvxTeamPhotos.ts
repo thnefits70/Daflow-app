@@ -1,5 +1,6 @@
-// Fotos del equipo en provedix.com (pedido del usuario 2026-10-16). El equipo
-// sube fotos a la carpeta de Drive "FOTOS BODEGA PARA PAGINA"
+// Fotos del equipo en provedix.com (pedido del usuario 2026-10-16). Las nuevas
+// del Drive las revisa el servidor solo, días 1 y 15 (provedixTeamPhotoSync.ts).
+// El equipo sube fotos a la carpeta de Drive "FOTOS BODEGA PARA PAGINA"
 // (1cYyiLK6aQF_mRENmWkqRsk1v-akCbY_R). Se revisan una por una y solo las
 // mejores entran a TEAM_PHOTOS. La página muestra 6 (2 retratos + 4 del
 // trabajo) y las cambia cada semana para que se vea viva.
@@ -52,9 +53,11 @@ function rotate<T>(list: T[], n: number, week: number): T[] {
 }
 
 // Las 6 de esta semana: retrato, 4 del trabajo, retrato.
-export function pickTeamPhotos(now: Date = new Date()): TeamPhoto[] {
+// pool: el grupo activo (código + las que aprobó la revisión del Drive, ver
+// provedixTeamPhotoSync.ts); sin él, solo las del código.
+export function pickTeamPhotos(now: Date = new Date(), pool: TeamPhoto[] = TEAM_PHOTOS): TeamPhoto[] {
   const week = weekIndex(now);
-  const portraits = rotate(TEAM_PHOTOS.filter((p) => p.kind === "portrait"), SHOW_PORTRAITS, week);
-  const work = rotate(TEAM_PHOTOS.filter((p) => p.kind === "work"), SHOW_WORK, week);
+  const portraits = rotate(pool.filter((p) => p.kind === "portrait"), SHOW_PORTRAITS, week);
+  const work = rotate(pool.filter((p) => p.kind === "work"), SHOW_WORK, week);
   return [portraits[0], ...work, portraits[1]].filter(Boolean);
 }

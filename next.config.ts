@@ -44,7 +44,7 @@ const nextConfig: NextConfig = {
   async rewrites() {
     const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
     if (!base) return [];
-    return ["purchase-catalog", "branded-photos", "market-product-reference"].map((folder) => ({
+    return ["purchase-catalog", "branded-photos", "market-product-reference", "provedix-team"].map((folder) => ({
       source: `/pvx/f/${folder}/:path*`,
       destination: `${base}/storage/v1/object/public/daflow-files/${folder}/:path*`,
     }));

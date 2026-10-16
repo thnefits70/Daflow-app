@@ -5,11 +5,12 @@ import { ProvedixPanel } from "@/components/provedix/ProvedixPanel";
 import { michelleWeeklyStats } from "@/lib/provedixCases";
 import { prisma } from "@/lib/prisma";
 import { getRatingsOverview } from "@/lib/provedixRatings";
+import { getTeamPhotosAdmin } from "@/lib/provedixTeamPhotoSync";
 
 // AdminLayout ya exige role === "admin" para todo /admin/* — no hace falta
 // otro guard aquí (pedido del usuario 2026-10-10: solo él ve esta sección).
 export default async function ProvedixPage() {
-  const [overview, snapshot, traffic, leads, chats, michelleStats, openCases, ratings] = await Promise.all([
+  const [overview, snapshot, traffic, leads, chats, michelleStats, openCases, ratings, teamPhotos] = await Promise.all([
     getProvedixOverview(),
     getLatestProvedixSnapshot(),
     getProvedixTraffic(),
@@ -18,6 +19,7 @@ export default async function ProvedixPage() {
     michelleWeeklyStats(),
     prisma.provedixCase.count({ where: { status: "ABIERTO" } }),
     getRatingsOverview(),
+    getTeamPhotosAdmin(),
   ]);
   return (
     <ProvedixPanel
@@ -29,6 +31,7 @@ export default async function ProvedixPage() {
       michelleStats={michelleStats}
       openCases={openCases}
       ratings={ratings}
+      teamPhotos={teamPhotos}
     />
   );
 }
