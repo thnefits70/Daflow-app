@@ -192,7 +192,15 @@ export function NickPanel({
                       </div>
                       {r.fields.length > 0 && (
                         <div className="mt-1 break-words">
-                          <b>Datos de cada orden (sin montos):</b> {r.fields.join(", ")}
+                          <b>Datos de cada orden en la lista (sin montos):</b> {r.fields.join(", ")}
+                        </div>
+                      )}
+                      <div className="mt-1">
+                        <b>Usada para el detalle:</b> {r.detailTool ?? "ninguna"}
+                      </div>
+                      {r.detailFields.length > 0 && (
+                        <div className="mt-1 break-words">
+                          <b>Datos del detalle de una orden (sin montos):</b> {r.detailFields.join(", ")}
                         </div>
                       )}
                     </details>
