@@ -7,7 +7,7 @@
 //
 // Nunca usar: guías con datos de clientes, etiquetas de proveedores o
 // "MADE IN CHINA", nada que muestre la ubicación exacta (solo "Guayaquil,
-// Ecuador"). Las fotos van en public/pvx/team/ a 720×960 webp y sin datos de
+// Ecuador"), ni productos o cajas en mal estado (pedido 2026-10-16). Las fotos van en public/pvx/team/ a 720×960 webp y sin datos de
 // la cámara (sharp los quita). Si el grupo crece mucho (más de ~14), se sacan
 // las más flojas o repetidas.
 
@@ -15,7 +15,6 @@ export type TeamPhoto = { src: string; title: string; alt: string; kind: "portra
 
 export const TEAM_PHOTOS: TeamPhoto[] = [
   // Retratos
-  { kind: "portrait", driveId: "1369ZcoHn8mqLWfeTCy9CCGWuPIX_V3hD", src: "/pvx/team/equipo-1.webp", title: "Gente real detrás de cada pedido", alt: "Colaborador de Provedix sonriendo en la bodega" },
   { kind: "portrait", driveId: "1PTMMlppolfr7s2HE6Pa741EePXrWVy8X", src: "/pvx/team/equipo-2.webp", title: "Listos para despachar contigo", alt: "Colaborador de Provedix con los brazos cruzados frente a las perchas" },
   { kind: "portrait", driveId: "1ve2sKkNa_uQ8a-olL_7L2DASq1saPOMu", src: "/pvx/team/equipo-3.webp", title: "Un equipo que te responde", alt: "Colaborador de Provedix frente a las perchas de la bodega" },
   { kind: "portrait", driveId: "11OzHoiA3sqHC2yVtGQcroHmemAjPk8y9", src: "/pvx/team/equipo-4.webp", title: "Cuidamos cada producto", alt: "Colaborador de Provedix en un pasillo de la bodega" },
@@ -30,6 +29,7 @@ export const TEAM_PHOTOS: TeamPhoto[] = [
 
 // Fotos de la carpeta ya revisadas que NO se usan (para no volver a revisarlas).
 export const TEAM_PHOTOS_REJECTED: { driveId: string; reason: string }[] = [
+  { driveId: "1369ZcoHn8mqLWfeTCy9CCGWuPIX_V3hD", reason: "cajas de producto en mal estado detrás (quitada por el usuario 2026-10-16)" },
   { driveId: "1jEUqL4nG1TybdGPr4YbrG4zVC49h_sPh", reason: "guía con datos de un cliente" },
   { driveId: "1QVSGLbDrkKM8Hl-ySd9rcMv4YwdcXhz3", reason: "caja MADE IN CHINA y etiqueta de proveedor" },
   { driveId: "10wGi8IuRV6pH_1vDFIB40hfnqP_JidHf", reason: "etiquetas de proveedor en los sacos" },

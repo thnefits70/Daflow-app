@@ -94,6 +94,7 @@ RECHAZA (usable: false) cualquier foto que muestre algo de esto, aunque sea pequ
 - la ubicación exacta: dirección, letreros de calle, fachada del local, placas de autos
 - pantallas con información, documentos, facturas, dinero
 - personas que no parecen del equipo, niños, gestos o poses inapropiadas
+- productos o cajas en mal estado: aplastadas, rotas, abolladas, sucias, mojadas o desordenadas (la bodega debe verse cuidada y ordenada)
 - fotos borrosas, oscuras, torcidas, mal encuadradas o con la persona cortada
 - fotos casi iguales a otra de las nuevas o a una de la página actual (misma persona, misma pose y mismo lugar)
 Si dudas, recházala. Los códigos QR de las perchas sí se permiten.
