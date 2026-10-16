@@ -172,7 +172,7 @@ export async function saveNickScoreDay(now = new Date()) {
 
 // Precio que paga Dropi (confirmado por la asesora B2B o el calculado) y costo
 // por unidad de cada producto de las etiquetas.
-async function productValues(guides: string[]) {
+export async function productValues(guides: string[]) {
   if (!guides.length) return { byGuide: new Map<string, { price: number | null; cost: number | null }>() };
   const rows = await prisma.fulfillmentRequestGuide.findMany({ where: { guideNumber: { in: guides } }, select: { guideNumber: true, labelProducts: true } });
   const lines = rows.flatMap((g) =>

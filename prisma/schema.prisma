@@ -8704,3 +8704,43 @@ model NickScoreDay {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// NICK — cruce de pagos (2026-10-16, aprobado por el usuario): Excel
+// "Historial de cartera" de Dropi que sube el admin (por ahora solo él) por
+// cuenta. Se guardan SOLO los movimientos de pedidos (pagos por guía,
+// indemnizaciones, cobros de garantía, rechazados); los retiros y las
+// transferencias entre billeteras se ignoran y nunca se guardan.
+model NickWalletUpload {
+  id           String   @id @default(cuid())
+  accountId    String
+  month        String // YYYY-MM que más se repite en el archivo
+  fileName     String
+  rows         Int // movimientos guardados
+  skipped      Int // retiros/transferencias ignorados
+  uploadedById String? // null = admin
+  createdAt    DateTime @default(now())
+
+  movements NickWalletMovement[]
+
+  @@index([accountId, month])
+}
+
+model NickWalletMovement {
+  // ID del movimiento en Dropi: subir el mismo archivo dos veces no duplica.
+  id          String           @id
+  uploadId    String
+  upload      NickWalletUpload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+  accountId   String
+  at          DateTime
+  // PAGO_GUIA | INDEMNIZACION | COBRO_FLETE_GARANTIA | COBRO_RECOLECCION_GARANTIA | RECHAZADO | OTRO
+  kind        String
+  direction   String // ENTRADA | SALIDA
+  amount      Float
+  orderId     String?
+  guideNumber String?
+  description String
+
+  @@index([guideNumber])
+  @@index([accountId, at])
+  @@index([kind])
+}

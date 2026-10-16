@@ -60,7 +60,7 @@ const addDays = (day: string, n: number) => {
 const cleanGuide = (g: unknown) => String(g ?? "").toUpperCase().replace(/\s+/g, "").trim();
 
 // Guarda una página de órdenes: crea las guías nuevas y anota los cambios.
-async function saveRows(accountId: string, rows: Record<string, unknown>[]) {
+export async function saveRows(accountId: string, rows: Record<string, unknown>[]) {
   const withGuide = rows
     .map((o) => ({
       guideNumber: cleanGuide(o.tracking_code),
