@@ -5,9 +5,10 @@
 export type WarrantyReasonCode = "MAL_FUNCIONAMIENTO" | "PRODUCTO_ROTO" | "ORDEN_INCOMPLETA" | "ORDEN_DIFERENTE";
 
 // Plazo desde que salió la guía/venta original: hasta 7 días normal; de 7 a
-// 10 solo con doble confirmación; después de 10 ya no se acepta.
+// 20 solo con doble confirmación; después de 20 ya no se acepta. (Pedido de
+// Yair 2026-10-16: subió de 10 a 20 porque la orden de recolección tarda.)
 export const WARRANTY_NORMAL_DAYS = 7;
-export const WARRANTY_MAX_DAYS = 10;
+export const WARRANTY_MAX_DAYS = 20;
 
 export const WARRANTY_CITY = "GUAYAQUIL";
 
