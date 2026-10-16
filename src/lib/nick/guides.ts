@@ -2,6 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
 import type { NickGroup } from "@/lib/nick/sync";
+import { NICK_ATTENTION, getNickAttention, type NickAttentionKey } from "@/lib/nick/attention";
 
 // Pantalla "Guías" de NICK: las guías de Dropi de los últimos 45 días con su
 // estado, más las guías de los cortes que NICK no encontró en ninguna cuenta.
@@ -10,6 +11,8 @@ const PAGE_SIZE = 50;
 
 export type NickGuidesFilter = {
   group?: NickGroup | "NO_ENCONTRADA" | null;
+  // Etapa 2: una de las 5 listas de "Requiere atención".
+  attention?: NickAttentionKey | null;
   account?: string | null;
   carrier?: string | null;
   day?: string | null; // día del corte (manifestDay)
@@ -30,10 +33,13 @@ export type NickGuideView = {
   statusSince: string | null;
   lastSeenAt: string | null;
   manifestDay: string | null;
+  // Por qué está en "Requiere atención" (solo cuando se filtra por una de esas listas).
+  reason: string | null;
 };
 
 export type NickGuidesResult = {
   counts: Record<string, number>;
+  attentionCounts: Record<NickAttentionKey, number>;
   total: number;
   page: number;
   pageSize: number;
@@ -73,6 +79,12 @@ export async function getNickGuides(f: NickGuidesFilter): Promise<NickGuidesResu
     ...(dayGuides ? { guideNumber: { in: dayGuides } } : {}),
   };
   const grouped = await prisma.nickGuideStatus.groupBy({ by: ["statusGroup"], where, _count: true });
+  const attention = await getNickAttention();
+  const attentionCounts = {} as Record<NickAttentionKey, number>;
+  for (const a of NICK_ATTENTION) {
+    const set = [...attention[a.key].keys()];
+    attentionCounts[a.key] = set.length ? await prisma.nickGuideStatus.count({ where: { AND: [where, { guideNumber: { in: set } }] } }) : 0;
+  }
   const counts: Record<string, number> = {};
   for (const g of grouped) counts[g.statusGroup] = g._count;
 
@@ -108,9 +120,13 @@ export async function getNickGuides(f: NickGuidesFilter): Promise<NickGuidesResu
       statusSince: null,
       lastSeenAt: null,
       manifestDay: g.manifestDay,
+      reason: null,
     }));
   } else {
-    const w: Prisma.NickGuideStatusWhereInput = f.group ? { AND: [where, { statusGroup: f.group }] } : where;
+    const attSet = f.attention ? attention[f.attention] : null;
+    const w: Prisma.NickGuideStatusWhereInput = {
+      AND: [where, ...(f.group ? [{ statusGroup: f.group }] : []), ...(attSet ? [{ guideNumber: { in: [...attSet.keys()] } }] : [])],
+    };
     total = await prisma.nickGuideStatus.count({ where: w });
     const list = await prisma.nickGuideStatus.findMany({
       where: w,
@@ -136,6 +152,7 @@ export async function getNickGuides(f: NickGuidesFilter): Promise<NickGuidesResu
       lastSeenAt: g.lastSeenAt.toISOString(),
       // Día del corte; si la guía no vino en un corte, el día de la orden.
       manifestDay: corteDay.get(g.guideNumber) ?? (g.orderCreatedAt ? ecuadorDay(g.orderCreatedAt) : null),
+      reason: attSet?.get(g.guideNumber) ?? null,
     }));
   }
 
@@ -143,5 +160,5 @@ export async function getNickGuides(f: NickGuidesFilter): Promise<NickGuidesResu
     .map((c) => c.carrier!)
     .sort();
 
-  return { counts, total, page, pageSize: PAGE_SIZE, rows, accounts: accounts.map((a) => ({ id: a.id, name: a.name })), carriers, lastSyncAt: lastSyncAt?.toISOString() ?? null, firstSyncDone };
+  return { counts, attentionCounts, total, page, pageSize: PAGE_SIZE, rows, accounts: accounts.map((a) => ({ id: a.id, name: a.name })), carriers, lastSyncAt: lastSyncAt?.toISOString() ?? null, firstSyncDone };
 }

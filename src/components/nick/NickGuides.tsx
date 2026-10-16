@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, Search } from "lucide-react";
 import type { NickGuidesResult } from "@/lib/nick/guides";
 import type { NickSyncProgress } from "@/lib/nick/sync";
+import { NICK_ATTENTION } from "@/lib/nick/attentionLabels";
 import { formatDateTime } from "@/lib/formatDateTime";
 
 // NICK Etapa 1 (2026-10-16): estado en Dropi de cada guía de los cortes.
@@ -40,6 +41,8 @@ function sinceLabel(iso: string | null) {
 
 export function NickGuides() {
   const [group, setGroup] = useState("");
+  // Etapa 2: lista de "Requiere atención" elegida (excluye a group).
+  const [attention, setAttention] = useState("");
   const [account, setAccount] = useState("");
   const [carrier, setCarrier] = useState("");
   const [day, setDay] = useState("");
@@ -55,6 +58,7 @@ export function NickGuides() {
   const url = useMemo(() => {
     const p = new URLSearchParams();
     if (group) p.set("group", group);
+    if (attention) p.set("attention", attention);
     if (account) p.set("account", account);
     if (carrier) p.set("carrier", carrier);
     if (day) p.set("day", day);
@@ -62,7 +66,7 @@ export function NickGuides() {
     p.set("page", String(page));
     p.set("k", String(reloadKey));
     return `/api/nick/guides?${p.toString()}`;
-  }, [group, account, carrier, day, q, page, reloadKey]);
+  }, [group, attention, account, carrier, day, q, page, reloadKey]);
 
   const load = useCallback(() => {
     fetch(url)
@@ -136,6 +140,37 @@ export function NickGuides() {
         </div>
       )}
 
+      <div className="rounded-lg border border-amber/40 bg-amber/5 p-3 mb-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+          <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-amber">Requiere atención</div>
+          <div className="text-[10.5px] text-steel">Solo se ve aquí: no se envía ningún aviso a nadie.</div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          {NICK_ATTENTION.map((a) => {
+            const n = data?.attentionCounts?.[a.key] ?? 0;
+            const active = attention === a.key;
+            return (
+              <button
+                key={a.key}
+                type="button"
+                title={a.hint}
+                onClick={() =>
+                  setFilter(() => {
+                    setAttention(active ? "" : a.key);
+                    setGroup("");
+                  })
+                }
+                className={`text-left rounded-lg border p-3 cursor-pointer transition-colors ${active ? "border-amber bg-amber/15" : "border-rule bg-surface hover:bg-surface2"}`}
+              >
+                <div className="text-[10.5px] text-steel leading-tight">{a.label}</div>
+                <div className={`font-display text-[22px] font-bold tabular-nums mt-1 ${n > 0 ? "text-amber" : ""}`}>{n.toLocaleString("es-EC")}</div>
+                <div className="text-[9.5px] text-steel leading-tight mt-0.5">{a.hint}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 mb-4">
         {GROUPS.map((g) => {
           const n = data?.counts[g.key] ?? 0;
@@ -144,7 +179,12 @@ export function NickGuides() {
             <button
               key={g.key}
               type="button"
-              onClick={() => setFilter(() => setGroup(active ? "" : g.key))}
+              onClick={() =>
+                setFilter(() => {
+                  setGroup(active ? "" : g.key);
+                  setAttention("");
+                })
+              }
               className={`text-left rounded-lg border p-3 cursor-pointer transition-colors ${active ? "border-blue bg-blue/10" : "border-rule bg-surface hover:bg-surface2"}`}
             >
               <div className="text-[10.5px] text-steel leading-tight">{g.label}</div>
@@ -196,12 +236,13 @@ export function NickGuides() {
             <Search size={13} />
           </button>
         </form>
-        {(group || account || carrier || day || q) && (
+        {(group || attention || account || carrier || day || q) && (
           <button
             type="button"
             onClick={() =>
               setFilter(() => {
                 setGroup("");
+                setAttention("");
                 setAccount("");
                 setCarrier("");
                 setDay("");
@@ -221,7 +262,9 @@ export function NickGuides() {
           <div className="p-5 text-[12px] text-steel">Cargando guías…</div>
         ) : !data || data.rows.length === 0 ? (
           <div className="p-5 text-[12px] text-steel">
-            {group === "NO_ENCONTRADA" && !data?.firstSyncDone
+            {attention
+              ? "Nada en esta lista por ahora."
+              : group === "NO_ENCONTRADA" && !data?.firstSyncDone
               ? "Se calcula cuando las 3 cuentas terminen su primera actualización."
               : group === "NO_ENCONTRADA" ? "Todas las guías de los cortes aparecen en Dropi." : "No hay guías con estos filtros. Si es la primera vez, pulsa Actualizar ahora."}
           </div>
@@ -239,6 +282,7 @@ export function NickGuides() {
                 <th className="py-2 pr-3">En este estado</th>
                 <th className="py-2 pr-3">Corte</th>
                 <th className="py-2 pr-3">Días</th>
+                {attention && <th className="py-2 pr-3">Motivo</th>}
               </tr>
             </thead>
             <tbody>
@@ -269,6 +313,7 @@ export function NickGuides() {
                     <td className="py-1.5 pr-3 whitespace-nowrap">{sinceLabel(g.statusSince)}</td>
                     <td className="py-1.5 pr-3 whitespace-nowrap">{g.manifestDay ?? "—"}</td>
                     <td className="py-1.5 pr-3 tabular-nums">{d ?? "—"}</td>
+                    {attention && <td className="py-1.5 pr-3 text-amber">{g.reason ?? "—"}</td>}
                   </tr>
                 );
               })}
