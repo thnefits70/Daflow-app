@@ -21,6 +21,10 @@ import type { PendingItem } from "@/lib/pendingTasks";
 const CREATOR_USERNAMES = new Set(["yairurgilez"]);
 
 export const ROCKET_WARRANTY_MAX_DAYS = 10;
+// Pedido del usuario 2026-10-16: Yair solo elige entre los 4 motivos normales
+// (la lista del KPI también trae frases escritas a mano en cortes viejos, que
+// se quedan ahí por la historia pero no se ofrecen aquí).
+export const ROCKET_WARRANTY_REASONS = ["Mal funcionamiento", "Producto roto", "Pedido incompleto", "Pedido diferente"];
 export const ROCKET_WARRANTIES_URL = "/area/arreglos-garantia";
 const ADMIN_URL = "/admin/arreglos-garantia";
 // Cada cuánto NICK vuelve a preguntar a Dropi por la guía de una orden.
@@ -132,7 +136,8 @@ export async function createRocketWarranty(input: CreateRocketWarrantyInput, use
   if (src.daysSince > ROCKET_WARRANTY_MAX_DAYS) {
     return { ok: false, error: `Ya pasaron ${src.daysSince} días desde que se despachó el pedido: el plazo máximo es de ${ROCKET_WARRANTY_MAX_DAYS} días.` };
   }
-  const reason = await prisma.warrantyCategory.findFirst({ where: { name: { equals: input.reason.trim(), mode: "insensitive" } }, select: { name: true } });
+  const wanted = ROCKET_WARRANTY_REASONS.find((r) => r.toLowerCase() === input.reason.trim().toLowerCase());
+  const reason = wanted ? await prisma.warrantyCategory.findFirst({ where: { name: { equals: wanted, mode: "insensitive" } }, select: { name: true } }) : null;
   if (!reason) return { ok: false, error: "Elige el motivo de la lista." };
   const order = input.dropiOrder.replace(/\D/g, "");
   if (order.length < 5) return { ok: false, error: "Escribe el número de orden de Dropi (solo números)." };

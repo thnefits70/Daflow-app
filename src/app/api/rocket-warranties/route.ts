@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { createRocketWarranty, getRocketWarrantyRole, linkRocketWarrantyGuides, listRocketWarranties, lookupRocketGuide } from "@/lib/rocketWarranty";
+import { ROCKET_WARRANTY_REASONS, createRocketWarranty, getRocketWarrantyRole, linkRocketWarrantyGuides, listRocketWarranties, lookupRocketGuide } from "@/lib/rocketWarranty";
 
 // Garantías de Rocket por orden de Dropi (2026-10-16) — ver lib/rocketWarranty.ts.
 // GET: lista + rol + motivos. Con ?guide= busca la guía de Rocket original.
@@ -17,7 +17,9 @@ export async function GET(req: NextRequest) {
   }
   // Al abrir la pantalla, NICK busca las guías que falten (sin demorar mucho).
   await linkRocketWarrantyGuides({ budgetMs: 8_000 }).catch(() => 0);
-  const reasons = (await prisma.warrantyCategory.findMany({ orderBy: { name: "asc" }, select: { name: true } })).map((c) => c.name);
+  // Solo los 4 motivos normales (con el nombre exacto que tienen en el KPI).
+  const existing = (await prisma.warrantyCategory.findMany({ select: { name: true } })).map((c) => c.name);
+  const reasons = ROCKET_WARRANTY_REASONS.map((r) => existing.find((e) => e.toLowerCase() === r.toLowerCase())).filter((r): r is string => !!r);
   return NextResponse.json({ role, reasons, rows: await listRocketWarranties() });
 }
 
