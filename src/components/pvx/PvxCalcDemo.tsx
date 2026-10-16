@@ -81,7 +81,7 @@ export function PvxCalcDemo({ onTry }: { onTry: () => void }) {
         <div
           className={`rounded-2xl bg-white px-3.5 py-2.5 text-[var(--pvx-ink)] transition-shadow ${step === 0 ? "ring-2 ring-[var(--pvx-orange)]" : ""}`}
         >
-          <p className="text-[11px] font-bold text-[var(--pvx-ink-2)]">
+          <p className="text-[12px] font-bold text-[var(--pvx-ink-2)]">
             Precio en Dropi (por unidad)
           </p>
           <p className="pvx-num text-[18px] font-bold">
@@ -103,7 +103,7 @@ export function PvxCalcDemo({ onTry }: { onTry: () => void }) {
               key={k}
               className={`rounded-2xl bg-white px-3.5 py-2.5 text-[var(--pvx-ink)] ${step === 1 ? "ring-2 ring-[var(--pvx-orange)]" : ""}`}
             >
-              <p className="text-[11px] font-bold text-[var(--pvx-ink-2)]">
+              <p className="text-[12px] font-bold text-[var(--pvx-ink-2)]">
                 {k}
               </p>
               <p className="pvx-num text-[16px] font-bold">{v}</p>
@@ -116,7 +116,7 @@ export function PvxCalcDemo({ onTry }: { onTry: () => void }) {
         >
           <div className="flex items-start justify-between gap-2">
             <div>
-              <p className="text-[11.5px] text-white/60">
+              <p className="text-[12.5px] text-white/60">
                 Precio recomendado al público
               </p>
               <p className="pvx-display pvx-num text-[40px] leading-none text-[var(--pvx-orange)]">
@@ -124,7 +124,7 @@ export function PvxCalcDemo({ onTry }: { onTry: () => void }) {
               </p>
             </div>
             <span
-              className={`shrink-0 rounded-full bg-[#e3f6ea] px-2.5 py-1 text-[11.5px] font-bold text-[#0f7239] transition-all duration-300 ${showBadge ? "scale-100 opacity-100" : "scale-75 opacity-0"}`}
+              className={`shrink-0 rounded-full bg-[#e3f6ea] px-2.5 py-1 text-[12.5px] font-bold text-[#0f7239] transition-all duration-300 ${showBadge ? "scale-100 opacity-100" : "scale-75 opacity-0"}`}
             >
               🟢 Rentable
             </span>
@@ -137,11 +137,11 @@ export function PvxCalcDemo({ onTry }: { onTry: () => void }) {
           <div
             className={`rounded-2xl bg-white/[0.06] px-3.5 py-2.5 ${step === 3 ? "ring-2 ring-[var(--pvx-orange)]" : ""}`}
           >
-            <p className="text-[11px] text-white/60">CPA máximo sin perder</p>
+            <p className="text-[12px] text-white/60">CPA máximo sin perder</p>
             <p className="pvx-num text-[18px] font-bold">$8,47</p>
           </div>
           <div className="rounded-2xl bg-white/[0.06] px-3.5 py-2.5">
-            <p className="text-[11px] text-white/60">Ganas por pedido</p>
+            <p className="text-[12px] text-white/60">Ganas por pedido</p>
             <p className="pvx-num text-[18px] font-bold">$5,43</p>
           </div>
         </div>

@@ -122,7 +122,7 @@ function SceneSales({ c, active }: { c: PublicCard; active: boolean }) {
             />
           ))}
         </div>
-        <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[11.5px] font-semibold text-white/80">
+        <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 text-[12.5px] font-semibold text-white/80">
           <IconLock className="w-3 h-3" /> Precio, ganancia y ciudades: gratis
           al registrarte
         </div>
@@ -342,7 +342,7 @@ export function PvxDemo({ cards }: { cards: PublicCard[] }) {
 
         <figcaption className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
           <span className="min-w-0">
-            <span className="block text-[11.5px] font-semibold text-white/50">
+            <span className="block text-[12.5px] font-semibold text-white/65">
               Paso {scene + 1} de 4
             </span>
             <span className="pvx-heading block truncate text-[17px] text-white sm:text-[19px]">
@@ -356,7 +356,7 @@ export function PvxDemo({ cards }: { cards: PublicCard[] }) {
               aria-label={paused ? "Reproducir" : "Pausar"}
               className="pvx-press grid h-9 w-9 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20 cursor-pointer"
             >
-              <span aria-hidden className="text-[11px]">
+              <span aria-hidden className="text-[12px]">
                 {paused ? "▶" : "❚❚"}
               </span>
             </button>

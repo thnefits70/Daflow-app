@@ -21,7 +21,8 @@ const SUPPLIER_LEDGER_ALLOWED_PREFIXES = ["/proveedor-ledger", "/api/proveedor-l
 // (2026-10-14: /api/auth/session y /api/app-version ya no pasan — la página
 // pública no carga la sesión ni el aviso de versión de DAFLOW.)
 const PROVEDIX_EXTRA_PATHS = ["/robots.txt", "/sitemap.xml", "/googleb11466063347423e.html"];
-const PROVEDIX_SHARE_PATHS = ["/calculadora", "/michelle"];
+// /privacidad (2026-10-16): política de privacidad, misma regla de reescritura.
+const PROVEDIX_SHARE_PATHS = ["/calculadora", "/michelle", "/privacidad"];
 
 // Seguridad de provedix.com (pedido del usuario 2026-10-14): la página solo
 // puede cargar cosas de su propio dominio (nada de scripts de otros sitios),
@@ -68,7 +69,11 @@ function provedixProxy(req: NextRequest): NextResponse {
   // Cada enlace tiene su página (mismo contenido, título e imagen propios al compartir).
   if (PROVEDIX_SHARE_PATHS.includes(pathname)) return withProvedixSecurity(NextResponse.rewrite(new URL(`/pvx${pathname}`, req.nextUrl)));
   const allowed = PROVEDIX_PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) || PROVEDIX_EXTRA_PATHS.includes(pathname);
-  return allowed ? withProvedixSecurity(NextResponse.next()) : new NextResponse(null, { status: 404 });
+  if (allowed) return withProvedixSecurity(NextResponse.next());
+  // Página "no encontrado" de Provedix (2026-10-16) en vez de un 404 en blanco;
+  // las rutas /api siguen con 404 liso.
+  if (pathname.startsWith("/api/")) return new NextResponse(null, { status: 404 });
+  return withProvedixSecurity(NextResponse.rewrite(new URL("/pvx/no-encontrado", req.nextUrl)));
 }
 
 export default function proxy(req: NextRequest, ctx: NextFetchEvent) {

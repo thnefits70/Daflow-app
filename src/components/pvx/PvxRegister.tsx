@@ -8,6 +8,7 @@ const msSince = (t: number) => (t ? Date.now() - t : 0);
 const nowMs = () => Date.now();
 import { IconClose, IconLock } from "@/components/pvx/PvxIcons";
 import { PHONE_COUNTRIES, checkWhatsapp, phoneCountry } from "@/lib/pvxPhone";
+import { PRIVACY_URL } from "@/lib/pvxFaq";
 
 // Registro corto (decisión del usuario 2026-10-07/10): nombre + WhatsApp y
 // una casilla persuasiva — recibir gratis los nuevos ganadores desde el
@@ -205,7 +206,7 @@ export function PvxRegister({
                   </option>
                 ))}
               </select>
-              <span className="pointer-events-none absolute right-2.5 text-[10px] text-[#6B717B]">
+              <span className="pointer-events-none absolute right-2.5 text-[11.5px] text-[#6B717B]">
                 ▼
               </span>
             </label>
@@ -279,12 +280,20 @@ export function PvxRegister({
             Quiero recibir gratis por WhatsApp los productos ganadores nuevos,
             antes que los demás.
           </b>
-          <span className="block text-[11.5px] text-[#4A4F58] mt-0.5">
+          <span className="block text-[12.5px] text-[#4A4F58] mt-0.5">
             Te enviaremos solo lo que te interese. Puedes darte de baja cuando
             quieras.
           </span>
         </span>
       </label>
+
+      <p className="mt-2 text-[12.5px] text-[#4A4F58]">
+        Al registrarte aceptas nuestra{" "}
+        <a href={PRIVACY_URL} target="_blank" rel="noopener" className="font-semibold underline underline-offset-2">
+          política de privacidad
+        </a>
+        .
+      </p>
 
       {error && (
         <div role="alert" className="mt-2 text-[13px] text-[#d33a2c]">

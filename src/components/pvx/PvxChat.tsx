@@ -315,7 +315,7 @@ export function PvxChat({
           <span className="block text-[14px] font-bold">
             {open ? "Cerrar chat" : "Pregúntale a Michelle"}
           </span>
-          <span className="block text-[11px] font-semibold text-white/60">
+          <span className="block text-[12px] font-semibold text-white/60">
             Asistente virtual · IA
           </span>
         </span>
@@ -574,7 +574,7 @@ export function PvxChat({
             ) : (
               <>
                 {remaining != null && (
-                  <div className="mb-1.5 text-right text-[11.5px] text-[var(--pvx-ink-3)]">
+                  <div className="mb-1.5 text-right text-[12.5px] text-[var(--pvx-ink-3)]">
                     {remaining} mensajes hoy
                   </div>
                 )}

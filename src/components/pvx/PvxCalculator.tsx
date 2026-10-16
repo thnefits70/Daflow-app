@@ -165,7 +165,7 @@ function Field({
         {suffix && <span className="text-[var(--pvx-ink-3)]">{suffix}</span>}
       </span>
       {hint && (
-        <span className="mt-1 block text-[11.5px] text-[var(--pvx-ink-3)]">
+        <span className="mt-1 block text-[12.5px] text-[var(--pvx-ink-3)]">
           {hint}
         </span>
       )}
@@ -502,7 +502,7 @@ export function PvxCalculator({
                       {t as string}
                     </span>
                     <span
-                      className={`block text-[11.5px] ${organic === v ? "text-white/70" : "text-[var(--pvx-ink-3)]"}`}
+                      className={`block text-[12.5px] ${organic === v ? "text-white/70" : "text-[var(--pvx-ink-3)]"}`}
                     >
                       {s as string}
                     </span>
@@ -787,7 +787,7 @@ export function PvxCalculator({
                       key={k}
                       className="rounded-2xl bg-white/[0.06] px-3.5 py-3"
                     >
-                      <p className="text-[11.5px] text-white/60">{k}</p>
+                      <p className="text-[12.5px] text-white/60">{k}</p>
                       <p className="pvx-num mt-0.5 text-[20px] font-bold">
                         {v}
                       </p>
@@ -854,8 +854,8 @@ export function PvxCalculator({
                         className={`rounded-xl px-1 py-2 ${i === 3 ? "bg-[var(--pvx-orange)]" : "bg-white/[0.06]"}`}
                       >
                         <p className="pvx-num text-[20px] font-bold">{n}</p>
-                        <p className="text-[11px] text-white/80">{l}</p>
-                        {s && <p className="text-[10px] text-white/60">{s}</p>}
+                        <p className="text-[12px] text-white/80">{l}</p>
+                        {s && <p className="text-[11.5px] text-white/60">{s}</p>}
                       </div>
                     ))}
                   </div>
@@ -886,7 +886,7 @@ export function PvxCalculator({
                       <p className="pvx-num text-[18px] font-bold">
                         {money(Number(v))}
                       </p>
-                      <p className="text-[11.5px] text-white/60">
+                      <p className="text-[12.5px] text-white/60">
                         ganancia {k}
                       </p>
                     </div>

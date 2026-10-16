@@ -77,7 +77,7 @@ export function CopyId({
       className="pvx-press inline-flex max-w-full items-center gap-1.5 rounded-full bg-[#F4F4F2] px-3.5 py-2 text-[13px] font-bold hover:bg-[#FFF1E8] cursor-pointer"
     >
       {label && (
-        <span className="shrink-0 text-[11.5px] font-bold text-[#6B717B]">
+        <span className="shrink-0 text-[12.5px] font-bold text-[#6B717B]">
           {label}
         </span>
       )}
@@ -87,7 +87,7 @@ export function CopyId({
       >
         {code}
       </span>{" "}
-      <span className="inline-flex shrink-0 items-center gap-1 text-[11.5px] text-[#C24400]">
+      <span className="inline-flex shrink-0 items-center gap-1 text-[12.5px] text-[#C24400]">
         {copied ? (
           <>
             <IconCheck className="w-3.5 h-3.5" /> Copiado
@@ -232,7 +232,7 @@ export function PvxProductDetail({
               #{p.rank} más vendido
             </span>
             {p.trend === "up" && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-[#F95B02] px-2 py-0.5 text-[11px] font-bold text-white">
+              <span className="inline-flex items-center gap-1 rounded-full bg-[#F95B02] px-2 py-0.5 text-[12px] font-bold text-white">
                 <IconFlame className="w-3 h-3" /> En subida
               </span>
             )}
@@ -276,7 +276,7 @@ export function PvxProductDetail({
               vendidos
             </span>
           </div>
-          <div className="text-right text-[11.5px] text-white/70">
+          <div className="text-right text-[12.5px] text-white/70">
             30 días · {p.unitsRange} u.
           </div>
         </div>
@@ -288,7 +288,7 @@ export function PvxProductDetail({
                 {money(offer.price)}
               </div>
               {offer.units > 1 && (
-                <div className="text-[10px] text-white/70">
+                <div className="text-[11.5px] text-white/70">
                   {offer.units} unidades
                 </div>
               )}
@@ -308,7 +308,7 @@ export function PvxProductDetail({
           </div>
         )}
         {p.offers.length > 1 && (
-          <div className="mt-1.5 truncate text-[11px] text-white/70">
+          <div className="mt-1.5 truncate text-[12px] text-white/70">
             También se vende a:{" "}
             <span className="font-semibold text-white">
               {p.offers
@@ -446,11 +446,11 @@ export function PvxProductDetail({
               {c.name}
             </div>
             {c.sold === false ? (
-              <div className="text-[11px] font-semibold text-[#C24400]">
+              <div className="text-[12px] font-semibold text-[#C24400]">
                 Nuevo · listo para vender
               </div>
             ) : (
-              <div className="text-[11px] text-[#4A4F58]">
+              <div className="text-[12px] text-[#4A4F58]">
                 {c.unitsRange} vendidos
                 {c.price != null ? ` · se vende a ${money(c.price)}` : ""}
               </div>

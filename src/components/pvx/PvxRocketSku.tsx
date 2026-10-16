@@ -25,13 +25,13 @@ export function PvxRocketSku({ sku }: { sku: string }) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className={`pvx-press inline-flex w-full items-center justify-center gap-1 rounded-full px-2 py-1.5 text-[11.5px] font-bold cursor-pointer ${open ? "bg-[#111214] text-white" : "bg-white text-[#111214] hover:bg-[#FFF1E8]"}`}
+        className={`pvx-press inline-flex w-full items-center justify-center gap-1 rounded-full px-2 py-1.5 text-[12.5px] font-bold cursor-pointer ${open ? "bg-[#111214] text-white" : "bg-white text-[#111214] hover:bg-[#FFF1E8]"}`}
       >
         Ver SKU de Rocket <span className="text-[9px]">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
         <div className="pvx-pop absolute z-10 bottom-full mb-1.5 left-0 right-0 rounded-2xl bg-white p-2.5 shadow-[0_16px_40px_-12px_rgb(0_0_0/0.35)]">
-          <div className="text-[11px] font-bold text-[#6B717B]">SKU en Rocket</div>
+          <div className="text-[12px] font-bold text-[#6B717B]">SKU en Rocket</div>
           <div className="pvx-num mt-0.5 text-[12.5px] font-bold break-all text-[#111214]">{sku}</div>
           <button
             type="button"

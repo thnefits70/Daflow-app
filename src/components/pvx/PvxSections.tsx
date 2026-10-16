@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import type { PublicStats } from "@/lib/provedixPublic";
 import { isWorkingDay, nextWorkingDay } from "@/lib/ecuadorHolidays";
+import { ADVISOR_RESPONSE_PROMISE, PVX_FAQ, WORK_HOURS_TEXT } from "@/lib/pvxFaq";
+import type { PublicTestimonials } from "@/lib/provedixRatings";
 import { IconArrow, IconBox, IconCheck, IconClock, IconExternal, IconImage, IconSpark, IconTrendUp, IconTruck } from "@/components/pvx/PvxIcons";
 
 // Secciones sacadas del "Manual de Trabajo Provedix – Actualizado 2026"
@@ -109,7 +111,7 @@ function LiveCut() {
                   {i > 0 && <span className="text-white/25">:</span>}
                   <span className="flex flex-col items-center">
                     {part}
-                    <span className="mt-1 text-[11px] font-semibold not-italic normal-case tracking-normal text-white/45">{["horas", "min", "seg"][i]}</span>
+                    <span className="mt-1 text-[12px] font-semibold not-italic normal-case tracking-normal text-white/60">{["horas", "min", "seg"][i]}</span>
                   </span>
                 </span>
               ))}
@@ -401,6 +403,93 @@ export function PvxResources() {
             ))}
           </ul>
         </div>
+      </div>
+    </section>
+  );
+}
+
+// ---- Preguntas frecuentes + promesa de respuesta (pedido del usuario 2026-10-16) ----
+
+export function PvxFaq() {
+  return (
+    <section id="preguntas" className="scroll-mt-4 bg-[var(--pvx-paper)] py-24 sm:py-32" aria-labelledby="pvx-faq">
+      <div className="mx-auto grid max-w-[1240px] gap-12 px-4 sm:px-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-20">
+        <div data-r>
+          <h2 id="pvx-faq" className="pvx-display text-[38px] sm:text-[clamp(40px,4.4vw,60px)]">
+            Preguntas <span className="text-[var(--pvx-orange)]">frecuentes</span>
+          </h2>
+          <p className="mt-6 max-w-[440px] text-[17px] leading-relaxed text-[var(--pvx-ink-2)]">Lo que más nos preguntan los dropshippers antes de empezar.</p>
+          {/* Promesa de respuesta: la asesora humana en menos de 3 horas, en horario de trabajo. */}
+          <div className="mt-8 max-w-[440px] rounded-[24px] bg-[var(--pvx-night)] p-6 text-white">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-[var(--pvx-orange)] text-white">
+              <IconClock className="w-6 h-6" />
+            </span>
+            <p className="pvx-heading mt-6 text-[24px]">Te respondemos en {ADVISOR_RESPONSE_PROMISE}</p>
+            <p className="mt-2 text-[15px] leading-relaxed text-white/75">
+              Michelle IA te responde al instante. Si tu caso necesita a una persona, la asesora del equipo te escribe por WhatsApp en {ADVISOR_RESPONSE_PROMISE}, de {WORK_HOURS_TEXT}.
+            </p>
+            <a
+              href="#michelle"
+              className="pvx-press mt-6 inline-flex items-center gap-2 rounded-full bg-[var(--pvx-orange)] px-5 py-3 text-[15px] font-bold text-white hover:bg-[var(--pvx-orange-press)]"
+            >
+              Preguntar a Michelle IA <IconArrow className="w-4 h-4" />
+            </a>
+          </div>
+        </div>
+        <ul className="flex flex-col gap-3">
+          {PVX_FAQ.map((f, i) => (
+            <li key={f.q} data-r style={{ ["--d" as string]: Math.min(i, 3) }}>
+              <details className="group rounded-[22px] bg-[var(--pvx-paper-2)] open:bg-white open:shadow-[0_0_0_2px_var(--pvx-paper-3)]">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 p-5 text-[17px] font-bold sm:p-6 [&::-webkit-details-marker]:hidden">
+                  {f.q}
+                  <span aria-hidden className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-[20px] leading-none text-[var(--pvx-orange-text)] transition-transform group-open:rotate-45 group-open:bg-[var(--pvx-paper-2)]">
+                    +
+                  </span>
+                </summary>
+                <p className="-mt-1 px-5 pb-5 text-[16px] leading-relaxed text-[var(--pvx-ink-2)] sm:px-6 sm:pb-6">{f.a}</p>
+              </details>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+// ---- Opiniones reales (casos de éxito, pedido del usuario 2026-10-16) ----------
+// Solo aparece cuando hay datos reales suficientes (getPublicTestimonials).
+
+export function PvxTestimonials({ data }: { data: PublicTestimonials | null }) {
+  if (!data) return null;
+  const avg = data.avg.toLocaleString("es-EC", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return (
+    <section className="bg-[var(--pvx-paper-2)] py-24 sm:py-32" aria-labelledby="pvx-testimonials">
+      <div className="mx-auto max-w-[1240px] px-4 sm:px-8">
+        <div data-r className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+          <h2 id="pvx-testimonials" className="pvx-display max-w-[720px] text-[38px] sm:text-[60px]">
+            Lo que dicen los <span className="text-[var(--pvx-orange)]">dropshippers</span>
+          </h2>
+          <p className="shrink-0">
+            <span className="pvx-display pvx-num text-[48px] text-[var(--pvx-orange)]">{avg}</span>
+            <span className="ml-2 text-[15px] font-semibold text-[var(--pvx-ink-2)]">
+              de 5 · {data.total} calificaciones
+            </span>
+          </p>
+        </div>
+        <ul className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {data.items.map((t, i) => (
+            <li key={t.id} data-r style={{ ["--d" as string]: i % 3 }} className="flex flex-col rounded-[24px] bg-white p-6 sm:p-7">
+              <span className="text-[18px] tracking-[2px] text-[var(--pvx-orange)]" aria-label={`${t.stars} de 5 estrellas`}>
+                {"★".repeat(t.stars)}
+                <span className="text-[var(--pvx-paper-3)]">{"★".repeat(5 - t.stars)}</span>
+              </span>
+              <p className="mt-4 flex-1 text-[16px] leading-relaxed">“{t.comment}”</p>
+              <p className="mt-5 text-[14px] text-[var(--pvx-ink-2)]">
+                <span className="font-bold text-[var(--pvx-ink)]">{t.firstName}</span> · {t.tool}
+              </p>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );

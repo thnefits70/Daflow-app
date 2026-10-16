@@ -1,5 +1,7 @@
 import { getPublicCatalog, getPublicStats } from "@/lib/provedixPublic";
 import { PvxCatalog } from "@/components/pvx/PvxCatalog";
+import { getPublicTestimonials } from "@/lib/provedixRatings";
+import { PVX_FAQ } from "@/lib/pvxFaq";
 
 // Página pública de provedix.com (etapa 3, pedido del usuario 2026-10-12).
 // Se arma como mucho una vez por minuto (antes 10: el "hay stock / agotado"
@@ -32,13 +34,39 @@ const JSON_LD = {
   ],
 };
 
+// Preguntas frecuentes y lista de productos para Google (2026-10-16). Solo
+// nombre, foto y posición: el precio y las ventas se ven con registro. Las
+// fotos van solo si salen por provedix.com (/pvx/f/…), nunca la dirección
+// interna del almacenamiento.
+function pageJsonLd(cards: { name: string; photo: string | null }[]) {
+  const faq = {
+    "@type": "FAQPage",
+    "@id": "https://provedix.com/#preguntas",
+    mainEntity: PVX_FAQ.map((f) => ({ "@type": "Question", name: f.q, acceptedAnswer: { "@type": "Answer", text: f.a } })),
+  };
+  const list = {
+    "@type": "ItemList",
+    "@id": "https://provedix.com/#productos",
+    name: "Productos ganadores de Provedix",
+    numberOfItems: Math.min(cards.length, 30),
+    itemListElement: cards.slice(0, 30).map((c, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: c.name,
+      url: "https://provedix.com/#productos",
+      ...(c.photo?.startsWith("/pvx/") ? { image: `https://provedix.com${c.photo}` } : {}),
+    })),
+  };
+  return { "@context": "https://schema.org", "@graph": [...JSON_LD["@graph"], faq, ...(cards.length ? [list] : [])] };
+}
+
 export default async function ProvedixPublicPage() {
   // Sin la fecha de corte: dejaría ver el retraso de los datos (pedido 2026-10-12).
-  const [{ cards }, stats] = await Promise.all([getPublicCatalog(), getPublicStats()]);
+  const [{ cards }, stats, testimonials] = await Promise.all([getPublicCatalog(), getPublicStats(), getPublicTestimonials().catch(() => null)]);
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }} />
-      <PvxCatalog cards={cards} stats={stats} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pageJsonLd(cards)).replace(/</g, "\\u003c") }} />
+      <PvxCatalog cards={cards} stats={stats} testimonials={testimonials} />
     </>
   );
 }

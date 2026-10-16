@@ -144,3 +144,31 @@ export async function getRatingsOverview(): Promise<RatingsOverview> {
     comments,
   };
 }
+
+// ---- Opiniones en la página pública (pedido del usuario 2026-10-16) --------
+// Solo aparecen cuando se cumple la meta (PUBLIC_MIN_RATINGS con promedio
+// PUBLIC_MIN_AVG o más) y hay al menos 3 comentarios con permiso. Se muestra
+// el promedio REAL de todas las calificaciones y solo el primer nombre.
+
+export type PublicTestimonial = { id: string; firstName: string; stars: number; comment: string; tool: string };
+export type PublicTestimonials = { avg: number; total: number; items: PublicTestimonial[] };
+
+export async function getPublicTestimonials(): Promise<PublicTestimonials | null> {
+  const o = await getRatingsOverview().catch(() => null);
+  if (!o || !o.readyForPublic || o.avg == null) return null;
+  const items = o.comments
+    .filter((c) => c.allowPublic && c.stars >= 4)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    // Una opinión por persona y herramienta (la más nueva).
+    .filter((c, i, all) => all.findIndex((x) => x.name === c.name && x.storeName === c.storeName && x.tool === c.tool) === i)
+    .slice(0, 6)
+    .map((c) => ({
+      id: c.id,
+      firstName: c.name.trim().split(/\s+/)[0] ?? "",
+      stars: c.stars,
+      comment: c.comment,
+      tool: RATING_TOOLS[c.tool],
+    }));
+  if (items.length < 3) return null;
+  return { avg: o.avg, total: o.total, items };
+}

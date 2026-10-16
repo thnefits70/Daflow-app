@@ -4,6 +4,8 @@ import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PublicCard, PublicStats } from "@/lib/provedixPublic";
 import type { SnapshotProduct } from "@/lib/provedixSnapshot";
+import type { PublicTestimonials } from "@/lib/provedixRatings";
+import { ADVISOR_RESPONSE_PROMISE, PRIVACY_URL } from "@/lib/pvxFaq";
 import { PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxRegister } from "@/components/pvx/PvxRegister";
 import { DropiLink, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
@@ -14,6 +16,8 @@ import {
   PvxCities,
   PvxOperation,
   PvxTeam,
+  PvxTestimonials,
+  PvxFaq,
   PvxResources,
   titleCase,
 } from "@/components/pvx/PvxSections";
@@ -107,8 +111,8 @@ function CardMetrics({
       className="mt-3 rounded-xl bg-white p-2"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-[11.5px] font-semibold text-[var(--pvx-ink-2)]">
+      <div className="flex items-center justify-between gap-1">
+        <span className="min-w-0 truncate text-[12px] font-semibold text-[var(--pvx-ink-2)]">
           Ventas<span className="hidden min-[420px]:inline"> día a día</span>
         </span>
         <div className="flex rounded-full bg-[var(--pvx-paper-2)] p-0.5">
@@ -117,7 +121,7 @@ function CardMetrics({
               key={d}
               type="button"
               onClick={() => setDays(d)}
-              className={`pvx-press whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-bold cursor-pointer ${days === d ? "bg-[var(--pvx-ink)] text-white" : "text-[var(--pvx-ink-2)]"}`}
+              className={`pvx-press whitespace-nowrap rounded-full px-2 py-1.5 text-[12px] font-bold cursor-pointer ${days === d ? "bg-[var(--pvx-ink)] text-white" : "text-[var(--pvx-ink-2)]"}`}
             >
               {d}d
             </button>
@@ -139,7 +143,7 @@ function CardMetrics({
             onClick={onUnlock}
             className="absolute inset-0 grid place-items-center cursor-pointer"
           >
-            <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[var(--pvx-ink)] px-2.5 py-1 text-[11px] font-bold text-white">
+            <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-[var(--pvx-ink)] px-2.5 py-1 text-[12px] font-bold text-white">
               <IconLock className="w-3 h-3" /> Regístrate y míralo
             </span>
           </button>
@@ -166,7 +170,7 @@ function CardDropiId({ code }: { code: string }) {
       title="Copiar ID"
       className="pvx-press flex w-full items-center justify-between gap-1 whitespace-nowrap rounded-full bg-white px-3 py-1.5 hover:bg-[var(--pvx-orange-soft)] cursor-pointer"
     >
-      <span className="text-[11px] font-bold text-[var(--pvx-ink-3)]">
+      <span className="text-[12px] font-bold text-[var(--pvx-ink-3)]">
         Dropi
       </span>
       <span
@@ -211,7 +215,7 @@ function Nav({ name }: { name: string | null }) {
       className="mx-auto flex max-w-[1240px] items-center justify-between gap-4 px-4 pt-5 sm:px-8 sm:pt-7"
       aria-label="Principal"
     >
-      <a href="#" aria-label="Provedix, inicio" className="shrink-0">
+      <a href="#" aria-label="Provedix, inicio" className="shrink-0 py-3">
         <Image
           src="/pvx/brand/wordmark-white.png"
           alt="Provedix"
@@ -620,7 +624,7 @@ function Hero({
             <div className="mt-5">
               <AdvisorPicker
                 dark
-                className="inline-flex items-center gap-2 text-left text-[14.5px] font-semibold text-white/75 underline decoration-white/30 underline-offset-4 hover:text-white hover:decoration-[var(--pvx-orange)] cursor-pointer"
+                className="inline-flex items-center gap-2 py-2 text-left text-[14.5px] font-semibold text-white/75 underline decoration-white/30 underline-offset-4 hover:text-white hover:decoration-[var(--pvx-orange)] cursor-pointer"
               >
                 <IconWhatsApp className="w-4.5 h-4.5 shrink-0 text-[#3ddc84]" />{" "}
                 ¿Dudas? Escríbele a un asesor por WhatsApp
@@ -772,7 +776,7 @@ function Promises() {
     {
       icon: <IconWhatsApp className="w-7 h-7" />,
       title: "Un asesor por WhatsApp",
-      text: "Una persona real te ayuda a elegir y resuelve tus dudas.",
+      text: `Una persona real te responde en ${ADVISOR_RESPONSE_PROMISE} en horario de trabajo.`,
     },
   ];
   // Titular arriba a todo el ancho y las promesas en cuadrícula (2026-10-13:
@@ -895,7 +899,7 @@ function ProductCard({
             #{c.rank}
           </span>
           <Badges c={c} />
-          <span className="text-[11.5px] font-semibold text-[var(--pvx-ink-3)]">
+          <span className="text-[12.5px] font-semibold text-[var(--pvx-ink-3)]">
             {BRAND[c.brand]}
           </span>
         </div>
@@ -911,7 +915,7 @@ function ProductCard({
           </span>
         </div>
         {c.stock === "out" && (
-          <div className="mt-2 flex items-start gap-1.5 rounded-xl bg-[#fff4e0] px-2.5 py-1.5 text-[11.5px] font-semibold text-[#8a4b00]">
+          <div className="mt-2 flex items-start gap-1.5 rounded-xl bg-[#fff4e0] px-2.5 py-1.5 text-[12.5px] font-semibold text-[#8a4b00]">
             <IconClock className="mt-px w-3.5 h-3.5 shrink-0" /> Agotado por
             ahora · llega más stock. Consulta con el asesor.
           </div>
@@ -1077,7 +1081,13 @@ function Footer() {
             correo (si lo das) solo para enviarte productos ganadores y
             atenderte mejor; puedes pedir que los borremos cuando quieras. Las
             conversaciones con Michelle, nuestra asistente virtual, también se
-            guardan para atenderte mejor.
+            guardan para atenderte mejor.{" "}
+            <a
+              href={PRIVACY_URL}
+              className="font-semibold text-white/80 underline underline-offset-4 hover:text-white"
+            >
+              Política de privacidad
+            </a>
           </p>
         </div>
       </div>
@@ -1092,9 +1102,11 @@ function Footer() {
 export function PvxCatalog({
   cards,
   stats,
+  testimonials = null,
 }: {
   cards: PublicCard[];
   stats: PublicStats;
+  testimonials?: PublicTestimonials | null;
 }) {
   const [registered, setRegistered] = useState<boolean | null>(null);
   const [name, setName] = useState<string | null>(null);
@@ -1271,6 +1283,7 @@ export function PvxCatalog({
       <Promises />
       <PvxOperation />
       <PvxTeam />
+      <PvxTestimonials data={testimonials} />
       <PvxCities stats={stats} />
 
       <section
@@ -1421,6 +1434,7 @@ export function PvxCatalog({
         onRegister={() => setOpen({ code: "", mode: "register" })}
       />
       <PvxResources />
+      <PvxFaq />
       <Footer />
       {/* Guía: sale sola al registrado que no la vio (o con novedades), sin ventanas abiertas. */}
       <PvxTour autoStart={registered === true && !open} />

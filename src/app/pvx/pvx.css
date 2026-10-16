@@ -424,3 +424,8 @@
 .pvx .pvx-noring:focus-visible {
   outline: none;
 }
+
+/* Páginas de texto (privacidad, 2026-10-16). */
+.pvx-legal ul { list-style: disc; padding-left: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.pvx-legal b { color: var(--pvx-ink); }
+.pvx-legal a { color: var(--pvx-orange-text); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }

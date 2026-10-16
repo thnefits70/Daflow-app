@@ -78,7 +78,7 @@ export function PvxSalesCurve({ values, height = 70, labels = true, tips }: { va
               style={{ left: `${leftPct}%`, top: pts[active][1] }}
             />
             <div
-              className="absolute -top-1 whitespace-nowrap rounded-md bg-[#111214] text-white text-[11px] font-semibold px-2 py-0.5 pointer-events-none"
+              className="absolute -top-1 whitespace-nowrap rounded-md bg-[#111214] text-white text-[12px] font-semibold px-2 py-0.5 pointer-events-none"
               style={{ left: `${leftPct}%`, transform: `translate(${leftPct > 70 ? "-100%" : leftPct < 30 ? "0" : "-50%"}, -100%)` }}
             >
               {tips![active]}
@@ -87,7 +87,7 @@ export function PvxSalesCurve({ values, height = 70, labels = true, tips }: { va
         )}
       </div>
       {labels && (
-        <div className="flex justify-between text-[10px] text-[#6B717B] mt-0.5">
+        <div className="flex justify-between text-[11.5px] text-[#6B717B] mt-0.5">
           <span>Antes</span>
           <span>{interactive ? "Toca la curva para ver cada día" : "Reciente"}</span>
         </div>
@@ -138,7 +138,7 @@ export function PvxDailyBars({ ranges, heightClass = "h-[150px]" }: { ranges: st
           </button>
         ))}
       </div>
-      <div className="mt-1 flex justify-between text-[11px] text-[#6B717B]">
+      <div className="mt-1 flex justify-between text-[12px] text-[#6B717B]">
         <span>Antes</span>
         <span>Toca una barra para ver ese día</span>
         <span>Reciente</span>
