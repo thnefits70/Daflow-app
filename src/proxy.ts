@@ -12,7 +12,10 @@ import { isProvedixHost, PROVEDIX_PUBLIC_PREFIXES } from "@/lib/provedixHosts";
 // sus rutas de apoyo (firma/subida de foto) — cualquier otra ruta responde
 // 404 liso, sin revelar nada de DAFLOW.
 const SUPPLIER_LEDGER_DOMAIN = process.env.NEXT_PUBLIC_SUPPLIER_LEDGER_DOMAIN;
-const SUPPLIER_LEDGER_ALLOWED_PREFIXES = ["/proveedor-ledger", "/api/proveedor-ledger"];
+// 2026-10-17: las PÁGINAS del proveedor se dejan pasar solo con su forma exacta
+// (lo demás, 404 vacío). Así el not-found raíz nunca se muestra en ese dominio
+// y no necesita mirar el dominio (eso volvía dinámica toda la app).
+const SUPPLIER_LEDGER_PAGE = /^\/proveedor-ledger\/(?:hoja\/|envios\/)?[\w-]+(?:\/manifest)?\/?$/;
 
 // provedix.com (etapa 3, 2026-10-12): mismo criterio — la raíz muestra la
 // página pública (/pvx) y solo pasan sus rutas; todo lo demás, 404 liso.
@@ -66,6 +69,8 @@ function provedixProxy(req: NextRequest): NextResponse {
   // calculadora y provedix.com/michelle abre el chat de Michelle IA — es la
   // misma página; ella decide qué abrir según la dirección.
   if (pathname === "/") return withProvedixSecurity(NextResponse.rewrite(new URL("/pvx", req.nextUrl)));
+  // Ícono que piden algunos navegadores por su cuenta: el de Provedix (2026-10-17).
+  if (pathname === "/favicon.ico") return withProvedixSecurity(NextResponse.rewrite(new URL("/pvx/icon.png", req.nextUrl)));
   // Cada enlace tiene su página (mismo contenido, título e imagen propios al compartir).
   if (PROVEDIX_SHARE_PATHS.includes(pathname)) return withProvedixSecurity(NextResponse.rewrite(new URL(`/pvx${pathname}`, req.nextUrl)));
   const allowed = PROVEDIX_PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) || PROVEDIX_EXTRA_PATHS.includes(pathname);
@@ -85,7 +90,7 @@ const daflowProxy = auth((req) => {
   const { pathname } = req.nextUrl;
 
   if (SUPPLIER_LEDGER_DOMAIN && req.nextUrl.hostname === SUPPLIER_LEDGER_DOMAIN) {
-    const allowed = SUPPLIER_LEDGER_ALLOWED_PREFIXES.some((p) => pathname.startsWith(p));
+    const allowed = pathname.startsWith("/api/proveedor-ledger") || SUPPLIER_LEDGER_PAGE.test(pathname);
     return allowed ? NextResponse.next() : new NextResponse(null, { status: 404 });
   }
 
@@ -119,5 +124,6 @@ export const config = {
   // 2026-10-16: /pvx/up y /pvx/dl (adjuntos del chat de Michelle IA) tampoco
   // pasan: van directo a Supabase con enlace firmado (next.config.ts), y si
   // pasaran por aquí chocarían con el límite de 4,5 MB (videos).
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|pvx/up/|pvx/dl/).*)"],
+  // favicon.ico sí pasa (2026-10-17): en provedix.com se responde con el ícono de Provedix.
+  matcher: ["/((?!_next/static|_next/image|pvx/up/|pvx/dl/).*)"],
 };
