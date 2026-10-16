@@ -303,7 +303,7 @@ export function StockCountPanel() {
     );
   }
 
-  const counted = count.products.filter((p) => p.countedQty !== null || p.adjusted).length;
+  const counted = count.products.filter((p) => p.countedQty !== null || p.adjusted || p.newArrival).length;
   const toApply = count.products.filter((p) => p.countedQty !== null && !p.applied && !p.recount && !p.adjusted).length;
   const total = count.products.length;
   const locked = count.status !== "COUNTING";
@@ -313,6 +313,8 @@ export function StockCountPanel() {
     if (p.applied) return false;
     // Ya ajustado por Daniel en Stock Actual: el equipo no lo cuenta.
     if (p.adjusted && !isLead) return false;
+    // Llegó por primera vez durante el conteo: no se cuenta (Daniel puede si quiere).
+    if (p.newArrival && !isLead) return false;
     if (!isLead && !board?.window.inWindow) return false;
     if (recounting && mineIds.has(p.id)) return !!mine?.startedAt && p.recount;
     if (locked) return false;
@@ -359,7 +361,7 @@ export function StockCountPanel() {
                 {[...WAREHOUSE_AREAS, "NONE"].map((a) => {
                   const inArea = count.products.filter((p) => (a === "NONE" ? !p.area : p.area === a));
                   if (inArea.length === 0) return null;
-                  const done = inArea.filter((p) => p.countedQty !== null || p.adjusted).length;
+                  const done = inArea.filter((p) => p.countedQty !== null || p.adjusted || p.newArrival).length;
                   return (
                     <button key={a} type="button" className={`rounded-full border px-2.5 py-1 text-[12px] cursor-pointer ${area === a ? "bg-teal border-teal text-navy font-bold" : done === inArea.length ? "border-green bg-green/15" : "border-rule"}`} onClick={() => setArea(a)}>
                       {a === "NONE" ? "Sin área" : `Área ${a}`} <span className="font-mono">{done}/{inArea.length}</span>
@@ -377,71 +379,85 @@ export function StockCountPanel() {
           <div className="flex flex-col gap-1.5 max-w-3xl">
             {visible.map((p, i) => {
               const editable = canEdit(p);
-              const done = (p.countedQty !== null || p.adjusted) && !(recounting && p.recount);
+              const done = (p.countedQty !== null || p.adjusted || p.newArrival) && !(recounting && p.recount);
               const vRows = editable ? variantRows(p) : null;
               return (
-                <div key={p.id} className={`border rounded p-2 text-[12.5px] ${done ? "border-green/50 bg-green/5" : p.recount ? "border-gold/60 bg-gold/5" : "border-rule"}`}>
-                <div className="flex items-center gap-2">
-                  <span className="text-steel font-mono text-[11px] w-6 text-right shrink-0">{i + 1}</span>
+                // 2026-10-15, pedido del usuario: en celular todo iba en una sola
+                // fila y el nombre/estado quedaban de una palabra por línea. Ahora:
+                // arriba foto + nombre + ID, debajo una etiqueta de estado, y el
+                // número a escribir en su propia línea.
+                <div key={p.id} className={`border rounded-md p-2.5 text-[12.5px] ${done ? "border-green/50 bg-green/5" : p.recount ? "border-gold/60 bg-gold/5" : "border-rule"}`}>
+                <div className="flex items-start gap-2.5">
+                  <span className="text-steel font-mono text-[11px] w-5 text-right shrink-0 pt-0.5">{i + 1}</span>
                   {p.photo && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img loading="lazy" decoding="async" src={p.photo} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
+                    <img loading="lazy" decoding="async" src={p.photo} alt="" className="w-11 h-11 rounded object-cover shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
                     <button
                       type="button"
-                      className={`block w-full text-left font-semibold cursor-pointer ${openNames.has(p.id) ? "break-words" : "truncate"}`}
+                      className={`block w-full text-left font-semibold leading-snug cursor-pointer ${openNames.has(p.id) ? "break-words" : "line-clamp-2"}`}
                       title={p.name}
                       onClick={() => setOpenNames((s) => { const n = new Set(s); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })}
                     >
                       {p.name}
                     </button>
-                    <div className="text-steel font-mono text-[11px]">
-                      {p.justCode ? <span className="inline-flex items-center gap-1 align-middle"><CatalogCode code={p.justCode} size="text-[11px]" /></span> : "sin ID"} · {areaLabel(p.area)}
-                      {p.recount && " · para recontar"}
-                      {p.applied && " · ✓ aplicado a INVESTOCK"}
-                      {p.adjusted && " · ✓ ya ajustado por Daniel, no hace falta contarlo"}
-                      {p.countedQty !== null && !p.adjusted && ` · contado ${p.countedQty}${p.countedByName && isLead ? ` por ${p.countedByName}` : ""}`}
+                    <div className="flex flex-wrap items-center gap-x-1.5 text-steel font-mono text-[11px] mt-0.5">
+                      {p.justCode ? <CatalogCode code={p.justCode} size="text-[11px]" /> : <span>sin ID</span>}
+                      <span>·</span>
+                      <span>{areaLabel(p.area)}</span>
                     </div>
-                    {p.variantCounts && p.variantCounts.length > 0 && !vRows && <div className="text-steel text-[11.5px]">{variantSummary(p.variantCounts)}</div>}
-                    {editable && !vRows && (
-                      <button
-                        type="button"
-                        className="text-teal text-[11.5px] font-semibold cursor-pointer"
-                        onClick={() => setVarDrafts((d) => ({ ...d, [p.id]: [...p.variantNames.map((name) => ({ name, qty: "", added: false })), ...(p.variantNames.length === 0 ? [{ name: "", qty: "", added: true }] : [])] }))}
-                      >
-                        Este producto tiene colores o tallas
-                      </button>
-                    )}
-                    {p.variantNames.length > 0 && (
-                      <button
-                        type="button"
-                        className="ml-3 text-steel hover:text-teal text-[11.5px] underline cursor-pointer"
-                        onClick={() => window.dispatchEvent(new CustomEvent(OPEN_VARIANT_EDITOR, { detail: p.id }))}
-                      >
-                        Editar tallas/colores
-                      </button>
-                    )}
+                    <CountStatus p={p} isLead={isLead} />
+                    {p.variantCounts && p.variantCounts.length > 0 && !vRows && <div className="text-steel text-[11.5px] mt-1">{variantSummary(p.variantCounts)}</div>}
                   </div>
-                  {editable && !vRows && (
-                    <>
+                  {done && <CheckCircle2 size={16} className="text-green shrink-0 mt-0.5" />}
+                </div>
+                {editable && !vRows && (
+                  <div className="mt-2 sm:pl-[30px] flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
                       <input
                         type="number"
                         inputMode="numeric"
                         min={0}
-                        className="w-20 rounded border border-rule bg-surface px-2 py-1.5 text-[14px] text-right"
+                        className="flex-1 sm:flex-none sm:w-32 min-w-0 rounded border border-rule bg-surface px-2.5 py-1.5 text-[14px] text-right"
                         placeholder={p.countedQty !== null ? String(p.countedQty) : "¿Cuántos?"}
                         value={drafts[p.id] ?? ""}
                         onChange={(e) => setDrafts((d) => ({ ...d, [p.id]: e.target.value }))}
                         onKeyDown={(e) => e.key === "Enter" && save(p.id)}
                       />
-                      <button type="button" disabled={saving === p.id || !(drafts[p.id] ?? "").trim()} className="rounded border border-teal bg-teal px-2.5 py-1.5 font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => save(p.id)}>
+                      <button type="button" disabled={saving === p.id || !(drafts[p.id] ?? "").trim()} className="shrink-0 rounded border border-teal bg-teal px-3.5 py-1.5 font-bold text-navy cursor-pointer disabled:opacity-40" onClick={() => save(p.id)}>
                         {saving === p.id ? "…" : p.countedQty !== null ? "Corregir" : "Guardar"}
                       </button>
-                    </>
-                  )}
-                  {done && <CheckCircle2 size={15} className="text-green shrink-0" />}
-                </div>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px]">
+                      <button
+                        type="button"
+                        className="text-left text-teal font-semibold cursor-pointer"
+                        onClick={() => setVarDrafts((d) => ({ ...d, [p.id]: [...p.variantNames.map((name) => ({ name, qty: "", added: false })), ...(p.variantNames.length === 0 ? [{ name: "", qty: "", added: true }] : [])] }))}
+                      >
+                        Tiene colores o tallas
+                      </button>
+                      {p.variantNames.length > 0 && (
+                        <button
+                          type="button"
+                          className="text-left text-steel hover:text-teal underline cursor-pointer"
+                          onClick={() => window.dispatchEvent(new CustomEvent(OPEN_VARIANT_EDITOR, { detail: p.id }))}
+                        >
+                          Editar tallas/colores
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {!editable && p.variantNames.length > 0 && (
+                  <button
+                    type="button"
+                    className="mt-1 sm:pl-[30px] text-left text-steel hover:text-teal text-[11.5px] underline cursor-pointer"
+                    onClick={() => window.dispatchEvent(new CustomEvent(OPEN_VARIANT_EDITOR, { detail: p.id }))}
+                  >
+                    Editar tallas/colores
+                  </button>
+                )}
                 {vRows && (
                   <VariantCountEditor
                     rows={vRows}
@@ -502,6 +518,24 @@ export function StockCountPanel() {
 }
 
 // Tarjeta de la persona asignada: empezar, cronómetro, meta y terminar.
+// Estado de un producto en el conteo, como una etiqueta corta y legible.
+function CountStatus({ p, isLead }: { p: CountView["products"][number]; isLead: boolean }) {
+  let tone = "";
+  let text = "";
+  if (p.applied) [tone, text] = ["border-green/50 bg-green/15 text-green", "Aplicado a INVESTOCK"];
+  else if (p.adjusted) [tone, text] = ["border-green/50 bg-green/15 text-green", "Ya ajustado por Daniel · no se cuenta"];
+  else if (p.newArrival) [tone, text] = ["border-teal/50 bg-teal/10 text-teal", "Nuevo, llegó durante el conteo · no se cuenta"];
+  else if (p.recount) [tone, text] = ["border-gold/60 bg-gold/15 text-gold", "Para recontar"];
+  const countedText = p.countedQty !== null && !p.adjusted ? `Contado: ${p.countedQty}${p.countedByName && isLead ? ` · ${p.countedByName}` : ""}` : null;
+  if (!text && !countedText) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+      {text && <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold ${tone}`}>{text}</span>}
+      {countedText && <span className="text-[11.5px] text-ink">{countedText}</span>}
+    </div>
+  );
+}
+
 function MyAssignment({ a, now, board, busy, onAction }: { a: AssignmentView; now: number; board: AssignmentBoard | null; busy: boolean; onAction: (action: "start" | "finish") => void }) {
   const [confirmFinish, setConfirmFinish] = useState(false);
   const what = a.area === "RECOUNT" ? `Recontar ${a.total} producto(s)` : `Contar ${a.label}`;

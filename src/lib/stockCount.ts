@@ -9,7 +9,7 @@ import { resolveCountsByAlias } from "@/lib/variantEdit";
 import { notifyOwner } from "@/lib/notifications";
 import { getInventoryLeadId } from "@/lib/guards";
 import { isBigDifference } from "@/lib/stockCountRules";
-import { COUNT_HOURS_TEXT, MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, closeShift, openAssignmentFor, recentMovement, windowStatus } from "@/lib/stockCountAssignments";
+import { COUNTABLE_ITEM, COUNT_HOURS_TEXT, MAX_PRODUCT_GAP_SEC, RECOUNT, assignmentProductIds, closeShift, openAssignmentFor, recentMovement, windowStatus } from "@/lib/stockCountAssignments";
 
 // Conteo físico de inventario — pedido del usuario 2026-10-02.
 // - FULL: conteo general de toda la bodega (una vez). Cuando el admin lo
@@ -81,7 +81,7 @@ async function expectedNow(catalogItemId: string): Promise<number> {
 
 async function products(area: string | null): Promise<CountableProduct[]> {
   const items = await prisma.purchaseCatalogItem.findMany({
-    where: area ? { warehouseArea: area } : {},
+    where: area ? { warehouseArea: area, ...COUNTABLE_ITEM } : COUNTABLE_ITEM,
     select: { id: true, name: true, justCode: true, photos: true, warehouseArea: true },
     orderBy: [{ warehouseArea: "asc" }, { name: "asc" }],
   });
@@ -155,7 +155,7 @@ export type CountView = {
   weekStart: string | null;
   // applied = ya se aplicó a INVESTOCK (2026-10-13): no se corrige desde aquí.
   // adjusted = ya corregido con «Ajustar (conteo)» después de lo contado: no se cuenta.
-  products: (CountableProduct & { countedQty: number | null; variantCounts: VariantCount[] | null; countedByName: string | null; countedAt: string | null; recount: boolean; applied: boolean; adjusted: boolean })[];
+  products: (CountableProduct & { countedQty: number | null; variantCounts: VariantCount[] | null; countedByName: string | null; countedAt: string | null; recount: boolean; applied: boolean; adjusted: boolean; newArrival: boolean })[];
 };
 
 // Vista para quien cuenta / Daniel: NUNCA incluye lo que dice el sistema.
@@ -164,7 +164,14 @@ export async function getCountView(countId: string): Promise<CountView | null> {
   if (!count) return null;
   const list = await products(count.kind === "WEEKLY_AREA" ? count.area : null);
   const byItem = new Map(count.lines.map((l) => [l.catalogItemId, l]));
-  const adjusted = await manualAdjustmentsSince(count.startedAt, list.map((p) => p.id));
+  const [adjusted, firstEntries] = await Promise.all([
+    manualAdjustmentsSince(count.startedAt, list.map((p) => p.id)),
+    prisma.stockKardexEntry.groupBy({ by: ["catalogItemId"], where: { catalogItemId: { in: list.map((p) => p.id) } }, _min: { occurredAt: true } }),
+  ]);
+  // Producto que entró a bodega por primera vez cuando el conteo ya había
+  // empezado: su stock es lo que se acaba de recibir, no hace falta contarlo
+  // (contarlo además podía duplicarlo, explicó Daniel 2026-10-15).
+  const newArrivals = new Set(firstEntries.filter((e) => e._min.occurredAt && e._min.occurredAt > count.startedAt).map((e) => e.catalogItemId));
   const userIds = [...new Set(count.lines.map((l) => l.countedById).filter((x): x is string => !!x))];
   const users = await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true } });
   const nameOf = new Map(users.map((u) => [u.id, u.name]));
@@ -176,7 +183,7 @@ export async function getCountView(countId: string): Promise<CountView | null> {
     weekStart: count.weekStart,
     products: list.map((p) => {
       const l = byItem.get(p.id);
-      return { ...p, countedQty: l?.countedQty ?? null, variantCounts: parseVariantCounts(l?.variantCounts), countedByName: l?.countedById ? (nameOf.get(l.countedById) ?? null) : null, countedAt: l?.countedAt.toISOString() ?? null, recount: l?.decision === RECOUNT, applied: l?.decision === "APPROVED", adjusted: isAdjustedAfter(adjusted.get(p.id), l) };
+      return { ...p, countedQty: l?.countedQty ?? null, variantCounts: parseVariantCounts(l?.variantCounts), countedByName: l?.countedById ? (nameOf.get(l.countedById) ?? null) : null, countedAt: l?.countedAt.toISOString() ?? null, recount: l?.decision === RECOUNT, applied: l?.decision === "APPROVED", adjusted: isAdjustedAfter(adjusted.get(p.id), l), newArrival: !l && newArrivals.has(p.id) };
     }),
   };
 }

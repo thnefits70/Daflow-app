@@ -130,10 +130,15 @@ export async function inventoryTeam(): Promise<{ id: string; name: string }[]> {
   });
 }
 
+// 2026-10-15 (conteo general, Daniel: 13 sin contar): un producto que nunca
+// entró a INVESTOCK (sin ninguna línea de Kardex — sin comprar, rechazado o
+// todavía sin llegar) no se cuenta: no hay nada que comparar.
+export const COUNTABLE_ITEM = { stockKardexEntries: { some: {} } } as const;
+
 // Productos que cubre una asignación.
 export async function assignmentProductIds(a: { countId: string; area: string; catalogItemIds: string[] }): Promise<string[]> {
   if (a.area === RECOUNT) return a.catalogItemIds;
-  const items = await prisma.purchaseCatalogItem.findMany({ where: { warehouseArea: a.area === NO_AREA ? null : a.area }, select: { id: true } });
+  const items = await prisma.purchaseCatalogItem.findMany({ where: { warehouseArea: a.area === NO_AREA ? null : a.area, ...COUNTABLE_ITEM }, select: { id: true } });
   return items.map((i) => i.id);
 }
 
@@ -141,7 +146,7 @@ export async function assignmentProductIds(a: { countId: string; area: string; c
 // semanal: solo su área).
 export async function countAreas(count: { kind: string; area: string | null }): Promise<string[]> {
   if (count.kind === "WEEKLY_AREA") return count.area ? [count.area] : [];
-  const noArea = await prisma.purchaseCatalogItem.count({ where: { warehouseArea: null } });
+  const noArea = await prisma.purchaseCatalogItem.count({ where: { warehouseArea: null, ...COUNTABLE_ITEM } });
   return [...WAREHOUSE_AREAS, ...(noArea > 0 ? [NO_AREA] : [])];
 }
 
