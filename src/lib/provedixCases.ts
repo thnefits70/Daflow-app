@@ -182,6 +182,7 @@ export async function resolveCase(
   userId: string | null,
   input: {
     resolution: string;
+    reply?: string;
     teach?: { question: string; answer: string } | null;
   },
 ): Promise<string | null> {
@@ -195,6 +196,23 @@ export async function resolveCase(
     },
   });
   if (updated.count === 0) return "Este caso ya estaba resuelto.";
+  // Respuesta para el dropshipper: le aparece en su chat de Michelle IA
+  // la próxima vez que lo abra.
+  if (input.reply?.trim()) {
+    const k = await prisma.provedixCase.findUnique({
+      where: { id: caseId },
+      select: { chatId: true },
+    });
+    if (k) {
+      await prisma.provedixChatMessage.create({
+        data: { chatId: k.chatId, role: "assistant", content: input.reply.trim() },
+      });
+      await prisma.provedixChat.update({
+        where: { id: k.chatId },
+        data: { updatedAt: new Date() },
+      });
+    }
+  }
   if (input.teach?.question.trim() && input.teach.answer.trim()) {
     await prisma.provedixAnswer.create({
       data: {

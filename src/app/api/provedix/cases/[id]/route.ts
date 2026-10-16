@@ -20,6 +20,7 @@ export async function GET(
 
 const body = z.object({
   resolution: z.string().trim().min(3, "Escribe cómo se resolvió.").max(2000),
+  reply: z.string().trim().max(1000).optional(),
   teach: z
     .object({ question: z.string().max(500), answer: z.string().max(2000) })
     .nullable()

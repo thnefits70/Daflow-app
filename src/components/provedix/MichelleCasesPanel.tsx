@@ -123,6 +123,7 @@ function CaseCard({
   const [showChat, setShowChat] = useState(false);
   const [chat, setChat] = useState<Msg[] | null>(null);
   const [resolution, setResolution] = useState("");
+  const [reply, setReply] = useState("");
   const [teach, setTeach] = useState(false);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -148,6 +149,7 @@ function CaseCard({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         resolution,
+        reply,
         teach: teach ? { question, answer } : null,
       }),
     });
@@ -215,6 +217,17 @@ function CaseCard({
           rows={2}
           className="mt-1 w-full rounded-md border border-rule bg-surface px-2.5 py-2 text-[13px]"
           placeholder="Ej.: Se aprobó la garantía y se reenvía el protector que faltó."
+        />
+        <label className="mt-2 block text-[12px] font-semibold">
+          Respuesta para el dropshipper (opcional)
+        </label>
+        <textarea
+          value={reply}
+          onChange={(e) => setReply(e.target.value)}
+          rows={2}
+          maxLength={1000}
+          className="mt-1 w-full rounded-md border border-rule bg-surface px-2.5 py-2 text-[13px]"
+          placeholder="Le aparece en su chat con Michelle IA la próxima vez que lo abra. Escríbelo corto, como por WhatsApp."
         />
         <label className="mt-2 flex items-center gap-2 text-[12.5px] cursor-pointer">
           <input
