@@ -6,7 +6,6 @@ import {
   PVX_CALC_EVENT,
   PVX_PRODUCT_EVENT,
 } from "@/components/pvx/PvxCalculator";
-import { PVX_SHARE_URLS, PvxShare } from "@/components/pvx/PvxShare";
 import { markPvxUse } from "@/components/pvx/PvxRating";
 import {
   IconArrow,
@@ -126,11 +125,11 @@ export const cleanReply = (t: string) =>
     // marca a medio llegar mientras se escribe la respuesta
     .replace(/\[(\[[A-Z]*(:\d*)?\]?)?$/, "")
     .trim();
+// Pocas y cortas (pedido del usuario 2026-10-17: el chat se veía sobrecargado).
 const SUGGESTIONS = [
   "¿Qué productos van en subida?",
-  "¿Cómo empiezo a vender con Provedix?",
-  "¿A qué hora es el próximo corte?",
-  "¿A cuánto vendo un producto para ganar?",
+  "¿Cómo empiezo a vender?",
+  "¿A cuánto vendo para ganar?",
 ];
 
 function readChatId(): string | null {
@@ -669,19 +668,15 @@ export function PvxChat({
               <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[14.5px] leading-relaxed">
                 {registered ? (
                   <>
-                    ¡Hola{name ? `, ${name.trim().split(/s+/)[0]}` : ""}! 👋 Soy{" "}
-                    <b>Michelle</b>, tu asistente virtual de Provedix 😊 Estoy
-                    aquí para ayudarte a encontrar productos ganadores, ver
-                    cuánto se venden y resolver tus dudas. Cuéntame, ¿en qué te
-                    ayudo hoy? 💛
+                    ¡Hola{name ? `, ${name.trim().split(/\s+/)[0]}` : ""}! 👋 Soy{" "}
+                    <b>Michelle</b>, de Provedix 😊 ¿En qué te ayudo hoy?
                   </>
                 ) : (
-                  // Sin registro: 2 preguntas generales gratis y luego registro aquí mismo (2026-10-17).
+                  // Sin registro (2026-10-17): sin hablar de límites ni de registro;
+                  // si hace falta, el chat lo pide solo conversando.
                   <>
-                    ¡Hola! 👋 Soy <b>Michelle</b>, tu asistente virtual de
-                    Provedix 😊 Pregúntame lo que quieras sobre cómo vender con
-                    nosotros. Para seguir conversando y ver toda la información,
-                    te registras gratis aquí mismo en un minuto 💛
+                    ¡Hola! 👋 Soy <b>Michelle</b>, de Provedix 😊 ¿En qué te
+                    ayudo hoy?
                   </>
                 )}
               </div>
@@ -699,19 +694,6 @@ export function PvxChat({
                     {s}
                   </button>
                 ))}
-              </div>
-            )}
-            {/* Compartir el chat (2026-10-15): enlace provedix.com/michelle. */}
-            {messages.length === 0 && loaded && (
-              <div className="mt-4 rounded-2xl bg-white px-3.5 py-3 ml-9">
-                <p className="mb-2 text-[12.5px] text-[var(--pvx-ink-2)]">
-                  ¿Conoces a otro dropshipper? Compártele este chat 💛
-                </p>
-                <PvxShare
-                  compact
-                  url={PVX_SHARE_URLS.michelle}
-                  message="💬 Pregúntale a Michelle IA, la asistente de Provedix, por productos ganadores y tus pedidos:"
-                />
               </div>
             )}
 
@@ -1002,24 +984,7 @@ export function PvxChat({
                     </span>
                     Enviando archivo… {uploading}%
                   </div>
-                ) : !registered ? (
-                  // Prueba sin registro: cuántas preguntas gratis quedan y registro a un toque.
-                  <div className="mb-1.5 flex items-center justify-between gap-2 text-[12.5px] text-[var(--pvx-ink-3)]">
-                    <span>
-                      {trialLeft != null
-                        ? `${trialLeft} pregunta${trialLeft === 1 ? "" : "s"} gratis`
-                        : "Preguntas gratis"}{" "}
-                      sin registrarte
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setRegFlow(true)}
-                      className="shrink-0 font-bold text-[var(--pvx-orange-text)] underline underline-offset-2 cursor-pointer"
-                    >
-                      Registrarme gratis
-                    </button>
-                  </div>
-                ) : (
+                ) : !registered ? null : (
                   <div className="mb-1.5 flex items-center justify-between gap-2 text-[12.5px] text-[var(--pvx-ink-3)]">
                     {/* El límite se ve antes de adjuntar (2026-10-16). */}
                     <span>
@@ -1080,15 +1045,15 @@ export function PvxChat({
                     placeholder={
                       outOfMessages
                         ? "Llegaste al límite de hoy…"
-                        : "Escribe tu pregunta…"
+                        : "Escribe aquí tu pregunta…"
                     }
-                    className="max-h-28 min-h-[44px] flex-1 resize-none rounded-2xl bg-[var(--pvx-paper-2)] px-3.5 py-2.5 text-[16px] outline-none focus:bg-white focus:shadow-[0_0_0_2px_var(--pvx-orange)] disabled:opacity-60"
+                    className="max-h-28 min-h-[48px] flex-1 resize-none rounded-2xl border-2 border-[var(--pvx-orange)] bg-white px-4 py-3 text-[16px] outline-none placeholder:text-[var(--pvx-ink-2)] focus:shadow-[0_0_0_4px_var(--pvx-orange-soft)] disabled:border-[var(--pvx-paper-3)] disabled:opacity-60"
                   />
                   <button
                     type="submit"
                     disabled={busy || !input.trim() || outOfMessages}
                     aria-label="Enviar"
-                    className="pvx-press grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--pvx-orange)] text-white hover:bg-[var(--pvx-orange-press)] disabled:opacity-40 cursor-pointer"
+                    className="pvx-press grid h-12 w-12 shrink-0 place-items-center rounded-full bg-[var(--pvx-orange)] text-white hover:bg-[var(--pvx-orange-press)] disabled:opacity-60 cursor-pointer"
                   >
                     <IconArrow className="w-5 h-5" />
                   </button>
@@ -1096,8 +1061,8 @@ export function PvxChat({
               </>
             )}
             <p className="mt-1.5 text-center text-[10.5px] text-[var(--pvx-ink-3)]">
-              Michelle es una IA y puede equivocarse. Guardamos la conversación
-              para atenderte mejor.
+              Michelle es una IA y puede equivocarse · Guardamos el chat para
+              atenderte mejor
             </p>
           </div>
         </div>

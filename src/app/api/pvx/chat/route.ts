@@ -255,7 +255,7 @@ const TRIAL_QUESTIONS = 2;
 const TRIAL_RULES = `MODO PRUEBA (persona NO registrada, le quedan pocas preguntas gratis)
 - Responde SOLO dudas generales: cómo funciona Provedix, cortes y despachos, cómo empezar a vender, la calculadora, garantías y cancelaciones en general, y los productos con los datos públicos de arriba (nombre, ID, ventas en rangos, tendencia, stock sí/no).
 - NO consultes ni des estado de guías o pedidos, no hagas cancelaciones, no pases casos al equipo ni pidas datos de guías: para eso tiene que registrarse.
-- Responde corto y útil, y al final invita en una frase a registrarse gratis aquí mismo en el chat para seguir (sin presionar).
+- Responde corto y útil. NO hables de registro, de límites ni de "preguntas gratis" (crea un freno): cuando haga falta, el chat le pide sus datos solo, conversando. Si pregunta algo que necesita registro (su guía, un caso), dile con naturalidad que para eso necesitas conocerlo un poquito y que te deje sus datos aquí mismo.
 - Todas las reglas de seguridad de arriba siguen igual.`;
 
 async function trialUsed(visitorId: string): Promise<number> {
@@ -478,7 +478,7 @@ export async function POST(req: NextRequest) {
       });
     }
   }
-  if (trial) system.push({ type: "text", text: `${TRIAL_RULES}\n- Preguntas gratis que le quedan después de esta: ${trialLeft - 1}.` });
+  if (trial) system.push({ type: "text", text: TRIAL_RULES });
   const client = getAnthropicClient();
   const params = {
     model: MICHELLE_MODEL,

@@ -117,7 +117,7 @@ export function PvxChatRegister({ onDone }: { onDone: (name: string) => void }) 
   return (
     <div>
       <Bubble>
-        Para seguir te registro aquí mismo, es gratis y toma un minuto 😊 ¿Cómo te llamas?
+        Me encanta ayudarte 😊 Para mostrarte todo, cuéntame un poquito de ti. ¿Cómo te llamas?
       </Bubble>
       {idx > 0 && <Mine>{name}</Mine>}
       {idx >= 1 && <Bubble>Mucho gusto, {first} 💛 ¿Cuál es tu WhatsApp?</Bubble>}
