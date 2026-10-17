@@ -314,6 +314,9 @@ export function PvxChat({
   // Última vez que se trajo la conversación: al volver a abrir el chat se
   // actualiza (así ve la respuesta del equipo sobre su guía, 2026-10-15).
   const lastLoadRef = useRef(0);
+  // Cuántos mensajes mandó en esta visita: si escribe antes de que termine de
+  // cargar la conversación guardada, la carga no le borra lo que escribió.
+  const sentRef = useRef(0);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   // Subiendo un adjunto: porcentaje (null = nada subiendo).
@@ -344,6 +347,10 @@ export function PvxChat({
   // Sin registro (2026-10-17): 2 preguntas gratis y luego el registro aquí mismo.
   const [trialLeft, setTrialLeft] = useState<number | null>(null);
   const [regFlow, setRegFlow] = useState(false);
+  // La pregunta que hizo justo cuando se le pidieron sus datos (2026-10-17): se
+  // queda a la vista y se responde sola al terminar, para que no la escriba
+  // donde va su nombre.
+  const [pendingQ, setPendingQ] = useState<string | null>(null);
   const showRegister = !registered && (regFlow || trialLeft === 0);
 
   // Sin abrir el chat: ¿el equipo respondió algo nuevo? (una sola consulta al cargar la página)
@@ -393,12 +400,13 @@ export function PvxChat({
     if (!open || busy || (loaded && Date.now() - lastLoadRef.current < 60_000))
       return;
     lastLoadRef.current = Date.now();
+    const sentBefore = sentRef.current;
     const id = readChatId();
     fetch(`/api/pvx/chat${id ? `?chatId=${encodeURIComponent(id)}` : ""}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.chatId) setChatId(d.chatId);
-        if (Array.isArray(d?.messages)) setMessages(d.messages);
+        if (Array.isArray(d?.messages) && sentRef.current === sentBefore) setMessages(d.messages);
         if (d?.blocked) {
           setBlocked(true);
           if (d.blockedText) setBlockedMsg(d.blockedText);
@@ -430,6 +438,7 @@ export function PvxChat({
     async (raw: string) => {
       const text = raw.trim();
       if (!text || busy) return;
+      sentRef.current += 1;
       setError("");
       setInput("");
       setBusy(true);
@@ -447,14 +456,16 @@ export function PvxChat({
         });
         if (!res.ok || !res.body) {
           const d = await res.json().catch(() => null);
-          setMessages((m) => m.slice(0, -2));
-          // Se acabaron las preguntas gratis: pasa al registro dentro del chat.
+          // Se acabaron las preguntas sin datos: pasa al registro dentro del
+          // chat, con su pregunta a la vista.
           if (d?.needsRegister) {
+            setMessages((m) => m.slice(0, -1));
+            setPendingQ(text);
             setTrialLeft(0);
             setRegFlow(true);
-            setInput(text);
             return;
           }
+          setMessages((m) => m.slice(0, -2));
           setError(
             d?.error ??
               "No pude responder ahora. Intenta de nuevo en un momento.",
@@ -952,19 +963,26 @@ export function PvxChat({
             )}
             {showRegister && !blocked && (
               <PvxChatRegister
+                pending={pendingQ != null}
                 onDone={(name) => {
                   trackChat("chat_register");
                   setRegFlow(false);
                   setTrialLeft(null);
                   onRegistered?.(name);
+                  const q = pendingQ;
+                  setPendingQ(null);
+                  // La pregunta pendiente se vuelve a enviar: se quita la copia a la vista.
                   setMessages((m) => [
-                    ...m,
+                    ...(q && m[m.length - 1]?.role === "user" && m[m.length - 1].content === q ? m.slice(0, -1) : m),
                     {
                       role: "assistant",
-                      content: `¡Listo, ${name.split(" ")[0]}! 🎉 Ya estás registrado. Ahora sí, pregúntame todo lo que necesites 💛`,
+                      content: q
+                        ? `¡Listo, ${name.split(" ")[0]}! 🎉 Ahora sí, te respondo 👇`
+                        : `¡Listo, ${name.split(" ")[0]}! 🎉 Ahora sí, pregúntame todo lo que necesites 💛`,
                     },
                   ]);
-                  setTimeout(() => inputRef.current?.focus(), 200);
+                  if (q) setTimeout(() => send(q), 400);
+                  else setTimeout(() => inputRef.current?.focus(), 200);
                 }}
               />
             )}

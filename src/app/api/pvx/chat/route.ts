@@ -245,7 +245,7 @@ const BLOCKED_TEXT = "Por seguridad, esta conversación quedó cerrada 🔒";
 const BLOCKED_24H_TEXT =
   "Por seguridad, este chat quedó bloqueado durante 24 horas porque la información de la guía no coincide 🔒";
 const REGISTER_TEXT =
-  "Para seguir conversando, regístrate gratis aquí mismo en el chat 😊 Solo toma un minuto y te doy toda la información de los productos.";
+  "Para seguir conversando, cuéntame un poquito de ti aquí mismo en el chat 😊 Es un minuto y te doy toda la información de los productos.";
 
 // Prueba sin registro (pedido del usuario 2026-10-17, "siempre con las medidas
 // de seguridad"): quien no está registrado puede hacer 2 preguntas GENERALES
@@ -253,7 +253,7 @@ const REGISTER_TEXT =
 // crea casos), solo con los datos públicos de la página, con límite por
 // navegador (7 días) y por conexión (6 por hora).
 const TRIAL_QUESTIONS = 2;
-const TRIAL_RULES = `MODO PRUEBA (persona NO registrada, le quedan pocas preguntas gratis)
+const TRIAL_RULES = `MODO PRUEBA (persona que todavía no te dio sus datos)
 - Responde SOLO dudas generales: cómo funciona Provedix, cortes y despachos, cómo empezar a vender, la calculadora, garantías y cancelaciones en general, y los productos con los datos públicos de arriba (nombre, ID, ventas en rangos, tendencia, stock sí/no).
 - NO consultes ni des estado de guías o pedidos, no hagas cancelaciones, no pases casos al equipo ni pidas datos de guías: para eso tiene que registrarse.
 - Responde corto y útil. NO hables de registro, de límites ni de "preguntas gratis" (crea un freno): cuando haga falta, el chat le pide sus datos solo, conversando. Si pregunta algo que necesita registro (su guía, un caso), dile con naturalidad que para eso necesitas conocerlo un poquito y que te deje sus datos aquí mismo.

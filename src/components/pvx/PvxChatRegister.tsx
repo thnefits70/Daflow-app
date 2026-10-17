@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { PHONE_COUNTRIES, checkWhatsapp, phoneCountry } from "@/lib/pvxPhone";
 import { PRIVACY_URL } from "@/lib/pvxFaq";
 import { IconArrow } from "@/components/pvx/PvxIcons";
+import { cleanPersonName } from "@/lib/pvxName";
 
 // Registro DENTRO del chat de Michelle IA (pedido del usuario 2026-10-17): los
 // mismos datos que el formulario (nombre, WhatsApp con país, tienda, dónde
@@ -36,7 +37,7 @@ function Mine({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function PvxChatRegister({ onDone }: { onDone: (name: string) => void }) {
+export function PvxChatRegister({ onDone, pending = false }: { onDone: (name: string) => void; pending?: boolean }) {
   const [step, setStep] = useState<Step>("name");
   const [name, setName] = useState("");
   const [country, setCountry] = useState("EC");
@@ -66,8 +67,9 @@ export function PvxChatRegister({ onDone }: { onDone: (name: string) => void }) 
     setError("");
     const v = draft.trim();
     if (step === "name") {
-      if (v.length < 2) return setError("Escribe tu nombre, porfa.");
-      setName(v.replace(/\s+/g, " "));
+      const n = cleanPersonName(v);
+      if (!n.ok) return setError(n.error);
+      setName(n.name);
     } else if (step === "whatsapp") {
       const c = checkWhatsapp(country, v);
       if (!c.ok) return setError(c.error);
@@ -117,7 +119,9 @@ export function PvxChatRegister({ onDone }: { onDone: (name: string) => void }) 
   return (
     <div>
       <Bubble>
-        Me encanta ayudarte 😊 Para mostrarte todo, cuéntame un poquito de ti. ¿Cómo te llamas?
+        {pending
+          ? "¡Buena pregunta! 😊 Te la respondo apenas me cuentes un poquito de ti. ¿Cómo te llamas?"
+          : "Me encanta ayudarte 😊 Para mostrarte todo, cuéntame un poquito de ti. ¿Cómo te llamas?"}
       </Bubble>
       {idx > 0 && <Mine>{name}</Mine>}
       {idx >= 1 && <Bubble>Mucho gusto, {first} 💛 ¿Cuál es tu WhatsApp?</Bubble>}

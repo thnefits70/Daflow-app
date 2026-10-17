@@ -9,6 +9,7 @@ import {
   setVisitorCookies,
 } from "@/lib/provedixVisitor";
 import { checkWhatsapp } from "@/lib/pvxPhone";
+import { cleanPersonName } from "@/lib/pvxName";
 
 // Registro en provedix.com: nombre + WhatsApp + aceptación (obligatoria).
 // "website" es un campo oculto: si viene lleno es un robot y se ignora.
@@ -88,7 +89,10 @@ export async function POST(req: NextRequest) {
       { error: "Ese WhatsApp no es válido." },
       { status: 400 },
     );
-  const name = parsed.data.name.replace(/\s+/g, " ");
+  const cleanName = cleanPersonName(parsed.data.name);
+  if (!cleanName.ok)
+    return NextResponse.json({ error: cleanName.error }, { status: 400 });
+  const name = cleanName.name;
   const storeName = parsed.data.storeName.replace(/\s+/g, " ");
   const { platform } = parsed.data;
   const platformEmail = parsed.data.platformEmail || null;
