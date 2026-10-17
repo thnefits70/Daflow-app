@@ -442,7 +442,7 @@ export async function POST(req: NextRequest) {
   type Block =
     | { type: "text"; text: string }
     | { type: "image"; source: { type: "base64"; media_type: "image/jpeg"; data: string } };
-  const messages: { role: "user" | "assistant"; content: Block[] }[] = [];
+  const messages: Anthropic.Beta.BetaMessageParam[] = [];
   for (const m of turns) {
     const role = m.role === "assistant" ? ("assistant" as const) : ("user" as const);
     const blocks: Block[] = [];
@@ -454,9 +454,10 @@ export async function POST(req: NextRequest) {
     const text = describeTeamReply(describeAttachments(m.content, seen)).trim();
     if (text) blocks.push({ type: "text", text });
     if (!blocks.length) continue;
+    const content = blocks as Anthropic.Beta.BetaContentBlockParam[];
     const last = messages[messages.length - 1];
-    if (last && last.role === role) last.content.push(...blocks);
-    else messages.push({ role, content: blocks });
+    if (last && last.role === role && Array.isArray(last.content)) last.content.push(...content);
+    else messages.push({ role, content });
   }
 
   const system = await michelleSystem(!trial);
