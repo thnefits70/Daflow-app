@@ -3,6 +3,7 @@ import type { SnapshotProduct } from "@/lib/provedixSnapshot";
 import { getSheetProducts, type SheetProduct } from "@/lib/provedixSheets";
 import { getActiveAnswers } from "@/lib/provedixCases";
 import { prisma } from "@/lib/prisma";
+import { getCarrierStats } from "@/lib/provedixCarriers";
 import { getVariantStock } from "@/lib/variantStock";
 import { getVariantSales } from "@/lib/variantSales";
 import { getPublicProductsFull, getPublicStats, PROVEDIX_SNAPSHOT_TAG, PROVEDIX_STOCK_TAG } from "@/lib/provedixPublic";
@@ -64,7 +65,7 @@ QUÉ HACES
   [[SEP]]
   Mensaje 3: "Te comparto el enlace para que veas el stock en tiempo real, porque se actualiza todos los días 👇" + [[DROPI:169468]]
 - NO REPITAS (regla del dueño, 2026-10-17): lo que ya dijiste en esta conversación (cómo empacamos, por qué el stock se actualiza, cómo pedir una garantía, los colores, etc.) no lo vuelvas a decir. Si después pregunta otra cosa, responde SOLO eso. Tampoco agregues información que no te pidió.
-- TRANSPORTADORAS CON DATOS REALES (2026-10-17): si habla de envíos, devoluciones, a qué ciudad vende o qué transportadora elegir, guíale con "ENTREGAS POR TRANSPORTADORA": recomiéndale la que mejor entrega en la ciudad de su cliente (en Dropi elige la transportadora al crear el pedido). Dilo sencillo ("para Quito te recomiendo Servientrega, es la que mejor nos entrega allá"); da el porcentaje solo si lo pregunta. Si en este chat ya verificaste una guía suya, nombra su transportadora. Úsalo cuando sirva, sin repetirlo en cada mensaje. Si junto al porcentaje aparece "suele llegar en N días", combina las dos cosas: recomienda la que entrega más y llega rápido; si entregan parecido, la más rápida ("para Cuenca te recomiendo Gintracom: entrega igual de bien y suele llegar en 2 días"). Si no aparece el tiempo, no inventes días ni prometas fechas.
+- TRANSPORTADORAS CON DATOS REALES (2026-10-17): si habla de envíos, devoluciones, a qué ciudad vende o qué transportadora elegir, guíale con "ENTREGAS POR TRANSPORTADORA": recomiéndale la que mejor entrega en la ciudad de su cliente (en Dropi elige la transportadora al crear el pedido). Dilo sencillo ("para Quito te recomiendo Servientrega, es la que mejor nos entrega allá"); da el porcentaje solo si lo pregunta. Si en este chat ya verificaste una guía suya, nombra su transportadora. Úsalo cuando sirva, sin repetirlo en cada mensaje. Si junto al porcentaje aparece "suele llegar en N días", combina las dos cosas: recomienda la que entrega más y llega rápido; si entregan parecido, la más rápida ("para Cuenca te recomiendo Gintracom: entrega igual de bien y suele llegar en 2 días"). Si no aparece el tiempo, no inventes días ni prometas fechas. Si quiere ver todas las ciudades, pon [[IR:transportadoras]] (la sección "Qué transportadora entrega mejor" con buscador de ciudad).
 - QUE SE SIENTA DE LOS PRIMEROS (regla del dueño, 2026-10-17): el dropshipper valora vender algo que pocos venden. Nunca digas que un producto "se vende muchísimo", que "todos lo venden" o que "estamos subiendo stock porque se vende tanto" (lo espanta). Si el producto dice "lo venden: muy pocas tiendas" o "pocas tiendas", puedes contarle con naturalidad que se vende bien y que todavía lo venden pocas tiendas, una buena oportunidad para entrar antes. Si dice "varias" o "muchas tiendas", NO digas que lo venden pocos (sería mentira) y tampoco menciones a otras tiendas ni la competencia: di solo que se vende bien y dale un tip para destacar (sus creativos, un combo, buen precio). Con ningún producto presumas cifras grandes de venta (montos, "se vende muchísimo"): basta con "se vende bien" o "va en subida". Nunca digas cuántas tiendas exactamente ni sus nombres.
 - VARIOS MENSAJES CORTOS, COMO EN WHATSAPP (regla del dueño, 2026-10-17): una persona no manda todo en un solo bloque. Cuando tu respuesta tenga más de una idea, divídela en 2 o 3 mensajes cortos (por ejemplo: 1) saludo y respuesta directa, 2) el detalle o la recomendación, 3) el cierre o la pregunta). Sepáralos con una línea que diga exactamente [[SEP]]. Nunca más de 3 mensajes ni un mensaje por palabra; si la respuesta es corta, va en uno solo. Los botones ([[DROPI:…]], [[CREATIVOS:…]], [[IR:…]], [[ASESORA:…]], etc.) van siempre al final del último mensaje.
 - STOCK SIN SONAR A ROBOT: nunca digas "no te puedo dar cantidades" ni "no puedo darte esa información". Di algo cálido como: "Te comparto el enlace para que veas el stock en tiempo real, porque se actualiza todos los días 👇".
@@ -80,7 +81,7 @@ PRECIO EN DROPI Y BOTONES
   [[LANDING:ID]] → su landing hecha con IA. Solo si dice "landing: sí".
   [[CALC:ID]] → abre la calculadora de ganancia de la página con ese producto. Úsalo cuando pregunten a cuánto venderlo, cuánto ganarían, si es rentable o cuánto pueden pagar de publicidad (CPA). Explica en 1–2 líneas que ahí ponen el precio en Dropi, su flete (promedio $7) y su CPA (promedio $4–5) y les dice el precio recomendado y el CPA máximo. Puedes mencionar a qué precio se vende al público, pero no calcules tú el precio en Dropi ni la ganancia.
   [[FICHA:ID]] → abre la ficha completa del producto en la página (ventas por día, ciudades, compradores, combos; si no está registrado le pide registrarse). Úsalo cuando quiera ver más de un producto.
-  [[IR:cortes]] → la sección de cortes en vivo (próximo corte y cuenta regresiva). [[IR:recursos]] → creativos gratis, rastreo de guías por transportadora, garantías y buenas prácticas. [[IR:calculadora]] → la calculadora sin producto. [[IR:productos]] → el catálogo con buscador y filtros. [[IR:como-funciona]] → cómo funciona Provedix en pasos. [[IR:preguntas]] → las preguntas frecuentes (costos, stock mínimo, cortes, cancelar guías, garantías, tiempos de respuesta).
+  [[IR:cortes]] → la sección de cortes en vivo (próximo corte y cuenta regresiva). [[IR:recursos]] → creativos gratis, rastreo de guías por transportadora, garantías y buenas prácticas. [[IR:calculadora]] → la calculadora sin producto. [[IR:productos]] → el catálogo con buscador y filtros. [[IR:como-funciona]] → cómo funciona Provedix en pasos. [[IR:transportadoras]] → qué transportadora entrega mejor en cada ciudad (con buscador). [[IR:preguntas]] → las preguntas frecuentes (costos, stock mínimo, cortes, cancelar guías, garantías, tiempos de respuesta).
 - TODO FÁCIL, A UN CLIC (regla del dueño, 2026-10-17): Michelle IA es para que el dropshipper venda de una vez nuestros productos. NUNCA le mandes a buscar nada (ni en hojas, ni en Dropi, ni con Ctrl + F, ni "revisa en la página"): dale SIEMPRE el botón directo a lo que necesita, dentro de lo permitido. Producto en Dropi (colores, tallas, stock real, precio) → [[DROPI:ID]]; fotos y videos → [[CREATIVOS:ID]]; datos de venta → [[FICHA:ID]]; ganancia → [[CALC:ID]]; partes de la página → [[IR:…]]; rastreo → el enlace de la transportadora. Explica en una frase qué va a ver al tocarlo.
 - COLORES Y TALLAS (2026-10-17): si el producto trae "colores/tallas que más se venden", dile cuáles son los favoritos (sirve para decidir qué color anunciar). "colores/tallas con stock real" es para GUIARTE: con eso le confirmas "sí tenemos ese color"; NUNCA digas cantidades. Siempre dale [[DROPI:ID]] para que vea el stock publicado de hoy en Dropi, elija el color al crear el pedido y lance su publicidad según ese stock. No pases colores al equipo.
 - STOCK PARA VENDER MÁS (2026-10-17): tu objetivo es inspirarle a subir órdenes con nosotros. Si dice que en Dropi ve poco o ningún stock de un producto o color y quiere vender más (o lanzar campaña), anímale, usa la herramienta avisar_stock (producto, color/talla y lo que necesita) y luego dile: "Ya le avisé al equipo para que revise el stock y lo actualice en Dropi" + que mientras tanto vea el stock de hoy con [[DROPI:ID]] y lance su publicidad según eso. Si ese color no está en "con stock real", ofrécele los colores que sí tenemos. Nunca prometas cantidades ni fechas de llegada. Termina con la marca [[ASESORA:CÓDIGO]] que te devuelve avisar_stock.
@@ -266,112 +267,20 @@ async function storesSellingByCode(): Promise<Map<string, number>> {
   return new Map([...sets].map(([c, set]) => [c, set.size]));
 }
 
-// Qué transportadora entrega mejor, en general y por ciudad (2026-10-17): de
-// TODOS nuestros envíos en Dropi de los últimos 60 días (NICK). Datos reales
-// para guiar al dropshipper; nada de una tienda en particular.
-const CARRIER_NAME: Record<string, string> = { SERVIENTREGA: "Servientrega", GINTRACOM: "Gintracom", LAARCOURIER: "LaarCourier", VELOCES: "Veloces", URBANO: "Urbano" };
-const carrierName = (c: string) => CARRIER_NAME[c.toUpperCase().replace(/\s+/g, "")] ?? c;
-// Cuánto tarda cada transportadora (pedido del usuario 2026-10-17): desde el día
-// del corte (manifestDay) hasta que NICK ve la guía pasar a ENTREGADA (revisa cada
-// 2 h). Dropi no da la fecha de entrega, así que solo cuentan las entregas que
-// NICK vio cambiar (desde el 2026-10-16); las que ya estaban entregadas no tienen
-// hora. Para no sesgar (si solo cuentan las que ya llegaron, salen más rápidas de
-// lo real) se miden guías que salieron desde que NICK empezó y que ya tuvieron
-// 10+ días para llegar. Días contados sin domingos. Se usa solo con MIN_TIMED+.
-const MIN_TIMED = 20;
-type Timed = { carrier: string | null; city: string | null; day: string; delivered: string };
-function daysWithoutSundays(from: string, to: string): number {
-  const d = new Date(`${from}T12:00:00Z`);
-  const end = new Date(`${to}T12:00:00Z`);
-  let n = 0;
-  while (d < end) {
-    d.setUTCDate(d.getUTCDate() + 1);
-    if (d.getUTCDay() !== 0) n++;
-  }
-  return n;
-}
-const median = (xs: number[]) => {
-  const a = [...xs].sort((x, y) => x - y);
-  const m = Math.floor(a.length / 2);
-  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
-};
-async function carrierSpeed(): Promise<{ byCarrier: Map<string, number[]>; byCity: Map<string, number[]> }> {
-  const rows = await prisma.$queryRaw<Timed[]>`
-    SELECT DISTINCT ON (c."guideNumber") g.carrier, g.city, f."manifestDay" AS day,
-      ((c.at AT TIME ZONE 'UTC') AT TIME ZONE 'America/Guayaquil')::date::text AS delivered
-    FROM "NickGuideStatusChange" c
-    JOIN "NickGuideStatus" g ON g."guideNumber" = c."guideNumber"
-    JOIN "FulfillmentRequestGuide" f ON f."guideNumber" = c."guideNumber"
-    WHERE c."fromStatus" IS NOT NULL AND g."statusGroup" = 'ENTREGADA' AND c."toStatus" = g.status
-      AND f."manifestDay" >= (SELECT min("firstSeenAt")::date::text FROM "NickGuideStatus")
-      AND f."manifestDay" >= (now() - interval '60 days')::date::text
-      AND f."manifestDay" <= ((now() AT TIME ZONE 'America/Guayaquil') - interval '10 days')::date::text
-    ORDER BY c."guideNumber", c.at`;
-  const byCarrier = new Map<string, number[]>();
-  const byCity = new Map<string, number[]>();
-  for (const r of rows) {
-    if (!r.carrier || r.delivered < r.day) continue;
-    const carrier = carrierName(r.carrier);
-    const days = daysWithoutSundays(r.day, r.delivered);
-    if (days > 20) continue; // perdida o mal escaneada: no es un tiempo normal
-    byCarrier.set(carrier, [...(byCarrier.get(carrier) ?? []), days]);
-    const city = (r.city ?? "").trim().toUpperCase();
-    if (city) byCity.set(`${city}|${carrier}`, [...(byCity.get(`${city}|${carrier}`) ?? []), days]);
-  }
-  return { byCarrier, byCity };
-}
-const speedText = (xs?: number[]) => {
-  if (!xs || xs.length < MIN_TIMED) return "";
-  const d = Math.round(median(xs));
-  return d <= 0 ? ", llega el mismo día" : d === 1 ? ", suele llegar en 1 día" : `, suele llegar en ${d} días`;
-};
-
+// Transportadoras (2026-10-17): mismos datos que la sección de provedix.com
+// (provedixCarriers.ts). Solo porcentajes y días, de todos nuestros envíos.
 async function carrierInsights(): Promise<string> {
-  const since = new Date(Date.now() - 60 * 86_400_000);
-  const rows = await prisma.nickGuideStatus.groupBy({
-    by: ["city", "carrier", "statusGroup"],
-    where: { orderCreatedAt: { gte: since }, statusGroup: { in: ["ENTREGADA", "DEVOLUCION"] }, carrier: { not: null } },
-    _count: { _all: true },
-  });
-  const speed = await carrierSpeed().catch(() => ({ byCarrier: new Map<string, number[]>(), byCity: new Map<string, number[]>() }));
-  const byCarrier = new Map<string, { ok: number; total: number }>();
-  const byCity = new Map<string, Map<string, { ok: number; total: number }>>();
-  for (const r of rows) {
-    const carrier = carrierName(r.carrier ?? "");
-    const n = r._count._all;
-    const ok = r.statusGroup === "ENTREGADA" ? n : 0;
-    const c = byCarrier.get(carrier) ?? { ok: 0, total: 0 };
-    byCarrier.set(carrier, { ok: c.ok + ok, total: c.total + n });
-    const city = (r.city ?? "").trim().toUpperCase();
-    if (!city) continue;
-    if (!byCity.has(city)) byCity.set(city, new Map());
-    const cc = byCity.get(city)!.get(carrier) ?? { ok: 0, total: 0 };
-    byCity.get(city)!.set(carrier, { ok: cc.ok + ok, total: cc.total + n });
-  }
-  const pct = (x: { ok: number; total: number }) => Math.round((x.ok / x.total) * 100);
-  // Solo se comparan las que mueven volumen de verdad (10%+ de los envíos): un
-  // 88% sobre 25 guías no vale lo mismo que un 77% sobre 1.000 (caso Urbano en Quito).
-  const MIN_SHARE = 0.1;
-  const allTotal = [...byCarrier.values()].reduce((s, x) => s + x.total, 0);
-  const general = [...byCarrier].filter(([, x]) => x.total >= allTotal * MIN_SHARE).sort((a, b) => pct(b[1]) - pct(a[1])).map(([c, x]) => `${c} ${pct(x)}%${speedText(speed.byCarrier.get(c))}`);
-  const cities = [...byCity]
-    .map(([city, m]) => ({ city, m, total: [...m.values()].reduce((s, x) => s + x.total, 0) }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 25)
-    .map(({ city, m, total }) => {
-      const ranked = [...m].filter(([, x]) => x.total >= 25 && x.total >= total * MIN_SHARE).sort((a, b) => pct(b[1]) - pct(a[1]));
-      if (!ranked.length) return null;
-      const [best, second] = ranked;
-      const sp = (c: string) => speedText(speed.byCity.get(`${city}|${c}`));
-      return second && pct(best[1]) - pct(second[1]) < 3
-        ? `${city}: ${best[0]} y ${second[0]} entregan parecido (${best[0]} ${pct(best[1])}%${sp(best[0])}; ${second[0]} ${pct(second[1])}%${sp(second[0])})`
-        : `${city}: mejor ${best[0]} (${pct(best[1])}%${sp(best[0])})${second ? `, luego ${second[0]} (${pct(second[1])}%${sp(second[0])})` : ""}`;
-    })
-    .filter(Boolean);
+  const { general, cities } = await getCarrierStats();
   if (!general.length) return "";
+  const days = (d: number | null) => (d == null ? "" : d <= 0 ? ", llega el mismo día" : d === 1 ? ", suele llegar en 1 día" : `, suele llegar en ${d} días`);
+  const cityLines = cities.map(({ city, carriers: [best, second], similar }) =>
+    similar
+      ? `${city}: ${best.carrier} y ${second.carrier} entregan parecido (${best.carrier} ${best.pct}%${days(best.days)}; ${second.carrier} ${second.pct}%${days(second.days)})`
+      : `${city}: mejor ${best.carrier} (${best.pct}%${days(best.days)})${second ? `, luego ${second.carrier} (${second.pct}%${days(second.days)})` : ""}`,
+  );
   return `ENTREGAS POR TRANSPORTADORA (nuestros envíos de los últimos 60 días: % de pedidos entregados entre entregados y devueltos; solo las que llevan buena parte del volumen, las de poco volumen no se comparan porque su dato no es seguro)
-- En general: ${general.join(", ")}.
-- Por ciudad: ${cities.join("; ")}.`;
+- En general: ${general.map((g) => `${g.carrier} ${g.pct}%${days(g.days)}`).join(", ")}.
+- Por ciudad: ${cityLines.join("; ")}.`;
 }
 
 async function buildKnowledge(full: boolean): Promise<string> {

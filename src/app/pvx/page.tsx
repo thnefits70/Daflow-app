@@ -4,6 +4,7 @@ import { getPublicTestimonials } from "@/lib/provedixRatings";
 import { PVX_FAQ } from "@/lib/pvxFaq";
 import { pickTeamPhotos } from "@/lib/pvxTeamPhotos";
 import { getTeamPhotoPool } from "@/lib/provedixTeamPhotoSync";
+import { getCarrierStats } from "@/lib/provedixCarriers";
 
 // Página pública de provedix.com (etapa 3, pedido del usuario 2026-10-12).
 // Se arma como mucho una vez por minuto (antes 10: el "hay stock / agotado"
@@ -64,11 +65,11 @@ function pageJsonLd(cards: { name: string; photo: string | null }[]) {
 
 export default async function ProvedixPublicPage() {
   // Sin la fecha de corte: dejaría ver el retraso de los datos (pedido 2026-10-12).
-  const [{ cards }, stats, testimonials, teamPool] = await Promise.all([getPublicCatalog(), getPublicStats(), getPublicTestimonials().catch(() => null), getTeamPhotoPool().catch(() => null)]);
+  const [{ cards }, stats, testimonials, teamPool, carriers] = await Promise.all([getPublicCatalog(), getPublicStats(), getPublicTestimonials().catch(() => null), getTeamPhotoPool().catch(() => null), getCarrierStats().catch(() => null)]);
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(pageJsonLd(cards)).replace(/</g, "\\u003c") }} />
-      <PvxCatalog cards={cards} stats={stats} testimonials={testimonials} teamPhotos={pickTeamPhotos(new Date(), teamPool ?? undefined)} />
+      <PvxCatalog cards={cards} stats={stats} testimonials={testimonials} teamPhotos={pickTeamPhotos(new Date(), teamPool ?? undefined)} carriers={carriers} />
     </>
   );
 }

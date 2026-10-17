@@ -20,6 +20,7 @@ const SECTION_LABEL: Record<string, string> = {
   calculadora: "Abrir la calculadora",
   productos: "Ver los productos",
   "como-funciona": "Cómo funciona Provedix",
+  transportadoras: "Ver qué transportadora entrega mejor",
   preguntas: "Ver preguntas frecuentes",
 };
 

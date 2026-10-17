@@ -6,6 +6,7 @@ import type { PublicCard, PublicStats } from "@/lib/provedixPublic";
 import type { SnapshotProduct } from "@/lib/provedixSnapshot";
 import type { PublicTestimonials } from "@/lib/provedixRatings";
 import type { TeamPhoto } from "@/lib/pvxTeamPhotos";
+import type { CarrierStats } from "@/lib/provedixCarriers";
 import { ADVISOR_RESPONSE_PROMISE, PRIVACY_URL } from "@/lib/pvxFaq";
 import { productAlt, PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxRegister } from "@/components/pvx/PvxRegister";
@@ -15,6 +16,7 @@ import { AskMichelleButton, AskProductButton } from "@/components/pvx/PvxContact
 import { PvxRocketSku } from "@/components/pvx/PvxRocketSku";
 import {
   PvxCities,
+  PvxCarriers,
   PvxOperation,
   PvxTeam,
   PvxTestimonials,
@@ -1097,11 +1099,13 @@ export function PvxCatalog({
   stats,
   testimonials = null,
   teamPhotos = [],
+  carriers = null,
 }: {
   cards: PublicCard[];
   stats: PublicStats;
   testimonials?: PublicTestimonials | null;
   teamPhotos?: TeamPhoto[];
+  carriers?: CarrierStats | null;
 }) {
   const [registered, setRegistered] = useState<boolean | null>(null);
   const [name, setName] = useState<string | null>(null);
@@ -1280,6 +1284,7 @@ export function PvxCatalog({
       <PvxTeam photos={teamPhotos} />
       <PvxTestimonials data={testimonials} />
       <PvxCities stats={stats} />
+      <PvxCarriers data={carriers} />
 
       <section
         id="productos"
