@@ -81,14 +81,20 @@ export async function recordPick(params: { lotId: string; catalogItemId: string;
 // Pedido del usuario 2026-10-01: cuánto despacho ya contado sigue sin
 // confirmar por Daniel (y por eso todavía no baja del stock). Lo usan
 // Inicio y Stock Actual.
-export async function getUnconfirmedDispatchSummary(): Promise<{ lots: number; units: number; since: string | null }> {
+// Pedido del usuario 2026-10-16 (se asustó con un aviso rojo por cortes del
+// mismo día): `overdue` = cortes contados hace más de 24 h sin confirmar —
+// la misma regla que el bloqueo de Daniel. Solo esos se avisan en rojo.
+export async function getUnconfirmedDispatchSummary(): Promise<{ lots: number; units: number; since: string | null; overdue: number }> {
   const lots = await prisma.fulfillmentLot.findMany({ where: { status: "SENT" }, select: { id: true, day: true }, orderBy: { day: "asc" } });
-  if (lots.length === 0) return { lots: 0, units: 0, since: null };
-  const picks = await prisma.fulfillmentLotPick.findMany({
-    where: { lotId: { in: lots.map((l) => l.id) }, confirmedAt: null, pickedQty: { gt: 0 } },
-    select: { pickedQty: true },
-  });
-  return { lots: lots.length, units: picks.reduce((s, p) => s + (p.pickedQty ?? 0), 0), since: lots[0].day };
+  if (lots.length === 0) return { lots: 0, units: 0, since: null, overdue: 0 };
+  const [picks, counted] = await Promise.all([
+    prisma.fulfillmentLotPick.findMany({
+      where: { lotId: { in: lots.map((l) => l.id) }, confirmedAt: null, pickedQty: { gt: 0 } },
+      select: { pickedQty: true },
+    }),
+    getCountedUnconfirmedLots(),
+  ]);
+  return { lots: lots.length, units: picks.reduce((s, p) => s + (p.pickedQty ?? 0), 0), since: lots[0].day, overdue: overdueCountedLots(counted).length };
 }
 
 // Un Egreso (EG-xxxx) por corte y por motivo — se crea la primera vez que

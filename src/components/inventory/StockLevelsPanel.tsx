@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { B2BAdvisorName } from "@/components/shared/B2BAdvisorName";
-import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, Copy, AlertTriangle, ChevronDown, Bell, SlidersHorizontal, Download, LineChart, TrendingUp } from "lucide-react";
+import { Search, ArrowUpDown, Info, X, Wrench, Check, ClipboardCheck, Copy, AlertTriangle, ChevronDown, Clock, Bell, SlidersHorizontal, Download, LineChart, TrendingUp } from "lucide-react";
 import { DailyDispatchChart, type DailyDispatchDay } from "./DailyDispatchChart";
 import { StockCountReview } from "./StockCountReview";
 import { ZeroCostCorrectionCard } from "./ZeroCostCorrectionCard";
@@ -760,7 +760,7 @@ export function StockLevelsPanel({
       .catch(() => setDispatchError(true));
   }
   // Pedido del usuario 2026-10-01: cortes contados que Daniel aún no confirma.
-  const [unconfirmedDispatch, setUnconfirmedDispatch] = useState<{ lots: number; units: number; since: string | null } | null>(null);
+  const [unconfirmedDispatch, setUnconfirmedDispatch] = useState<{ lots: number; units: number; since: string | null; overdue: number } | null>(null);
   const [query, setQuery] = useRememberedState("stock-q", "");
   // Confirmado 2026-09-28, pedido del usuario: buscador propio de los combos,
   // justo encima de su tabla (el de arriba queda lejos cuando se ven
@@ -1132,6 +1132,9 @@ export function StockLevelsPanel({
   );
 
   const unconfirmedLots = unconfirmedDispatch?.lots ?? 0;
+  // Pedido del usuario 2026-10-16: rojo solo si hay cortes contados hace más
+  // de 24 h; los del día (o que el equipo aún cuenta) son normales → gris.
+  const overdueLots = unconfirmedDispatch?.overdue ?? 0;
   const activeFilterCount =
     (viewMode !== "all" ? 1 : 0) +
     (marcaFilter ? 1 : 0) +
@@ -1156,7 +1159,7 @@ export function StockLevelsPanel({
             <span className="text-gold">· {expirationCounts.soon} por vencer</span>
           )}
           {unconfirmedLots > 0 && (
-            <span className="text-red">· {unconfirmedLots} corte{unconfirmedLots === 1 ? "" : "s"} sin confirmar</span>
+            <span className={overdueLots > 0 ? "text-red" : "text-steel"}>· {unconfirmedLots} corte{unconfirmedLots === 1 ? "" : "s"} sin confirmar</span>
           )}
           <ChevronDown size={13} className={`transition-transform ${alertsOpen ? "rotate-180" : ""}`} />
         </button>
@@ -1185,17 +1188,26 @@ export function StockLevelsPanel({
       {unconfirmedDispatch && unconfirmedDispatch.lots > 0 && (
         <a
           href="/area/workspace?tab=egresos&otab=solicitud"
-          className="flex items-start gap-2 border border-red/40 bg-red/5 rounded-md px-3 py-2 mb-3 text-[12px] hover:bg-red/10"
+          className={`flex items-start gap-2 border rounded-md px-3 py-2 mb-3 text-[12px] ${overdueLots > 0 ? "border-red/40 bg-red/5 hover:bg-red/10" : "border-rule bg-inset text-steel hover:text-ink"}`}
         >
-          <AlertTriangle size={14} className="text-red shrink-0 mt-0.5" />
-          <span>
-            <b className="text-red">
-              {unconfirmedDispatch.lots === 1 ? "1 corte" : `${unconfirmedDispatch.lots} cortes`} sin confirmar
-              {unconfirmedDispatch.since ? ` desde el ${unconfirmedDispatch.since.split("-").reverse().slice(0, 2).join("/")}` : ""}.
-            </b>{" "}
-            {unconfirmedDispatch.units > 0 ? `El equipo ya sacó ${unconfirmedDispatch.units} unidades que todavía no bajan del stock: ` : "Lo despachado todavía no baja del stock: "}
-            el stock de esta tabla sale más alto que el real hasta que Daniel confirme cada corte.
-          </span>
+          {overdueLots > 0 ? <AlertTriangle size={14} className="text-red shrink-0 mt-0.5" /> : <Clock size={14} className="shrink-0 mt-0.5" />}
+          {overdueLots > 0 ? (
+            <span>
+              <b className="text-red">
+                {overdueLots === 1 ? "1 corte contado" : `${overdueLots} cortes contados`} hace más de 24 horas sin confirmar.
+              </b>{" "}
+              {unconfirmedDispatch.units > 0 ? `En total, ${unconfirmedDispatch.units} unidades que ya salieron todavía no bajan del stock: ` : "Lo despachado todavía no baja del stock: "}
+              el stock de esta tabla sale más alto que el real hasta que Daniel confirme cada corte.
+            </span>
+          ) : (
+            <span>
+              <b className="text-ink">
+                {unconfirmedDispatch.lots === 1 ? "1 corte pendiente" : `${unconfirmedDispatch.lots} cortes pendientes`} de confirmar.
+              </b>{" "}
+              Es normal: Daniel los confirma después de que su equipo los cuenta.
+              {unconfirmedDispatch.units > 0 ? ` Mientras tanto, ${unconfirmedDispatch.units} unidades que ya salieron siguen sumando en esta tabla.` : ""}
+            </span>
+          )}
         </a>
       )}
 
