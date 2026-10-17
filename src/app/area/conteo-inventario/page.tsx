@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { TopLine } from "@/components/ui/TopLine";
-import { canActOnMerchandiseOutflow, canCaptureMerchandiseOutflow } from "@/lib/guards";
+import { canActOnMerchandiseOutflow, canCaptureMerchandiseOutflow, canManageJustCatalog } from "@/lib/guards";
 import { StockCountPanel } from "@/components/inventory/StockCountPanel";
 import { GuideVariantReview } from "@/components/inventory/GuideVariantReview";
 import { VariantListEditor } from "@/components/inventory/VariantListEditor";
@@ -18,8 +18,8 @@ export default async function ConteoInventarioPage() {
       <TopLine eyebrow="INVESTOCK" title="Conteo de inventario" />
       {/* Daniel une los colores/tallas de las guías con la lista del conteo (2026-10-06). */}
       {isLead && <GuideVariantReview />}
-      {/* Todo el equipo edita tallas y colores, siempre (2026-10-15). */}
-      <VariantListEditor isLead={isLead} />
+      {/* Todo el equipo ve tallas y colores; desde 2026-10-17 solo DANIEL y el admin los cambian. */}
+      <VariantListEditor isLead={isLead} canEdit={await canManageJustCatalog()} />
       <StockCountPanel />
     </div>
   );

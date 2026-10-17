@@ -16,7 +16,14 @@ import { ManifestBrandConflicts } from "./ManifestBrandConflicts";
 import { CombinedPriceChart, PriceHistoryBreakdownList } from "@/components/purchases/PriceTrendChart";
 import type { SupplierPriceHistory } from "@/lib/purchases";
 import { ExplainButton } from "@/components/shared/ExplainButton";
+import { DropiVariantsTrigger } from "@/components/inventory/DropiVariantsForm";
 import { useRememberedState } from "@/lib/rememberedState";
+
+// Pedido de DANIEL 2026-10-17: su pendiente de Inicio llega con
+// ?filtro=variantes-sin-dropi — solo los productos con variantes sin organizar.
+function fromVariantesSinDropiLink() {
+  return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("filtro") === "variantes-sin-dropi";
+}
 
 function fromSinAreaLink() {
   return typeof window !== "undefined" && new URLSearchParams(window.location.search).get("filtro") === "sin-area";
@@ -37,6 +44,7 @@ type PendingAdjustmentRow = {
   currentQuantityNow: number;
   requestedQuantity: number;
   variantCounts: { name: string; qty: number }[] | null;
+  dropiVariants?: { dropiId: string; name: string; qty: number; previousName: string | null }[] | null;
   reason: string;
   requestedByName: string | null;
   requestedAt: string;
@@ -115,7 +123,9 @@ type StockRow = {
   lastCountedAt?: string | null;
   notPurchasedYet?: boolean;
   pendingDropiId?: string | null;
-  variantStock?: { variants: { id: string; name: string; stock: number }[]; unidentified: number } | null;
+  variantStock?: { variants: { id: string; name: string; stock: number; dropiVariantId?: string | null }[]; unidentified: number } | null;
+  // Variantes organizadas como en Dropi (2026-10-17).
+  variantsOrganized?: boolean;
   // Variantes del último recuento (2026-10-08), se ven al pulsar el nombre.
   countedVariants?: { name: string; qty: number }[] | null;
 };
@@ -789,6 +799,7 @@ export function StockLevelsPanel({
   // Inicio llega con ?filtro=sin-area — abre los filtros con el chip
   // "Sin área" ya prendido para que Daniel asigne el área sin buscar.
   const [sinAreaFilter, setSinAreaFilter] = useState(fromSinAreaLink);
+  const [sinDropiFilter, setSinDropiFilter] = useState(fromVariantesSinDropiLink);
 
   // Confirmado 2026-09-22, pedido explícito del usuario (admin): bandeja
   // para aprobar/rechazar las solicitudes de ajuste de stock que Daniel
@@ -947,7 +958,8 @@ export function StockLevelsPanel({
     .filter((r) => !marcaFilter || r.bodega === marcaFilter)
     .filter((r) => !sinPrecioFilter || r.providerPrice === undefined)
     .filter((r) => !sinStockFilter || r.balance === 0)
-    .filter((r) => !sinAreaFilter || r.warehouseArea == null);
+    .filter((r) => !sinAreaFilter || r.warehouseArea == null)
+    .filter((r) => !sinDropiFilter || (!r.variantsOrganized && !!(r.variantStock || r.countedVariants)));
   const marcaFilteredCombosBase = combosSinMarcaOnly
     ? combos.filter((c) => !c.bodega)
     : marcaFilter === "ROCKET"
@@ -1034,6 +1046,7 @@ export function StockLevelsPanel({
   const sinPrecioCount = rows.filter((r) => r.providerPrice === undefined).length;
   const sinStockCount = rows.filter((r) => r.balance === 0).length;
   const sinAreaCount = rows.filter((r) => r.warehouseArea == null).length;
+  const sinDropiCount = rows.filter((r) => !r.variantsOrganized && !!(r.variantStock || r.countedVariants)).length;
   const countPendingCount = rows.filter((r) => r.countPending).length;
 
   // Pedido del usuario 2026-10-02 (para Nairoby, Contabilidad): bajar en
@@ -1141,6 +1154,7 @@ export function StockLevelsPanel({
     (viewMode !== "all" ? 1 : 0) +
     (marcaFilter ? 1 : 0) +
     (sinAreaFilter ? 1 : 0) +
+    (sinDropiFilter ? 1 : 0) +
     (sinPrecioFilter ? 1 : 0) +
     (sinStockFilter ? 1 : 0) +
     (query.trim() ? 1 : 0);
@@ -1261,8 +1275,19 @@ export function StockLevelsPanel({
                               {a.currentQuantityNow} → <span className="font-bold text-gold">{a.requestedQuantity}</span>
                             </span>
                           </div>
-                          {a.variantCounts && a.variantCounts.length > 0 && (
-                            <div className="text-[11px] text-teal font-semibold mb-1">Por talla: {a.variantCounts.map((v) => `${v.name} ${v.qty}`).join(" · ")}</div>
+                          {a.dropiVariants ? (
+                            <div className="text-[11px] mb-1">
+                              <div className="text-teal font-semibold">Variantes como en Dropi (quedan así al aprobar):</div>
+                              {a.dropiVariants.map((v) => (
+                                <div key={v.dropiId} className="text-steel">
+                                  #{v.dropiId} <b className="text-ink">{v.name}</b> {v.qty}
+                                  {v.previousName && v.previousName.toLowerCase() !== v.name.toLowerCase() ? ` (antes «${v.previousName}»)` : v.previousName ? "" : " (nueva)"}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            a.variantCounts &&
+                            a.variantCounts.length > 0 && <div className="text-[11px] text-teal font-semibold mb-1">Por talla: {a.variantCounts.map((v) => `${v.name} ${v.qty}`).join(" · ")}</div>
                           )}
                           <div className="text-[11px] text-steel mb-1.5">
                             &quot;{a.reason}&quot; — pedido por {a.requestedByName ?? "—"} el {formatDateTime(a.requestedAt)}
@@ -1363,8 +1388,18 @@ export function StockLevelsPanel({
           registrado en INVESTOCK) se quedaron sin precio o sin stock —
           combinables entre sí y con marca/búsqueda, mismo patrón que los
           chips de marca de arriba. */}
-      {viewMode !== "combos" && (sinPrecioCount > 0 || sinStockCount > 0 || sinAreaCount > 0) && (
-        <div className="flex items-center gap-1.5 mb-3">
+      {viewMode !== "combos" && (sinPrecioCount > 0 || sinStockCount > 0 || sinAreaCount > 0 || sinDropiCount > 0) && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          {sinDropiCount > 0 && (
+            <button
+              type="button"
+              className={`rounded-full px-3 py-1.5 text-[12px] font-semibold cursor-pointer border ${sinDropiFilter ? "bg-amber border-amber text-navy" : "border-rule text-amber hover:text-amber"}`}
+              onClick={() => setSinDropiFilter((v) => !v)}
+              title="Productos con colores o tallas que todavía no tienen sus variantes como en Dropi (ID de variación + nombre)."
+            >
+              Variantes sin Dropi · {sinDropiCount}
+            </button>
+          )}
           {sinAreaCount > 0 && (
             <button
               type="button"
@@ -1519,6 +1554,14 @@ export function StockLevelsPanel({
                     <ProductNameToggle name={r.name} countedVariants={r.countedVariants ?? null} hasVariantStock={!!r.variantStock} />
                     {/* Pedido del usuario 2026-10-14: Mary explica la fila. */}
                     <ExplainButton compact topic="stock-actual" extra={stockRowExplainText(r)} />
+                    {(r.variantStock || r.countedVariants) && (
+                      <span
+                        className={`shrink-0 text-[9.5px] font-bold uppercase ${r.variantsOrganized ? "text-teal" : "text-amber"}`}
+                        title={r.variantsOrganized ? "Variantes con ID y nombre como en Dropi" : "Falta poner las variantes como en Dropi (DANIEL)"}
+                      >
+                        {r.variantsOrganized ? "✓ Dropi" : "Var. sin Dropi"}
+                      </span>
+                    )}
                     {r.countedVariants && !r.variantStock && (
                       <span className="shrink-0 text-[9.5px] font-bold uppercase text-teal" title="Tiene variantes contadas: pulsa el nombre para verlas">
                         {r.countedVariants.length} var.
@@ -1562,6 +1605,19 @@ export function StockLevelsPanel({
                       isAdmin={isAdmin}
                       pendingQuantity={r.pendingAdjustmentQuantity}
                       variants={r.variantStock?.variants ?? null}
+                      onChanged={loadRows}
+                    />
+                  )}
+                  {/* Pedido de DANIEL 2026-10-17: variantes con ID y nombre de Dropi + lo contado. */}
+                  {canEdit && r.pendingAdjustmentQuantity == null && (
+                    <DropiVariantsTrigger
+                      catalogItemId={r.catalogItemId}
+                      name={r.name}
+                      justCode={r.justCode}
+                      currentBalance={r.balance}
+                      isAdmin={isAdmin}
+                      organized={!!r.variantsOrganized}
+                      variants={r.variantStock?.variants.map((v) => ({ id: v.id, name: v.name, stock: v.stock, dropiVariantId: v.dropiVariantId ?? null })) ?? null}
                       onChanged={loadRows}
                     />
                   )}

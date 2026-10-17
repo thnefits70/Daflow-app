@@ -83,15 +83,18 @@ export async function GET() {
   // Cambiado 2026-09-30, pedido del usuario: el costo para los precios sale
   // de lo que queda de verdad en bodega (ver sellingCost.ts), no del
   // promedio del Kardex ni del costo fijo de la propuesta de Jariel.
-  const [costBasisByItemId, variantStock] = await Promise.all([
+  const [costBasisByItemId, variantStock, organized] = await Promise.all([
     resolveCostBasisForCatalogItems(rows.map((r) => r.catalogItemId)),
     // Stock por variante (2026-10-06): desglose por color/talla.
     getVariantStock(rows.map((r) => r.catalogItemId)),
+    // Variantes organizadas como en Dropi (2026-10-17).
+    prisma.purchaseCatalogItem.findMany({ where: { id: { in: rows.map((r) => r.catalogItemId) }, variantsOrganizedAt: { not: null } }, select: { id: true } }),
   ]);
+  const organizedIds = new Set(organized.map((o) => o.id));
 
   const withPrices = rows.map((r) => {
     const variants = variantStock.get(r.catalogItemId) ?? null;
-    return withPrice({ ...r, variantStock: variants, countedVariants: countedVariantsByItem.get(r.catalogItemId) ?? null, lastCountedAt: lastCountedByItem.get(r.catalogItemId)?.toISOString() ?? null });
+    return withPrice({ ...r, variantStock: variants, countedVariants: countedVariantsByItem.get(r.catalogItemId) ?? null, variantsOrganized: organizedIds.has(r.catalogItemId), lastCountedAt: lastCountedByItem.get(r.catalogItemId)?.toISOString() ?? null });
   });
 
   function withPrice<T extends (typeof rows)[number]>(r: T) {

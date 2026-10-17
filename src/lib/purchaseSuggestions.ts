@@ -6,6 +6,7 @@ import { getReadyToBuyPendingProposalIdsByBuyer } from "@/lib/marketProduct";
 import { notifyOwner } from "@/lib/notifications";
 import { isWithinBusinessHours } from "@/lib/businessHours";
 import { getVariantSales, MIX_MIN_UNITS } from "@/lib/variantSales";
+import { getVariantsToOrganize } from "@/lib/variantDropi";
 import { colorBuyTotal, firstMainColorOut, getColorPlans, getDemandByItem, type ColorBreakdown, type ColorGap, type Demand, type ReturnSource } from "@/lib/demandForecast";
 
 // Confirmado 2026-09-29, idea de Daniel aprobada por el usuario: "Qué
@@ -767,6 +768,7 @@ export function buildSuggestionNotice(s: PurchaseSuggestions, audience: Suggesti
 export const PURCHASE_SUGGESTIONS_HREF = "/area/workspace?tab=compras&ptab=que-comprar";
 export const COUNT_FIRST_TYPE = "compras_falta_contar";
 export const STOCK_COUNT_HREF = "/area/conteo-inventario";
+export const VARIANTS_TO_ORGANIZE_HREF = "/area/workspace?tab=stock-actual&filtro=variantes-sin-dropi";
 
 // Pedido del usuario 2026-10-13: lo que no se contó no se puede comprar. Al
 // líder de Inventario le sale lo que ya estaría urgente para que lo cuente
@@ -864,6 +866,17 @@ export async function getPurchaseSuggestionPendingItems(userId: string, href: st
   // "Pedir que lo cuenten" (2026-10-14): se queda en su Inicio hasta contarlo.
   const asked = audiences.includes("escalation") ? await getCountRequestPendingItem() : null;
   if (asked) items.unshift(asked);
+  // Variantes como en Dropi (pedido de DANIEL 2026-10-17): se queda hasta organizar todas.
+  const toOrganize = audiences.includes("escalation") ? await getVariantsToOrganize().catch(() => []) : [];
+  if (toOrganize.length > 0)
+    items.push({
+      type: "variantes_dropi",
+      icon: "🏷️",
+      label: `Variantes por poner como en Dropi: ${toOrganize.length} producto${toOrganize.length === 1 ? "" : "s"}`,
+      meta: `${toOrganize.slice(0, 3).map((t) => t.name).join("; ")}${toOrganize.length > 3 ? ` y ${toOrganize.length - 3} más` : ""} · ID de variación + nombre de Dropi + lo contado`,
+      overdue: false,
+      href: VARIANTS_TO_ORGANIZE_HREF,
+    });
   return items;
 }
 

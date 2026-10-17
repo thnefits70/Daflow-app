@@ -4,6 +4,7 @@ import { getInventoryLeadId } from "@/lib/guards";
 import { PRICED_STATUSES, effectiveUnitCost } from "@/lib/purchases";
 import { getZeroCostCorrections } from "@/lib/sellingCost";
 import { applyCountToVariants, applyReceiptToVariants } from "@/lib/variantStock";
+import { applyDropiOrganization, checkPreviousBelongToItem, cleanDropiLines, parseDropiLines, type DropiVariantLine } from "@/lib/variantDropi";
 import { Prisma, type MarketProductBodega, type StockMovementType } from "@/generated/prisma/client";
 
 // Fase 3 (INVESTOCK) — confirmado 2026-09-09: el número de stock propio de
@@ -589,6 +590,16 @@ async function applyAdjustmentVariants(catalogItemId: string, counts: Adjustment
   }
 }
 
+// Igual que applyAdjustmentVariants: si falla, el Kardex ya quedó bien; solo se registra.
+async function applyDropiOrganizationSafe(catalogItemId: string, lines: DropiVariantLine[], refId: string, userId: string | null): Promise<void> {
+  try {
+    const user = userId ? await prisma.user.findUnique({ where: { id: userId }, select: { name: true } }) : null;
+    await applyDropiOrganization(catalogItemId, lines, refId, { userId, userName: user?.name ?? (userId ? null : "Admin") });
+  } catch (e) {
+    console.error("[dropi variants]", e);
+  }
+}
+
 export async function submitPhysicalCountAdjustment(params: {
   catalogItemId: string;
   requestedQuantity: number;
@@ -596,13 +607,17 @@ export async function submitPhysicalCountAdjustment(params: {
   isAdmin: boolean;
   userId: string | null;
   variantCounts?: AdjustmentVariantCount[] | null;
+  // Variantes como en Dropi (pedido de DANIEL 2026-10-17): reemplaza a variantCounts.
+  dropiVariants?: DropiVariantLine[] | null;
 }): Promise<PhysicalCountAdjustmentResult> {
   if (!Number.isInteger(params.requestedQuantity) || params.requestedQuantity < 0) {
     throw new Error("La cantidad contada debe ser un número entero, 0 o mayor.");
   }
   const reason = params.reason.trim();
   if (!reason) throw new Error("Escribe el motivo del ajuste.");
-  const variantCounts = cleanAdjustmentVariants(params.variantCounts, params.requestedQuantity);
+  const dropiLines = params.dropiVariants?.length ? cleanDropiLines(params.dropiVariants, params.requestedQuantity) : null;
+  if (dropiLines) await checkPreviousBelongToItem(params.catalogItemId, dropiLines);
+  const variantCounts = dropiLines ? null : cleanAdjustmentVariants(params.variantCounts, params.requestedQuantity);
   const blocker = await pendingKardexBlocker(params.catalogItemId);
   if (blocker) throw new Error(blocker);
 
@@ -623,14 +638,15 @@ export async function submitPhysicalCountAdjustment(params: {
     // Si Daniel ya tenía una solicitud pendiente de este mismo producto, el
     // admin acaba de resolverlo directo — esa solicitud ya no aplica.
     await prisma.stockPhysicalCountAdjustmentRequest.deleteMany({ where: { catalogItemId: params.catalogItemId } });
-    if (variantCounts) await applyAdjustmentVariants(params.catalogItemId, variantCounts, entry.id, null);
+    if (dropiLines) await applyDropiOrganizationSafe(params.catalogItemId, dropiLines, entry.id, null);
+    else if (variantCounts) await applyAdjustmentVariants(params.catalogItemId, variantCounts, entry.id, null);
     return { kind: "applied", balanceAfter: entry.balanceAfter, avgCostAfter: entry.avgCostAfter };
   }
 
   const request = await prisma.stockPhysicalCountAdjustmentRequest.upsert({
     where: { catalogItemId: params.catalogItemId },
-    update: { currentQuantityAtRequest: current.balance, requestedQuantity: params.requestedQuantity, reason, variantCounts: variantCounts ?? Prisma.DbNull, requestedById: params.userId, requestedAt: new Date() },
-    create: { catalogItemId: params.catalogItemId, currentQuantityAtRequest: current.balance, requestedQuantity: params.requestedQuantity, reason, variantCounts: variantCounts ?? Prisma.DbNull, requestedById: params.userId },
+    update: { currentQuantityAtRequest: current.balance, requestedQuantity: params.requestedQuantity, reason, variantCounts: dropiLines ?? variantCounts ?? Prisma.DbNull, organizeVariants: !!dropiLines, requestedById: params.userId, requestedAt: new Date() },
+    create: { catalogItemId: params.catalogItemId, currentQuantityAtRequest: current.balance, requestedQuantity: params.requestedQuantity, reason, variantCounts: dropiLines ?? variantCounts ?? Prisma.DbNull, organizeVariants: !!dropiLines, requestedById: params.userId },
   });
   return { kind: "requested", requestId: request.id };
 }
@@ -644,6 +660,8 @@ export type PendingPhysicalCountAdjustmentRow = {
   currentQuantityNow: number;
   requestedQuantity: number;
   variantCounts: AdjustmentVariantCount[] | null;
+  // Variantes como en Dropi: cada línea con su ID de variación y el nombre que tenía en DAFLOW.
+  dropiVariants: (DropiVariantLine & { previousName: string | null })[] | null;
   reason: string;
   requestedByName: string | null;
   requestedAt: string;
@@ -652,6 +670,12 @@ export type PendingPhysicalCountAdjustmentRow = {
   // aprobarlo, para que se vea antes de pulsar Aprobar.
   blocker: string | null;
 };
+
+async function withPreviousNames(lines: DropiVariantLine[]) {
+  const ids = lines.map((l) => l.previousId).filter((x): x is string => !!x);
+  const names = new Map((ids.length ? await prisma.productVariant.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } }) : []).map((v) => [v.id, v.name]));
+  return lines.map((l) => ({ ...l, previousName: l.previousId ? (names.get(l.previousId) ?? null) : null }));
+}
 
 export async function getPendingPhysicalCountAdjustments(): Promise<PendingPhysicalCountAdjustmentRow[]> {
   const requests = await prisma.stockPhysicalCountAdjustmentRequest.findMany({
@@ -670,6 +694,7 @@ export async function getPendingPhysicalCountAdjustments(): Promise<PendingPhysi
       currentQuantityNow: current.balance,
       requestedQuantity: r.requestedQuantity,
       variantCounts: Array.isArray(r.variantCounts) ? (r.variantCounts as AdjustmentVariantCount[]) : null,
+      dropiVariants: r.organizeVariants ? await withPreviousNames(parseDropiLines(r.variantCounts) ?? []) : null,
       reason: r.reason,
       requestedByName: r.requestedBy?.name ?? null,
       requestedAt: r.requestedAt.toISOString(),
@@ -707,7 +732,9 @@ export async function reviewPhysicalCountAdjustment(params: { id: string; action
     }),
     prisma.stockPhysicalCountAdjustmentRequest.delete({ where: { id: params.id } }),
   ]);
-  if (Array.isArray(request.variantCounts) && request.variantCounts.length > 0) {
+  if (request.organizeVariants) {
+    await applyDropiOrganizationSafe(request.catalogItemId, parseDropiLines(request.variantCounts) ?? [], entry.id, request.requestedById);
+  } else if (Array.isArray(request.variantCounts) && request.variantCounts.length > 0) {
     await applyAdjustmentVariants(request.catalogItemId, request.variantCounts as AdjustmentVariantCount[], entry.id, request.requestedById);
   }
   return { ok: true };

@@ -11,6 +11,11 @@ const schema = z.object({
   reason: z.string().trim().min(1),
   // Pedido de Daniel 2026-10-17: ajuste por talla/color (opcional).
   variantCounts: z.array(z.object({ name: z.string().trim().min(1).max(60), qty: z.number().int().min(0) })).max(60).optional(),
+  // Pedido de DANIEL 2026-10-17: variantes como en Dropi (ID de variación + nombre exacto).
+  dropiVariants: z
+    .array(z.object({ dropiId: z.string().trim().min(1).max(20), name: z.string().trim().min(1).max(60), qty: z.number().int().min(0), previousId: z.string().min(1).nullable() }))
+    .max(60)
+    .optional(),
 });
 
 // Confirmado 2026-09-22, pedido explícito del usuario (admin): único punto
@@ -36,14 +41,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       requestedQuantity: parsed.data.requestedQuantity,
       reason: parsed.data.reason,
       variantCounts: parsed.data.variantCounts,
+      dropiVariants: parsed.data.dropiVariants,
       isAdmin,
       userId: isAdmin ? null : session.user.id,
     });
     if (result.kind === "requested") {
       const item = await prisma.purchaseCatalogItem.findUnique({ where: { id }, select: { name: true } });
+      const dropi = parsed.data.dropiVariants;
       await notifyOwner("admin", {
-        title: "📦 Ajuste de stock por conteo físico",
-        body: `Daniel pidió ajustar "${item?.name ?? ""}" a ${parsed.data.requestedQuantity}${parsed.data.variantCounts?.length ? ` (${parsed.data.variantCounts.map((v) => `${v.name} ${v.qty}`).join(", ")})` : ""} — ${parsed.data.reason}`,
+        title: dropi?.length ? "🏷️ Variantes como en Dropi para aprobar" : "📦 Ajuste de stock por conteo físico",
+        body: dropi?.length
+          ? `Daniel organizó las variantes de "${item?.name ?? ""}" como en Dropi: ${dropi.map((v) => `#${v.dropiId} ${v.name} ${v.qty}`).join(", ")} — total ${parsed.data.requestedQuantity}`
+          : `Daniel pidió ajustar "${item?.name ?? ""}" a ${parsed.data.requestedQuantity}${parsed.data.variantCounts?.length ? ` (${parsed.data.variantCounts.map((v) => `${v.name} ${v.qty}`).join(", ")})` : ""} — ${parsed.data.reason}`,
         url: "/admin",
       });
     }

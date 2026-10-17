@@ -1986,6 +1986,8 @@ model PurchaseCatalogItem {
   // datos de productos" importada desde el export de Just (ver
   // JustCatalogImport). Único porque en Just cada código es un producto.
   justCode             String?               @unique
+  // Variantes organizadas como en Dropi (ID de variación + nombre), aprobado por el admin (2026-10-17).
+  variantsOrganizedAt  DateTime?
   supplierProductCodes SupplierProductCode[]
 
   // true SOLO en los renglones "esqueleto" que crea la importación de Just
@@ -3445,6 +3447,9 @@ model StockPhysicalCountAdjustmentRequest {
   // [{ name, qty }] que suman requestedQuantity; null = ajuste sin tallas.
   // Al aprobar, cada talla queda en lo contado (applyCountToVariants).
   variantCounts            Json?
+  // Pedido de DANIEL 2026-10-17: la solicitud deja las variantes como en Dropi
+  // (cada línea de variantCounts trae dropiId y la variante de DAFLOW que reemplaza).
+  organizeVariants         Boolean @default(false)
 
   requestedById String?
   requestedBy   User?    @relation("StockPhysicalCountAdjustmentRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
@@ -8063,14 +8068,16 @@ model StockCountLine {
 // Se crean/actualizan cuando el admin aprueba un conteo. Todavía NO es stock
 // por variante: el Kardex sigue con un solo número por producto (etapa 3).
 model ProductVariant {
-  id            String              @id @default(cuid())
-  catalogItemId String
-  catalogItem   PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
-  name          String
+  id             String              @id @default(cuid())
+  catalogItemId  String
+  catalogItem    PurchaseCatalogItem @relation(fields: [catalogItemId], references: [id], onDelete: Cascade)
+  name           String
+  // ID de la variación en Dropi (ej. 76777), tal como DANIEL la organizó (2026-10-17).
+  dropiVariantId String?
   // Cantidad del último conteo aprobado.
-  countedQty    Int?
-  countedAt     DateTime?
-  createdAt     DateTime            @default(now())
+  countedQty     Int?
+  countedAt      DateTime?
+  createdAt      DateTime            @default(now())
 
   aliases   ProductVariantAlias[]
   movements ProductVariantMovement[]

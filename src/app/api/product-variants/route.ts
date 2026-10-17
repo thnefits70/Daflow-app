@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { canActOnMerchandiseOutflow, canCaptureMerchandiseOutflow, dbUserId } from "@/lib/guards";
+import { canActOnMerchandiseOutflow, canCaptureMerchandiseOutflow, canManageJustCatalog, dbUserId } from "@/lib/guards";
 import { addVariant, getVariantProduct, mergeVariants, recentVariantEdits, removeVariant, renameVariant, searchVariantProducts } from "@/lib/variantEdit";
 
 // Tallas y colores de los productos (pedido del usuario 2026-10-15, aprobado
-// por Daniel): todo el equipo de INVESTOCK (Daniel incluido) y el admin.
+// por Daniel): todo el equipo de INVESTOCK (Daniel incluido) y el admin los ve.
+// Desde 2026-10-17 (pedido de DANIEL, aprobado por el usuario) solo DANIEL
+// (líder de Inventario) y el admin los cambian: las variantes van como en Dropi.
 async function access() {
   const session = await auth();
   if (!session) return null;
@@ -22,7 +24,7 @@ export async function GET(req: NextRequest) {
   if (id) return NextResponse.json({ product: await getVariantProduct(id) });
   const q = req.nextUrl.searchParams.get("q") ?? "";
   const [products, recent] = await Promise.all([searchVariantProducts(q), a.isLead && !q.trim() ? recentVariantEdits() : null]);
-  return NextResponse.json({ products, recent });
+  return NextResponse.json({ products, recent, canEdit: await canManageJustCatalog() });
 }
 
 const schema = z.discriminatedUnion("action", [
@@ -35,6 +37,7 @@ const schema = z.discriminatedUnion("action", [
 export async function POST(req: NextRequest) {
   const a = await access();
   if (!a) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
+  if (!(await canManageJustCatalog())) return NextResponse.json({ error: "Solo DANIEL puede cambiar las tallas y colores." }, { status: 403 });
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Datos inválidos." }, { status: 400 });
   const userId = dbUserId(a.session.user.id);

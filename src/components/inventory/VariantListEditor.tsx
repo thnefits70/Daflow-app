@@ -29,7 +29,7 @@ function when(iso: string): string {
 // Pedido del usuario 2026-10-15 (aprobado por Daniel): todo el equipo de
 // INVESTOCK edita la lista de tallas/colores de un producto, siempre. Solo
 // nombres: igual que el conteo, aquí no se ve cuánto dice el sistema.
-export function VariantListEditor({ isLead }: { isLead: boolean }) {
+export function VariantListEditor({ isLead, canEdit = false }: { isLead: boolean; canEdit?: boolean }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<VariantEditProduct[] | null>(null);
@@ -71,10 +71,13 @@ export function VariantListEditor({ isLead }: { isLead: boolean }) {
       {open && (
         <div className="px-3 pb-3 text-[13px]">
           <p className="text-steel text-[12px] mb-2">
-            Agrega, cambia el nombre, junta o quita tallas y colores. El stock total del producto no cambia, solo cómo se reparte. Lo que está como «Sin talla» se queda así hasta el siguiente conteo.
+            {canEdit
+              ? "Agrega, cambia el nombre, junta o quita tallas y colores. El stock total del producto no cambia, solo cómo se reparte. Lo que está como «Sin talla» se queda así hasta el siguiente conteo. Para dejarlas como en Dropi (ID de variación + nombre + lo contado), usa «Variantes Dropi» en Stock Actual."
+              : "Las tallas y colores de cada producto. Solo DANIEL los cambia (van como en Dropi); si falta alguno o está mal escrito, avísale."}
           </p>
           {product ? (
             <ProductEditor
+              readOnly={!canEdit}
               product={product}
               onBack={() => setProduct(null)}
               onChanged={() => {
@@ -125,7 +128,7 @@ export function VariantListEditor({ isLead }: { isLead: boolean }) {
   );
 }
 
-function ProductEditor({ product, onBack, onChanged }: { product: VariantEditProduct; onBack: () => void; onChanged: () => void }) {
+function ProductEditor({ product, onBack, onChanged, readOnly = false }: { product: VariantEditProduct; onBack: () => void; onChanged: () => void; readOnly?: boolean }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [target, setTarget] = useState("");
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
@@ -183,6 +186,7 @@ function ProductEditor({ product, onBack, onChanged }: { product: VariantEditPro
       <div className="flex flex-col gap-1 mb-2">
         {product.variants.map((v) => (
           <div key={v.id} className={`flex items-center gap-2 border rounded px-2 py-1.5 ${selected.has(v.id) ? "border-teal bg-teal/5" : "border-rule"}`}>
+            {!readOnly && (
             <input
               type="checkbox"
               className="w-4 h-4 shrink-0 cursor-pointer"
@@ -190,6 +194,7 @@ function ProductEditor({ product, onBack, onChanged }: { product: VariantEditPro
               checked={selected.has(v.id)}
               onChange={(e) => setSelected((s) => { const n = new Set(s); if (e.target.checked) n.add(v.id); else n.delete(v.id); return n; })}
             />
+            )}
             {renaming?.id === v.id ? (
               <>
                 <input autoFocus maxLength={60} className="flex-1 min-w-0 rounded border border-teal bg-surface px-2 py-1 text-[14px]" value={renaming.name} onChange={(e) => setRenaming({ id: v.id, name: e.target.value })} />
@@ -201,10 +206,14 @@ function ProductEditor({ product, onBack, onChanged }: { product: VariantEditPro
             ) : (
               <>
                 <span className="flex-1 min-w-0 break-words text-[14px]">{v.name}</span>
+                {!readOnly && (
+                <>
                 <button type="button" disabled={busy} className="text-teal text-[12px] cursor-pointer" onClick={() => setRenaming({ id: v.id, name: v.name })}>Cambiar nombre</button>
                 <button type="button" disabled={busy} className="text-steel hover:text-red text-[12px] cursor-pointer" onClick={() => { if (window.confirm(`¿Quitar «${v.name}» de la lista?`)) act({ action: "remove", variantId: v.id }, `«${v.name}» quitado.`); }}>
                   Quitar
                 </button>
+                </>
+                )}
               </>
             )}
           </div>
@@ -226,12 +235,14 @@ function ProductEditor({ product, onBack, onChanged }: { product: VariantEditPro
         </div>
       )}
 
+      {!readOnly && (
       <div className="flex items-center gap-2">
         <input maxLength={60} className="flex-1 min-w-0 rounded border border-rule bg-surface px-2 py-1.5 text-[14px]" placeholder="Nueva talla o color (ej. Rojo, XL)" value={newName} onChange={(e) => setNewName(e.target.value)} />
         <button type="button" disabled={busy || !newName.trim()} className="rounded border border-teal px-3 py-1.5 font-bold text-teal cursor-pointer disabled:opacity-40" onClick={async () => { if (await act({ action: "add", catalogItemId: product.id, name: newName }, `«${newName.trim()}» agregado.`)) setNewName(""); }}>
           ➕ Agregar
         </button>
       </div>
+      )}
 
       {msg && <div className="text-teal mt-2">{msg}</div>}
       {err && <div className="text-red mt-2">{err}</div>}

@@ -158,12 +158,12 @@ export async function applyLotSalesToVariants(lotId: string, dispatchedByItem: M
   await prisma.productVariantMovement.createMany({ data: rows, skipDuplicates: true });
 }
 
-export type VariantStock = { variants: { id: string; name: string; stock: number }[]; unidentified: number };
+export type VariantStock = { variants: { id: string; name: string; stock: number; dropiVariantId: string | null }[]; unidentified: number };
 
 // Desglose por color/talla de cada producto que ya tiene lista oficial.
 export async function getVariantStock(catalogItemIds: string[]): Promise<Map<string, VariantStock>> {
   if (catalogItemIds.length === 0) return new Map();
-  const official = await prisma.productVariant.findMany({ where: { catalogItemId: { in: catalogItemIds } }, select: { id: true, catalogItemId: true, name: true }, orderBy: { name: "asc" } });
+  const official = await prisma.productVariant.findMany({ where: { catalogItemId: { in: catalogItemIds } }, select: { id: true, catalogItemId: true, name: true, dropiVariantId: true }, orderBy: { name: "asc" } });
   if (official.length === 0) return new Map();
   const ids = [...new Set(official.map((v) => v.catalogItemId))];
   const [bal, kardex] = await Promise.all([
@@ -180,7 +180,7 @@ export async function getVariantStock(catalogItemIds: string[]): Promise<Map<str
   for (const id of ids) {
     const variants = official
       .filter((v) => v.catalogItemId === id)
-      .map((v) => ({ id: v.id, name: v.name, stock: bal.get(v.id) ?? 0 }))
+      .map((v) => ({ id: v.id, name: v.name, stock: bal.get(v.id) ?? 0, dropiVariantId: v.dropiVariantId }))
       .sort((a, b) => b.stock - a.stock || a.name.localeCompare(b.name));
     const sum = variants.reduce((s, v) => s + v.stock, 0);
     out.set(id, { variants, unidentified: (total.get(id) ?? 0) - sum });
