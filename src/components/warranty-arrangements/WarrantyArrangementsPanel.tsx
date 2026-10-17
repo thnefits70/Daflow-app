@@ -46,11 +46,11 @@ const FOLDER = "warranty-arrangement-files";
 const STATUS: Record<string, { label: string; tone: string }> = {
   PAYMENT_REVIEW: { label: "Esperando que el admin verifique el pago", tone: "text-amber" },
   PAYMENT_REJECTED: { label: "Pago no verificado — subir otro comprobante", tone: "text-red" },
-  PAYMENT_OK: { label: "Pago verificado — Daniel genera la guía", tone: "text-blue" },
+  PAYMENT_OK: { label: "Pago verificado — Allan o Daniel generan la guía", tone: "text-blue" },
   DONE: { label: "Guía generada", tone: "text-green" },
   APPROVAL: { label: "Esperando aprobación de Bryan", tone: "text-amber" },
   TO_PAY: { label: "Aprobado — esperando que el admin pague", tone: "text-blue" },
-  PAID: { label: "Pagado al cliente", tone: "text-green" },
+  PAID: { label: "Pagado al dropshipper", tone: "text-green" },
   REJECTED: { label: "No aprobado por Bryan", tone: "text-red" },
   CANCELLED: { label: "Cancelado", tone: "text-steel" },
 };
@@ -92,7 +92,7 @@ export function WarrantyArrangementsPanel() {
             Reenvío: flete lo paga el dropshipper
           </button>
           <button type="button" className={form === "CASH" ? btnPrimary : btnGhost} onClick={() => setForm(form === "CASH" ? null : "CASH")}>
-            Arreglo en dinero con el cliente
+            Arreglo en dinero con el dropshipper
           </button>
         </div>
       )}
@@ -211,7 +211,7 @@ function ReshipForm({ onDone }: { onDone: () => void }) {
   return (
     <div className="bg-surface border border-rule rounded-md p-4 flex flex-col gap-3">
       <div className="font-display font-bold text-[14px]">Reenvío: flete lo paga el dropshipper</div>
-      <div className="text-[12px] text-steel">El dropshipper paga el flete exacto antes. El admin verifica el pago y recién ahí Daniel genera la guía.</div>
+      <div className="text-[12px] text-steel">El dropshipper paga el flete exacto antes. El admin verifica el pago y recién ahí Allan o Daniel generan la guía y la anotan.</div>
       <div className="flex gap-2 items-end">
         <Field label="Guía original del problema">
           <input value={originalGuide} onChange={(e) => { setOriginalGuide(e.target.value); setFound(null); }} placeholder="Ej.: D002055162" className={`${inputCls} font-mono`} />
@@ -270,7 +270,7 @@ function CashForm({ onDone }: { onDone: () => void }) {
     setErr("");
     setFound(null);
     setCatalogItemId("");
-    if (guide.trim().length < 3) return setErr("Escribe la guía del cliente.");
+    if (guide.trim().length < 3) return setErr("Escribe la guía del pedido.");
     setSearching(true);
     const res = await fetch(`/api/warranty-arrangements?guide=${encodeURIComponent(guide.trim())}`);
     const d = await res.json().catch(() => null);
@@ -287,8 +287,8 @@ function CashForm({ onDone }: { onDone: () => void }) {
     if (!catalogItemId) return setErr("Elige el producto del problema.");
     if (!(n > 0)) return setErr("Escribe el monto acordado.");
     if (reason.trim().length < 5) return setErr("Explica el problema y el acuerdo.");
-    if (!holderName.trim() || !holderIdNumber.trim() || !bankName.trim() || !bankAccountType || !bankAccountNumber.trim()) return setErr("Completa los datos de la cuenta del cliente.");
-    if (!file) return setErr("Sube la foto del chat donde el cliente acepta.");
+    if (!holderName.trim() || !holderIdNumber.trim() || !bankName.trim() || !bankAccountType || !bankAccountNumber.trim()) return setErr("Completa los datos de la cuenta del dropshipper.");
+    if (!file) return setErr("Sube la foto del chat donde el dropshipper acepta.");
     setSaving(true);
     const e = await post("/api/warranty-arrangements", {
       kind: "CASH",
@@ -310,10 +310,10 @@ function CashForm({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="bg-surface border border-rule rounded-md p-4 flex flex-col gap-3">
-      <div className="font-display font-bold text-[14px]">Arreglo en dinero con el cliente</div>
-      <div className="text-[12px] text-steel">En vez de hacer la garantía, se le paga un monto al cliente y se queda con el producto. Bryan aprueba y el admin paga.</div>
+      <div className="font-display font-bold text-[14px]">Arreglo en dinero con el dropshipper</div>
+      <div className="text-[12px] text-steel">En vez de hacer la garantía, se le devuelve un monto al dropshipper (él es nuestro cliente; con el cliente final no hacemos nada). Bryan aprueba y el admin paga.</div>
       <div className="flex gap-2 items-end">
-        <Field label="Guía del cliente">
+        <Field label="Guía del pedido">
           <input value={guide} onChange={(e) => setGuide(e.target.value)} placeholder="Ej.: D002055162" className={`${inputCls} font-mono`} />
         </Field>
         <button type="button" disabled={searching} onClick={search} className={btnGhost}>{searching ? "Buscando…" : "Buscar"}</button>
@@ -336,9 +336,9 @@ function CashForm({ onDone }: { onDone: () => void }) {
             <input value={amount} onChange={(e) => setAmount(e.target.value)} inputMode="decimal" placeholder="Ej.: 4.00" className={inputCls} />
           </Field>
           <Field label="Problema y acuerdo">
-            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Ej.: la faja le quedó pequeña; aceptó $4 y se queda con ella." className={inputCls} />
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Ej.: la faja le quedó pequeña a su cliente; el dropshipper aceptó $4 en vez de la garantía." className={inputCls} />
           </Field>
-          <div className="font-semibold text-[12.5px]">Cuenta del cliente</div>
+          <div className="font-semibold text-[12.5px]">Cuenta del dropshipper</div>
           <Field label="Nombre del titular">
             <input value={holderName} onChange={(e) => setHolderName(e.target.value)} className={inputCls} />
           </Field>
@@ -358,7 +358,7 @@ function CashForm({ onDone }: { onDone: () => void }) {
           <Field label="Número de cuenta">
             <input value={bankAccountNumber} onChange={(e) => setBankAccountNumber(e.target.value)} inputMode="numeric" className={inputCls} />
           </Field>
-          <FilePick label="Foto del chat donde el cliente acepta" file={file} onFile={(f, e) => { setFile(f); if (e) setErr(e); }} />
+          <FilePick label="Foto del chat donde el dropshipper acepta" file={file} onFile={(f, e) => { setFile(f); if (e) setErr(e); }} />
         </>
       )}
       {err && <div className="text-red text-[11.5px]">{err}</div>}
@@ -415,7 +415,7 @@ function Card({ r, role, onChange }: { r: Row; role: Role; onChange: () => void 
         </div>
       ) : (
         <div className="text-[12px]">
-          {r.productName} · <span className="font-semibold">{money(r.amount)}</span> al cliente
+          {r.productName} · <span className="font-semibold">{money(r.amount)}</span> al dropshipper
         </div>
       )}
       <div className="text-[12.5px] whitespace-pre-wrap bg-cloud rounded-md p-2.5">{r.reason}</div>
@@ -430,12 +430,12 @@ function Card({ r, role, onChange }: { r: Row; role: Role; onChange: () => void 
       <div className="flex gap-3 flex-wrap">
         {r.evidenceUrl && (
           <a href={r.evidenceUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11.5px] font-semibold text-blue">
-            <FileText size={12} /> {r.kind === "RESHIP" ? "Comprobante del dropshipper" : "Chat con el cliente"}
+            <FileText size={12} /> {r.kind === "RESHIP" ? "Comprobante del dropshipper" : "Chat con el dropshipper"}
           </a>
         )}
         {r.payoutProofUrl && (
           <a href={r.payoutProofUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-[11.5px] font-semibold text-blue">
-            <FileText size={12} /> Comprobante del pago al cliente
+            <FileText size={12} /> Comprobante del pago al dropshipper
           </a>
         )}
       </div>
@@ -462,7 +462,7 @@ function Card({ r, role, onChange }: { r: Row; role: Role; onChange: () => void 
                   type="button"
                   disabled={busy || !(Number(received.replace(",", ".")) > 0)}
                   className={btnPrimary}
-                  onClick={() => act({ action: "verify_payment", receivedAmount: Number(received.replace(",", ".")) }, `¿Confirmas que llegaron $${Number(received.replace(",", ".")).toFixed(2)} del dropshipper? Después Daniel podrá despachar.`)}
+                  onClick={() => act({ action: "verify_payment", receivedAmount: Number(received.replace(",", ".")) }, `¿Confirmas que llegaron $${Number(received.replace(",", ".")).toFixed(2)} del dropshipper? Después Allan o Daniel generan la guía.`)}
                 >
                   Confirmar ✓
                 </button>
@@ -493,7 +493,7 @@ function Card({ r, role, onChange }: { r: Row; role: Role; onChange: () => void 
       )}
       {r.status === "APPROVAL" && role.canApprove && (
         <div className="flex flex-col gap-2 mt-1">
-          <button type="button" disabled={busy} className={`self-start ${btnPrimary}`} onClick={() => act({ action: "approve" }, `¿Apruebas pagar ${money(r.amount)} al cliente?`)}>Aprobar</button>
+          <button type="button" disabled={busy} className={`self-start ${btnPrimary}`} onClick={() => act({ action: "approve" }, `¿Apruebas pagar ${money(r.amount)} al dropshipper?`)}>Aprobar</button>
           <div className="flex gap-2">
             <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Si no lo apruebas, escribe por qué" className={`${inputCls} flex-1`} />
             <button type="button" disabled={busy || text.trim().length < 3} className={btnGhost} onClick={() => act({ action: "reject", note: text })}>No aprobar</button>

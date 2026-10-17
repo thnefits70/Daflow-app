@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { canSubmitFulfillmentRequest } from "@/lib/guards";
 import { auth } from "@/auth";
+import { warrantyGuideAlreadyUsedError } from "@/lib/warrantyGuideUsage";
 import { cleanRef, getRocketWarrantyRole, rocketWarrantyCode, rocketWarrantyNotices } from "@/lib/rocketWarranty";
 
 const schema = z.discriminatedUnion("action", [
@@ -34,8 +35,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!open || w.shippedAt) return NextResponse.json({ error: "Esta garantía ya no está abierta." }, { status: 400 });
     if (w.guideNumber) return NextResponse.json({ error: `Ya tiene la guía ${w.guideNumber}.` }, { status: 400 });
     const guide = cleanRef(p.guideNumber);
-    const taken = await prisma.rocketWarranty.findFirst({ where: { guideNumber: guide }, select: { number: true } });
-    if (taken) return NextResponse.json({ error: `Esa guía ya es de ${rocketWarrantyCode(taken.number)}.` }, { status: 400 });
+    const taken = await warrantyGuideAlreadyUsedError(guide, { rocketWarrantyId: id });
+    if (taken) return NextResponse.json({ error: taken }, { status: 400 });
     await prisma.rocketWarranty.update({ where: { id }, data: { guideNumber: guide, guideLinkedAt: now, guideLinkedBy: session.user.id } });
     return NextResponse.json({ ok: true });
   }

@@ -4436,7 +4436,7 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     teamItems.unshift(...(await getWarrantyDispatchPendingItems(actor.userId).catch(() => [])));
     // Casos que Michelle IA no pudo resolver (2026-10-15): Michelle, la asesora humana.
     teamItems.unshift(...(await getCasesPendingItem(actor.userId).then((i) => (i ? [i] : [])).catch(() => [])));
-    // Arreglos de garantía (2026-10-15): Bryan aprueba, Daniel anota la guía.
+    // Arreglos de garantía (2026-10-15): Bryan aprueba, Allan o Daniel anotan la guía.
     teamItems.unshift(...(await getArrangementPendingItems(actor.userId).catch(() => [])));
     // Garantías de Rocket por orden de Dropi (2026-10-16): Bryan las aprueba.
     teamItems.unshift(...(await getRocketWarrantyPendingItems(actor.userId).catch(() => [])));

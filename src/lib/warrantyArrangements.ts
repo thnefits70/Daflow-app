@@ -10,11 +10,15 @@ import type { PendingItem } from "@/lib/pendingTasks";
 // - RESHIP: reenvío por mala gestión del dropshipper. Él paga el flete exacto
 //   POR ADELANTADO (wallet de Dropi o transferencia); Michelle o Yair suben el
 //   comprobante con el número de pedido. El admin verifica el pago y recién
-//   ahí Daniel genera la guía y la anota. Ese flete no es pérdida nuestra.
-// - CASH: arreglo en dinero con el cliente en vez de garantía (se queda el
-//   producto). Bryan aprueba; el admin paga desde la cuenta principal (nunca
+//   ahí Allan o Daniel generan la guía y la anotan (2026-10-17: Daniel es
+//   líder, no el único que opera). Ese flete no es pérdida nuestra.
+// - CASH: arreglo en dinero con el DROPSHIPPER en vez de garantía (él es
+//   nuestro cliente; con el cliente final no hacemos nada — usuario 2026-10-17).
+//   Bryan aprueba; el admin paga desde la cuenta principal (nunca
 //   Caja Chica) y sube el comprobante. Nunca más que 2 fletes + producto.
 const CREATOR_USERNAMES = new Set(["mramirez", "yairurgilez"]);
+// Generan y anotan la guía del reenvío, además del líder de Inventario.
+const GUIDE_USERNAMES = new Set(["allan2026"]);
 
 // Desde 2026-10-17 es una pestaña de "Mi área de trabajo".
 export const ARRANGEMENTS_AREA_URL = "/area/workspace?tab=arreglos-garantia";
@@ -29,7 +33,7 @@ export type ArrangementRole = {
   isAdmin: boolean;
   canCreate: boolean;
   canApprove: boolean; // Bryan (líder MKT)
-  canAttachGuide: boolean; // Daniel (líder INV)
+  canAttachGuide: boolean; // Allan o Daniel (líder INV)
 };
 
 export async function getArrangementRole(): Promise<ArrangementRole | null> {
@@ -46,7 +50,7 @@ export async function getArrangementRole(): Promise<ArrangementRole | null> {
     isAdmin: false,
     canCreate: CREATOR_USERNAMES.has(u.username ?? ""),
     canApprove: !!u.isLeader && u.leadsDept?.code === "MKT",
-    canAttachGuide: !!u.isLeader && u.leadsDept?.code === "INV",
+    canAttachGuide: GUIDE_USERNAMES.has(u.username ?? "") || (!!u.isLeader && u.leadsDept?.code === "INV"),
   };
   if (!role.canCreate && !role.canApprove && !role.canAttachGuide) return null;
   return role;
@@ -69,8 +73,8 @@ async function bryanIds(): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-async function danielIds(): Promise<string[]> {
-  const rows = await prisma.user.findMany({ where: { isActive: true, isLeader: true, leadsDept: { code: "INV" } }, select: { id: true } });
+async function guideIds(): Promise<string[]> {
+  const rows = await prisma.user.findMany({ where: { isActive: true, OR: [{ username: { in: [...GUIDE_USERNAMES] } }, { isLeader: true, leadsDept: { code: "INV" } }] }, select: { id: true } });
   return rows.map((r) => r.id);
 }
 
@@ -91,14 +95,14 @@ export const arrangementNotices = {
   paymentSubmitted: (code: string, order: string) => send(["admin"], T_VERIFY, `${code} · pedido ${order}. Revisa que el pago llegó antes de despachar.`),
   paymentReviewed: async (code: string, order: string, ok: boolean, creatorId: string, note: string | null) => {
     await resolve(["admin"], T_VERIFY, code);
-    if (ok) await send(await danielIds(), T_GUIDE, `${code} · pedido ${order}. Genera la guía y anótala.`);
-    await send([creatorId], T_RESULT, `${code} · ${ok ? "el admin verificó el pago del flete; Daniel genera la guía." : `el pago no se verificó: ${note ?? ""}. Sube el comprobante correcto.`}`);
+    if (ok) await send(await guideIds(), T_GUIDE, `${code} · pedido ${order}. Genera la guía y anótala.`);
+    await send([creatorId], T_RESULT, `${code} · ${ok ? "el admin verificó el pago del flete; Allan o Daniel generan la guía." : `el pago no se verificó: ${note ?? ""}. Sube el comprobante correcto.`}`);
   },
-  guideAttached: async (code: string, guide: string, creatorId: string) => {
-    await resolve(await danielIds(), T_GUIDE, code);
-    await send([creatorId], T_RESULT, `${code} · Daniel anotó la guía ${guide}.`);
+  guideAttached: async (code: string, guide: string, creatorId: string, who: string) => {
+    await resolve(await guideIds(), T_GUIDE, code);
+    await send([creatorId], T_RESULT, `${code} · ${who} anotó la guía ${guide}.`);
   },
-  cashCreated: async (code: string, amount: number) => send(await bryanIds(), T_APPROVE, `${code} · $${amount.toFixed(2)} al cliente en vez de garantía.`),
+  cashCreated: async (code: string, amount: number) => send(await bryanIds(), T_APPROVE, `${code} · $${amount.toFixed(2)} al dropshipper en vez de garantía.`),
   cashReviewed: async (code: string, ok: boolean, creatorId: string, note: string | null) => {
     await resolve(await bryanIds(), T_APPROVE, code);
     if (ok) await send(["admin"], T_PAY, `${code} · Bryan lo aprobó. Paga desde la cuenta principal y sube el comprobante.`);
@@ -106,13 +110,13 @@ export const arrangementNotices = {
   },
   cashPaid: async (code: string, creatorId: string) => {
     await resolve(["admin"], T_PAY, code);
-    await send([creatorId], T_RESULT, `${code} · el admin ya pagó al cliente. Avísale.`);
+    await send([creatorId], T_RESULT, `${code} · el admin ya pagó al dropshipper. Avísale.`);
   },
   cancelled: async (code: string) => {
     await resolve(["admin"], T_VERIFY, code);
     await resolve(["admin"], T_PAY, code);
     await resolve(await bryanIds(), T_APPROVE, code);
-    await resolve(await danielIds(), T_GUIDE, code);
+    await resolve(await guideIds(), T_GUIDE, code);
   },
 };
 
@@ -121,7 +125,7 @@ export async function listArrangements(role: ArrangementRole) {
   const rows = await prisma.warrantyArrangement.findMany({
     where: {
       OR: [{ status: { in: ["PAYMENT_REVIEW", "PAYMENT_REJECTED", "PAYMENT_OK", "APPROVAL", "TO_PAY"] } }, { createdAt: { gte: since } }],
-      // Daniel solo ve los reenvíos; los datos bancarios del cliente no le tocan.
+      // Allan y Daniel solo ven los reenvíos; los datos bancarios no les tocan.
       ...(role.canAttachGuide && !role.canCreate && !role.canApprove && !role.isAdmin ? { kind: "RESHIP" } : {}),
     },
     orderBy: { createdAt: "desc" },
@@ -179,7 +183,7 @@ export async function getArrangementAdminPendingItems(): Promise<PendingItem[]> 
   if (verify.length)
     out.push({ type: "arreglo_verificar_flete", icon: "💵", label: "Verificar pago de flete del dropshipper (reenvío)", meta: `${verify.map((r) => arrangementCode(r.number)).join(", ")} · no se despacha hasta que lo verifiques`, overdue: true, href: ARRANGEMENTS_ADMIN_URL });
   if (pay.length)
-    out.push({ type: "arreglo_pagar_cliente", icon: "💸", label: "Pagar arreglo en dinero al cliente", meta: `${plural(pay.length, "arreglo aprobado", "arreglos aprobados")} por Bryan · cuenta principal`, overdue: true, href: ARRANGEMENTS_ADMIN_URL });
+    out.push({ type: "arreglo_pagar_cliente", icon: "💸", label: "Pagar arreglo en dinero al dropshipper", meta: `${plural(pay.length, "arreglo aprobado", "arreglos aprobados")} por Bryan · cuenta principal`, overdue: true, href: ARRANGEMENTS_ADMIN_URL });
   return out;
 }
 
@@ -191,7 +195,7 @@ export async function getArrangementPendingItems(userId: string): Promise<Pendin
     const n = await prisma.warrantyArrangement.count({ where: { status: "APPROVAL" } });
     if (n) out.push({ type: "arreglo_aprobar", icon: "🤝", label: "Arreglos en dinero por aprobar", meta: plural(n, "arreglo", "arreglos"), overdue: true, href: ARRANGEMENTS_AREA_URL });
   }
-  if (u.isLeader && u.leadsDept?.code === "INV") {
+  if (GUIDE_USERNAMES.has(u.username ?? "") || (u.isLeader && u.leadsDept?.code === "INV")) {
     const rows = await prisma.warrantyArrangement.findMany({ where: { status: "PAYMENT_OK" }, select: { number: true, orderNumber: true } });
     if (rows.length) out.push({ type: "arreglo_generar_guia", icon: "📦", label: "Reenvío pagado por el dropshipper: genera la guía", meta: rows.map((r) => `${arrangementCode(r.number)} (pedido ${r.orderNumber})`).join(", "), overdue: true, href: ARRANGEMENTS_AREA_URL });
   }

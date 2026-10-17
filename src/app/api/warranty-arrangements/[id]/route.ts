@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { arrangementCode, arrangementNotices, getArrangementRole } from "@/lib/warrantyArrangements";
+import { warrantyGuideAlreadyUsedError } from "@/lib/warrantyGuideUsage";
 
 const schema = z.discriminatedUnion("action", [
   // Admin: el pago del flete del dropshipper llegó / no llegó.
@@ -11,12 +12,12 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reject_payment"), note: z.string().trim().min(3, "Escribe qué pasó.").max(500) }),
   // Quien lo registró: sube otro comprobante tras un rechazo.
   z.object({ action: z.literal("resubmit_payment"), evidenceUrl: z.string().url() }),
-  // Daniel: anota la guía que generó.
+  // Allan o Daniel: anotan la guía que generaron.
   z.object({ action: z.literal("attach_guide"), guideNumber: z.string().trim().min(3, "Escribe la guía.").max(60) }),
   // Bryan: aprueba o no el arreglo en dinero.
   z.object({ action: z.literal("approve") }),
   z.object({ action: z.literal("reject"), note: z.string().trim().min(3, "Escribe el motivo.").max(500) }),
-  // Admin: pagó al cliente.
+  // Admin: pagó al dropshipper.
   z.object({ action: z.literal("pay"), payoutProofUrl: z.string().url("Sube el comprobante.") }),
   // Quien lo registró (o el admin) antes de que avance.
   z.object({ action: z.literal("cancel") }),
@@ -58,12 +59,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       break;
     }
     case "attach_guide": {
-      if (!role.canAttachGuide) return deny("Solo Daniel anota la guía.");
+      if (!role.canAttachGuide) return deny("Solo Allan o Daniel anotan la guía.");
       // Bloqueo pedido por el usuario: sin pago verificado no se despacha.
       if (a.status !== "PAYMENT_OK") return NextResponse.json({ error: "Todavía no se puede: el admin no ha verificado el pago del flete." }, { status: 400 });
       const guideNumber = p.guideNumber.toUpperCase().replace(/\s+/g, "");
+      // Cada guía de garantía es única (usuario 2026-10-17).
+      if (guideNumber === a.originalGuide) return NextResponse.json({ error: "Esa es la guía original del pedido. Escribe la guía nueva del reenvío." }, { status: 400 });
+      const used = await warrantyGuideAlreadyUsedError(guideNumber, { arrangementId: id });
+      if (used) return NextResponse.json({ error: used }, { status: 400 });
       await prisma.warrantyArrangement.update({ where: { id }, data: { status: "DONE", guideNumber, guideAttachedAt: now, guideAttachedById: role.userId } });
-      await arrangementNotices.guideAttached(code, guideNumber, a.createdById);
+      const who = (await prisma.user.findUnique({ where: { id: role.userId }, select: { name: true } }))?.name ?? "Inventario";
+      await arrangementNotices.guideAttached(code, guideNumber, a.createdById, who);
       break;
     }
     case "approve":

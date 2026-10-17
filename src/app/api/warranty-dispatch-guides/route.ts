@@ -28,8 +28,10 @@ export async function POST(req: NextRequest) {
   const guideErr = warrantyGuideNumberError(parsed.data.guideNumber);
   if (guideErr) return NextResponse.json({ error: guideErr }, { status: 400 });
   const guideNumber = parsed.data.guideNumber.toUpperCase().replace(/\s+/g, "");
-  const open = await prisma.warrantyDispatchGuide.findFirst({ where: { guideNumber, verifiedAt: null }, select: { id: true } });
-  if (open) return NextResponse.json({ error: "Esa guía ya está en la lista, pendiente de despachar." }, { status: 400 });
+  // Cada guía de garantía se registra una sola vez, aunque ya se haya
+  // despachado (pedido del usuario 2026-10-17).
+  const used = await prisma.warrantyDispatchGuide.findFirst({ where: { guideNumber }, select: { verifiedAt: true } });
+  if (used) return NextResponse.json({ error: used.verifiedAt ? "Esa guía ya se registró y ya se despachó. Cada guía se usa una sola vez." : "Esa guía ya está en la lista, pendiente de despachar." }, { status: 400 });
 
   const row = await prisma.warrantyDispatchGuide.create({
     data: {

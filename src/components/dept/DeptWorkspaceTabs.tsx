@@ -777,7 +777,7 @@ export function DeptWorkspaceTabs({
       {tab === "arreglos-garantia" && canSeeWarrantyArrangements && (
         <div>
           <TabGuide storageKey="arreglos-garantia">
-            Dos casos: (1) reenvío cuando el dropshipper gestionó mal — él paga el flete exacto antes (wallet de Dropi o transferencia), el admin verifica el pago y recién ahí Daniel genera la guía; (2) arreglo en dinero cuando el cliente acepta un monto en vez de la garantía y se queda con el producto — Bryan aprueba y el admin paga. El arreglo nunca puede costar más que 2 fletes + el producto.
+            Dos casos: (1) reenvío cuando el dropshipper gestionó mal — él paga el flete exacto antes (wallet de Dropi o transferencia), el admin verifica el pago y recién ahí Allan o Daniel generan la guía y la anotan; (2) arreglo en dinero: en vez de la garantía se le devuelve un monto al dropshipper (él es nuestro cliente; con el cliente final no hacemos nada) — Bryan aprueba y el admin paga. El arreglo nunca puede costar más que 2 fletes + el producto. Cada guía se usa una sola vez.
           </TabGuide>
           <WarrantyArrangementsPanel />
           {/* Garantías de Rocket por orden de Dropi (2026-10-16). */}

@@ -70,6 +70,12 @@ export async function POST(req: NextRequest) {
   if (!found.ok) return NextResponse.json({ error: found.error }, { status: 400 });
   const src = found.source;
 
+  // Una guía = una sola garantía (usuario 2026-10-17): si ya tiene un reenvío
+  // o un arreglo en dinero en curso o hecho, no se registra otro. Lo
+  // cancelado o rechazado no cuenta.
+  const taken = await prisma.warrantyArrangement.findFirst({ where: { originalGuide, status: { notIn: ["CANCELLED", "REJECTED"] } }, select: { number: true, kind: true } });
+  if (taken) return NextResponse.json({ error: `Esta guía ya tiene ${taken.kind === "RESHIP" ? "un reenvío" : "un arreglo en dinero"} (${arrangementCode(taken.number)}). Cada guía se usa una sola vez.` }, { status: 400 });
+
   if (d.kind === "RESHIP") {
     const orderNumber = d.orderNumber.toUpperCase().replace(/\s+/g, "");
     const open = await prisma.warrantyArrangement.findFirst({ where: { kind: "RESHIP", orderNumber, status: { not: "CANCELLED" } }, select: { id: true } });
@@ -99,8 +105,6 @@ export async function POST(req: NextRequest) {
   const max = await maxCashSettlement(d.catalogItemId);
   // Sin mostrar el costo: solo que conviene más hacer la garantía.
   if (d.amount > max) return NextResponse.json({ error: "Ese monto cuesta más que hacer la garantía (2 fletes + producto). Mejor haz la garantía." }, { status: 400 });
-  const open = await prisma.warrantyArrangement.findFirst({ where: { kind: "CASH", originalGuide, status: { notIn: ["CANCELLED", "REJECTED"] } }, select: { number: true } });
-  if (open) return NextResponse.json({ error: `Esta guía ya tiene un arreglo en dinero (${arrangementCode(open.number)}).` }, { status: 400 });
   const row = await prisma.warrantyArrangement.create({
     data: {
       kind: "CASH",

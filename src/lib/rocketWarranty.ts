@@ -4,6 +4,7 @@ import { notifyOwner, resolveNotifications } from "@/lib/notifications";
 import { lookupGuide } from "@/lib/localWarranty";
 import { isRocketCode } from "@/lib/dropiGuidesPdf";
 import { findOrderGuide } from "@/lib/nick/dropiMcp";
+import { warrantyGuideAlreadyUsedError } from "@/lib/warrantyGuideUsage";
 import type { PendingItem } from "@/lib/pendingTasks";
 
 // Garantías de Rocket enviadas como orden de Dropi (pedido del usuario
@@ -247,7 +248,7 @@ export async function linkRocketWarrantyGuides(opts: { budgetMs?: number; force?
     const now = new Date();
     if (hit?.guide) {
       // Una guía no puede ser de dos garantías.
-      const taken = await prisma.rocketWarranty.findFirst({ where: { guideNumber: hit.guide, id: { not: w.id } }, select: { id: true } });
+      const taken = await warrantyGuideAlreadyUsedError(hit.guide, { rocketWarrantyId: w.id });
       if (!taken) {
         await prisma.rocketWarranty.update({ where: { id: w.id }, data: { guideNumber: hit.guide, guideLinkedAt: now, guideLinkedBy: "NICK", dropiAccount: hit.account, nickCheckedAt: now } });
         linked++;
