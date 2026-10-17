@@ -312,3 +312,47 @@ export async function getDropiCatalogChecks(
   );
   return { readAt: catalog.readAt, checks, errors };
 }
+
+// Quién corrige (pedido del usuario 2026-10-17): Michelle (asesora B2B, por su
+// permiso "Publicar en Dropi"), Bryan Ríos y Yair. Cada ID se le asigna
+// siempre a la misma persona para que no se crucen; cuando se corrige en Dropi
+// desaparece de la lista de todos y cada uno puede ayudar con los de los demás.
+// El admin solo supervisa.
+export const DROPI_FIXER_IDS = [
+  "cmrgq3z6n000004jwldrbjkqc", // BRYAN RIOS
+  "cmrk1e8l60002b0vna4u0g8gs", // YAIR URGILEZ
+];
+
+export type DropiFixer = { id: string; name: string };
+
+export async function getDropiFixTeam(): Promise<DropiFixer[]> {
+  const users = await prisma.user.findMany({
+    where: { isActive: true, OR: [{ id: { in: DROPI_FIXER_IDS } }, { canPublishMarketProduct: true }] },
+    select: { id: true, name: true },
+    orderBy: { id: "asc" },
+  });
+  return users;
+}
+
+export function dropiAssignee(code: string, team: DropiFixer[]): DropiFixer | null {
+  if (!team.length) return null;
+  let h = 0;
+  for (const ch of code) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return team[h % team.length];
+}
+
+// Lo que hay que corregir (precio bajo y stock por subir) con su responsable.
+export async function getDropiFixList(): Promise<{
+  readAt: string;
+  errors: string[];
+  team: DropiFixer[];
+  checks: (DropiCheck & { assignee: DropiFixer | null })[];
+}> {
+  const [data, team] = await Promise.all([getCachedDropiCatalogChecks(), getDropiFixTeam()]);
+  return {
+    readAt: data.readAt,
+    errors: data.errors,
+    team,
+    checks: data.checks.map((c) => ({ ...c, assignee: c.kind === "revisar_stock" ? null : dropiAssignee(c.code, team) })),
+  };
+}

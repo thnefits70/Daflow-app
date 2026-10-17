@@ -33,7 +33,7 @@ import { formerLeaderIdsFor, isSummaryComplete } from "@/lib/formerLeaders";
 import { getUnlinkedShanghaiCount } from "@/lib/storeTracking";
 import { getCountedUnconfirmedLots, overdueCountedLots } from "@/lib/fulfillmentPicking";
 import { getDropiPriceChanges } from "@/lib/dropiPriceChanges";
-import { getCachedDropiCatalogChecks } from "@/lib/dropiCatalogCheck";
+import { getDropiFixList } from "@/lib/dropiCatalogCheck";
 import { getMissingDropiPrices, PROVISIONAL_DROPI_PRICE_HELPERS } from "@/lib/dropiPriceMissing";
 import { getUnmatchedGuideVariants } from "@/lib/variantSales";
 import { COMBO_BRAND_HREF } from "@/lib/comboAlias";
@@ -595,8 +595,9 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_compra_en_camino: "Ya se está comprando — publícalo en Dropi",
   precio_dropi_cambio: "Cambió el precio mínimo de un producto publicado en Dropi",
   precio_dropi_faltante: "Productos de provedix.com sin Precio Dropi — escribir el precio publicado en Dropi",
-  dropi_precio_bajo: "Precio en Dropi por debajo del mínimo de INVESTOCK",
-  dropi_subir_stock: "Mercadería en bodega que Dropi muestra con poco o nada de stock",
+  dropi_corregir: "Corregir en Dropi precio bajo el mínimo o stock por subir (te tocan)",
+  dropi_ayudar: "Ayudar a corregir en Dropi lo que les queda a tus compañeros",
+  dropi_supervision: "Supervisión: precio y stock por corregir en Dropi",
   combos_semana: "Combos sugeridos de la semana por revisar",
   combos_sin_marca: "Combos vendidos en Dropi sin marca — elegir su marca",
   marcas_no_coinciden: "Marcas que no coinciden con el manifiesto",
@@ -2008,34 +2009,61 @@ async function getDropiPriceChangesPendingItem(href: string): Promise<PendingIte
   };
 }
 
-// Pedido del usuario 2026-10-17 — ver dropiCatalogCheck.ts: lo que el catálogo
-// de Dropi muestra distinto a INVESTOCK. Precio bajo y stock sin subir son
-// urgentes (se pierde margen / se queda mercadería sin vender). priceOnly: Yair.
-async function getDropiCatalogPendingItems(href: string, priceOnly: boolean): Promise<PendingItem[]> {
-  const data = await getCachedDropiCatalogChecks().catch(() => null);
+// Pedido del usuario 2026-10-17 — ver dropiCatalogCheck.ts: precio en Dropi
+// por debajo del mínimo de INVESTOCK y stock por subir. Corrigen Michelle,
+// Bryan Ríos y Yair: a cada uno le sale lo suyo (urgente, se pierde dinero) y,
+// si ya terminó, lo que les queda a los demás para ayudar. Al corregirlo en
+// Dropi desaparece solo. userId null = el admin, que solo supervisa.
+const DROPI_CHECK_HREF = "/area/workspace?tab=analisis-mercado&ptab=dropicheck";
+async function getDropiFixPendingItems(userId: string | null, adminHref?: string): Promise<PendingItem[]> {
+  const data = await getDropiFixList().catch(() => null);
   if (!data) return [];
-  const low = data.checks.filter((c) => c.kind === "precio_bajo");
-  const raise = priceOnly ? [] : data.checks.filter((c) => c.kind === "subir_stock");
-  const items: PendingItem[] = [];
-  if (low.length)
-    items.push({
-      type: "dropi_precio_bajo",
-      icon: "🔴",
-      label: `Sube el precio en Dropi de ${low.length} producto${low.length === 1 ? "" : "s"}`,
-      meta: low.length === 1 ? `${low[0].name}: ${low[0].dropiPrice?.toFixed(2)} → mínimo ${low[0].minPrice?.toFixed(2)}` : "Están por debajo del mínimo de INVESTOCK: se pierde margen",
-      overdue: true,
-      href,
-    });
-  if (raise.length)
-    items.push({
-      type: "dropi_subir_stock",
-      icon: "📦",
-      label: `Sube el stock en Dropi de ${raise.length} producto${raise.length === 1 ? "" : "s"}`,
-      meta: raise.length === 1 ? `${raise[0].name}: bodega ${raise[0].realStock}, Dropi ${raise[0].dropiStock}` : "Hay mercadería en bodega que Dropi muestra con poco o nada",
-      overdue: true,
-      href,
-    });
-  return items;
+  const urgent = data.checks.filter((c) => c.kind !== "revisar_stock");
+  if (!urgent.length) return [];
+  const count = (list: typeof urgent) => {
+    const low = list.filter((c) => c.kind === "precio_bajo").length;
+    const raise = list.length - low;
+    return [low ? `${low} con precio bajo el mínimo` : null, raise ? `${raise} con stock por subir` : null].filter(Boolean).join(" · ");
+  };
+  const first = (n: string) => n.trim().split(/\s+/)[0];
+  if (userId == null) {
+    const perPerson = data.team.map((t) => `${first(t.name)} ${urgent.filter((c) => c.assignee?.id === t.id).length}`).join(" · ");
+    return [
+      {
+        type: "dropi_supervision",
+        icon: "🔴",
+        label: `Dropi: ${urgent.length} producto${urgent.length === 1 ? "" : "s"} con margen o stock por corregir`,
+        meta: `${count(urgent)} · pendientes: ${perPerson}`,
+        overdue: true,
+        href: adminHref ?? "/admin",
+      },
+    ];
+  }
+  if (!data.team.some((t) => t.id === userId)) return [];
+  const mine = urgent.filter((c) => c.assignee?.id === userId);
+  if (mine.length)
+    return [
+      {
+        type: "dropi_corregir",
+        icon: "🔴",
+        label: `Corrige en Dropi ${mine.length} producto${mine.length === 1 ? "" : "s"} (te tocan a ti)`,
+        meta: mine.length === 1 && mine[0].kind === "precio_bajo"
+          ? `${mine[0].name}: $${mine[0].dropiPrice?.toFixed(2)} → mínimo $${mine[0].minPrice?.toFixed(2)}`
+          : `${count(mine)} — se está perdiendo dinero`,
+        overdue: true,
+        href: DROPI_CHECK_HREF,
+      },
+    ];
+  return [
+    {
+      type: "dropi_ayudar",
+      icon: "🤝",
+      label: `Terminaste lo tuyo en Dropi: a tus compañeros les quedan ${urgent.length}`,
+      meta: count(urgent),
+      overdue: false,
+      href: DROPI_CHECK_HREF,
+    },
+  ];
 }
 
 // Pedido del usuario 2026-10-12 — ver dropiPriceMissing.ts: productos de
@@ -4257,6 +4285,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     // calientes o frías, esa lista le llega al admin — y el recordatorio de
     // asignar a alguien va arriba de todo.
     items.unshift(...(await getPurchaseSuggestionAdminPendingItems()));
+    // Supervisión (2026-10-17): el admin ve cuánto falta corregir en Dropi y de quién.
+    items.unshift(...(await getDropiFixPendingItems(null, mktDept ? `/admin/dept/${mktDept.id}?tab=analisis-mercado&ptab=dropicheck` : "/admin").catch(() => [])));
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
   }
@@ -4374,12 +4404,9 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (missingPriceItem) teamItems.push(missingPriceItem);
       const makePublicItem = await getMakePublicPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
       if (makePublicItem) teamItems.unshift(makePublicItem);
-      teamItems.unshift(...(await getDropiCatalogPendingItems("/area/workspace?tab=analisis-mercado&ptab=dropicheck", false)));
     } else if (PROVISIONAL_DROPI_PRICE_HELPERS.has(actor.userId)) {
       // PROVISIONAL (2026-10-12): Yair ayuda solo con el Precio Dropi faltante;
       // el aviso se va solo cuando no quedan productos.
-      // Pedido del usuario 2026-10-17: Yair ayuda a corregir los precios por debajo del mínimo.
-      teamItems.unshift(...(await getDropiCatalogPendingItems("/area/workspace?tab=analisis-mercado&ptab=dropicheck", true)));
       const missingPriceItem = await getMissingDropiPricesPendingItem("/area/workspace?tab=analisis-mercado&ptab=preciodropi");
       if (missingPriceItem) teamItems.push(missingPriceItem);
     }
@@ -4484,6 +4511,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     teamItems.unshift(...(await getRocketWarrantyPendingItems(actor.userId).catch(() => [])));
     // Productos privatizados en Dropi (2026-10-17): Michelle y Yair.
     teamItems.unshift(...(await getPrivatizationPendingItems(actor.userId).catch(() => [])));
+    // Precio y stock en Dropi (2026-10-17): Michelle, Bryan Ríos y Yair.
+    teamItems.unshift(...(await getDropiFixPendingItems(actor.userId).catch(() => [])));
     if (teamItems.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: me.department?.code === "INV" ? "En Inventario" : "Para ti", items: teamItems };
   }
@@ -4500,6 +4529,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   items.unshift(...(await getRocketWarrantyPendingItems(actor.userId).catch(() => [])));
   // Productos privatizados en Dropi (2026-10-17): Bryan aprueba.
   items.unshift(...(await getPrivatizationPendingItems(actor.userId).catch(() => [])));
+  // Precio y stock en Dropi (2026-10-17): Michelle, Bryan Ríos y Yair.
+  items.unshift(...(await getDropiFixPendingItems(actor.userId).catch(() => [])));
   let monthly = false;
 
   if (me.leadsDept.code === "FIN") {
@@ -4878,7 +4909,7 @@ export async function getAllPendingTasksActors(): Promise<{ ownerId: string; act
   // getPendingTasksForActor) — si no se incluye acá, el cron nunca lo
   // evalúa y nunca le llega el push aunque tenga algo pendiente.
   const purchaseDelegates = await prisma.user.findMany({
-    where: { isActive: true, OR: [{ canManagePurchases: true }, { canUploadRocketSku: true }, { handlesHotPurchases: true }, { handlesColdPurchases: true }], AND: [{ OR: [{ isLeader: false }, { leadsDeptId: null }] }] },
+    where: { isActive: true, OR: [{ canManagePurchases: true }, { canUploadRocketSku: true }, { handlesHotPurchases: true }, { handlesColdPurchases: true }, { canPublishMarketProduct: true }], AND: [{ OR: [{ isLeader: false }, { leadsDeptId: null }] }] },
     select: { id: true },
   });
   return [
