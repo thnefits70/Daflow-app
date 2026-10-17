@@ -64,6 +64,7 @@ QUÉ HACES
   [[SEP]]
   Mensaje 3: "Te comparto el enlace para que veas el stock en tiempo real, porque se actualiza todos los días 👇" + [[DROPI:169468]]
 - NO REPITAS (regla del dueño, 2026-10-17): lo que ya dijiste en esta conversación (cómo empacamos, por qué el stock se actualiza, cómo pedir una garantía, los colores, etc.) no lo vuelvas a decir. Si después pregunta otra cosa, responde SOLO eso. Tampoco agregues información que no te pidió.
+- TRANSPORTADORAS CON DATOS REALES (2026-10-17): si habla de envíos, devoluciones, a qué ciudad vende o qué transportadora elegir, guíale con "ENTREGAS POR TRANSPORTADORA": recomiéndale la que mejor entrega en la ciudad de su cliente (en Dropi elige la transportadora al crear el pedido). Dilo sencillo ("para Quito te recomiendo Servientrega, es la que mejor nos entrega allá"); da el porcentaje solo si lo pregunta. Si en este chat ya verificaste una guía suya, nombra su transportadora. Úsalo cuando sirva, sin repetirlo en cada mensaje.
 - QUE SE SIENTA DE LOS PRIMEROS (regla del dueño, 2026-10-17): el dropshipper valora vender algo que pocos venden. Nunca digas que un producto "se vende muchísimo", que "todos lo venden" o que "estamos subiendo stock porque se vende tanto" (lo espanta). Si el producto dice "lo venden: muy pocas tiendas" o "pocas tiendas", puedes contarle con naturalidad que se vende bien y que todavía lo venden pocas tiendas, una buena oportunidad para entrar antes. Si dice "varias" o "muchas tiendas", NO digas que lo venden pocos (sería mentira) y tampoco menciones a otras tiendas ni la competencia: di solo que se vende bien y dale un tip para destacar (sus creativos, un combo, buen precio). Con ningún producto presumas cifras grandes de venta (montos, "se vende muchísimo"): basta con "se vende bien" o "va en subida". Nunca digas cuántas tiendas exactamente ni sus nombres.
 - VARIOS MENSAJES CORTOS, COMO EN WHATSAPP (regla del dueño, 2026-10-17): una persona no manda todo en un solo bloque. Cuando tu respuesta tenga más de una idea, divídela en 2 o 3 mensajes cortos (por ejemplo: 1) saludo y respuesta directa, 2) el detalle o la recomendación, 3) el cierre o la pregunta). Sepáralos con una línea que diga exactamente [[SEP]]. Nunca más de 3 mensajes ni un mensaje por palabra; si la respuesta es corta, va en uno solo. Los botones ([[DROPI:…]], [[CREATIVOS:…]], [[IR:…]], [[ASESORA:…]], etc.) van siempre al final del último mensaje.
 - STOCK SIN SONAR A ROBOT: nunca digas "no te puedo dar cantidades" ni "no puedo darte esa información". Di algo cálido como: "Te comparto el enlace para que veas el stock en tiempo real, porque se actualiza todos los días 👇".
@@ -265,12 +266,60 @@ async function storesSellingByCode(): Promise<Map<string, number>> {
   return new Map([...sets].map(([c, set]) => [c, set.size]));
 }
 
+// Qué transportadora entrega mejor, en general y por ciudad (2026-10-17): de
+// TODOS nuestros envíos en Dropi de los últimos 60 días (NICK). Datos reales
+// para guiar al dropshipper; nada de una tienda en particular.
+const CARRIER_NAME: Record<string, string> = { SERVIENTREGA: "Servientrega", GINTRACOM: "Gintracom", LAARCOURIER: "LaarCourier", VELOCES: "Veloces", URBANO: "Urbano" };
+const carrierName = (c: string) => CARRIER_NAME[c.toUpperCase().replace(/\s+/g, "")] ?? c;
+async function carrierInsights(): Promise<string> {
+  const since = new Date(Date.now() - 60 * 86_400_000);
+  const rows = await prisma.nickGuideStatus.groupBy({
+    by: ["city", "carrier", "statusGroup"],
+    where: { orderCreatedAt: { gte: since }, statusGroup: { in: ["ENTREGADA", "DEVOLUCION"] }, carrier: { not: null } },
+    _count: { _all: true },
+  });
+  const byCarrier = new Map<string, { ok: number; total: number }>();
+  const byCity = new Map<string, Map<string, { ok: number; total: number }>>();
+  for (const r of rows) {
+    const carrier = carrierName(r.carrier ?? "");
+    const n = r._count._all;
+    const ok = r.statusGroup === "ENTREGADA" ? n : 0;
+    const c = byCarrier.get(carrier) ?? { ok: 0, total: 0 };
+    byCarrier.set(carrier, { ok: c.ok + ok, total: c.total + n });
+    const city = (r.city ?? "").trim().toUpperCase();
+    if (!city) continue;
+    if (!byCity.has(city)) byCity.set(city, new Map());
+    const cc = byCity.get(city)!.get(carrier) ?? { ok: 0, total: 0 };
+    byCity.get(city)!.set(carrier, { ok: cc.ok + ok, total: cc.total + n });
+  }
+  const pct = (x: { ok: number; total: number }) => Math.round((x.ok / x.total) * 100);
+  const general = [...byCarrier].filter(([, x]) => x.total >= 50).sort((a, b) => pct(b[1]) - pct(a[1])).map(([c, x]) => `${c} ${pct(x)}%`);
+  const cities = [...byCity]
+    .map(([city, m]) => ({ city, m, total: [...m.values()].reduce((s, x) => s + x.total, 0) }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 25)
+    .map(({ city, m }) => {
+      const ranked = [...m].filter(([, x]) => x.total >= 25).sort((a, b) => pct(b[1]) - pct(a[1]));
+      if (!ranked.length) return null;
+      const [best, second] = ranked;
+      return second && pct(best[1]) - pct(second[1]) < 3
+        ? `${city}: ${best[0]} y ${second[0]} entregan parecido (${pct(best[1])}% y ${pct(second[1])}%)`
+        : `${city}: mejor ${best[0]} (${pct(best[1])}%)${second ? `, luego ${second[0]} (${pct(second[1])}%)` : ""}`;
+    })
+    .filter(Boolean);
+  if (!general.length) return "";
+  return `ENTREGAS POR TRANSPORTADORA (nuestros envíos de los últimos 60 días: % de pedidos entregados entre entregados y devueltos)
+- En general: ${general.join(", ")}.
+- Por ciudad: ${cities.join("; ")}.`;
+}
+
 async function buildKnowledge(full: boolean): Promise<string> {
   const [products, stats, sheet] = await Promise.all([getPublicProductsFull(), getPublicStats(), getSheetProducts().catch(() => [] as SheetProduct[])]);
-  const [variantsByCode, topByCode, storesByCode] = await Promise.all([
+  const [variantsByCode, topByCode, storesByCode, carriers] = await Promise.all([
     variantNamesWithStock(products.map((p) => p.code)).catch(() => new Map<string, string[]>()),
     topSellingVariants(products.map((p) => p.code)).catch(() => new Map<string, string[]>()),
     storesSellingByCode().catch(() => new Map<string, number>()),
+    full ? carrierInsights().catch(() => "") : Promise.resolve(""),
   ]);
   const bySheet = new Map(sheet.map((x) => [x.code, x]));
   const inSnapshot = new Set(products.map((p) => p.code));
@@ -289,6 +338,8 @@ async function buildKnowledge(full: boolean): Promise<string> {
 ${BUSINESS_FACTS}
 
 RESUMEN: ${summary}.
+
+${carriers}
 
 PRODUCTOS (ordenados por ventas de los últimos 30 días; ventas siempre en rangos):
 ${products.map((p) => productLine(p, full, bySheet.get(p.code), variantsByCode.get(p.code), topByCode.get(p.code), storesByCode.get(p.code))).join("\n")}
