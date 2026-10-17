@@ -16,14 +16,12 @@ const monthLabel = (m: string) => {
 };
 
 function GuideTable({ rows, showPaid = false, showEst = false }: { rows: PaymentGuide[]; showPaid?: boolean; showEst?: boolean }) {
-  const [all, setAll] = useState(false);
   if (!rows.length) return <div className="p-3 text-[12px] text-steel">Ninguna.</div>;
-  const visible = all ? rows : rows.slice(0, 30);
   return (
     <>
-      <div className="overflow-x-auto">
+      <div className="overflow-auto max-h-[calc(100vh-190px)]">
         <table className="w-full text-[12px]">
-          <thead>
+          <thead className="sticky top-0 bg-surface z-[1]">
             <tr className="text-left text-steel font-mono text-[10px] uppercase tracking-wide">
               <th className="py-2 px-3">Guía</th>
               <th className="py-2 pr-3">Orden Dropi</th>
@@ -37,7 +35,7 @@ function GuideTable({ rows, showPaid = false, showEst = false }: { rows: Payment
             </tr>
           </thead>
           <tbody>
-            {visible.map((g) => (
+            {rows.map((g) => (
               <tr key={g.guideNumber} className="border-t border-rule">
                 <td className="py-1.5 px-3 font-mono">{g.guideNumber}</td>
                 <td className="py-1.5 pr-3 font-mono">{g.orderId}</td>
@@ -53,11 +51,6 @@ function GuideTable({ rows, showPaid = false, showEst = false }: { rows: Payment
           </tbody>
         </table>
       </div>
-      {rows.length > 30 && (
-        <button type="button" onClick={() => setAll((v) => !v)} className="m-3 text-[12px] text-blue underline cursor-pointer">
-          {all ? "Ver menos" : `Ver las ${rows.length}`}
-        </button>
-      )}
     </>
   );
 }
@@ -113,179 +106,186 @@ export function NickPayments({ accounts }: { accounts: { id: string; name: strin
 
   const accName = (id: string | null) => accounts.find((a) => a.id === id)?.name ?? "—";
 
+  const tabs = data
+    ? ([
+        ["unpaid", `Entregadas sin pagar (${data.unpaid.length})`],
+        ["twice", `Posibles pagos repetidos (${data.paidTwice.length})`],
+        ["returned", `Pagadas pero devueltas (${data.paidReturned.length})`],
+        ["indem", `Indemnizaciones (${data.indemnities.length})`],
+      ] as const)
+    : [];
+
+  // 2026-10-17: en pantallas anchas, totales a la izquierda y la lista a la
+  // derecha con su propio desplazamiento, para no bajar por toda la página.
   return (
-    <div className="mb-8 flex flex-col gap-4">
-      <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Pagos de Dropi · solo lo ves tú</div>
+    <div className="mb-8 grid gap-4 xl:grid-cols-[400px_minmax(0,1fr)] items-start">
+      <div className="flex flex-col gap-3 min-w-0">
+        <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel">Pagos de Dropi · solo lo ves tú</div>
 
-      <div className="bg-surface border border-rule rounded-lg p-4">
-        <div className="text-[13px] font-semibold mb-1">Subir Historial de cartera</div>
-        <div className="text-[11.5px] text-steel mb-3">
-          Descárgalo en Dropi (Historial de Cartera) del mes anterior completo, entre el 20 y el fin de mes. Los retiros y transferencias se ignoran: no se guardan.
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-[12px]">
-          <select value={upAccount} onChange={(e) => setUpAccount(e.target.value)} className="bg-surface border border-rule rounded px-2 py-1.5">
-            <option value="">¿De qué cuenta es?</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-          <input type="file" accept=".xlsx,.xls" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-[12px]" />
-          <button
-            type="button"
-            onClick={upload}
-            disabled={!file || !upAccount || uploading}
-            className="inline-flex items-center gap-1.5 rounded-md bg-blue text-white px-3 py-1.5 text-[12.5px] font-semibold cursor-pointer disabled:opacity-50"
-          >
-            <Upload size={13} /> {uploading ? "Subiendo…" : "Subir"}
-          </button>
-        </div>
-        {upMsg && <div className={`mt-2 text-[12px] ${upMsg.ok ? "text-green" : "text-red"}`}>{upMsg.text}</div>}
-      </div>
-
-      {data && data.uploads.length > 0 && (
-        <>
+        <div className="bg-surface border border-rule rounded-lg p-3">
+          <div className="text-[13px] font-semibold mb-0.5">Subir Historial de cartera</div>
+          <div className="text-[11px] text-steel mb-2">
+            Del mes anterior completo, entre el 20 y el fin de mes. Los retiros y transferencias se ignoran: no se guardan.
+          </div>
           <div className="flex flex-wrap items-center gap-2 text-[12px]">
-            <select
-              value={data.account ?? ""}
-              onChange={(e) => {
-                setAccount(e.target.value);
-                setMonth("");
-                setLoading(true);
-              }}
-              className="bg-surface border border-rule rounded px-2 py-1.5"
-            >
+            <select value={upAccount} onChange={(e) => setUpAccount(e.target.value)} className="bg-surface border border-rule rounded px-2 py-1.5">
+              <option value="">¿De qué cuenta es?</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
               ))}
             </select>
-            <select
-              value={data.month ?? ""}
-              onChange={(e) => {
-                setMonth(e.target.value);
-                setLoading(true);
-              }}
-              className="bg-surface border border-rule rounded px-2 py-1.5"
+            <input type="file" accept=".xlsx,.xls" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="text-[12px] max-w-full" />
+            <button
+              type="button"
+              onClick={upload}
+              disabled={!file || !upAccount || uploading}
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue text-white px-3 py-1.5 text-[12.5px] font-semibold cursor-pointer disabled:opacity-50"
             >
-              {data.months.length === 0 && <option value="">Sin archivos de esta cuenta</option>}
-              {data.months.map((m) => (
-                <option key={m} value={m}>
-                  Órdenes de {monthLabel(m)}
-                </option>
-              ))}
-            </select>
-            {loading && <span className="text-steel">Calculando…</span>}
+              <Upload size={13} /> {uploading ? "Subiendo…" : "Subir"}
+            </button>
           </div>
+          {upMsg && <div className={`mt-2 text-[12px] ${upMsg.ok ? "text-green" : "text-red"}`}>{upMsg.text}</div>}
+        </div>
 
-          {data.month && (
-            <>
-              <div className={`grid grid-cols-2 lg:grid-cols-4 gap-3 ${loading ? "opacity-60" : ""}`}>
-                <div className="bg-surface border border-rule rounded-lg p-3">
-                  <div className="text-[11px] text-steel">✅ Entregadas y pagadas</div>
-                  <div className="font-display text-[22px] font-bold tabular-nums">
-                    {data.counts.deliveredPaid.toLocaleString("es-EC")} <span className="text-[13px] text-steel">de {data.counts.delivered.toLocaleString("es-EC")}</span>
-                  </div>
-                  <div className="text-[10.5px] text-steel">Pagado: {usd(data.amounts.paid)}</div>
-                </div>
-                <div className="bg-surface border border-amber/50 rounded-lg p-3">
-                  <div className="text-[11px] text-steel">⚠️ Entregadas sin pagar</div>
-                  <div className="font-display text-[22px] font-bold tabular-nums text-amber">{data.counts.deliveredUnpaid.toLocaleString("es-EC")}</div>
-                  <div className="text-[10.5px] text-steel">Aprox. {usd(data.amounts.unpaidEstimate)} por reclamar</div>
-                  {data.counts.deliveredWaiting > 0 && (
-                    <div className="text-[10.5px] text-steel">⏳ {data.counts.deliveredWaiting.toLocaleString("es-EC")} más esperan el archivo del mes siguiente</div>
-                  )}
-                </div>
-                <div className="bg-surface border border-rule rounded-lg p-3">
-                  <div className="text-[11px] text-steel">🔁 Posibles pagos repetidos</div>
-                  <div className="font-display text-[22px] font-bold tabular-nums">{data.counts.paidTwice.toLocaleString("es-EC")}</div>
-                  <div className="text-[10.5px] text-steel">↩️ Pagadas pero devueltas: {data.counts.paidReturned}</div>
-                </div>
-                <div className="bg-surface border border-rule rounded-lg p-3">
-                  <div className="text-[11px] text-steel">💵 Indemnizaciones del mes</div>
-                  <div className="font-display text-[22px] font-bold tabular-nums">{usd(data.amounts.indemnIn - data.amounts.indemnOut)}</div>
-                  <div className="text-[10.5px] text-steel">
-                    🧾 Cobros por garantías: {usd(data.amounts.warrantyCharges)}
-                    {data.amounts.rejected ? ` · Rechazados: ${usd(data.amounts.rejected)}` : ""}
-                  </div>
-                </div>
-              </div>
-              {data.counts.paidNotInNick > 0 && (
-                <div className="text-[11px] text-steel">
-                  {data.counts.paidNotInNick} pagos de este mes son de guías que NICK no tiene (órdenes de otro mes o de antes de que NICK leyera esa fecha).
-                </div>
-              )}
-              <div className="text-[11px] text-steel">
-                Se cruza por número de guía con todos los archivos subidos de esta cuenta. &quot;Sin pagar&quot; solo cuenta órdenes que ya debieron pagarse dentro de los
-                archivos subidos; las de los últimos días esperan el archivo del mes siguiente. Varios pagos de una guía a la misma hora son un pago por producto, no un
-                repetido.
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {(
-                  [
-                    ["unpaid", `Entregadas sin pagar (${data.unpaid.length})`],
-                    ["twice", `Posibles pagos repetidos (${data.paidTwice.length})`],
-                    ["returned", `Pagadas pero devueltas (${data.paidReturned.length})`],
-                    ["indem", `Indemnizaciones (${data.indemnities.length})`],
-                  ] as const
-                ).map(([k, l]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setTab(k)}
-                    className={`rounded-md border px-3 py-1.5 text-[12.5px] cursor-pointer ${tab === k ? "border-blue bg-blue/10 font-semibold" : "border-rule bg-surface"}`}
-                  >
-                    {l}
-                  </button>
+        {data && data.uploads.length > 0 && (
+          <>
+            <div className="flex flex-wrap items-center gap-2 text-[12px]">
+              <select
+                value={data.account ?? ""}
+                onChange={(e) => {
+                  setAccount(e.target.value);
+                  setMonth("");
+                  setLoading(true);
+                }}
+                className="bg-surface border border-rule rounded px-2 py-1.5"
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
                 ))}
-              </div>
-              <div className="bg-surface border border-rule rounded-lg">
-                {tab === "unpaid" && <GuideTable rows={data.unpaid} showEst />}
-                {tab === "twice" && <GuideTable rows={data.paidTwice} showPaid />}
-                {tab === "returned" && <GuideTable rows={data.paidReturned} showPaid />}
-                {tab === "indem" &&
-                  (data.indemnities.length ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-[12px]">
-                        <thead>
-                          <tr className="text-left text-steel font-mono text-[10px] uppercase tracking-wide">
-                            <th className="py-2 px-3">Fecha</th>
-                            <th className="py-2 pr-3">Tipo</th>
-                            <th className="py-2 pr-3 text-right">Monto</th>
-                            <th className="py-2 pr-3">Orden</th>
-                            <th className="py-2 pr-3">Motivo</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {data.indemnities.map((i, n) => (
-                            <tr key={n} className="border-t border-rule">
-                              <td className="py-1.5 px-3 whitespace-nowrap">{formatDateTime(i.at)}</td>
-                              <td className="py-1.5 pr-3">{i.direction === "SALIDA" ? "Te cobraron" : "Te pagaron"}</td>
-                              <td className="py-1.5 pr-3 text-right tabular-nums">{usd(i.amount)}</td>
-                              <td className="py-1.5 pr-3 font-mono">{i.orderId ?? "—"}</td>
-                              <td className="py-1.5 pr-3">{i.description}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <div className="p-3 text-[12px] text-steel">Ninguna este mes.</div>
-                  ))}
-              </div>
-            </>
-          )}
+              </select>
+              <select
+                value={data.month ?? ""}
+                onChange={(e) => {
+                  setMonth(e.target.value);
+                  setLoading(true);
+                }}
+                className="bg-surface border border-rule rounded px-2 py-1.5"
+              >
+                {data.months.length === 0 && <option value="">Sin archivos de esta cuenta</option>}
+                {data.months.map((m) => (
+                  <option key={m} value={m}>
+                    Órdenes de {monthLabel(m)}
+                  </option>
+                ))}
+              </select>
+              {loading && <span className="text-steel">Calculando…</span>}
+            </div>
 
-          <div className="text-[10.5px] text-steel">
-            Archivos subidos:{" "}
-            {data.uploads
-              .map((u) => `${accName(u.accountId)} · ${monthLabel(u.month)} · ${u.rows} movimientos (${formatDateTime(u.createdAt)})`)
-              .join(" | ")}
+            {data.month && (
+              <>
+                <div className={`grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-2 gap-2 ${loading ? "opacity-60" : ""}`}>
+                  <div className="bg-surface border border-rule rounded-lg p-3">
+                    <div className="text-[11px] text-steel">✅ Entregadas y pagadas</div>
+                    <div className="font-display text-[22px] font-bold tabular-nums">
+                      {data.counts.deliveredPaid.toLocaleString("es-EC")} <span className="text-[13px] text-steel">de {data.counts.delivered.toLocaleString("es-EC")}</span>
+                    </div>
+                    <div className="text-[10.5px] text-steel">Pagado: {usd(data.amounts.paid)}</div>
+                  </div>
+                  <div className="bg-surface border border-amber/50 rounded-lg p-3">
+                    <div className="text-[11px] text-steel">⚠️ Entregadas sin pagar</div>
+                    <div className="font-display text-[22px] font-bold tabular-nums text-amber">{data.counts.deliveredUnpaid.toLocaleString("es-EC")}</div>
+                    <div className="text-[10.5px] text-steel">Aprox. {usd(data.amounts.unpaidEstimate)} por reclamar</div>
+                    {data.counts.deliveredWaiting > 0 && (
+                      <div className="text-[10.5px] text-steel">⏳ {data.counts.deliveredWaiting.toLocaleString("es-EC")} más esperan el archivo del mes siguiente</div>
+                    )}
+                  </div>
+                  <div className="bg-surface border border-rule rounded-lg p-3">
+                    <div className="text-[11px] text-steel">🔁 Posibles pagos repetidos</div>
+                    <div className="font-display text-[22px] font-bold tabular-nums">{data.counts.paidTwice.toLocaleString("es-EC")}</div>
+                    <div className="text-[10.5px] text-steel">↩️ Pagadas pero devueltas: {data.counts.paidReturned}</div>
+                  </div>
+                  <div className="bg-surface border border-rule rounded-lg p-3">
+                    <div className="text-[11px] text-steel">💵 Indemnizaciones del mes</div>
+                    <div className="font-display text-[22px] font-bold tabular-nums">{usd(data.amounts.indemnIn - data.amounts.indemnOut)}</div>
+                    <div className="text-[10.5px] text-steel">
+                      🧾 Cobros por garantías: {usd(data.amounts.warrantyCharges)}
+                      {data.amounts.rejected ? ` · Rechazados: ${usd(data.amounts.rejected)}` : ""}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-[10.5px] text-steel leading-snug">
+                  Se cruza por número de guía con todos los archivos subidos de esta cuenta. &quot;Sin pagar&quot; solo cuenta órdenes que ya debieron pagarse dentro
+                  de los archivos subidos; las de los últimos días esperan el archivo del mes siguiente. Varios pagos de una guía a la misma hora son un pago por
+                  producto, no un repetido.
+                  {data.counts.paidNotInNick > 0 &&
+                    ` ${data.counts.paidNotInNick} pagos de este mes son de guías que NICK no tiene (órdenes de otro mes o de antes de que NICK leyera esa fecha).`}
+                </div>
+              </>
+            )}
+
+            <div className="text-[10.5px] text-steel">
+              Archivos subidos:{" "}
+              {data.uploads
+                .map((u) => `${accName(u.accountId)} · ${monthLabel(u.month)} · ${u.rows} movimientos (${formatDateTime(u.createdAt)})`)
+                .join(" | ")}
+            </div>
+          </>
+        )}
+      </div>
+
+      {data && data.uploads.length > 0 && data.month && (
+        <div className="flex flex-col gap-2 min-w-0">
+          <div className="flex flex-wrap gap-2">
+            {tabs.map(([k, l]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setTab(k)}
+                className={`rounded-md border px-3 py-1.5 text-[12.5px] cursor-pointer ${tab === k ? "border-blue bg-blue/10 font-semibold" : "border-rule bg-surface"}`}
+              >
+                {l}
+              </button>
+            ))}
           </div>
-        </>
+          <div className="bg-surface border border-rule rounded-lg">
+            {tab === "unpaid" && <GuideTable rows={data.unpaid} showEst />}
+            {tab === "twice" && <GuideTable rows={data.paidTwice} showPaid />}
+            {tab === "returned" && <GuideTable rows={data.paidReturned} showPaid />}
+            {tab === "indem" &&
+              (data.indemnities.length ? (
+                <div className="overflow-auto max-h-[calc(100vh-190px)]">
+                  <table className="w-full text-[12px]">
+                    <thead className="sticky top-0 bg-surface z-[1]">
+                      <tr className="text-left text-steel font-mono text-[10px] uppercase tracking-wide">
+                        <th className="py-2 px-3">Fecha</th>
+                        <th className="py-2 pr-3">Tipo</th>
+                        <th className="py-2 pr-3 text-right">Monto</th>
+                        <th className="py-2 pr-3">Orden</th>
+                        <th className="py-2 pr-3">Motivo</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.indemnities.map((i, n) => (
+                        <tr key={n} className="border-t border-rule">
+                          <td className="py-1.5 px-3 whitespace-nowrap">{formatDateTime(i.at)}</td>
+                          <td className="py-1.5 pr-3">{i.direction === "SALIDA" ? "Te cobraron" : "Te pagaron"}</td>
+                          <td className="py-1.5 pr-3 text-right tabular-nums">{usd(i.amount)}</td>
+                          <td className="py-1.5 pr-3 font-mono">{i.orderId ?? "—"}</td>
+                          <td className="py-1.5 pr-3">{i.description}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-3 text-[12px] text-steel">Ninguna este mes.</div>
+              ))}
+          </div>
+        </div>
       )}
     </div>
   );

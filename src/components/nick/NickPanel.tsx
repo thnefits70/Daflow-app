@@ -57,7 +57,7 @@ export function NickPanel({
   };
 
   return (
-    <div className="max-w-[1100px]">
+    <div>
       {okName && (
         <div className="mb-4 rounded-lg border border-green/40 bg-green/10 px-4 py-3 text-[12.5px]">
           <b>{okName}</b> quedó conectada. NICK la va a leer sola en la próxima actualización (o pulsa <b>Actualizar ahora</b> arriba).
@@ -107,7 +107,7 @@ export function NickPanel({
       </div>
 
       <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-steel mb-2">Cuentas de Dropi</div>
-      <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-5">
         {accounts.map((a) => {
           return (
             <div key={a.id} className="bg-surface border border-rule rounded-lg p-4">
