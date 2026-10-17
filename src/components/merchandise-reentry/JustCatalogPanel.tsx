@@ -111,14 +111,28 @@ function MissingReportsQueue() {
               <div className="font-semibold truncate">&quot;{r.query}&quot;</div>
               <div className="text-[10.5px] text-steel">{r.reportedBy.name} · {fmt(r.reportedAt)}{r.note ? ` · ${r.note}` : ""}</div>
             </div>
-            <button
-              type="button"
-              disabled={resolvingId === r.id}
-              className="shrink-0 text-[11px] font-bold text-teal cursor-pointer disabled:opacity-50"
-              onClick={() => resolve(r.id)}
-            >
-              Ya lo agregué
-            </button>
+            {/* Pedido de Daniel 2026-10-17: algunos avisos son error de Dropi
+                (producto que nunca se compró ni pidió) — se cierran sin crearlo. */}
+            <div className="shrink-0 flex items-center gap-3">
+              <button
+                type="button"
+                disabled={resolvingId === r.id}
+                className="text-[11px] font-semibold text-steel cursor-pointer disabled:opacity-50"
+                onClick={() => {
+                  if (confirm(`¿Quitar "${r.query}"? No se crea ningún producto.`)) resolve(r.id);
+                }}
+              >
+                No hace falta
+              </button>
+              <button
+                type="button"
+                disabled={resolvingId === r.id}
+                className="text-[11px] font-bold text-teal cursor-pointer disabled:opacity-50"
+                onClick={() => resolve(r.id)}
+              >
+                Ya lo agregué
+              </button>
+            </div>
           </div>
         ))}
       </div>

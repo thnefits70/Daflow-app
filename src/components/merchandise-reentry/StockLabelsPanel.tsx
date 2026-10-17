@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
-import { Search, Printer, CheckCheck, ScanLine } from "lucide-react";
-import { LiveBarcodeScanner } from "@/components/shared/LiveBarcodeScanner";
+import { Search, Printer, CheckCheck } from "lucide-react";
 import type { StockLabelPrintSummary } from "@/app/api/stock-label-prints/route";
 import { useRememberedState } from "@/lib/rememberedState";
 
@@ -30,42 +29,6 @@ export function StockLabelsPanel() {
   const [confirming, setConfirming] = useState<"print" | "manual" | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Momentáneo (pedido de Daniel 2026-10-13): escanear, percha por percha, los
-  // QR que ya están pegados para marcarlos como impresos y ver cuáles faltan.
-  // Daniel avisa cuando ya no lo necesite, para quitarlo.
-  const [scanning, setScanning] = useState(false);
-  const [scanLog, setScanLog] = useState<{ code: string; text: string; ok: boolean }[]>([]);
-  const itemsRef = useRef(items);
-  const printsRef = useRef(prints);
-  useEffect(() => {
-    itemsRef.current = items;
-    printsRef.current = prints;
-  }, [items, prints]);
-
-  async function onShelfScanned(raw: string) {
-    const code = raw.trim();
-    const item = itemsRef.current.find((i) => (i.justCode ?? "").toLowerCase() === code.toLowerCase() || i.id === code);
-    const log = (text: string, ok: boolean) => setScanLog((prev) => [{ code, text, ok }, ...prev].slice(0, 30));
-    if (!item) return log("No está en el catálogo", false);
-    if (printsRef.current[item.id]) return log(`${item.name} — ya estaba marcado`, true);
-    try {
-      const res = await fetch("/api/stock-label-prints", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ catalogItemIds: [item.id], manual: true }),
-      });
-      if (!res.ok) throw new Error();
-      const next = await fetch("/api/stock-label-prints").then((r) => (r.ok ? r.json() : null));
-      if (next) {
-        printsRef.current = next;
-        setPrints(next);
-      }
-      log(`${item.name} — marcado como impreso ✓`, true);
-    } catch {
-      log(`${item.name} — no se pudo guardar, escanéalo otra vez`, false);
-    }
-  }
-
   useEffect(() => {
     fetch("/api/purchase-catalog").then((r) => (r.ok ? r.json() : [])).then(setItems).catch(() => setItems([]));
     fetch("/api/stock-label-prints").then((r) => (r.ok ? r.json() : {})).then(setPrints).catch(() => setPrints({}));
@@ -172,38 +135,6 @@ export function StockLabelsPanel() {
           <CheckCheck size={13} /> Ya los tengo impresos ({selected.size})
         </button>
         <span className="text-[11.5px] text-steel">Marca los que ya están pegados en percha, sin imprimirlos de nuevo.</span>
-      </div>
-
-      {/* Momentáneo (pedido de Daniel 2026-10-13) — ver onShelfScanned. */}
-      <div className="mb-3 print:hidden">
-        {!scanning ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="flex items-center gap-1.5 rounded border border-teal px-3 py-1.5 text-[12px] font-semibold text-teal cursor-pointer"
-              onClick={() => setScanning(true)}
-            >
-              <ScanLine size={13} /> Escanear QR de las perchas
-            </button>
-            <span className="text-[11.5px] text-steel">Recorre área por área: cada QR que escanees queda como ya impreso; los que no, siguen en &quot;Aún sin imprimir&quot;.</span>
-          </div>
-        ) : (
-          <div className="rounded-md border border-teal/40 p-2.5">
-            <LiveBarcodeScanner continuous onScanned={onShelfScanned} onCancel={() => setScanning(false)} />
-            <button type="button" className="mt-2 text-[12px] font-semibold text-steel cursor-pointer" onClick={() => setScanning(false)}>
-              Terminar de escanear
-            </button>
-          </div>
-        )}
-        {scanLog.length > 0 && (
-          <div className="mt-2 flex flex-col gap-0.5 max-h-40 overflow-y-auto">
-            {scanLog.map((l, idx) => (
-              <div key={idx} className={`text-[11.5px] ${l.ok ? "text-ink" : "text-red-500"}`}>
-                <span className="font-mono text-steel">{l.code}</span> · {l.text}
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {confirming && (
