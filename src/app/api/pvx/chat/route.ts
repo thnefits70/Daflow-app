@@ -22,6 +22,7 @@ import { checkGuideForDropshipper } from "@/lib/provedixGuideCheck";
 import { requestCancellationFromChat } from "@/lib/michelleCancellations";
 import { createCaseFromChat } from "@/lib/provedixCases";
 import { cutNowText } from "@/lib/pvxCuts";
+import { cleanPersonName } from "@/lib/pvxName";
 
 // Pasar un caso al equipo con resumen (2026-10-15): solo lo que Michelle IA de
 // verdad no puede resolver. Desde 2026-10-16 ya no hay WhatsApp: la persona
@@ -467,13 +468,14 @@ export async function POST(req: NextRequest) {
   if (leadId) {
     const me = await prisma.provedixLead.findUnique({ where: { id: leadId }, select: { name: true, storeName: true, platform: true } }).catch(() => null);
     if (me) {
+      const realName = cleanPersonName(me.name).ok;
       const first = me.name.trim().split(/\s+/)[0] ?? "";
       const where = me.platform === "DROPI" ? "Dropi" : me.platform === "ROCKET" ? "Rocket" : "Dropi y Rocket";
       system.push({
         type: "text",
         text: `PERSONA CON LA QUE HABLAS (registrada; son sus propios datos)
-- Se llama ${first}. Su tienda: "${me.storeName ?? ""}". Vende en ${where}.
-- Llámale por su nombre con naturalidad (al saludar o de vez en cuando, no en cada mensaje).
+- ${realName ? `Se llama ${first}.` : "No sabemos su nombre (al registrarse escribió otra cosa): no le llames por ningún nombre; pregúntale cómo se llama una sola vez, con naturalidad."} Su tienda: "${me.storeName ?? ""}". Vende en ${where}.
+- ${realName ? "Llámale por su nombre con naturalidad (al saludar o de vez en cuando, no en cada mensaje)." : "Cuando te diga su nombre, úsalo con naturalidad."}
 - ${me.platform === "AMBAS" ? "Vende en las dos: si el caso depende de la plataforma, pregunta de cuál es ese pedido." : `Ya sabes que vende en ${where}: no se lo vuelvas a preguntar.`}
 - Para verificar una guía igual pide los 3 datos (guía, tienda como remitente y cliente): es por seguridad.`,
       });

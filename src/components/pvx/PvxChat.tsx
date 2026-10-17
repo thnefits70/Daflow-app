@@ -16,6 +16,7 @@ import {
 } from "@/components/pvx/PvxIcons";
 import { ADVISOR_RESPONSE_PROMISE, WORK_HOURS_TEXT } from "@/lib/pvxFaq";
 import { linksOf, PVX_LINKS } from "@/lib/pvxLinks";
+import { cleanPersonName } from "@/lib/pvxName";
 import { PvxChatRegister } from "@/components/pvx/PvxChatRegister";
 
 // Chat con Michelle, la asistente virtual de provedix.com (2026-10-15).
@@ -681,7 +682,7 @@ export function PvxChat({
               <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[14.5px] leading-relaxed">
                 {registered ? (
                   <>
-                    ¡Hola{name ? `, ${name.trim().split(/\s+/)[0]}` : ""}! 👋 Soy{" "}
+                    ¡Hola{name && cleanPersonName(name).ok ? `, ${name.trim().split(/\s+/)[0]}` : ""}! 👋 Soy{" "}
                     <b>Michelle</b>, de Provedix 😊 ¿En qué te ayudo hoy?
                   </>
                 ) : (

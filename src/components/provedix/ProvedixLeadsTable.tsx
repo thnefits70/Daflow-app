@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import type { ProvedixLeadActivity, ProvedixLeadRow } from "@/lib/provedixTraffic";
+import { cleanPersonName } from "@/lib/pvxName";
 
 // Cartera de dropshippers (etapa 4, 2026-10-12) — SOLO el admin. Por ahora
 // nadie los contacta (decisión del usuario), así que el WhatsApp va como
@@ -114,7 +115,15 @@ export function ProvedixLeadsTable({ leads }: { leads: ProvedixLeadRow[] }) {
               {shown.map((l) => (
                 <Fragment key={l.id}>
                   <tr className={`border-t border-rule cursor-pointer hover:bg-cloud ${open === l.id ? "bg-cloud" : ""}`} onClick={() => setOpen(open === l.id ? null : l.id)}>
-                    <td className="py-2 pr-3 font-medium">{l.name}</td>
+                    <td className="py-2 pr-3 font-medium">
+                      {cleanPersonName(l.name).ok ? (
+                        l.name
+                      ) : (
+                        <span title={`Escribió: ${l.name}`}>
+                          Sin nombre <span className="font-normal opacity-50">(escribió una pregunta)</span>
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2 pr-3 tabular-nums whitespace-nowrap">{l.whatsapp}</td>
                     <td className="py-2 pr-3">
                       {l.storeName ?? <span className="text-steel">—</span>}
