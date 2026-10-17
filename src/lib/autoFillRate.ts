@@ -69,8 +69,13 @@ export async function retainedGuideNumbers(): Promise<Set<string>> {
 //   2. Si se sube un corte cuando la transportadora de esa guía ya se fue
 //      (ej. guías de Gintracom subidas a las 4 pm, Gintracom sale a las 3 pm),
 //      la guía sale el siguiente día de trabajo y cuenta ese día.
-export const SUBTRACT_OUT_OF_STOCK = false;
 export const DISPATCH_RULES_FROM_WEEK = "2026-W42";
+// Pedido del usuario 2026-10-17: el conteo general cerró el 16/10 y el stock
+// ya es real → desde la S43 la falta de stock vuelve a restarse de los
+// despachados. No se resta dos veces: las guías que Daniel/Allan retuvieron
+// por falta de stock (FulfillmentGuideHold) ya salieron de ese día, así que
+// se descuentan de la falta de stock antes de restarla.
+export const SUBTRACT_OUT_OF_STOCK_FROM_WEEK = "2026-W43";
 
 // Hora (Ecuador) en que se va cada transportadora — confirmado por Daniel
 // 2026-10-15: Veloces 11:00, Urbano 13:00, Gintracom 15:00, Laar y
@@ -155,7 +160,7 @@ export function warrantyGuidesOf(items: { warrantyGuide: string | null }[]): Set
 }
 
 export function outOfStockSubtracted(week: string): boolean {
-  return SUBTRACT_OUT_OF_STOCK || week < DISPATCH_RULES_FROM_WEEK;
+  return week < DISPATCH_RULES_FROM_WEEK || week >= SUBTRACT_OUT_OF_STOCK_FROM_WEEK;
 }
 
 // Lo que DAFLOW sabe solo de la semana: guías totales (por el día en que
@@ -166,6 +171,8 @@ export async function computeAutoCounts(week: string): Promise<{
   externalSales: number;
   retained: number;
   subtractOutOfStock: boolean;
+  // Guías de los cortes de esa semana que se retuvieron por falta de stock.
+  heldFromWeek: number;
   // Guías que salen esa semana (sin retenidas ni garantías) con su día de salida — para Preparadas/Generadas con NICK.
   counted: { guideNumber: string; dispatchDay: string }[];
 }> {
@@ -184,10 +191,12 @@ export async function computeAutoCounts(week: string): Promise<{
   let guides = 0;
   let retained = 0;
   const counted: { guideNumber: string; dispatchDay: string }[] = [];
+  let heldFromWeek = 0;
   for (const b of batches) {
     if (!b.lot) continue;
     const warrantyGuides = warrantyGuidesOf(b.items);
     for (const g of b.guides) {
+      if (daySet.has(b.lot.day) && holds.has(g.guideNumber.trim().toUpperCase())) heldFromWeek++;
       const dispatchDay = guideDispatchDay(b.lot.day, b.requestedAt, g.carrier, g.guideNumber, holds);
       if (!daySet.has(dispatchDay)) continue;
       if (isWarrantyGuide(b.lot.day, g.guideNumber, warrantyGuides)) continue;
@@ -216,6 +225,7 @@ export async function computeAutoCounts(week: string): Promise<{
     externalSales: await countDeliveredExternalSales(days),
     retained,
     subtractOutOfStock: outOfStockSubtracted(week),
+    heldFromWeek,
     counted,
   };
 }
@@ -231,9 +241,14 @@ async function countDeliveredExternalSales(days: string[]): Promise<number> {
 
 // Despachadas y no despachadas a partir de lo automático + lo que escribió Yair.
 // Las retenidas se quitan del todo (no son despachadas ni fallas del Fill Rate).
-// Desde la S42 la falta de stock no se resta (ver SUBTRACT_OUT_OF_STOCK).
-export function fillRateNumbers(counts: { guides: number; outOfStock: number; externalSales: number; retained?: number; subtractOutOfStock?: boolean }, prepared: number, generated: number) {
-  const subtracted = counts.subtractOutOfStock === false ? 0 : counts.outOfStock;
+// En la S42 la falta de stock no se restó (conteo general); desde la S43 sí,
+// menos las guías ya retenidas por falta de stock (ver SUBTRACT_OUT_OF_STOCK_FROM_WEEK).
+export function fillRateNumbers(
+  counts: { guides: number; outOfStock: number; externalSales: number; retained?: number; subtractOutOfStock?: boolean; heldFromWeek?: number },
+  prepared: number,
+  generated: number,
+) {
+  const subtracted = counts.subtractOutOfStock === false ? 0 : Math.max(0, counts.outOfStock - (counts.heldFromWeek ?? 0));
   const value = Math.max(0, counts.guides - (counts.retained ?? 0) - subtracted - prepared - generated) + counts.externalSales;
   return { value, outOfStock: counts.outOfStock, notDispatched: counts.outOfStock + prepared + generated };
 }

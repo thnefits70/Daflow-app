@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getCompiledLot, ecuadorDay, NO_BRAND } from "@/lib/fulfillmentGuides";
 import { guideBrandsOf } from "@/lib/guideBrands";
 import { brandLabel, sortBrands } from "@/lib/brandLabels";
+import { NICK_FILL_RATE_FROM_WEEK, nickPreparedGenerated } from "@/lib/nick/fillRate";
 import { daysOfIsoWeek, isAutoFillRateWeek, FILL_RATE_DEPT_CODE, retainedGuideNumbers, guideDispatchDay, guideHoldDays, lotDaysFeeding, outOfStockSubtracted, isWarrantyGuide, warrantyGuidesOf } from "@/lib/autoFillRate";
 
 // Pedido de Daniel 2026-10-13: al hacer clic en una semana de "Pedidos
@@ -20,6 +21,12 @@ export type DispatchedDay = {
   // Guías de garantías que salieron en el corte (2026-10-15) — no son pedidos, se restan.
   warranties: number;
   outOfStock: number;
+  // Desde la S43 (2026-10-17): guías que según NICK no se empacaron (Generadas)
+  // o no las recogió la transportadora (Preparadas) — se restan ese día.
+  prepared: number;
+  generated: number;
+  // Guías del corte de ese día retenidas por falta de stock (no se restan dos veces).
+  heldFromDay: number;
   // Guías de un corte del día anterior subido cuando su transportadora ya se
   // había ido (2026-10-14): salen este día y cuentan aquí.
   movedIn: number;
@@ -74,17 +81,23 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
   const byDay = new Map<string, { day: DispatchedDay; brandCounts: Record<string, number> }>();
   for (const day of days) {
     byDay.set(day, {
-      day: { day, brands: [], guides: 0, retained: 0, warranties: 0, outOfStock: 0, movedIn: 0, externalSales: 0, dispatched: 0, cancelledInCut: 0, cancelledReported: 0 },
+      day: { day, brands: [], guides: 0, retained: 0, warranties: 0, outOfStock: 0, prepared: 0, generated: 0, heldFromDay: 0, movedIn: 0, externalSales: 0, dispatched: 0, cancelledInCut: 0, cancelledReported: 0 },
       brandCounts: {},
     });
   }
 
   // Guía → día en que sale, para saber si una guía cancelada estaba sumando.
   const guideDay = new Map<string, string>();
+  // Guías que NICK revisa (Preparadas/Generadas), por día de salida.
+  const nickCheck: { guideNumber: string; dispatchDay: string }[] = [];
   for (const b of batches) {
     if (!b.lot) continue;
     const warrantyGuides = warrantyGuidesOf(b.items);
     for (const g of b.guides) {
+      if (holds.has(g.guideNumber.trim().toUpperCase())) {
+        const lotEntry = byDay.get(b.lot.day);
+        if (lotEntry) lotEntry.day.heldFromDay++;
+      }
       const outDay = guideDispatchDay(b.lot.day, b.requestedAt, g.carrier, g.guideNumber, holds);
       const entry = byDay.get(outDay);
       if (!entry) continue;
@@ -95,6 +108,7 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
       const key = g.guideNumber.trim().toUpperCase();
       if (isWarrantyGuide(b.lot.day, g.guideNumber, warrantyGuides)) entry.day.warranties++;
       else if (retainedSet.has(key)) entry.day.retained++;
+      else if (!holds.has(key)) nickCheck.push({ guideNumber: key, dispatchDay: outDay });
       guideDay.set(key, entry.day.day);
     }
   }
@@ -120,12 +134,24 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
     if (cutDay) byDay.get(cutDay)!.day.cancelledInCut++;
   }
 
+  if (week >= NICK_FILL_RATE_FROM_WEEK) {
+    for (const day of days) {
+      const r = await nickPreparedGenerated(nickCheck.filter((g) => g.dispatchDay === day)).catch(() => null);
+      const entry = byDay.get(day);
+      if (r && entry) {
+        entry.day.prepared = r.prepared;
+        entry.day.generated = r.generated;
+      }
+    }
+  }
+
   const subtractOutOfStock = outOfStockSubtracted(week);
   const out: DispatchedDay[] = [];
   for (const { day: d, brandCounts } of byDay.values()) {
     d.brands = sortBrands(Object.keys(brandCounts)).map((b) => ({ label: brandLabel(b), value: brandCounts[b] }));
     d.outOfStock = Math.min(d.outOfStock, d.guides - d.retained - d.warranties);
-    d.dispatched = d.guides - d.retained - d.warranties - (subtractOutOfStock ? d.outOfStock : 0) + d.externalSales;
+    const oosToSubtract = subtractOutOfStock ? Math.max(0, d.outOfStock - d.heldFromDay) : 0;
+    d.dispatched = d.guides - d.retained - d.warranties - oosToSubtract - d.prepared - d.generated + d.externalSales;
     out.push(d);
   }
 
@@ -138,7 +164,8 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
   return {
     week,
     days: out,
-    manualWeekly: (record?.prepared ?? 0) + (record?.generated ?? 0),
+    // Desde la S43 ya van por día (NICK); antes, lo que se escribió para la semana.
+    manualWeekly: week >= NICK_FILL_RATE_FROM_WEEK ? 0 : (record?.prepared ?? 0) + (record?.generated ?? 0),
     weekTotal: record?.value ?? null,
     subtractOutOfStock,
   };

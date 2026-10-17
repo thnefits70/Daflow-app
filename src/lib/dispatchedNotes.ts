@@ -9,7 +9,11 @@ export const CARRIER_DEPARTURES =
 export const DISPATCHED_NOTES = {
   brands: "Las columnas por marca son las guías que salen ese día.",
   outOfStockShownOnly:
-    "Falta de stock: solo se muestra, no se resta — mientras no termine el inventario, el stock del sistema no es confiable para saber qué guías no salieron.",
+    "Falta de stock: en la semana 42 solo se muestra, no se resta — durante el conteo general el stock del sistema no era confiable para saber qué guías no salieron.",
+  // 2026-10-17: desde la S43 (stock ya contado) la falta de stock vuelve a restarse.
+  outOfStockHeld: "Falta de stock: desde la semana 43 se resta (el stock ya se contó el 16/10), sin contar otra vez las guías que ya se retuvieron por falta de stock ese día.",
+  nickNotDispatched:
+    "Preparadas / Generadas (desde la semana 43): NICK mira cada guía en Dropi el día siguiente laborable a las 17:00 (sábado 12:30). Si sigue en «Preparado para transportadora» no la recogió la transportadora; si sigue en «Guía generada» no se empacó. Se restan el día que debían salir.",
   movedIn: `↪ Guías de un corte subido el día anterior cuando su transportadora ya se había ido (${CARRIER_DEPARTURES}): salen este día y cuentan aquí.`,
   warranties: "Garantías: guías del corte que son garantías — salen, pero no son pedidos, así que no cuentan.",
   retained: "guías canceladas que Daniel o Allan confirmaron que retuvieron — no salieron, no cuentan.",
@@ -25,6 +29,8 @@ DESGLOSE POR DÍA (columnas):
 - − ${DISPATCHED_NOTES.warranties}
 - − Retenidas: ${DISPATCHED_NOTES.retained}
 - Falta de stock: si dice "− Falta de stock" se resta; si dice "Falta de stock*" (en gris) ${DISPATCHED_NOTES.outOfStockShownOnly.replace("Falta de stock: ", "")}
+- ${DISPATCHED_NOTES.outOfStockHeld}
+- ${DISPATCHED_NOTES.nickNotDispatched}
 - + Ventas externas: ventas externas entregadas ese día (suman).
 - = Despachados: guías − garantías − retenidas (− falta de stock si se resta) + ventas externas.
 - Canceladas: ${DISPATCHED_NOTES.cancelled}`;

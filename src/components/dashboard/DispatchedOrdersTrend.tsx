@@ -44,6 +44,11 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
   const anyWarranty = days.some((d) => d.warranties > 0);
   // Desde la S42 la falta de stock solo se muestra (pedido de Daniel 2026-10-14).
   const oosSubtracted = data?.subtractOutOfStock ?? true;
+  // Desde la S43 la falta de stock que se resta ya no incluye las guías
+  // retenidas por falta de stock (no se resta dos veces).
+  const oos = (d: DispatchedDailyBreakdown["days"][number]) => (oosSubtracted ? Math.max(0, d.outOfStock - (d.heldFromDay ?? 0)) : d.outOfStock);
+  // Desde la S43: Preparadas/Generadas por día, vistas por NICK en Dropi.
+  const anyNick = days.some((d) => (d.prepared ?? 0) + (d.generated ?? 0) > 0);
 
   return (
     <>
@@ -90,6 +95,8 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                         {anyWarranty && <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">− Garantías</th>}
                         {anyRetained && <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">− Retenidas</th>}
                         <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">{oosSubtracted ? "− Falta de stock" : "Falta de stock*"}</th>
+                        {anyNick && <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">− Preparadas</th>}
+                        {anyNick && <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">− Generadas</th>}
                         <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap">+ Ventas externas</th>
                         <th className="py-1.5 px-2 font-semibold text-right whitespace-nowrap text-ink">= Despachados</th>
                         {anyCancelled && <th className="py-1.5 pl-2 font-semibold text-right whitespace-nowrap">Canceladas</th>}
@@ -117,9 +124,11 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                                 {d.retained ? `−${n(d.retained)}` : "0"}
                               </td>
                             )}
-                            <td className={`py-1.5 px-2 text-right font-mono ${oosSubtracted ? "" : "text-steel"}`} style={d.outOfStock && oosSubtracted ? { color: "#FF9B90" } : undefined}>
-                              {d.outOfStock ? `${oosSubtracted ? "−" : ""}${n(d.outOfStock)}` : "0"}
+                            <td className={`py-1.5 px-2 text-right font-mono ${oosSubtracted ? "" : "text-steel"}`} style={oos(d) && oosSubtracted ? { color: "#FF9B90" } : undefined}>
+                              {oos(d) ? `${oosSubtracted ? "−" : ""}${n(oos(d))}` : "0"}
                             </td>
+                            {anyNick && <td className="py-1.5 px-2 text-right font-mono">{d.prepared ? `−${n(d.prepared)}` : "0"}</td>}
+                            {anyNick && <td className="py-1.5 px-2 text-right font-mono">{d.generated ? `−${n(d.generated)}` : "0"}</td>}
                             <td className="py-1.5 px-2 text-right font-mono">{d.externalSales ? `+${n(d.externalSales)}` : "0"}</td>
                             <td className="py-1.5 px-2 text-right font-mono font-bold">{n(d.dispatched)}</td>
                             {anyCancelled && (
@@ -140,7 +149,9 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                         <td className="py-2 px-2 text-right font-mono">{n(sum((d) => d.guides))}</td>
                         {anyWarranty && <td className="py-2 px-2 text-right font-mono">−{n(sum((d) => d.warranties))}</td>}
                         {anyRetained && <td className="py-2 px-2 text-right font-mono">−{n(sum((d) => d.retained))}</td>}
-                        <td className={`py-2 px-2 text-right font-mono ${oosSubtracted ? "" : "text-steel"}`}>{oosSubtracted ? "−" : ""}{n(sum((d) => d.outOfStock))}</td>
+                        <td className={`py-2 px-2 text-right font-mono ${oosSubtracted ? "" : "text-steel"}`}>{oosSubtracted ? "−" : ""}{n(sum(oos))}</td>
+                        {anyNick && <td className="py-2 px-2 text-right font-mono">−{n(sum((d) => d.prepared ?? 0))}</td>}
+                        {anyNick && <td className="py-2 px-2 text-right font-mono">−{n(sum((d) => d.generated ?? 0))}</td>}
                         <td className="py-2 px-2 text-right font-mono">+{n(sum((d) => d.externalSales))}</td>
                         <td className="py-2 px-2 text-right font-mono">{n(sum((d) => d.dispatched) - data.manualWeekly)}</td>
                         {anyCancelled && <td className="py-2 pl-2 text-right font-mono">{n(sum((d) => d.cancelledInCut))}</td>}
@@ -150,7 +161,7 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                 </div>
                 <div className="mt-3 flex flex-col gap-1 text-[11.5px] text-steel">
                   <div>
-                    {DISPATCHED_NOTES.brands} Despachados = guías{anyWarranty ? " − garantías" : ""} − retenidas{oosSubtracted ? " − falta de stock" : ""} + ventas externas entregadas.
+                    {DISPATCHED_NOTES.brands} Despachados = guías{anyWarranty ? " − garantías" : ""} − retenidas{oosSubtracted ? " − falta de stock" : ""}{anyNick ? " − preparadas − generadas" : ""} + ventas externas entregadas.
                   </div>
                   {!oosSubtracted && (
                     <div>* {DISPATCHED_NOTES.outOfStockShownOnly}</div>
@@ -159,6 +170,8 @@ export function DispatchedOrdersTrend({ deptName, points }: { deptName: string; 
                     <div>{DISPATCHED_NOTES.movedIn}</div>
                   )}
                   {anyWarranty && <div>{DISPATCHED_NOTES.warranties}</div>}
+                  {anyNick && <div>{DISPATCHED_NOTES.nickNotDispatched}</div>}
+                  {oosSubtracted && days.some((d) => (d.heldFromDay ?? 0) > 0 && d.outOfStock > 0) && <div>{DISPATCHED_NOTES.outOfStockHeld}</div>}
                   {anyRetained && <div><span style={{ color: "#D9A441" }}>Retenidas</span>: {DISPATCHED_NOTES.retained}</div>}
                   {data.manualWeekly > 0 && (
                     <div>Esta semana además resta {n(data.manualWeekly)} preparadas/generadas que se anotaron a mano para toda la semana (no se pueden repartir por día).</div>
