@@ -100,7 +100,7 @@ export async function saveRows(accountId: string, rows: Record<string, unknown>[
       data: changed.map((r) => ({ guideNumber: r.guideNumber, fromStatus: known.get(r.guideNumber) ?? null, toStatus: r.status, at: now })),
     });
   }
-  if (same.length) await prisma.nickGuideStatus.updateMany({ where: { guideNumber: { in: same.map((r) => r.guideNumber) } }, data: { lastSeenAt: now } });
+  if (same.length) await prisma.nickGuideStatus.updateMany({ where: { guideNumber: { in: same.map((r) => r.guideNumber) } }, data: { lastSeenAt: now, accountId } });
   return { created: fresh.length, changed: changed.length };
 }
 
