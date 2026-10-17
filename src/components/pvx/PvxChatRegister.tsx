@@ -120,7 +120,7 @@ export function PvxChatRegister({ onDone, pending = false }: { onDone: (name: st
     <div>
       <Bubble>
         {pending
-          ? "¡Buena pregunta! 😊 Te la respondo apenas me cuentes un poquito de ti. ¿Cómo te llamas?"
+          ? "Perfecto 😊 Empecemos: ¿cómo te llamas?"
           : "Me encanta ayudarte 😊 Para mostrarte todo, cuéntame un poquito de ti. ¿Cómo te llamas?"}
       </Bubble>
       {idx > 0 && <Mine>{name}</Mine>}

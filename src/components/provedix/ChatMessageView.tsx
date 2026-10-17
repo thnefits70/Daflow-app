@@ -56,6 +56,10 @@ function parse(raw: string) {
     chips.push({ text: "📸 Foto de la guía retenida", tone: "case" });
     return "";
   });
+  text = text.replace(/\[\[REGISTRO\]\]/g, () => {
+    chips.push({ text: "📝 Le pidió sus datos", tone: "case" });
+    return "";
+  });
   text = text.replace(/\[\[BLOQUEAR\]\]/g, () => {
     chips.push({ text: "🔒 Cerró el chat", tone: "warn" });
     return "";

@@ -19,7 +19,10 @@ export async function POST(req: NextRequest) {
   const parsed = body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Archivo no válido." }, { status: 400 });
   const { visitorId, leadId } = await chatVisitor(req);
-  if (!leadId) return NextResponse.json({ error: "Regístrate gratis para enviar archivos.", needsRegister: true }, { status: 401 });
+  // Sin registro (2026-10-17): solo fotos (para mostrar qué producto busca), con tope más corto.
+  if (!leadId && !parsed.data.type.startsWith("image/"))
+    return NextResponse.json({ error: "Por ahora envíame una foto o captura 😊" }, { status: 400 });
+  if (!leadId && !hitAllowed(req, "attach-guest", 6, 60 * 60_000)) return tooMany();
   let chat = await ownChat(parsed.data.chatId, visitorId, leadId);
   if (!chat) chat = await prisma.provedixChat.create({ data: { visitorId, leadId }, select: { id: true } });
   const slot = await createUploadSlot(chat.id, parsed.data);

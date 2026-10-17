@@ -245,33 +245,19 @@ async function blockedText(
 const BLOCKED_TEXT = "Por seguridad, esta conversación quedó cerrada 🔒";
 const BLOCKED_24H_TEXT =
   "Por seguridad, este chat quedó bloqueado durante 24 horas porque la información de la guía no coincide 🔒";
-const REGISTER_TEXT =
-  "Para seguir conversando, cuéntame un poquito de ti aquí mismo en el chat 😊 Es un minuto y te doy toda la información de los productos.";
 
-// Prueba sin registro (pedido del usuario 2026-10-17, "siempre con las medidas
-// de seguridad"): quien no está registrado puede hacer 2 preguntas GENERALES
-// para conocer a Michelle IA. Sin herramientas (no ve guías, no cancela, no
-// crea casos), solo con los datos públicos de la página, con límite por
-// navegador (7 días) y por conexión (6 por hora).
-const TRIAL_QUESTIONS = 2;
-const TRIAL_RULES = `MODO PRUEBA (persona que todavía no te dio sus datos)
-- Responde SOLO dudas generales: cómo funciona Provedix, cortes y despachos, cómo empezar a vender, la calculadora, garantías y cancelaciones en general, y los productos con los datos públicos de arriba (nombre, ID, ventas en rangos, tendencia, stock sí/no).
-- NO consultes ni des estado de guías o pedidos, no hagas cancelaciones, no pases casos al equipo ni pidas datos de guías: para eso tiene que registrarse.
-- Responde corto y útil. NO hables de registro, de límites ni de "preguntas gratis" (crea un freno): cuando haga falta, el chat le pide sus datos solo, conversando. Si pregunta algo que necesita registro (su guía, un caso), dile con naturalidad que para eso necesitas conocerlo un poquito y que te deje sus datos aquí mismo.
+// Sin registro (pedido del usuario 2026-10-17, segunda versión): ya no hay
+// límite de preguntas ni se habla de "gratis". Michelle IA ayuda igual a vender
+// nuestra mercadería; solo pide los datos cuando hace falta de verdad: ver,
+// cancelar o retener SUS guías, o pedir que se le privatice un producto. Para
+// eso escribe [[REGISTRO]] y el chat abre el registro conversado. Los topes
+// contra abuso son los mismos de siempre (por día, por conexión y en total).
+const GUEST_RULES = `PERSONA QUE TODAVÍA NO TE DIO SUS DATOS
+- Ayúdale igual con todo lo que sirve para vender: productos, colores, características, stock, cortes, transportadoras, creativos, garantías y cancelaciones en general. Si hace falta, pásale la pregunta al equipo como siempre.
+- Solo necesitas sus datos para: (1) ver, cancelar o retener SUS guías o pedidos, o (2) pedir que se le privatice un producto. En esos dos casos dile con naturalidad que para eso necesitas conocerlo un poquito ("Para revisar tu guía necesito conocerte un poquito 😊") y pon [[REGISTRO]] al final del mensaje: el chat le pide sus datos ahí mismo y luego le respondes.
+- En ningún otro caso hables de registro, de datos, de límites ni de "gratis".
 - Todas las reglas de seguridad de arriba siguen igual.`;
 
-async function trialUsed(visitorId: string): Promise<number> {
-  return prisma.provedixChatMessage.count({
-    where: {
-      role: "user",
-      createdAt: { gte: new Date(Date.now() - 7 * DAY) },
-      NOT: { content: { startsWith: "[[ADJUNTO:" } },
-      chat: { visitorId, leadId: null },
-    },
-  });
-}
-const INCOMPLETE_TEXT =
-  "Antes de seguir, completa tus datos (nombre de tu tienda y dónde vendes) con el botón Regístrate, usando tu mismo WhatsApp 😊";
 
 // Registro completo (2026-10-15): los registros viejos (antes del 14/10) no
 // tienen tienda ni plataforma. Sin esos datos no se habla con la IA: el botón
@@ -315,18 +301,12 @@ export async function GET(req: NextRequest) {
         select: { role: true, content: true },
       })
     : [];
-  const [used, blockMsg, usedTrial] = await Promise.all([
-    usedToday(visitorId, leadId),
-    blockedText(visitorId, leadId),
-    leadId ? Promise.resolve(0) : trialUsed(visitorId),
-  ]);
+  const [used, blockMsg] = await Promise.all([usedToday(visitorId, leadId), blockedText(visitorId, leadId)]);
   const res = NextResponse.json({
     chatId: chat?.id ?? null,
     messages,
     remaining: Math.max(0, MICHELLE_DAILY_LIMIT - used),
     registered: !!leadId,
-    // Preguntas gratis que le quedan sin registro (2026-10-17).
-    trialLeft: leadId ? null : Math.max(0, TRIAL_QUESTIONS - usedTrial),
     blocked: !!blockMsg,
     blockedText: blockMsg,
   });
@@ -363,17 +343,9 @@ export async function POST(req: NextRequest) {
 
   const { visitorId, leadId: anyLead } = await readVisitor(req);
   const leadId = await completeLead(anyLead);
-  // Sin registro completo: solo la prueba de 2 preguntas generales (2026-10-17).
-  let trialLeft = 0;
-  if (!leadId) {
-    trialLeft = TRIAL_QUESTIONS - (await trialUsed(visitorId));
-    if (trialLeft <= 0 || !hitAllowed(req, "trial", 6, 60 * 60_000))
-      return NextResponse.json(
-        { error: anyLead ? INCOMPLETE_TEXT : REGISTER_TEXT, needsRegister: true, trialLeft: 0 },
-        { status: 401 },
-      );
-  }
+  // Sin registro: mismo chat, con un tope por conexión algo más corto (2026-10-17).
   const trial = !leadId;
+  if (trial && !hitAllowed(req, "guest", 20, 60 * 60_000)) return tooMany();
   const blockMsg = await blockedText(visitorId, leadId);
   if (blockMsg)
     return NextResponse.json(
@@ -484,15 +456,15 @@ export async function POST(req: NextRequest) {
   // La hora de Ecuador y el corte que viene, ya calculados (2026-10-17): sin
   // esto respondía "¿a qué hora es el próximo corte?" con la tabla entera.
   system.push({ type: "text", text: cutNowText() });
-  if (trial) system.push({ type: "text", text: TRIAL_RULES });
+  if (trial) system.push({ type: "text", text: GUEST_RULES });
   const client = getAnthropicClient();
   const params = {
     model: MICHELLE_MODEL,
     max_tokens: 2000,
     system,
     output_config: { effort: "low" },
-    // En la prueba sin registro no hay herramientas (guías, cancelaciones, casos).
-    ...(trial ? {} : { tools: [GUIDE_TOOL, CANCEL_TOOL, HANDOFF_TOOL, STOCK_TOOL] }),
+    // Sin registro no ve ni cancela guías (eso es de cada tienda); sí pasa casos y avisos de stock.
+    tools: trial ? [HANDOFF_TOOL, STOCK_TOOL] : [GUIDE_TOOL, CANCEL_TOOL, HANDOFF_TOOL, STOCK_TOOL],
     // Si un filtro de seguridad de la IA rechaza por error una pregunta
     // normal, Anthropic la reintenta sola con otro modelo.
     betas: ["server-side-fallback-2026-07-01"],
@@ -667,7 +639,6 @@ export async function POST(req: NextRequest) {
       "Cache-Control": "no-store",
       "X-Chat-Id": chatId,
       "X-Remaining": String(Math.max(0, MICHELLE_DAILY_LIMIT - used - 1)),
-      ...(trial ? { "X-Trial-Left": String(Math.max(0, trialLeft - 1)) } : {}),
     },
   });
   setVisitorCookies(res, visitorId);

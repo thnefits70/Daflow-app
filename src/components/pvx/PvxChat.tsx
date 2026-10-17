@@ -120,7 +120,7 @@ export const cleanReply = (t: string) =>
     .replace(/\[\[SEP\]\]/g, "")
     .replace(TEAM_RE, "")
     .replace(ATTACH_RE, "")
-    .replace(/\[\[(ASESORA(:[A-Z0-9-]*)?|BLOQUEAR|SOSPECHA)\]\]/g, "")
+    .replace(/\[\[(ASESORA(:[A-Z0-9-]*)?|BLOQUEAR|SOSPECHA|REGISTRO)\]\]/g, "")
     .replace(ACTION_RE, "")
     .replace(SECTION_RE, "")
     .replace(/\[\[ENLACE:[a-z-]+\]\]/g, "")
@@ -345,14 +345,14 @@ export function PvxChat({
     );
     return () => clearTimeout(t);
   }, [live, messages, busy]);
-  // Sin registro (2026-10-17): 2 preguntas gratis y luego el registro aquí mismo.
-  const [trialLeft, setTrialLeft] = useState<number | null>(null);
+  // Sin registro (2026-10-17): conversa sin límite de preguntas; el registro
+  // aparece solo cuando Michelle IA lo pide con [[REGISTRO]] (sus guías o privatizar).
   const [regFlow, setRegFlow] = useState(false);
   // La pregunta que hizo justo cuando se le pidieron sus datos (2026-10-17): se
   // queda a la vista y se responde sola al terminar, para que no la escriba
   // donde va su nombre.
   const [pendingQ, setPendingQ] = useState<string | null>(null);
-  const showRegister = !registered && (regFlow || trialLeft === 0);
+  const showRegister = !registered && regFlow;
 
   // Sin abrir el chat: ¿el equipo respondió algo nuevo? (una sola consulta al cargar la página)
   useEffect(() => {
@@ -407,13 +407,13 @@ export function PvxChat({
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (d?.chatId) setChatId(d.chatId);
-        if (Array.isArray(d?.messages) && sentRef.current === sentBefore) setMessages(d.messages);
+        if (Array.isArray(d?.messages) && sentRef.current === sentBefore)
+          setMessages(d.messages);
         if (d?.blocked) {
           setBlocked(true);
           if (d.blockedText) setBlockedMsg(d.blockedText);
         }
         if (typeof d?.remaining === "number") setRemaining(d.remaining);
-        if (typeof d?.trialLeft === "number") setTrialLeft(d.trialLeft);
       })
       .catch(() => null)
       .finally(() => setLoaded(true));
@@ -462,7 +462,6 @@ export function PvxChat({
           if (d?.needsRegister) {
             setMessages((m) => m.slice(0, -1));
             setPendingQ(text);
-            setTrialLeft(0);
             setRegFlow(true);
             return;
           }
@@ -486,8 +485,6 @@ export function PvxChat({
         }
         const rem = res.headers.get("X-Remaining");
         if (rem != null) setRemaining(Number(rem));
-        const tl = res.headers.get("X-Trial-Left");
-        if (tl != null) setTrialLeft(Number(tl));
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let acc = "";
@@ -508,6 +505,12 @@ export function PvxChat({
           }
         }
         if (acc.trim()) markPvxUse("michelle");
+        // Michelle IA pidió sus datos (sus guías o privatizar): registro aquí mismo y
+        // al terminar se vuelve a enviar la pregunta.
+        if (acc.includes("[[REGISTRO]]") && !registered) {
+          setPendingQ(text);
+          setRegFlow(true);
+        }
       } catch {
         setError("Se perdió la conexión. Intenta de nuevo.");
       } finally {
@@ -517,7 +520,7 @@ export function PvxChat({
         inputRef.current?.focus();
       }
     },
-    [busy, chatId],
+    [busy, chatId, registered],
   );
 
   // Adjuntar foto o video (2026-10-16): pide un enlace firmado y sube directo.
@@ -682,8 +685,12 @@ export function PvxChat({
               <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[14.5px] leading-relaxed">
                 {registered ? (
                   <>
-                    ¡Hola{name && cleanPersonName(name).ok ? `, ${name.trim().split(/\s+/)[0]}` : ""}! 👋 Soy{" "}
-                    <b>Michelle</b>, de Provedix 😊 ¿En qué te ayudo hoy?
+                    ¡Hola
+                    {name && cleanPersonName(name).ok
+                      ? `, ${name.trim().split(/\s+/)[0]}`
+                      : ""}
+                    ! 👋 Soy <b>Michelle</b>, de Provedix 😊 ¿En qué te ayudo
+                    hoy?
                   </>
                 ) : (
                   // Sin registro (2026-10-17): sin hablar de límites ni de registro;
@@ -858,7 +865,8 @@ export function PvxChat({
                                         rel="noopener noreferrer"
                                         className="pvx-press inline-flex items-center gap-1.5 rounded-full border border-[var(--pvx-paper-3)] bg-white px-3.5 py-2 text-[13px] font-bold hover:border-[var(--pvx-orange)]"
                                       >
-                                        {PVX_LINKS[k].label} <IconExternal className="w-3.5 h-3.5" />
+                                        {PVX_LINKS[k].label}{" "}
+                                        <IconExternal className="w-3.5 h-3.5" />
                                       </a>
                                     ))}
                                   </div>
@@ -968,13 +976,16 @@ export function PvxChat({
                 onDone={(name) => {
                   trackChat("chat_register");
                   setRegFlow(false);
-                  setTrialLeft(null);
                   onRegistered?.(name);
                   const q = pendingQ;
                   setPendingQ(null);
                   // La pregunta pendiente se vuelve a enviar: se quita la copia a la vista.
                   setMessages((m) => [
-                    ...(q && m[m.length - 1]?.role === "user" && m[m.length - 1].content === q ? m.slice(0, -1) : m),
+                    ...(q &&
+                    m[m.length - 1]?.role === "user" &&
+                    m[m.length - 1].content === q
+                      ? m.slice(0, -1)
+                      : m),
                     {
                       role: "assistant",
                       content: q
@@ -1041,26 +1052,28 @@ export function PvxChat({
                   <input
                     ref={fileRef}
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,video/quicktime,video/webm,video/3gpp"
+                    accept={
+                      registered
+                        ? "image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,video/quicktime,video/webm,video/3gpp"
+                        : "image/jpeg,image/png,image/webp,image/heic,image/heif"
+                    }
                     className="hidden"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) attach(file);
                     }}
                   />
-                  {/* Adjuntar solo con registro (la subida lo exige). */}
-                  {registered && (
-                    <button
-                      type="button"
-                      onClick={() => fileRef.current?.click()}
-                      disabled={uploading != null}
-                      aria-label="Adjuntar foto o video"
-                      title="Adjuntar foto o video"
-                      className="pvx-press grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--pvx-paper-2)] text-[var(--pvx-ink-2)] hover:bg-[var(--pvx-paper-3)] disabled:opacity-40 cursor-pointer"
-                    >
-                      <IconClip />
-                    </button>
-                  )}
+                  {/* Adjuntar (2026-10-17): sin registro solo fotos, para mostrar qué producto busca. */}
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={uploading != null}
+                    aria-label="Adjuntar foto o video"
+                    title="Adjuntar foto o video"
+                    className="pvx-press grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[var(--pvx-paper-2)] text-[var(--pvx-ink-2)] hover:bg-[var(--pvx-paper-3)] disabled:opacity-40 cursor-pointer"
+                  >
+                    <IconClip />
+                  </button>
                   <label htmlFor="pvx-chat-input" className="sr-only">
                     Escribe tu pregunta para Michelle
                   </label>
