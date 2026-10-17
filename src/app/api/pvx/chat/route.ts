@@ -207,44 +207,19 @@ async function usedToday(
 // role "blocked" — el admin lo ve y puede desbloquear.
 const BLOCK_MARK = "[[BLOQUEAR]]";
 
-// Bloqueo de 24 h (pedido 2026-10-14): 3 veces datos de guía que no coinciden
-// → role "blocked_24h"; se abre solo 24 h después. Devuelve el texto a mostrar
-// o null si puede escribir.
+// Bloqueo: solo el que puso el admin o un cierre anterior (role "blocked"). El
+// bloqueo de 24 h por datos de guía que no coinciden ya no existe (pedido del
+// dueño 2026-10-17: frustra al dropshipper); Michelle le ayuda a encontrarlos.
 async function blockedText(
   visitorId: string,
   leadId: string | null,
 ): Promise<string | null> {
   const chat = leadId ? { OR: [{ visitorId }, { leadId }] } : { visitorId };
-  const since = new Date(Date.now() - DAY);
-  const [perm, temp] = await Promise.all([
-    prisma.provedixChatMessage.count({ where: { role: "blocked", chat } }),
-    prisma.provedixChatMessage.findFirst({
-      where: { role: "blocked_24h", createdAt: { gte: since }, chat },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
-    }),
-  ]);
-  if (perm > 0) return BLOCKED_TEXT;
-  if (temp) {
-    const until = new Date(temp.createdAt.getTime() + DAY).toLocaleString(
-      "es-EC",
-      {
-        timeZone: "America/Guayaquil",
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        hour: "2-digit",
-        minute: "2-digit",
-      },
-    );
-    return `${BLOCKED_24H_TEXT} Podrás volver a escribirme el ${until} 💛`;
-  }
-  return null;
+  const perm = await prisma.provedixChatMessage.count({ where: { role: "blocked", chat } });
+  return perm > 0 ? BLOCKED_TEXT : null;
 }
 
 const BLOCKED_TEXT = "Por seguridad, esta conversación quedó cerrada 🔒";
-const BLOCKED_24H_TEXT =
-  "Por seguridad, este chat quedó bloqueado durante 24 horas porque la información de la guía no coincide 🔒";
 
 // Sin registro (pedido del usuario 2026-10-17, segunda versión): ya no hay
 // límite de preguntas ni se habla de "gratis". Michelle IA ayuda igual a vender
@@ -476,7 +451,6 @@ export async function POST(req: NextRequest) {
 
   const encoder = new TextEncoder();
   let acc = "";
-  let guideBlocked = false;
   const readable = new ReadableStream<Uint8Array>({
     async start(controller) {
       const usage = { input: 0, output: 0 };
@@ -555,14 +529,13 @@ export async function POST(req: NextRequest) {
               const input = cancelInput.safeParse(use.input);
               out = input.success
                 ? await requestCancellationFromChat(input.data, chatId, who)
-                : { resultado: "no_coincide" as const, intentos_restantes: 0 };
+                : { resultado: "no_coincide" as const, varios_intentos: false };
             } else {
               const input = guideInput.safeParse(use.input);
               out = input.success
                 ? await checkGuideForDropshipper(input.data, chatId, who)
-                : { resultado: "no_coincide" as const, intentos_restantes: 0 };
+                : { resultado: "no_coincide" as const, varios_intentos: false };
             }
-            if (out.resultado === "bloquear") guideBlocked = true;
             results.push({
               type: "tool_result",
               tool_use_id: use.id,
@@ -587,9 +560,6 @@ export async function POST(req: NextRequest) {
             outputTokens: usage.output,
           });
         }
-        // Si la verificación de guías llegó al límite, el chat se cierra aunque la IA no ponga la marca.
-        if (guideBlocked && !acc.includes(BLOCK_MARK))
-          emit(`\n\n${BLOCKED_24H_TEXT}\n${BLOCK_MARK}`);
       } catch (err) {
         console.error("[michelle]", err);
         await logProvedixEvent({ visitorId, leadId, type: "chat_error" }).catch(() => null);
@@ -617,7 +587,7 @@ export async function POST(req: NextRequest) {
             .catch(() => null);
         }
         // (Si fue por las guías, el bloqueo ya lo guardó provedixGuideCheck.ts.)
-        if (acc.includes(BLOCK_MARK) && !guideBlocked) {
+        if (acc.includes(BLOCK_MARK)) {
           await prisma.provedixChatMessage
             .create({
               data: {

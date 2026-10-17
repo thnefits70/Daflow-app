@@ -13,8 +13,10 @@ import { labelMarketData } from "@/lib/guideMarketData";
 //   "no coincide" (y nunca cuál dato falló).
 // - El nombre del cliente se lee del PDF solo en este momento para comparar y
 //   se descarta: no se guarda (Ley de Protección de Datos, decisión 2026-10-10).
-// - 3 intentos fallidos en 24 h → el chat se bloquea 24 horas (role "blocked_24h").
-//   Con 1 o 2 fallos Michelle avisa que está a punto de bloquearse.
+// - Sin bloqueos (pedido del dueño 2026-10-17: bloquear frustra al dropshipper):
+//   cada fallo se guarda y desde el 3.º en 24 h Michelle le ayuda a buscar el
+//   dato correcto con más detalle y avisa al admin; el estado sigue sin darse
+//   si los 3 datos no coinciden con la etiqueta.
 
 export const GUIDE_FAIL_LIMIT = 3;
 
@@ -82,9 +84,8 @@ export type GuideCheckResult =
       cancelacion?: string;
       dropi?: DropiStatusForMichelle;
     }
-  | { resultado: "no_coincide"; intentos_restantes: number }
-  | { resultado: "no_encontrada"; intentos_restantes: number }
-  | { resultado: "bloquear" };
+  | { resultado: "no_coincide"; varios_intentos: boolean }
+  | { resultado: "no_encontrada"; varios_intentos: boolean };
 
 // Estado de la guía en Dropi (2026-10-16): NICK lo trae de las 3 cuentas
 // cada 2 horas (NickGuideStatus). Solo se da DESPUÉS de verificar al dueño.
@@ -145,9 +146,6 @@ export async function verifyGuideOwner(
       chat: person,
     },
   });
-  if (fails >= GUIDE_FAIL_LIMIT)
-    return { ok: false, result: { resultado: "bloquear" } };
-
   const fail = async (): Promise<{ ok: false; result: GuideCheckResult }> => {
     await prisma.provedixChatMessage.create({
       data: {
@@ -156,21 +154,9 @@ export async function verifyGuideOwner(
         content: `Datos de la guía ${guide} no coinciden.`,
       },
     });
-    const left = GUIDE_FAIL_LIMIT - fails - 1;
-    if (left <= 0) {
-      await prisma.provedixChatMessage.create({
-        data: {
-          chatId,
-          role: "blocked_24h",
-          content:
-            "Falló 3 veces la verificación de guías: chat bloqueado 24 horas.",
-        },
-      });
-      return { ok: false, result: { resultado: "bloquear" } };
-    }
     return {
       ok: false,
-      result: { resultado: "no_coincide", intentos_restantes: left },
+      result: { resultado: "no_coincide", varios_intentos: fails + 1 >= GUIDE_FAIL_LIMIT },
     };
   };
 
@@ -196,15 +182,10 @@ export async function verifyGuideOwner(
   // probar números al azar sin límite.
   if (!row) {
     const r = await fail();
-    return r.result.resultado === "no_coincide"
-      ? {
-          ok: false,
-          result: {
-            resultado: "no_encontrada",
-            intentos_restantes: r.result.intentos_restantes,
-          },
-        }
-      : r;
+    return {
+      ok: false,
+      result: { resultado: "no_encontrada", varios_intentos: "varios_intentos" in r.result && r.result.varios_intentos },
+    };
   }
 
   const { label } = await findGuideInPdfs(row.batch.fileUrls, row.guideNumber);
