@@ -9,6 +9,7 @@ import { NickGuides } from "@/components/nick/NickGuides";
 import { NickRankings } from "@/components/nick/NickRankings";
 import { NickScore } from "@/components/nick/NickScore";
 import { NickPayments } from "@/components/nick/NickPayments";
+import { NickSummary } from "@/components/nick/NickSummary";
 
 // NICK — Etapa 0 (2026-10-15): conectar las 3 cuentas de Dropi con el
 // conector oficial y ver las últimas guías tal como las ve Dropi. Solo
@@ -44,7 +45,8 @@ export function NickPanel({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   // Etapa 4: pestaña Rankings, solo para el admin.
-  const [view, setView] = useState<"guias" | "score" | "rankings" | "pagos">("guias");
+  // 2026-10-17: el admin entra directo al Resumen.
+  const [view, setView] = useState<"resumen" | "guias" | "score" | "rankings" | "pagos">(isAdmin ? "resumen" : "guias");
 
   const okName = notice?.ok ? accounts.find((a) => a.id === notice.ok)?.name : null;
 
@@ -70,6 +72,7 @@ export function NickPanel({
       {isAdmin && (
         <div className="flex gap-2 mb-4">
           {([
+            ["resumen", "Resumen"],
             ["guias", "Guías"],
             ["score", "Score"],
             ["rankings", "Rankings"],
@@ -87,7 +90,9 @@ export function NickPanel({
         </div>
       )}
 
-      {isAdmin && view === "pagos" ? (
+      {isAdmin && view === "resumen" ? (
+        <NickSummary onGoGuides={() => setView("guias")} />
+      ) : isAdmin && view === "pagos" ? (
         <NickPayments accounts={accounts.map((a) => ({ id: a.id, name: a.name }))} />
       ) : isAdmin && view === "score" ? (
         <NickScore />
