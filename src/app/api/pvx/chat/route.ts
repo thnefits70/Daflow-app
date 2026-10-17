@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAnthropicClient } from "@/lib/nancy";
 import { logAiUsage } from "@/lib/aiUsage";
-import { describeAttachments, describeTeamReply } from "@/lib/provedixAttachments";
+import { ATTACH_MARK_RE, attachmentImages, describeAttachments, describeTeamReply } from "@/lib/provedixAttachments";
 import {
   readVisitor,
   sameOriginRequest,
@@ -430,15 +430,33 @@ export async function POST(req: NextRequest) {
   while (prior.length && prior[0].role !== "user") prior.shift();
   // Adjuntos y respuestas del equipo van descritos en palabras; mensajes
   // seguidos del mismo lado se juntan en uno (2026-10-16).
-  const messages: Anthropic.Beta.BetaMessageParam[] = [];
-  for (const m of [...prior, { role: "user", content: parsed.data.message }]) {
+  // Fotos (2026-10-17): Michelle IA mira como una persona las fotos recientes
+  // (hasta 3, de los últimos 6 mensajes); las más viejas van en palabras.
+  const turns = [...prior, { role: "user", content: parsed.data.message }];
+  const recentImageIds = turns
+    .slice(-6)
+    .flatMap((m) => [...m.content.matchAll(ATTACH_MARK_RE)].filter((x) => x[2] === "image").map((x) => x[1]))
+    .slice(-3);
+  const images = await attachmentImages(chatId, recentImageIds).catch(() => new Map<string, string>());
+  const seen = new Set(images.keys());
+  type Block =
+    | { type: "text"; text: string }
+    | { type: "image"; source: { type: "base64"; media_type: "image/jpeg"; data: string } };
+  const messages: { role: "user" | "assistant"; content: Block[] }[] = [];
+  for (const m of turns) {
     const role = m.role === "assistant" ? ("assistant" as const) : ("user" as const);
-    const content = describeTeamReply(describeAttachments(m.content));
+    const blocks: Block[] = [];
+    if (role === "user")
+      for (const a of m.content.matchAll(ATTACH_MARK_RE)) {
+        const data = images.get(a[1]);
+        if (data) blocks.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data } });
+      }
+    const text = describeTeamReply(describeAttachments(m.content, seen)).trim();
+    if (text) blocks.push({ type: "text", text });
+    if (!blocks.length) continue;
     const last = messages[messages.length - 1];
-    if (last && last.role === role && typeof last.content === "string") last.content += `
-
-${content}`;
-    else messages.push({ role, content });
+    if (last && last.role === role) last.content.push(...blocks);
+    else messages.push({ role, content: blocks });
   }
 
   const system = await michelleSystem(!trial);

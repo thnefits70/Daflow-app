@@ -255,7 +255,7 @@ function CaseCard({
         {c.summary}
       </div>
       {/* Caso de stock (2026-10-17): real vs publicado en Dropi con un clic. */}
-      {c.topic === "stock" && <StockCheckBox caseId={c.id} />}
+      {c.topic === "stock" && <StockCheckBox caseId={c.id} open={c.status === "ABIERTO"} onDone={onDone} onError={onError} />}
       <button
         type="button"
         onClick={() => setShowChat(!showChat)}
@@ -518,9 +518,25 @@ type StockCheckData = {
 
 // Un dropshipper quiere vender más y ve poco stock en Dropi: stock real
 // (DAFLOW, por color) al lado del publicado hoy en Dropi (NICK), para ajustarlo.
-function StockCheckBox({ caseId }: { caseId: string }) {
+function StockCheckBox({ caseId, open, onDone, onError }: { caseId: string; open: boolean; onDone: () => void; onError: (e: string) => void }) {
   const [data, setData] = useState<StockCheckData | { error: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [closing, setClosing] = useState(false);
+  // Un clic (2026-10-17): avisa al dropshipper en su chat y cierra el caso.
+  async function finish(name: string) {
+    setClosing(true);
+    const res = await fetch(`/api/provedix/cases/${caseId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        resolution: "Stock revisado y actualizado en Dropi.",
+        reply: `¡Listo! Ya revisamos y actualizamos el stock de ${name} en Dropi 💛 Ya puedes lanzar tu campaña con tranquilidad. ¡Éxitos con tus ventas! 🚀`,
+      }),
+    }).catch(() => null);
+    setClosing(false);
+    if (!res?.ok) return onError("No se pudo cerrar el caso. Intenta de nuevo.");
+    onDone();
+  }
   async function load() {
     setLoading(true);
     const r = await fetch(`/api/provedix/cases/${caseId}/stock`).catch(() => null);
@@ -593,9 +609,38 @@ function StockCheckBox({ caseId }: { caseId: string }) {
           </>
         )}
       </div>
-      <div className="mt-1 text-[11.5px] text-steel">
-        Ajusta el stock publicado en Dropi según el real. Si va a faltar mercadería, DAFLOW le avisa solo a Jariel para comprar (las compras se deciden por las ventas
-        reales, no por preguntas).
+      {/* Qué hacer, ya resumido por Michelle IA (2026-10-17): sin trabajo extra para la asesora. */}
+      <div className="mt-2 rounded-md bg-teal/10 p-2.5">
+        <div className="text-[12px] font-semibold">Qué hacer</div>
+        <ol className="mt-1 list-decimal pl-5 text-[12.5px]">
+          <li>
+            Abre el producto en Dropi (botón de abajo) y{" "}
+            {data.realByVariant.some((v) => v.stock > 0) ? (
+              <>
+                pon el stock de cada color según el conteo:{" "}
+                <b>{data.realByVariant.filter((v) => v.stock > 0).map((v) => `${v.name} ${v.stock}`).join(", ")}</b>.
+              </>
+            ) : (
+              <>
+                revisa el stock de cada color con lo que hay en bodega (real total: <b>{data.realTotal}</b>; el conteo por color todavía no está).
+              </>
+            )}
+          </li>
+          {dropi && dropi !== "sin_conexion" && dropi.total > data.realTotal && (
+            <li>
+              Dropi muestra <b>{dropi.total}</b> y en bodega hay <b>{data.realTotal}</b>: bájalo para no vender sin mercadería.
+            </li>
+          )}
+          {dropi && dropi !== "sin_conexion" && dropi.total < data.realTotal && (
+            <li>
+              Hay <b>{data.realTotal}</b> en bodega y Dropi solo muestra <b>{dropi.total}</b>: puedes subirlo.
+            </li>
+          )}
+          <li>Cuando termines, toca &quot;Ya actualicé Dropi&quot;: le avisa al dropshipper en su chat y cierra el caso.</li>
+        </ol>
+        <div className="mt-1 text-[11.5px] text-steel">
+          Compras: si va a faltar mercadería, DAFLOW le avisa solo a Jariel (se decide por las ventas reales, no por preguntas).
+        </div>
       </div>
       <a
         href={data.dropiUrl}
@@ -605,6 +650,16 @@ function StockCheckBox({ caseId }: { caseId: string }) {
       >
         Abrir el producto en Dropi ↗
       </a>
+      {open && (
+        <button
+          type="button"
+          onClick={() => finish(data.name)}
+          disabled={closing}
+          className="ml-2 mt-2 inline-block rounded-md bg-teal px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-60 cursor-pointer"
+        >
+          {closing ? "Avisando…" : "✅ Ya actualicé Dropi"}
+        </button>
+      )}
     </div>
   );
 }

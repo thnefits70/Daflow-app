@@ -97,13 +97,47 @@ export async function signedViewPath(id: string, chatIds: string[] | "team"): Pr
   return token ? { path: row.path, token, kind: row.kind } : null;
 }
 
-// Para la IA: el adjunto se describe en palabras (no se le mandan las imágenes).
-export function describeAttachments(text: string): string {
-  return text.replace(ATTACH_MARK_RE, (_, _id, kind) => (kind === "video" ? "[El dropshipper adjuntó un video]" : "[El dropshipper adjuntó una foto]"));
+// Para la IA: las fotos recientes van como imagen (seen); el resto se describe en palabras.
+export function describeAttachments(text: string, seen?: Set<string>): string {
+  return text.replace(ATTACH_MARK_RE, (_, id: string, kind: string) =>
+    kind === "video"
+      ? "[El dropshipper mandó un video: no se reproduce aquí; el equipo lo revisa en su caso]"
+      : seen?.has(id)
+        ? "[Foto que mandó el dropshipper (la ves arriba)]"
+        : "[El dropshipper mandó una foto antes]",
+  );
 }
 
 // Respuesta escrita por la persona del equipo desde DAFLOW (no por la IA).
 export const TEAM_MARK_RE = /^\[\[EQUIPO:([^\]]{1,40})\]\]\s*/;
 export function describeTeamReply(text: string): string {
   return text.replace(TEAM_MARK_RE, (_, name) => `(Respuesta de ${name}, del equipo de Provedix) `);
+}
+
+// Fotos que Michelle IA mira como una persona (pedido del usuario 2026-10-17).
+// Se mandan como imagen (JPEG de hasta 1600 px) solo las más recientes del chat.
+// Si una foto no se puede abrir (p. ej. HEIC), queda descrita en palabras.
+export async function attachmentImages(chatId: string, ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!ids.length) return out;
+  const sharp = (await import("sharp")).default;
+  const rows = await prisma.provedixChatAttachment.findMany({
+    where: { id: { in: ids }, chatId, done: true, kind: "image" },
+    select: { id: true, path: true },
+  });
+  const sb = supabaseAdmin();
+  await Promise.all(
+    rows.map(async (r) => {
+      const { data } = await sb.storage.from(ATTACH_BUCKET).download(r.path);
+      if (!data) return;
+      const jpg = await sharp(Buffer.from(await data.arrayBuffer()))
+        .rotate()
+        .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toBuffer()
+        .catch(() => null);
+      if (jpg) out.set(r.id, jpg.toString("base64"));
+    }),
+  );
+  return out;
 }

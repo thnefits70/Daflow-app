@@ -64,7 +64,7 @@ const SECTIONS: { title: string; body: React.ReactNode }[] = [
     title: "Michelle IA",
     body: (
       <p>
-        Michelle IA es una asistente virtual con inteligencia artificial. Para responderte, tus mensajes se procesan con un servicio de inteligencia artificial. Si
+        Michelle IA es una asistente virtual con inteligencia artificial. Para responderte, tus mensajes y las fotos que adjuntas se procesan con un servicio de inteligencia artificial. Si
         tu caso necesita a una persona, el equipo la lee y te responde en el mismo chat. No escribas en el chat contraseñas ni datos de tarjetas: nunca te los
         vamos a pedir.
       </p>
