@@ -293,13 +293,17 @@ async function carrierInsights(): Promise<string> {
     byCity.get(city)!.set(carrier, { ok: cc.ok + ok, total: cc.total + n });
   }
   const pct = (x: { ok: number; total: number }) => Math.round((x.ok / x.total) * 100);
-  const general = [...byCarrier].filter(([, x]) => x.total >= 50).sort((a, b) => pct(b[1]) - pct(a[1])).map(([c, x]) => `${c} ${pct(x)}%`);
+  // Solo se comparan las que mueven volumen de verdad (10%+ de los envíos): un
+  // 88% sobre 25 guías no vale lo mismo que un 77% sobre 1.000 (caso Urbano en Quito).
+  const MIN_SHARE = 0.1;
+  const allTotal = [...byCarrier.values()].reduce((s, x) => s + x.total, 0);
+  const general = [...byCarrier].filter(([, x]) => x.total >= allTotal * MIN_SHARE).sort((a, b) => pct(b[1]) - pct(a[1])).map(([c, x]) => `${c} ${pct(x)}%`);
   const cities = [...byCity]
     .map(([city, m]) => ({ city, m, total: [...m.values()].reduce((s, x) => s + x.total, 0) }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 25)
-    .map(({ city, m }) => {
-      const ranked = [...m].filter(([, x]) => x.total >= 25).sort((a, b) => pct(b[1]) - pct(a[1]));
+    .map(({ city, m, total }) => {
+      const ranked = [...m].filter(([, x]) => x.total >= 25 && x.total >= total * MIN_SHARE).sort((a, b) => pct(b[1]) - pct(a[1]));
       if (!ranked.length) return null;
       const [best, second] = ranked;
       return second && pct(best[1]) - pct(second[1]) < 3
@@ -308,7 +312,7 @@ async function carrierInsights(): Promise<string> {
     })
     .filter(Boolean);
   if (!general.length) return "";
-  return `ENTREGAS POR TRANSPORTADORA (nuestros envíos de los últimos 60 días: % de pedidos entregados entre entregados y devueltos)
+  return `ENTREGAS POR TRANSPORTADORA (nuestros envíos de los últimos 60 días: % de pedidos entregados entre entregados y devueltos; solo las que llevan buena parte del volumen, las de poco volumen no se comparan porque su dato no es seguro)
 - En general: ${general.join(", ")}.
 - Por ciudad: ${cities.join("; ")}.`;
 }
