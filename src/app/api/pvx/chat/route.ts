@@ -56,6 +56,35 @@ const HANDOFF_TOOL = {
     required: ["tema", "resumen", "plataforma"],
   },
 };
+// Aviso de stock (2026-10-17): el dropshipper quiere vender más y en Dropi ve
+// poco stock. Crea un caso "stock" para la asesora: en su Inicio compara con un
+// clic el stock real (DAFLOW, por color) con el publicado en Dropi y lo ajusta.
+const STOCK_TOOL = {
+  name: "avisar_stock",
+  description:
+    "Avisa al equipo que un dropshipper quiere vender más de un producto (o de un color/talla) y en Dropi ve poco o ningún stock, para que revisen el stock real y lo actualicen en Dropi. Devuelve el código del caso.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      producto: { type: "string", description: "Solo el número del ID de Dropi del producto (p. ej. 169468)" },
+      variante: { type: "string", description: "Color o talla que pide, si lo dijo" },
+      necesidad: { type: "string", description: "Qué necesita: p. ej. lanzar campaña, cuántas unidades cree vender, qué ve en Dropi" },
+      plataforma: { type: "string", enum: ["dropi", "rocket"], description: "Dónde vende" },
+    },
+    required: ["producto", "necesidad", "plataforma"],
+  },
+};
+const stockInput = z.object({
+  // Saca el ID aunque la IA escriba el nombre junto ("Mochila … (ID 169468)").
+  producto: z
+    .string()
+    .transform((v) => v.match(/\d{3,8}/)?.[0] ?? "")
+    .refine((v) => v.length > 0),
+  variante: z.string().max(60).optional().nullable(),
+  necesidad: z.string().min(3).max(600),
+  plataforma: z.enum(["dropi", "rocket"]).optional().nullable(),
+});
+
 const handoffInput = z.object({
   tema: z.string().max(30),
   resumen: z.string().min(10).max(1500),
@@ -438,7 +467,7 @@ ${content}`;
     system,
     output_config: { effort: "low" },
     // En la prueba sin registro no hay herramientas (guías, cancelaciones, casos).
-    ...(trial ? {} : { tools: [GUIDE_TOOL, CANCEL_TOOL, HANDOFF_TOOL] }),
+    ...(trial ? {} : { tools: [GUIDE_TOOL, CANCEL_TOOL, HANDOFF_TOOL, STOCK_TOOL] }),
     // Si un filtro de seguridad de la IA rechaza por error una pregunta
     // normal, Anthropic la reintenta sola con otro modelo.
     betas: ["server-side-fallback-2026-07-01"],
@@ -496,7 +525,21 @@ ${content}`;
           for (const use of uses) {
             const who = { visitorId, leadId };
             let out;
-            if (use.name === "pasar_a_asesora") {
+            if (use.name === "avisar_stock") {
+              // Caso de stock para la asesora (2026-10-17). El resumen empieza con
+              // "STOCK · ID …": la pantalla del caso lo usa para comparar real vs Dropi.
+              const input = stockInput.safeParse(use.input);
+              out = input.success
+                ? {
+                    resultado: "caso_creado",
+                    codigo: await createCaseFromChat(chatId, {
+                      tema: "stock",
+                      resumen: `STOCK · ID ${input.data.producto}${input.data.variante ? ` · ${input.data.variante}` : ""} · ${input.data.necesidad}`,
+                      plataforma: input.data.plataforma,
+                    }),
+                  }
+                : { resultado: "faltan_datos", detalle: "Falta el ID del producto o lo que necesita." };
+            } else if (use.name === "pasar_a_asesora") {
               // Caso para Michelle (la asesora humana), con resumen (2026-10-15).
               const input = handoffInput.safeParse(use.input);
               out = input.success

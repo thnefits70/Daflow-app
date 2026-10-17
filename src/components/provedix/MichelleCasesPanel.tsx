@@ -254,6 +254,8 @@ function CaseCard({
       <div className="mt-2 whitespace-pre-wrap rounded-md bg-cloud px-3 py-2 text-[13px]">
         {c.summary}
       </div>
+      {/* Caso de stock (2026-10-17): real vs publicado en Dropi con un clic. */}
+      {c.topic === "stock" && <StockCheckBox caseId={c.id} />}
       <button
         type="button"
         onClick={() => setShowChat(!showChat)}
@@ -496,6 +498,113 @@ function AnswersEditor({
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+type StockCheckData = {
+  code: string;
+  name: string;
+  brand: string;
+  asked: string | null;
+  realTotal: number;
+  realByVariant: { name: string; stock: number }[];
+  unidentified: number;
+  dropi: { total: number; variations: { id: string; stock: number; label: string | null }[] } | "sin_conexion" | null;
+  sold30: number;
+  coverageDays: number | null;
+  dropiUrl: string;
+};
+
+// Un dropshipper quiere vender más y ve poco stock en Dropi: stock real
+// (DAFLOW, por color) al lado del publicado hoy en Dropi (NICK), para ajustarlo.
+function StockCheckBox({ caseId }: { caseId: string }) {
+  const [data, setData] = useState<StockCheckData | { error: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  async function load() {
+    setLoading(true);
+    const r = await fetch(`/api/provedix/cases/${caseId}/stock`).catch(() => null);
+    setData(r ? await r.json().catch(() => ({ error: "No se pudo leer." })) : { error: "No se pudo leer." });
+    setLoading(false);
+  }
+  if (!data)
+    return (
+      <button
+        type="button"
+        onClick={load}
+        disabled={loading}
+        className="mt-2 rounded-md bg-ink px-3 py-2 text-[12.5px] font-semibold text-bg disabled:opacity-60 cursor-pointer"
+      >
+        {loading ? "Revisando stock real y Dropi…" : "📦 Ver stock real vs Dropi"}
+      </button>
+    );
+  if ("error" in data) return <div className="mt-2 text-[12px] text-red">{data.error}</div>;
+  const dropi = data.dropi;
+  return (
+    <div className="mt-2 rounded-md border border-rule p-3 text-[12.5px]">
+      <div className="font-semibold">
+        {data.name} · ID {data.code} · {data.brand}
+        {data.asked ? <span className="ml-1 text-steel">· pidió: {data.asked}</span> : null}
+      </div>
+      <div className="mt-2 grid gap-3 sm:grid-cols-2">
+        <div className="rounded-md bg-cloud p-2.5">
+          <div className="text-[11px] text-steel">Stock REAL (DAFLOW)</div>
+          <div className="font-mono text-[18px] font-bold">{data.realTotal}</div>
+          {data.realByVariant.length > 0 ? (
+            <ul className="mt-1">
+              {data.realByVariant.map((v) => (
+                <li key={v.name} className={data.asked && v.name.toLowerCase() === data.asked.toLowerCase() ? "font-bold" : ""}>
+                  {v.name}: <span className="font-mono">{v.stock}</span>
+                </li>
+              ))}
+              {data.unidentified > 0 && <li className="text-steel">Sin identificar: {data.unidentified}</li>}
+            </ul>
+          ) : (
+            <div className="mt-1 text-[11.5px] text-steel">Sin conteo por color todavía.</div>
+          )}
+        </div>
+        <div className="rounded-md bg-cloud p-2.5">
+          <div className="text-[11px] text-steel">Publicado HOY en Dropi</div>
+          {dropi === "sin_conexion" || !dropi ? (
+            <div className="mt-1 text-[11.5px] text-steel">No se pudo leer Dropi ahora (revisa la conexión de NICK).</div>
+          ) : (
+            <>
+              <div className="font-mono text-[18px] font-bold">{dropi.total}</div>
+              {dropi.variations.length > 0 && (
+                <ul className="mt-1">
+                  {dropi.variations.map((v, i) => (
+                    <li key={v.id}>
+                      {v.label ?? `Variante ${i + 1}`}: <span className="font-mono">{v.stock}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="mt-1 text-[11px] text-steel">Dropi no envía el nombre del color de cada variante: míralo al abrir el producto.</div>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="mt-2 text-[12px]">
+        Vendidas en 30 días: <b className="font-mono">{data.sold30}</b>
+        {data.coverageDays != null && (
+          <>
+            {" "}
+            · el stock real alcanza para <b className="font-mono">~{data.coverageDays}</b> días
+          </>
+        )}
+      </div>
+      <div className="mt-1 text-[11.5px] text-steel">
+        Ajusta el stock publicado en Dropi según el real. Si va a faltar mercadería, DAFLOW le avisa solo a Jariel para comprar (las compras se deciden por las ventas
+        reales, no por preguntas).
+      </div>
+      <a
+        href={data.dropiUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-2 inline-block rounded-md border border-rule px-3 py-1.5 text-[12px] font-semibold hover:bg-cloud"
+      >
+        Abrir el producto en Dropi ↗
+      </a>
     </div>
   );
 }

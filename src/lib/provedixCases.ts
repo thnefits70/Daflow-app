@@ -34,6 +34,8 @@ export const CASE_TOPICS: Record<string, string> = {
   pedido: "Pedido o guía",
   pago: "Pago o cobro",
   negociacion: "Negociación (precio, volumen, crédito)",
+  // 2026-10-17: un dropshipper quiere vender más y ve poco stock en Dropi.
+  stock: "Stock en Dropi (verificar y actualizar)",
   otro: "Otro",
 };
 
@@ -331,14 +333,15 @@ export async function getCasesPendingItem(
   if (!platforms.length) return null;
   const open = await prisma.provedixCase.findMany({
     where: { status: "ABIERTO", platform: { in: platforms } },
-    select: { createdAt: true },
+    select: { createdAt: true, topic: true },
   });
   if (open.length === 0) return null;
   return {
     type: "michelle_casos",
     icon: "💬",
     label: "Casos que te pasó Michelle IA",
-    meta: `${open.length} caso${open.length === 1 ? "" : "s"} por atender`,
+    // Casos de stock (2026-10-17): verificar el stock real y actualizarlo en Dropi.
+    meta: `${open.length} caso${open.length === 1 ? "" : "s"} por atender${open.some((c) => c.topic === "stock") ? ` · ${open.filter((c) => c.topic === "stock").length} de stock: verifica y actualiza Dropi` : ""}`,
     // Promesa de la página: respuesta en menos de 3 horas.
     overdue: open.some(
       (c) => Date.now() - c.createdAt.getTime() > 3 * 3_600_000,
