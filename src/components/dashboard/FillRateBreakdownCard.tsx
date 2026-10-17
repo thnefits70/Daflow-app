@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { formatWeekShort } from "./WeeklyTrendChart";
 import { formatDateTime } from "@/lib/formatDateTime";
 import type { FillRateBreakdown } from "@/lib/dashboard";
+import { NICK_FILL_RATE_FROM_WEEK } from "@/lib/nick/fillRateWeek";
 import { ExplainButton } from "@/components/shared/ExplainButton";
 
 // Confirmado 2026-08-31: reemplaza las bandas anteriores (≥98/95-97/<95) —
@@ -133,19 +134,24 @@ export function FillRateBreakdownCard({
       color: "#14C7C7",
       desc: "Se preparó, se etiquetó y se entregó al courier — el proceso completo.",
     },
-    // Pedido del usuario 2026-10-12: Preparadas/Generadas ya no se escriben
-    // (casi siempre daban 0) — solo aparecen si una semana vieja las tenía.
+    // Pedido del usuario 2026-10-17: Preparadas/Generadas vuelven, ahora
+    // automáticas con NICK (estado en Dropi al día siguiente laborable). Desde
+    // la S43 se ven siempre; en semanas viejas solo si se habían escrito.
     {
       label: "Preparadas",
       value: data.prepared,
       color: "#1E5EFF",
-      desc: "Empacada y etiquetada, pero no se entregó al courier ese día.",
+      desc: data.week >= NICK_FILL_RATE_FROM_WEEK
+        ? "Dropi seguía en «Preparado para transportadora» al día siguiente: se empacó, pero la transportadora no la recogió."
+        : "Empacada y etiquetada, pero no se entregó al courier ese día.",
     },
     {
       label: "Generadas",
       value: data.generated,
       color: "#D9A441",
-      desc: "Ya existe la guía/etiqueta, pero el producto no se empacó.",
+      desc: data.week >= NICK_FILL_RATE_FROM_WEEK
+        ? "Dropi seguía en «Guía generada» al día siguiente: la guía existe, pero el producto no se empacó."
+        : "Ya existe la guía/etiqueta, pero el producto no se empacó.",
     },
     {
       label: "Falta de stock",
@@ -153,7 +159,7 @@ export function FillRateBreakdownCard({
       color: "#E0574A",
       desc: "No se pudo ni preparar porque no había la mercadería disponible.",
     },
-  ].filter((s) => (s.label !== "Preparadas" && s.label !== "Generadas") || s.value > 0);
+  ].filter((s) => (s.label !== "Preparadas" && s.label !== "Generadas") || s.value > 0 || data.week >= NICK_FILL_RATE_FROM_WEEK);
   const fmtDay = (d: string) => d.slice(5).split("-").reverse().join("/");
   const { lateManifests: lm, cancelledGuides: cg } = data;
 

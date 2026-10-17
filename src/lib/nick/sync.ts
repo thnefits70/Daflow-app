@@ -228,6 +228,7 @@ export async function runNickSyncTick({ force = false, budgetMs = 40_000 } = {})
 // Lo que llama la campanita: solo en horario de trabajo y como mucho una vez
 // por minuto en todo DAFLOW (un aviso por instancia del servidor).
 let lastBellTick = 0;
+let lastFillRateRecompute = 0;
 export async function runNickSyncFromBell() {
   if (!isWithinBusinessHours()) return;
   if (Date.now() - lastBellTick < 60_000) return;
@@ -244,6 +245,13 @@ export async function runNickSyncFromBell() {
   // Etapa 3: marcador del día para la tendencia (como mucho cada 3 horas).
   const { saveNickScoreDay } = await import("@/lib/nick/score");
   await saveNickScoreDay().catch(() => null);
+  // Preparadas/Generadas del Fill Rate salen de NICK (2026-10-17): se recalcula
+  // la semana actual y la anterior como mucho cada 3 horas.
+  if (Date.now() - lastFillRateRecompute > 3 * 3600 * 1000) {
+    lastFillRateRecompute = Date.now();
+    const { recomputeRecentAutoFillRate } = await import("@/lib/autoFillRate");
+    await recomputeRecentAutoFillRate().catch(() => null);
+  }
 }
 
 async function isDropiMarkedDown() {

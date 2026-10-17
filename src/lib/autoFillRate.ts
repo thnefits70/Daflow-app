@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCompiledLot, ecuadorDay } from "@/lib/fulfillmentGuides";
 import { nextWorkingDay } from "@/lib/ecuadorHolidays";
+import { NICK_FILL_RATE_FROM_WEEK, nickPreparedGenerated } from "@/lib/nick/fillRate";
 
 // Confirmado 2026-09-25 con el usuario (punto por punto):
 //   1. Desde la semana 2026-W40 (lunes 28 sept) el Fill Rate de Fulfillment
@@ -159,7 +160,15 @@ export function outOfStockSubtracted(week: string): boolean {
 
 // Lo que DAFLOW sabe solo de la semana: guías totales (por el día en que
 // salen), falta de stock y guías retenidas que estaban en esos cortes.
-export async function computeAutoCounts(week: string): Promise<{ guides: number; outOfStock: number; externalSales: number; retained: number; subtractOutOfStock: boolean }> {
+export async function computeAutoCounts(week: string): Promise<{
+  guides: number;
+  outOfStock: number;
+  externalSales: number;
+  retained: number;
+  subtractOutOfStock: boolean;
+  // Guías que salen esa semana (sin retenidas ni garantías) con su día de salida — para Preparadas/Generadas con NICK.
+  counted: { guideNumber: string; dispatchDay: string }[];
+}> {
   const days = daysOfIsoWeek(week);
   const daySet = new Set(days);
   const batches = await prisma.fulfillmentRequestBatch.findMany({
@@ -174,14 +183,19 @@ export async function computeAutoCounts(week: string): Promise<{ guides: number;
   const [retainedSet, holds] = await Promise.all([retainedGuideNumbers(), guideHoldDays()]);
   let guides = 0;
   let retained = 0;
+  const counted: { guideNumber: string; dispatchDay: string }[] = [];
   for (const b of batches) {
     if (!b.lot) continue;
     const warrantyGuides = warrantyGuidesOf(b.items);
     for (const g of b.guides) {
-      if (!daySet.has(guideDispatchDay(b.lot.day, b.requestedAt, g.carrier, g.guideNumber, holds))) continue;
+      const dispatchDay = guideDispatchDay(b.lot.day, b.requestedAt, g.carrier, g.guideNumber, holds);
+      if (!daySet.has(dispatchDay)) continue;
       if (isWarrantyGuide(b.lot.day, g.guideNumber, warrantyGuides)) continue;
       guides++;
-      if (retainedSet.has(g.guideNumber.trim().toUpperCase())) retained++;
+      const key = g.guideNumber.trim().toUpperCase();
+      if (retainedSet.has(key)) retained++;
+      // Retenidas (cancelación o falta de stock) tienen su propio camino: no se miran en NICK.
+      else if (!holds.has(key)) counted.push({ guideNumber: key, dispatchDay });
     }
   }
   const lots = await prisma.fulfillmentLot.findMany({
@@ -202,6 +216,7 @@ export async function computeAutoCounts(week: string): Promise<{ guides: number;
     externalSales: await countDeliveredExternalSales(days),
     retained,
     subtractOutOfStock: outOfStockSubtracted(week),
+    counted,
   };
 }
 
@@ -235,9 +250,13 @@ export async function recomputeAutoFillRate(day: string): Promise<void> {
     where: { deptId_week: { deptId: dept.id, week } },
     select: { prepared: true, generated: true },
   });
-  const prepared = existing?.prepared ?? 0;
-  const generated = existing?.generated ?? 0;
-  const nums = fillRateNumbers(await computeAutoCounts(week), prepared, generated);
+  const counts = await computeAutoCounts(week);
+  // Desde la S43 Preparadas/Generadas salen solas de NICK (pedido del usuario
+  // 2026-10-17); antes, lo que se había escrito a mano.
+  const auto = week >= NICK_FILL_RATE_FROM_WEEK ? await nickPreparedGenerated(counts.counted).catch(() => null) : null;
+  const prepared = auto ? auto.prepared : (existing?.prepared ?? 0);
+  const generated = auto ? auto.generated : (existing?.generated ?? 0);
+  const nums = fillRateNumbers(counts, prepared, generated);
   await prisma.weeklyMetricRecord.upsert({
     where: { deptId_week: { deptId: dept.id, week } },
     update: { ...nums, prepared, generated },
