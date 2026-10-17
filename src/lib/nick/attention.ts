@@ -87,10 +87,11 @@ export async function getNickAttention(now = new Date(), opts: { estimates?: boo
       statusGroup: { in: ["EN_CAMINO", "NOVEDAD"] },
       ...(opts.estimates ? {} : { statusSince: { lte: new Date(now.getTime() - NOVELTY_DAYS * 864e5) } }),
     },
-    select: { guideNumber: true, statusGroup: true, status: true, statusSince: true, firstSeenAt: true, orderCreatedAt: true },
+    select: { guideNumber: true, accountId: true, statusGroup: true, status: true, statusSince: true, firstSeenAt: true, orderCreatedAt: true },
   });
   for (const g of moving) {
-    const observed = g.statusSince.getTime() > g.firstSeenAt.getTime();
+    // Rastreo de Servientrega: la hora del último movimiento es la real.
+    const observed = g.statusSince.getTime() > g.firstSeenAt.getTime() || g.accountId === "servientrega";
     // Primero el dato real (lo que NICK vio); la estimación solo si todavía no alcanza.
     const since = observed ? "" : " desde que NICK empezó a mirar";
     if (g.statusGroup === "EN_CAMINO" && due(g.statusSince, STUCK_DAYS, now)) {

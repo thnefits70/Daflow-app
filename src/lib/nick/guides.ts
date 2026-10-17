@@ -150,7 +150,7 @@ export async function getNickGuides(f: NickGuidesFilter, opts: { isAdmin?: boole
     rows = list.map((g) => ({
       guideNumber: g.guideNumber,
       dropiOrderId: g.dropiOrderId,
-      account: accName.get(g.accountId) ?? null,
+      account: accName.get(g.accountId) ?? (g.accountId === "servientrega" ? "SERVIENTREGA (rastreo)" : null),
       carrier: g.carrier,
       city: g.city,
       status: g.status,

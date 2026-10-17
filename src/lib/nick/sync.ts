@@ -235,10 +235,20 @@ export async function runNickSyncTick({ force = false, budgetMs = 40_000 } = {})
 // por minuto en todo DAFLOW (un aviso por instancia del servidor).
 let lastBellTick = 0;
 let lastFillRateRecompute = 0;
+let lastServientregaTick = 0;
 export async function runNickSyncFromBell() {
   if (!isWithinBusinessHours()) return;
   if (Date.now() - lastBellTick < 60_000) return;
   lastBellTick = Date.now();
+  // Guías que Dropi no le muestra a NICK (garantías…): rastreo público de
+  // Servientrega, como mucho cada 5 minutos (2026-10-17). No depende de Dropi.
+  let dropiBudget = 40_000;
+  if (Date.now() - lastServientregaTick > 5 * 60_000) {
+    lastServientregaTick = Date.now();
+    dropiBudget = 25_000; // la campanita tiene 60 s en total
+    const { runServientregaTick } = await import("@/lib/nick/servientrega");
+    await runServientregaTick({ budgetMs: 15_000 }).catch(() => null);
+  }
   if (await isDropiMarkedDown()) return;
   const pending = await prisma.nickDropiAccount.count({
     where: {
@@ -247,7 +257,7 @@ export async function runNickSyncFromBell() {
       OR: [{ syncDay: { not: null } }, { lastSyncAt: null }, { lastSyncAt: { lt: new Date(Date.now() - NICK_SYNC_EVERY_MS) } }],
     },
   });
-  if (pending) await runNickSyncTick({ budgetMs: 40_000 });
+  if (pending) await runNickSyncTick({ budgetMs: dropiBudget });
   // Etapa 3: marcador del día para la tendencia (como mucho cada 3 horas).
   const { saveNickScoreDay } = await import("@/lib/nick/score");
   await saveNickScoreDay().catch(() => null);
