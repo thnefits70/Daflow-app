@@ -220,9 +220,12 @@ function Attachment({ id, kind }: { id: string; kind: string }) {
 
 export function PvxChat({
   registered,
+  name = null,
   onRegistered,
 }: {
   registered: boolean;
+  // Nombre del registrado (2026-10-17): el saludo lo usa.
+  name?: string | null;
   // Ya no se usa desde el chat (el registro es dentro del chat, 2026-10-17).
   onRegister?: () => void;
   // Se registró desde el chat: la página lo marca como registrado.
@@ -577,7 +580,7 @@ export function PvxChat({
               <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[14.5px] leading-relaxed">
                 {registered ? (
                   <>
-                    ¡Hola! 👋 Soy <b>Michelle</b>, tu asistente virtual de
+                    ¡Hola{name ? `, ${name.trim().split(/s+/)[0]}` : ""}! 👋 Soy <b>Michelle</b>, tu asistente virtual de
                     Provedix 😊 Estoy aquí para ayudarte a encontrar productos
                     ganadores, ver cuánto se venden y resolver tus dudas.
                     Cuéntame, ¿en qué te ayudo hoy? 💛

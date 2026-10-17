@@ -1436,6 +1436,7 @@ export function PvxCatalog({
       {/* Michelle, asistente virtual (2026-10-15). Registrarse desde el chat abre el mismo registro, sin producto. */}
       <PvxChat
         registered={registered === true}
+        name={name}
         onRegistered={(n) => {
           setRegistered(true);
           setName(n);

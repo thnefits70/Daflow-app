@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ProvedixChatRow } from "@/lib/provedixTraffic";
+import { ChatMessageView } from "@/components/provedix/ChatMessageView";
 
 // Conversaciones con Michelle, la asistente virtual de provedix.com
 // (2026-10-15) — SOLO el admin. Sirve para ver qué preguntan los
@@ -20,14 +21,6 @@ function when(iso: string) {
   });
 }
 
-const tidy = (t: string) =>
-  t
-    .replace(/\[\[ASESORA(:([A-Z0-9-]+))?\]\]/g, (_m, _c, code) => `→ pasó a Michelle (asesora)${code ? ` · caso ${code}` : ""}`)
-    .replace("[[BLOQUEAR]]", "→ cerró el chat")
-    .replace("[[SOSPECHA]]", "→ ⚠️ le pareció raro")
-    .replace(/\[\[FOTO:\w+\]\]/g, "[📸 foto de la guía retenida]")
-    .replace(/\[\[(DROPI|CREATIVOS|LANDING|CALC|FICHA):(\d+)\]\]/g, "[botón $1 · $2]")
-    .replace(/\[\[IR:([a-z-]+)\]\]/g, "[botón ir a $1]");
 
 const SYSTEM_ICON: Record<string, string> = {
   blocked: "🔒",
@@ -78,10 +71,10 @@ function Conversation({ chatId }: { chatId: string }) {
             <div
               className={`text-[10.5px] mb-0.5 ${m.role === "user" ? "text-bg opacity-70" : "text-steel"}`}
             >
-              {m.role === "user" ? "Dropshipper" : "Michelle (IA)"} ·{" "}
+              {m.role === "user" ? "Dropshipper" : m.content.startsWith("[[EQUIPO:") ? "Equipo" : "Michelle (IA)"} ·{" "}
               {when(m.at)}
             </div>
-            {tidy(m.content)}
+            <ChatMessageView content={m.content} dark={m.role === "user"} />
           </div>
         ),
       )}

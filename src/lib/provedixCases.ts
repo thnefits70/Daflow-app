@@ -193,18 +193,8 @@ export async function caseConversation(caseId: string) {
   });
   return rows.map((m) => ({
     role: m.role,
-    content: m.content
-      .replace(/\[\[ASESORA(:[^\]]*)?\]\]/g, "→ pasó a la asesora")
-      .replace(/\[\[(BLOQUEAR|SOSPECHA)\]\]/g, "")
-      .replace(
-        /\[\[(DROPI|CREATIVOS|LANDING|CALC|FICHA):(\d+)\]\]/g,
-        "[botón $1 · $2]",
-      )
-      .replace(/\[\[IR:([a-z-]+)\]\]/g, "[botón ir a $1]")
-      .replace(/\[\[FOTO:\w+\]\]/g, "[📸 foto]")
-      .replace(/^\[\[EQUIPO:([^\]]+)\]\]\s*/, "($1, del equipo) ")
-      .replace(/\[\[ADJUNTO:[^\]]+\]\]/g, "")
-      .trim(),
+    // Tal cual: la pantalla lo muestra con ChatMessageView (negritas y botones como etiquetas, 2026-10-17).
+    content: m.content,
     // Respuesta escrita por la persona del equipo (no por la IA).
     team: m.content.startsWith("[[EQUIPO:"),
     // Fotos y videos que adjuntó el dropshipper (2026-10-16): se abren desde el caso.

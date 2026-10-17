@@ -413,6 +413,23 @@ ${content}`;
   }
 
   const system = await michelleSystem(!trial);
+  // Con quién habla (2026-10-17): nombre, tienda y plataforma del registro, para
+  // llamarle por su nombre y no volver a preguntar dónde vende. Son sus propios datos.
+  if (leadId) {
+    const me = await prisma.provedixLead.findUnique({ where: { id: leadId }, select: { name: true, storeName: true, platform: true } }).catch(() => null);
+    if (me) {
+      const first = me.name.trim().split(/s+/)[0] ?? "";
+      const where = me.platform === "DROPI" ? "Dropi" : me.platform === "ROCKET" ? "Rocket" : "Dropi y Rocket";
+      system.push({
+        type: "text",
+        text: `PERSONA CON LA QUE HABLAS (registrada; son sus propios datos)
+- Se llama ${first}. Su tienda: "${me.storeName ?? ""}". Vende en ${where}.
+- Llámale por su nombre con naturalidad (al saludar o de vez en cuando, no en cada mensaje).
+- ${me.platform === "AMBAS" ? "Vende en las dos: si el caso depende de la plataforma, pregunta de cuál es ese pedido." : `Ya sabes que vende en ${where}: no se lo vuelvas a preguntar.`}
+- Para verificar una guía igual pide los 3 datos (guía, tienda como remitente y cliente): es por seguridad.`,
+      });
+    }
+  }
   if (trial) system.push({ type: "text", text: `${TRIAL_RULES}\n- Preguntas gratis que le quedan después de esta: ${trialLeft - 1}.` });
   const client = getAnthropicClient();
   const params = {

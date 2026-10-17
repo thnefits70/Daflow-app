@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatDateTime } from "@/lib/formatDateTime";
+import { ChatMessageView } from "@/components/provedix/ChatMessageView";
 
 type Case = {
   id: string;
@@ -276,18 +277,7 @@ function CaseCard({
                 {m.role === "user" ? "Dropshipper" : m.team ? "Equipo" : "Michelle IA"} ·{" "}
                 {formatDateTime(m.at)}
               </div>
-              {m.content}
-              {/* Fotos y videos que adjuntó en el chat (2026-10-16). */}
-              {m.attachments?.map((a) =>
-                a.kind === "video" ? (
-                  <video key={a.id} src={`/api/provedix/cases/file/${a.id}`} controls preload="metadata" className="mt-1 max-h-64 w-full rounded-md" />
-                ) : (
-                  <a key={a.id} href={`/api/provedix/cases/file/${a.id}`} target="_blank" rel="noopener noreferrer" className="mt-1 block">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`/api/provedix/cases/file/${a.id}`} alt="Foto que adjuntó el dropshipper" className="max-h-64 rounded-md" loading="lazy" />
-                  </a>
-                ),
-              )}
+              <ChatMessageView content={m.content} dark={m.role === "user"} />
             </div>
           ))}
         </div>
