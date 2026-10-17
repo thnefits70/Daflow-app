@@ -166,18 +166,20 @@ export function NickGuides({ isAdmin = false }: { isAdmin?: boolean }) {
         </div>
       )}
 
-      {isAdmin && (
+      {(
         <div className="rounded-lg border border-amber/40 bg-amber/5 p-3 mb-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
             <div className="font-mono text-[10.5px] tracking-[.14em] uppercase text-amber">
               Requiere atención
             </div>
             <div className="text-[10.5px] text-steel">
-              Solo lo ves tú: nadie más lo ve y no se envía ningún aviso.
+              {isAdmin
+                ? "«Salió en Dropi sin corte» la ve también Daniel; las demás solo tú, sin avisos."
+                : "Guías que la transportadora ya tiene en Dropi pero no vinieron en ningún PDF: sube el PDF que faltó."}
             </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-            {NICK_ATTENTION.map((a) => {
+          <div className={`grid gap-2 ${isAdmin ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"}`}>
+            {NICK_ATTENTION.filter((a) => isAdmin || a.team).map((a) => {
               const n = data?.attentionCounts?.[a.key] ?? 0;
               const active = attention === a.key;
               return (

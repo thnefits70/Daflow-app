@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { addBusinessDays } from "@/lib/businessHours";
+import { nextWorkingDay } from "@/lib/ecuadorHolidays";
+import { ecuadorDay } from "@/lib/fulfillmentGuides";
+import { statusGroup } from "@/lib/nick/sync";
 
 // NICK Etapa 2 (aprobada 2026-10-16): "Requiere atención". Pedido del
 // usuario: NO sale ningún aviso a nadie (ni Inicio, ni celular); todo se ve
@@ -24,12 +27,51 @@ const RETURN_FALLBACK_DAYS = 15;
 // fecha de la orden: 7+ días laborables. SOLO lo ve el admin; nadie más ni avisos.
 const ESTIMATE_DAYS = 7;
 
+// 0. "Salió en Dropi sin corte" (pedido del usuario 2026-10-17): la
+// transportadora ya tiene la guía en Dropi (en camino, novedad, entregada o
+// devolución) pero no vino en ningún PDF de corte, así que no descontó stock
+// ni cuenta en Fill Rate, Pedidos despachados ni Reingresos. Plazo: hasta el
+// siguiente día de trabajo a las 17:00 (sábado 12:30) desde que NICK la vio
+// con la transportadora. Solo órdenes desde el 21/09 (primer corte con guías).
+const NO_CORTE_FROM = new Date("2026-09-21T05:00:00Z");
+// Guías que el usuario decidió dejar fuera (2026-10-17: 189959968).
+export const NICK_NO_CORTE_OMITTED = ["189959968"];
+const CARRIER_GROUPS = ["EN_CAMINO", "NOVEDAD", "ENTREGADA", "DEVOLUCION"];
+
+export async function getNickNoCorte(now = new Date()): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const rows = await prisma.$queryRaw<{ guideNumber: string; status: string; firstSeenAt: Date }[]>`
+    SELECT s."guideNumber", s."status", s."firstSeenAt"
+    FROM "NickGuideStatus" s
+    WHERE s."statusGroup" = ANY(${CARRIER_GROUPS}) AND s."orderCreatedAt" >= ${NO_CORTE_FROM}
+      AND NOT (s."guideNumber" = ANY(${NICK_NO_CORTE_OMITTED}))
+      AND NOT EXISTS (SELECT 1 FROM "FulfillmentRequestGuide" g WHERE upper(replace(g."guideNumber", ' ', '')) = s."guideNumber")`;
+  if (!rows.length) return out;
+  const changes = await prisma.nickGuideStatusChange.findMany({
+    where: { guideNumber: { in: rows.map((r) => r.guideNumber) } },
+    orderBy: { at: "asc" },
+    select: { guideNumber: true, toStatus: true, at: true },
+  });
+  // Primera vez que NICK la vio ya con la transportadora.
+  const withCarrier = new Map<string, Date>();
+  for (const c of changes) if (!withCarrier.has(c.guideNumber) && CARRIER_GROUPS.includes(statusGroup(c.toStatus))) withCarrier.set(c.guideNumber, c.at);
+  for (const r of rows) {
+    const since = withCarrier.get(r.guideNumber) ?? r.firstSeenAt;
+    const day = nextWorkingDay(ecuadorDay(since));
+    const saturday = new Date(`${day}T12:00:00Z`).getUTCDay() === 6;
+    const limit = new Date(`${day}T${saturday ? "12:30" : "17:00"}:00-05:00`);
+    if (limit.getTime() <= now.getTime()) out.set(r.guideNumber, `Con la transportadora desde el ${ecuadorDay(since)} («${r.status}») y no está en ningún corte`);
+  }
+  return out;
+}
+
 const due = (since: Date, days: number, now: Date) => addBusinessDays(since, days).getTime() <= now.getTime();
 const daysAgo = (d: Date, now: Date) => Math.max(0, Math.floor((now.getTime() - d.getTime()) / 864e5));
 
 // Devuelve, por cada lista, las guías que entran y el motivo en palabras.
 export async function getNickAttention(now = new Date(), opts: { estimates?: boolean } = {}): Promise<Record<NickAttentionKey, Map<string, string>>> {
   const out: Record<NickAttentionKey, Map<string, string>> = {
+    SIN_CORTE: await getNickNoCorte(now),
     ESTANCADA: new Map(),
     NOVEDAD_ABIERTA: new Map(),
     DEVOLUCION_NO_LLEGO: new Map(),

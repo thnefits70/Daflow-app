@@ -47,6 +47,7 @@ import { getArrangementAdminPendingItems, getArrangementPendingItems } from "@/l
 import { getRocketWarrantyPendingItems } from "@/lib/rocketWarranty";
 import { getPrivatizationPendingItems } from "@/lib/privatizations";
 import { getWarrantyDispatchPendingItems } from "@/lib/warrantyDispatch";
+import { getNickNoCorte } from "@/lib/nick/attention";
 import { getDropiOutagePendingItem, getIdDeadlinePendingItem, getPendingIdExtensions, getReleaseDeadlineItems, timeLeftText } from "@/lib/handoffLocks";
 import { formatPurchaseRequestCode } from "@/lib/purchaseCode";
 
@@ -542,6 +543,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   garantias_despachar_tomar: "Garantías por despachar — sin tomar",
   garantias_despachar_corte: "Garantías anotadas — falta subir su corte",
   garantias_despachar_revisar: "Garantías por despachar — por revisar",
+  nick_sin_corte: "Guías que salieron en Dropi sin PDF de corte",
   garantia_local_resultado: "Tus garantías locales — confirmar si se entregaron",
   manifiestos_tras_feriado: "Manifiestos pendientes después de domingo o feriado",
   catalogo_posibles_duplicados: "Posibles productos duplicados por revisar",
@@ -4598,6 +4600,20 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     if (negativeStockItem) items.unshift(negativeStockItem);
     const manifestCatchUpItem = await getManifestCatchUpPendingItem("/area/workspace?tab=egresos&otab=solicitud");
     if (manifestCatchUpItem) items.unshift(manifestCatchUpItem);
+    // Pedido del usuario 2026-10-17: NICK encontró guías que la transportadora
+    // ya tiene en Dropi pero no vinieron en ningún PDF de corte (no descontaron
+    // stock ni cuentan en Fill Rate). Daniel sube el PDF que faltó.
+    const noCorte = await getNickNoCorte().catch(() => new Map<string, string>());
+    if (noCorte.size > 0) {
+      items.unshift({
+        type: "nick_sin_corte",
+        icon: "📄",
+        label: "Guías que salieron en Dropi sin PDF de corte",
+        meta: `${noCorte.size === 1 ? "1 guía" : `${noCorte.size} guías`}: sube el PDF del corte que faltó (míralas en NICK)`,
+        overdue: true,
+        href: "/area/nick",
+      });
+    }
     // Pedido del usuario 2026-10-02: Daniel decide él mismo los posibles
     // productos duplicados (juntar o "no son el mismo").
     const duplicates = await findDuplicateCandidates().catch(() => []);
@@ -4830,7 +4846,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.leadsDept.trackWeeklyMetric) types.push("pedidos_despachados", "fillrate_justificacion_pendiente");
     if (me.leadsDept.code === "INV") {
-      types.push("compras_recepcion", "compras_cambios_verificar", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "variantes_guias_unir", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "conteo_inventario", "stock_negativo", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "arreglo_generar_guia", "garantias_despachar_corte", "garantias_despachar_revisar");
+      types.push("compras_recepcion", "compras_cambios_verificar", "reingreso_mercaderia_revision", "compras_personales_confirmar", "compras_reclamo_posterior_revision", "combo_sugerencias_nicho_backfill", "egresos_deterioro_resolucion", "lotes_caducidad_alerta", "variantes_guias_unir", "ids_sin_marca", "productos_sin_area", "ventas_externas_agrupar", "ventas_externas_embalar", "garantia_local_recogida", "manifiestos_tras_feriado", "catalogo_posibles_duplicados", "conteo_inventario", "stock_negativo", "compras_excedente_kardex", "danados_doble_registro", "fulfillment_corte_enviado", "arreglo_generar_guia", "garantias_despachar_corte", "garantias_despachar_revisar", "nick_sin_corte");
     }
     // Mismo criterio de elegibilidad que canSubmitPurchaseRequests
     // (guards.ts) — delegado vía canManagePurchases, o líder de COM/FIN —

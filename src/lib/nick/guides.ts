@@ -2,7 +2,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { ecuadorDay } from "@/lib/fulfillmentGuides";
 import type { NickGroup } from "@/lib/nick/sync";
-import { NICK_ATTENTION, getNickAttention, type NickAttentionKey } from "@/lib/nick/attention";
+import { NICK_ATTENTION, getNickAttention, getNickNoCorte, type NickAttentionKey } from "@/lib/nick/attention";
 
 // Pantalla "Guías" de NICK: las guías de Dropi de los últimos 45 días con su
 // estado, más las guías de los cortes que NICK no encontró en ninguna cuenta.
@@ -82,8 +82,12 @@ export async function getNickGuides(f: NickGuidesFilter, opts: { isAdmin?: boole
   };
   const grouped = await prisma.nickGuideStatus.groupBy({ by: ["statusGroup"], where, _count: true });
   // Pedido del usuario 2026-10-16: "Requiere atención" lo ve SOLO el admin
-  // mientras él hace sus pruebas; a los demás ni se les calcula.
-  const attention = opts.isAdmin ? await getNickAttention(new Date(), { estimates: true }) : null;
+  // mientras él hace sus pruebas. Excepción (2026-10-17): "Salió en Dropi sin
+  // corte" también la ve quien tiene NICK (Daniel), para subir el PDF que faltó.
+  const attention = opts.isAdmin
+    ? await getNickAttention(new Date(), { estimates: true })
+    : (Object.fromEntries(NICK_ATTENTION.map((a) => [a.key, new Map<string, string>()])) as Record<NickAttentionKey, Map<string, string>>);
+  if (!opts.isAdmin) attention.SIN_CORTE = await getNickNoCorte();
   const attentionCounts = {} as Record<NickAttentionKey, number>;
   for (const a of NICK_ATTENTION) {
     const set = attention ? [...attention[a.key].keys()] : [];
