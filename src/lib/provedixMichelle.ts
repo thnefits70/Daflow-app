@@ -2,6 +2,8 @@ import { unstable_cache } from "next/cache";
 import type { SnapshotProduct } from "@/lib/provedixSnapshot";
 import { getSheetProducts, type SheetProduct } from "@/lib/provedixSheets";
 import { getActiveAnswers } from "@/lib/provedixCases";
+import { prisma } from "@/lib/prisma";
+import { getVariantStock } from "@/lib/variantStock";
 import { getPublicProductsFull, getPublicStats, PROVEDIX_SNAPSHOT_TAG, PROVEDIX_STOCK_TAG } from "@/lib/provedixPublic";
 
 // Michelle, la asistente virtual de provedix.com (pedido del usuario
@@ -59,6 +61,8 @@ PRECIO EN DROPI Y BOTONES
   [[CALC:ID]] → abre la calculadora de ganancia de la página con ese producto. Úsalo cuando pregunten a cuánto venderlo, cuánto ganarían, si es rentable o cuánto pueden pagar de publicidad (CPA). Explica en 1–2 líneas que ahí ponen el precio en Dropi, su flete (promedio $7) y su CPA (promedio $4–5) y les dice el precio recomendado y el CPA máximo. Puedes mencionar a qué precio se vende al público, pero no calcules tú el precio en Dropi ni la ganancia.
   [[FICHA:ID]] → abre la ficha completa del producto en la página (ventas por día, ciudades, compradores, combos; si no está registrado le pide registrarse). Úsalo cuando quiera ver más de un producto.
   [[IR:cortes]] → la sección de cortes en vivo (próximo corte y cuenta regresiva). [[IR:recursos]] → creativos gratis, rastreo de guías por transportadora, garantías y buenas prácticas. [[IR:calculadora]] → la calculadora sin producto. [[IR:productos]] → el catálogo con buscador y filtros. [[IR:como-funciona]] → cómo funciona Provedix en pasos. [[IR:preguntas]] → las preguntas frecuentes (costos, stock mínimo, cortes, cancelar guías, garantías, tiempos de respuesta).
+- TODO FÁCIL, A UN CLIC (regla del dueño, 2026-10-17): Michelle IA es para que el dropshipper venda de una vez nuestros productos. NUNCA le mandes a buscar nada (ni en hojas, ni en Dropi, ni con Ctrl + F, ni "revisa en la página"): dale SIEMPRE el botón directo a lo que necesita, dentro de lo permitido. Producto en Dropi (colores, tallas, stock real, precio) → [[DROPI:ID]]; fotos y videos → [[CREATIVOS:ID]]; datos de venta → [[FICHA:ID]]; ganancia → [[CALC:ID]]; partes de la página → [[IR:…]]; rastreo → el enlace de la transportadora. Explica en una frase qué va a ver al tocarlo.
+- COLORES Y TALLAS: si el producto trae "colores/tallas con stock", dilos (sin cantidades). Si no los trae, NO pases el caso al equipo: dale [[DROPI:ID]] y dile que ahí ve los colores o tallas con su stock real y que elige el que necesita al crear el pedido en Dropi.
 - HERRAMIENTAS DE LA PÁGINA: guía al dropshipper con ellas en vez de solo explicar. Ejemplos: si pregunta a qué hora sale su pedido → explica y pon [[IR:cortes]]; si quiere rastrear → [[IR:recursos]]; si duda del precio o de la ganancia → [[CALC:ID]]; si quiere conocer un producto a fondo → [[FICHA:ID]]. También existe el botón "?" (guía de la página) abajo a la izquierda.
 - Como mucho 4 botones por mensaje.
 
@@ -146,7 +150,7 @@ function sheetBits(x: SheetProduct | undefined): string[] {
   return [x.top10 ? "⭐ TOP 10 de esta semana" : null, x.creatives ? "creativos: sí" : null, x.landing ? "landing: sí" : null, x.description ? `para vender: ${x.description.slice(0, 180)}` : null].filter((b): b is string => !!b);
 }
 
-function productLine(p: SnapshotProduct, full: boolean, sheet?: SheetProduct): string {
+function productLine(p: SnapshotProduct, full: boolean, sheet?: SheetProduct, variants?: string[]): string {
   const brand = p.brand === "MKT_DAMIAN" ? "Importadora Damián" : "Provedix";
   const parts = [
     `ID ${p.code}`,
@@ -158,6 +162,8 @@ function productLine(p: SnapshotProduct, full: boolean, sheet?: SheetProduct): s
     `stock: ${stockText(p.stock)}`,
   ];
   if ((p.rocketSkus ?? []).length) parts.push(`SKU Rocket: ${p.rocketSkus!.join(", ")}`);
+  // Colores/tallas con stock según INVESTOCK (2026-10-17): solo nombres, nunca cantidades.
+  if (variants?.length) parts.push(`colores/tallas con stock: ${variants.join(", ")}`);
   if (full) {
     const o = p.offers[0];
     if (o) parts.push(`precio más común al público: ${money(o.price)}${o.units > 1 ? ` por ${o.units} unidades` : ""}`);
@@ -181,8 +187,25 @@ function productLine(p: SnapshotProduct, full: boolean, sheet?: SheetProduct): s
 
 // Texto con los datos (se arma como mucho cada 10 minutos y se reutiliza —
 // también sirve para el ahorro de caché de la IA, que necesita que sea igual).
+// Colores/tallas que tienen stock en INVESTOCK, por ID de Dropi (2026-10-17).
+// "Sin talla" / "Sin identificar" no son colores: no se dicen.
+async function variantNamesWithStock(codes: string[]): Promise<Map<string, string[]>> {
+  const items = await prisma.purchaseCatalogItem.findMany({
+    where: { justCode: { in: codes }, bodega: { in: ["MKT_PROVEDIX", "MKT_DAMIAN"] } },
+    select: { id: true, justCode: true },
+  });
+  const stock = await getVariantStock(items.map((i) => i.id));
+  const out = new Map<string, string[]>();
+  for (const i of items) {
+    const names = (stock.get(i.id)?.variants ?? []).filter((v) => v.stock > 0 && !/^sin (talla|identificar)/i.test(v.name)).map((v) => v.name);
+    if (names.length && i.justCode) out.set(i.justCode, names);
+  }
+  return out;
+}
+
 async function buildKnowledge(full: boolean): Promise<string> {
   const [products, stats, sheet] = await Promise.all([getPublicProductsFull(), getPublicStats(), getSheetProducts().catch(() => [] as SheetProduct[])]);
+  const variantsByCode = await variantNamesWithStock(products.map((p) => p.code)).catch(() => new Map<string, string[]>());
   const bySheet = new Map(sheet.map((x) => [x.code, x]));
   const inSnapshot = new Set(products.map((p) => p.code));
   // Productos del catálogo de las hojas que todavía no tienen ventas en el resumen.
@@ -202,7 +225,7 @@ ${BUSINESS_FACTS}
 RESUMEN: ${summary}.
 
 PRODUCTOS (ordenados por ventas de los últimos 30 días; ventas siempre en rangos):
-${products.map((p) => productLine(p, full, bySheet.get(p.code))).join("\n")}
+${products.map((p) => productLine(p, full, bySheet.get(p.code), variantsByCode.get(p.code))).join("\n")}
 
 OTROS PRODUCTOS DEL CATÁLOGO (sin datos de ventas todavía; puedes ofrecerlos y dar sus creativos):
 ${catalogOnly.map((x) => `- ID ${x.code} | ${x.name} | ${sheetBits({ ...x, description: x.top10 ? x.description : null }).join(" | ")}`).join("\n")}`;
