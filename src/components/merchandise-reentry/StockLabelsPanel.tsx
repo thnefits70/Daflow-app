@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import QRCode from "qrcode";
-import { Search, Printer, CheckCheck } from "lucide-react";
+import { Search, Printer } from "lucide-react";
 import type { StockLabelPrintSummary } from "@/app/api/stock-label-prints/route";
 import { useRememberedState } from "@/lib/rememberedState";
 
@@ -26,7 +26,7 @@ export function StockLabelsPanel() {
   // aún no tienen etiqueta (arriba). "Imprimir" pregunta antes, porque cada
   // confirmación cuenta aunque luego se cancele la impresora.
   const [prints, setPrints] = useState<StockLabelPrintSummary>({});
-  const [confirming, setConfirming] = useState<"print" | "manual" | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -42,20 +42,19 @@ export function StockLabelsPanel() {
   const printed = matches.filter(isPrinted);
   const filtered = [...notPrinted, ...printed];
 
-  async function register(manual: boolean) {
+  async function register() {
     setSaving(true);
     setError(null);
     try {
       const res = await fetch("/api/stock-label-prints", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ catalogItemIds: [...selected], manual }),
+        body: JSON.stringify({ catalogItemIds: [...selected] }),
       });
       if (!res.ok) throw new Error();
       setPrints(await fetch("/api/stock-label-prints").then((r) => (r.ok ? r.json() : prints)));
-      setConfirming(null);
-      if (manual) setSelected(new Set());
-      else window.print();
+      setConfirming(false);
+      window.print();
     } catch {
       setError("No se pudo guardar. Intenta de nuevo.");
     } finally {
@@ -116,34 +115,17 @@ export function StockLabelsPanel() {
           type="button"
           disabled={selected.size === 0}
           className="flex items-center gap-1.5 rounded border border-blue bg-blue px-3.5 py-1.5 text-[12.5px] font-semibold text-white cursor-pointer disabled:opacity-60"
-          onClick={() => setConfirming("print")}
+          onClick={() => setConfirming(true)}
         >
           <Printer size={13} /> Imprimir ({selected.size})
         </button>
-      </div>
-
-      {/* Botón momentáneo (pedido de Daniel 2026-10-02): marcar las etiquetas
-          que ya imprimió antes de este registro. Él avisa cuando ya no lo
-          necesite, para quitarlo. */}
-      <div className="flex flex-wrap items-center gap-2 mb-3 print:hidden">
-        <button
-          type="button"
-          disabled={selected.size === 0}
-          className="flex items-center gap-1.5 rounded border border-rule px-3 py-1.5 text-[12px] font-semibold text-ink cursor-pointer disabled:opacity-60"
-          onClick={() => setConfirming("manual")}
-        >
-          <CheckCheck size={13} /> Ya los tengo impresos ({selected.size})
-        </button>
-        <span className="text-[11.5px] text-steel">Marca los que ya están pegados en percha, sin imprimirlos de nuevo.</span>
       </div>
 
       {confirming && (
         <div className="mb-3 rounded-md border border-amber-500/60 bg-amber-500/10 px-3 py-2.5 text-[12.5px] print:hidden">
           <div className="font-semibold text-ink mb-1">¿Estás seguro?</div>
           <div className="text-steel mb-2">
-            {confirming === "print"
-              ? `Se van a imprimir ${selected.size} etiqueta(s) y quedarán contadas como impresas (aunque después canceles la impresora).`
-              : `Se van a marcar ${selected.size} producto(s) como "ya impresos antes". No se imprime nada.`}
+            {`Se van a imprimir ${selected.size} etiqueta(s) y quedarán contadas como impresas (aunque después canceles la impresora).`}
           </div>
           {error && <div className="text-red-500 mb-2">{error}</div>}
           <div className="flex gap-2">
@@ -151,16 +133,16 @@ export function StockLabelsPanel() {
               type="button"
               disabled={saving}
               className="rounded border border-blue bg-blue px-3 py-1 text-[12px] font-semibold text-white cursor-pointer disabled:opacity-60"
-              onClick={() => register(confirming === "manual")}
+              onClick={register}
             >
-              {saving ? "Guardando…" : confirming === "print" ? "Sí, imprimir" : "Sí, marcar"}
+              {saving ? "Guardando…" : "Sí, imprimir"}
             </button>
             <button
               type="button"
               disabled={saving}
               className="rounded border border-rule px-3 py-1 text-[12px] font-semibold text-ink cursor-pointer"
               onClick={() => {
-                setConfirming(null);
+                setConfirming(false);
                 setError(null);
               }}
             >
