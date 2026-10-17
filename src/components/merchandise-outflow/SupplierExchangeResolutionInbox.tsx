@@ -118,7 +118,7 @@ function ReplacementArrivalForm({ item, onDone }: { item: ItemDTO; onDone: () =>
   if (!open) {
     return (
       <button type="button" className="mt-1.5 self-start inline-flex items-center gap-1.5 rounded border border-teal bg-teal px-3 py-1.5 text-[11.5px] font-bold text-navy cursor-pointer" onClick={() => setOpen(true)}>
-        <PackageCheck size={13} /> Llegó el reemplazo
+        <PackageCheck size={13} /> {item.resolution === null ? "Llegó del proveedor" : "Llegó el reemplazo"}
       </button>
     );
   }
@@ -152,13 +152,16 @@ function ReplacementArrivalForm({ item, onDone }: { item: ItemDTO; onDone: () =>
         />
       ) : photos.length < 4 ? (
         <button type="button" className="self-start inline-flex items-center gap-1.5 rounded border border-rule px-3 py-1.5 text-[11.5px] font-semibold cursor-pointer" onClick={() => setTaking(true)}>
-          <Camera size={12} /> {photos.length === 0 ? "Tomar foto del reemplazo" : "Otra foto"}
+          <Camera size={12} /> {photos.length === 0 ? "Tomar foto de lo que llegó" : "Otra foto"}
         </button>
       ) : null}
       {partial && (
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Llegaron menos: ¿qué dijo el proveedor del resto?" className="w-full rounded border border-rule bg-transparent px-2 py-1 text-[11px] resize-none" />
       )}
-      <div className="text-[10.5px] text-steel">Cuenta solo las que llegaron en buen estado. Al confirmar, esas unidades se suman al stock.</div>
+      <div className="text-[10.5px] text-steel">
+        Cuenta solo las que llegaron en buen estado. Al confirmar, esas unidades se suman al stock
+        {item.resolution === null ? " y se le avisa al responsable de Compras — ya no se pueden cobrar como crédito." : "."}
+      </div>
       <div className="flex gap-1.5">
         <button
           type="button"
@@ -318,10 +321,16 @@ export function SupplierExchangeResolutionInbox({
   // así la baja financiera y la revisión del admin se ven igual en
   // los dos lugares, sin duplicar el JSX.
   function renderDetail(item: ItemDTO) {
+    // Pedido de Daniel 2026-10-17: la llegada física se confirma por
+    // producto también mientras Compras no decide (cambio/crédito/rechazo).
     if (item.resolution === null) {
       return (
-        <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-steel">
-          <Clock size={12} /> Pendiente — responsable: {item.gestorName ?? "sin asignar"}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-steel">
+            <Clock size={12} /> Pendiente — responsable: {item.gestorName ?? "sin asignar"}
+          </div>
+          {renderReceipts(item)}
+          {!item.replacementReceivedAt && canConfirmReplacementArrival && <ReplacementArrivalForm item={item} onDone={load} />}
         </div>
       );
     }
@@ -331,20 +340,7 @@ export function SupplierExchangeResolutionInbox({
           <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-green">
             <CheckCircle2 size={12} /> El proveedor aceptó cambiar el producto — registrado por {item.resolvedBy?.name ?? "—"}{item.resolvedAt ? ` · ${formatDateTime(item.resolvedAt)}` : ""}
           </div>
-          {item.replacementReceipts.map((r) => (
-            <div key={r.id} className="text-[11px]">
-              <span className="text-green font-semibold">✓ Llegaron {r.quantity} un. en buen estado</span> — confirmado por {r.receivedBy?.name ?? "—"} · {formatDateTime(r.receivedAt)}
-              {r.note && <span className="text-steel"> — &quot;{r.note}&quot;</span>}
-              <div className="flex gap-1 mt-1">
-                {r.photoUrls.map((u) => (
-                  <a key={u} href={u} target="_blank" rel="noreferrer">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img loading="lazy" decoding="async" src={u} alt="Reemplazo recibido" className="w-12 h-12 object-cover rounded border border-rule" />
-                  </a>
-                ))}
-              </div>
-            </div>
-          ))}
+          {renderReceipts(item)}
           {!item.replacementReceivedAt && (
             <>
               <div className="flex items-center gap-1.5 text-[11.5px] font-semibold" style={{ color: "var(--color-gold)" }}>
@@ -360,6 +356,32 @@ export function SupplierExchangeResolutionInbox({
         </div>
       );
     }
+    return renderResolvedOther(item);
+  }
+
+  // Historial de llegadas físicas: quién, cuándo, cuántas y la foto.
+  function renderReceipts(item: ItemDTO) {
+    return (
+      <>
+          {item.replacementReceipts.map((r) => (
+            <div key={r.id} className="text-[11px]">
+              <span className="text-green font-semibold">✓ Llegaron {r.quantity} un. en buen estado</span> — confirmado por {r.receivedBy?.name ?? "—"} · {formatDateTime(r.receivedAt)}
+              {r.note && <span className="text-steel"> — &quot;{r.note}&quot;</span>}
+              <div className="flex gap-1 mt-1">
+                {r.photoUrls.map((u) => (
+                  <a key={u} href={u} target="_blank" rel="noreferrer">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img loading="lazy" decoding="async" src={u} alt="Reemplazo recibido" className="w-12 h-12 object-cover rounded border border-rule" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          ))}
+      </>
+    );
+  }
+
+  function renderResolvedOther(item: ItemDTO) {
     if (item.resolution === "CREDIT_ISSUED") {
       return (
         <div className="flex flex-col gap-1">
@@ -456,6 +478,9 @@ export function SupplierExchangeResolutionInbox({
 
   const pendingItems = items.filter((i) => !isFullyClosed(i));
   const pendingGroups = groupByBatch(pendingItems);
+  // Pedido de Daniel 2026-10-17: lo que todavía tiene que regresar
+  // físicamente (Compras aún no decide, o ya aceptó cambio). Sin montos.
+  const toReceive = pendingItems.filter((i) => (i.resolution === null || i.resolution === "REPLACED") && !i.replacementReceivedAt);
 
   return (
     <div className="flex flex-col gap-4 max-w-lg">
@@ -475,6 +500,27 @@ export function SupplierExchangeResolutionInbox({
       )}
 
       {error && <div className="text-red text-[12px]">{error}</div>}
+
+      {toReceive.length > 0 && (
+        <div className="bg-surface border border-rule rounded-md p-3 flex flex-col gap-1.5">
+          <div className="flex items-center gap-1.5 text-[12px] font-bold">
+            <PackageCheck size={13} className="text-teal" /> Por recibir del proveedor ({toReceive.length})
+          </div>
+          <div className="text-[10.5px] text-steel">Lo que todavía tiene que regresar a bodega. Confírmalo abajo, en cada producto, cuando llegue.</div>
+          {toReceive.map((i) => {
+            const got = receivedQty(i);
+            return (
+              <div key={i.id} className="flex items-center gap-2 text-[11.5px] border-t border-rule pt-1.5">
+                <span className="font-mono text-[10px] font-bold text-teal shrink-0">{i.batch.code}</span>
+                <ExpandableName text={itemName(i)} className="flex-1 min-w-0 font-semibold" />
+                <span className="text-steel shrink-0">
+                  enviadas {i.quantity} · llegaron {got} · <span className="font-bold" style={{ color: "var(--color-gold)" }}>faltan {i.quantity - got}</span>
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {pendingGroups.length === 0 ? (
         <div className="text-[12.5px] text-steel">Todo gestionado — no hay nada pendiente ahora mismo.</div>

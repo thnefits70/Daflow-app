@@ -56,6 +56,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       batch: { select: { reason: true, supplierId: true, submittedAt: true, code: true, supplier: { select: { name: true } } } },
       catalogItem: { select: { name: true } },
       linkedPurchaseRequest: { select: { requestedById: true } },
+      replacementReceipts: { select: { quantity: true } },
     },
   });
   if (!item) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
@@ -73,6 +74,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (resolveQty > item.quantity) return NextResponse.json({ error: "La cantidad no puede ser mayor a la que queda pendiente." }, { status: 400 });
   const isPartial = resolveQty < item.quantity;
   const remainingQty = item.quantity - resolveQty;
+  // Pedido de Daniel 2026-10-17: lo que ya regresó físicamente a bodega
+  // (replacement-received antes de esta decisión) cuenta como cambio — nunca
+  // se puede cobrar como crédito ni dar por perdido.
+  const returnedQty = item.replacementReceipts.reduce((s, r) => s + r.quantity, 0);
+  if (returnedQty > 0) {
+    if (parsed.data.resolution === "REPLACED" && resolveQty < returnedQty) {
+      return NextResponse.json({ error: `Ya regresaron ${returnedQty} un. a bodega — el cambio tiene que incluir al menos esas.` }, { status: 400 });
+    }
+    if (parsed.data.resolution !== "REPLACED" && resolveQty > item.quantity - returnedQty) {
+      const left = item.quantity - returnedQty;
+      return NextResponse.json(
+        { error: `Ya regresaron ${returnedQty} un. a bodega — esas cuentan como cambio. ${left > 0 ? `Crédito o rechazo solo para las ${left} que no volvieron.` : "No queda nada para crédito o rechazo."}` },
+        { status: 400 }
+      );
+    }
+  }
   const proportionalCredit = (qty: number) => (item.unitCostAtExchange != null ? item.unitCostAtExchange * qty : null);
   const note = "note" in parsed.data ? parsed.data.note?.trim() || null : null;
   const now = new Date();
@@ -100,9 +117,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         },
       });
       targetId = split.id;
+      if (returnedQty > 0 && parsed.data.resolution === "REPLACED") {
+        // Las llegadas ya registradas pasan a la parte que se cambia.
+        await tx.merchandiseReplacementReceipt.updateMany({ where: { outflowItemId: id }, data: { outflowItemId: targetId } });
+      }
+      const originalKeepsReturned = returnedQty > 0 && parsed.data.resolution !== "REPLACED";
       await tx.merchandiseOutflowItem.update({
         where: { id },
-        data: { quantity: remainingQty, expectedCreditAmount: proportionalCredit(remainingQty) },
+        data: {
+          quantity: remainingQty,
+          expectedCreditAmount: proportionalCredit(remainingQty),
+          replacementReceivedAt: originalKeepsReturned && returnedQty >= remainingQty ? now : null,
+        },
       });
     }
 
@@ -114,6 +140,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         resolvedAt: now,
         resolvedById: session.user.id,
         rejectionProofUrl: parsed.data.resolution === "REJECTED" ? parsed.data.proofUrl : null,
+        ...(parsed.data.resolution === "REPLACED" && returnedQty >= resolveQty ? { replacementReceivedAt: item.replacementReceivedAt ?? now } : {}),
       },
     });
 

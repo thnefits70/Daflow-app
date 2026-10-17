@@ -14,6 +14,7 @@ type ItemDTO = {
   unitCostAtExchange: number | null;
   expectedCreditAmount: number | null;
   linkedPurchaseRequest: { requestNumber: number | null; requestedAt: string } | null;
+  replacementReceipts?: { quantity: number }[];
   batch: { id: string; code: string; createdAt: string; documentPhotoUrls: string[]; supplier: { id: string; name: string } | null };
 };
 
@@ -242,6 +243,14 @@ export function SupplierExchangeMyResolutions() {
                       <ExpandableName text={itemName(item)} />
                     </div>
                     <div className="text-[11px] text-steel">{item.quantity} un.</div>
+                    {(() => {
+                      const back = (item.replacementReceipts ?? []).reduce((s, r) => s + r.quantity, 0);
+                      return back > 0 ? (
+                        <div className="text-[10.5px] font-semibold text-green mt-0.5">
+                          📦 Ya regresaron {back} un. a bodega — esas cuentan como cambio, no como crédito.
+                        </div>
+                      ) : null;
+                    })()}
                     {item.expectedCreditAmount !== null ? (
                       <div className="text-[10.5px] text-steel mt-0.5">
                         Pagado: <span className="font-semibold text-ink">{money(item.unitCostAtExchange!)}/un.</span> · crédito estimado: <span className="font-semibold text-blue">{money(item.expectedCreditAmount)}</span>

@@ -6,6 +6,8 @@ import { getMarketingLeadId } from "@/lib/guards";
 const ITEM_INCLUDE = {
   catalogItem: { select: { name: true, photos: true, justCode: true } },
   linkedPurchaseRequest: { select: { requestNumber: true, requestedAt: true } },
+  // Pedido de Daniel 2026-10-17: lo que ya regresó a bodega antes de decidir.
+  replacementReceipts: { select: { quantity: true } },
 } as const;
 
 // Confirmado 2026-08-26, pedido explícito del usuario: "mis pendientes" de

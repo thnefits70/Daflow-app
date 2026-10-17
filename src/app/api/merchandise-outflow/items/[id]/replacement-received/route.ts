@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { canActOnDeterioro, getFinanceLeadId, getPurchaseGestionManagerIds } from "@/lib/guards";
-import { outflowItemDisplayName } from "@/lib/merchandiseOutflow";
+import { outflowItemDisplayName, resolveOutflowItemGestorId } from "@/lib/merchandiseOutflow";
 import { notifyOwner } from "@/lib/notifications";
 import { recordKardexEntry } from "@/lib/stockKardex";
 
@@ -20,6 +20,10 @@ const schema = z.object({
 // en la compra original; el proveedor no cobra el reemplazo). Puede llegar
 // en partes: si llega menos de lo acordado, avisa a Nairoby y a Jariel, y el
 // resto sigue pendiente.
+// Pedido de Daniel 2026-10-17: también mientras Compras todavía no decide
+// (resolution null) — si el proveedor ya devolvió el producto físicamente,
+// Daniel lo confirma igual (suma al Kardex) y se le avisa a quien gestiona.
+// Esas unidades ya no pueden pasar a crédito/rechazo (ver resolve-supplier).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session || !(await canActOnDeterioro())) return NextResponse.json({ error: "No autorizado." }, { status: 403 });
@@ -34,11 +38,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       batch: { select: { reason: true, submittedAt: true, code: true, supplier: { select: { name: true } } } },
       catalogItem: { select: { name: true } },
       replacementReceipts: { select: { quantity: true } },
+      linkedPurchaseRequest: { select: { requestedById: true } },
     },
   });
   if (!item) return NextResponse.json({ error: "No encontrado." }, { status: 404 });
-  if (item.batch.reason !== "CAMBIO_PROVEEDOR" || !item.batch.submittedAt || item.resolution !== "REPLACED") {
-    return NextResponse.json({ error: "Solo se registra la llegada de un cambio ya aceptado por el proveedor y enviado." }, { status: 400 });
+  if (item.batch.reason !== "CAMBIO_PROVEEDOR" || !item.batch.submittedAt || (item.resolution !== "REPLACED" && item.resolution !== null)) {
+    return NextResponse.json({ error: "Solo se registra la llegada de un producto enviado al proveedor que no pasó a crédito ni rechazo." }, { status: 400 });
   }
   if (item.replacementReceivedAt) return NextResponse.json({ error: "El reemplazo ya llegó completo." }, { status: 409 });
 
@@ -79,6 +84,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const body = `${outflowItemDisplayName(item)} (${item.batch.code}, ${item.batch.supplier?.name ?? "proveedor"}) — llegaron ${parsed.data.quantity} de ${missing}, faltan ${stillMissing}. ${note}`;
     for (const uid of new Set([financeLeadId, ...gestionIds].filter(Boolean) as string[])) {
       await notifyOwner(uid, { title: "⚠️ El reemplazo llegó incompleto", body, url: "/area/workspace?tab=egresos&otab=proveedor" }).catch(() => null);
+    }
+  }
+
+  if (item.resolution === null) {
+    const gestorId = await resolveOutflowItemGestorId(item);
+    if (gestorId) {
+      await notifyOwner(gestorId, {
+        title: "📦 El proveedor ya devolvió mercadería",
+        body: `${outflowItemDisplayName(item)} (${item.batch.code}, ${item.batch.supplier?.name ?? "proveedor"}) — regresaron ${parsed.data.quantity} un. a bodega. Esas unidades cuentan como cambio, ya no como crédito.`,
+        url: "/area/cambio-proveedor-gestiones",
+      }).catch(() => null);
     }
   }
 
