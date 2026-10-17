@@ -40,6 +40,7 @@ type PendingAdjustmentRow = {
   reason: string;
   requestedByName: string | null;
   requestedAt: string;
+  blocker: string | null;
 };
 
 // Confirmado 2026-09-16, pedido explícito del usuario: los combos de Dropi
@@ -1269,10 +1270,11 @@ export function StockLevelsPanel({
                               <span className="text-gold"> (el saldo cambió desde que pidió: tenía {a.currentQuantityAtRequest} en ese momento)</span>
                             )}
                           </div>
+                          {a.blocker && <div className="text-[11px] text-red mb-1.5">{a.blocker}</div>}
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
-                              disabled={reviewingAdjustmentId === a.id}
+                              disabled={reviewingAdjustmentId === a.id || !!a.blocker}
                               className="rounded border border-teal bg-teal px-2.5 py-1 text-[11px] font-bold text-navy cursor-pointer disabled:opacity-50"
                               onClick={() => reviewAdjustment(a.id, "approve")}
                             >

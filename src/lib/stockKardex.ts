@@ -647,6 +647,10 @@ export type PendingPhysicalCountAdjustmentRow = {
   reason: string;
   requestedByName: string | null;
   requestedAt: string;
+  // Pedido del usuario 2026-10-17 (reloj 127946: entró 1 en Reingreso dos
+  // minutos después de que Daniel pidió el ajuste): lo que hoy impide
+  // aprobarlo, para que se vea antes de pulsar Aprobar.
+  blocker: string | null;
 };
 
 export async function getPendingPhysicalCountAdjustments(): Promise<PendingPhysicalCountAdjustmentRow[]> {
@@ -669,6 +673,7 @@ export async function getPendingPhysicalCountAdjustments(): Promise<PendingPhysi
       reason: r.reason,
       requestedByName: r.requestedBy?.name ?? null,
       requestedAt: r.requestedAt.toISOString(),
+      blocker: await pendingKardexBlocker(r.catalogItemId),
     });
   }
   return results;
