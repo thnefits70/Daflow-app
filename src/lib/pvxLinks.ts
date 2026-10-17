@@ -5,6 +5,9 @@
 // provedix.com y los recursos de rastreo usan esta misma lista.
 
 export const PVX_LINKS = {
+  // Catálogos oficiales en Dropi (pasados por el usuario 2026-10-17).
+  "dropi-provedix": { label: "Ver catálogo de Provedix en Dropi", url: "https://app.dropi.ec/dashboard/provider/23538/provedix?isFavorite=true" },
+  "dropi-damian": { label: "Ver catálogo de Importadora Damián en Dropi", url: "https://app.dropi.ec/dashboard/provider/88543/importadora?isFavorite=true" },
   "canal-provedix": { label: "Unirme al canal de Provedix", url: "https://whatsapp.com/channel/0029VbCKi9o2P59fQXV5Hf30" },
   "canal-damian": { label: "Unirme al canal de Importadora Damián", url: "https://whatsapp.com/channel/0029Vb7M5b0FnSzGabyN9016" },
   instagram: { label: "Instagram @provedix.ec", url: "https://www.instagram.com/provedix.ec/" },
