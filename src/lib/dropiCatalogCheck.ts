@@ -24,16 +24,15 @@ import { getVariantStock } from "@/lib/variantStock";
 
 export const DROPI_CATALOG_TAG = "dropi-catalog";
 
-// Importadora Shanghai NO se revisa (confirmado por el dueño 2026-10-17): son
-// importados que se venden de forma privada, con precio fijo y un solo ingreso
-// de stock por ID hasta agotarse. Además Dropi no deja leer productos privados.
+// catalog: false → Importadora Shanghai (dueño 2026-10-17): sus productos son
+// privados (Dropi no los muestra en el catálogo), con precio fijo y un solo
+// ingreso de stock por ID hasta agotarse. Solo se revisa el precio cobrado en
+// sus pedidos, como red de seguridad. Los IDs que no son nuestros (se cobran
+// $1,57 hasta que se acaben) no están en el catálogo de DAFLOW y se ignoran solos.
 const ACCOUNTS = [
-  { id: "nick_acc_provedix", bodega: "MKT_PROVEDIX", brand: "Provedix" },
-  {
-    id: "nick_acc_importadora_damian",
-    bodega: "MKT_DAMIAN",
-    brand: "Importadora Damián",
-  },
+  { id: "nick_acc_provedix", bodega: "MKT_PROVEDIX", brand: "Provedix", catalog: true },
+  { id: "nick_acc_importadora_damian", bodega: "MKT_DAMIAN", brand: "Importadora Damián", catalog: true },
+  { id: "nick_acc_importadora_shanghai", bodega: "MKT_SHANGHAI", brand: "Importadora Shanghai", catalog: false },
 ] as const;
 
 type DropiVariation = { id: string; stock: number };
@@ -169,7 +168,7 @@ export async function readOrderPrices(): Promise<OrderPrices> {
 
 export async function readDropiCatalogs(): Promise<DropiCatalog> {
   const accounts = await Promise.all(
-    ACCOUNTS.map(async (a) => {
+    ACCOUNTS.filter((a) => a.catalog).map(async (a) => {
       try {
         return {
           id: a.id,
