@@ -21,6 +21,7 @@ import {
 import { checkGuideForDropshipper } from "@/lib/provedixGuideCheck";
 import { requestCancellationFromChat } from "@/lib/michelleCancellations";
 import { createCaseFromChat } from "@/lib/provedixCases";
+import { cutNowText } from "@/lib/pvxCuts";
 
 // Pasar un caso al equipo con resumen (2026-10-15): solo lo que Michelle IA de
 // verdad no puede resolver. Desde 2026-10-16 ya no hay WhatsApp: la persona
@@ -466,7 +467,7 @@ export async function POST(req: NextRequest) {
   if (leadId) {
     const me = await prisma.provedixLead.findUnique({ where: { id: leadId }, select: { name: true, storeName: true, platform: true } }).catch(() => null);
     if (me) {
-      const first = me.name.trim().split(/s+/)[0] ?? "";
+      const first = me.name.trim().split(/\s+/)[0] ?? "";
       const where = me.platform === "DROPI" ? "Dropi" : me.platform === "ROCKET" ? "Rocket" : "Dropi y Rocket";
       system.push({
         type: "text",
@@ -478,6 +479,9 @@ export async function POST(req: NextRequest) {
       });
     }
   }
+  // La hora de Ecuador y el corte que viene, ya calculados (2026-10-17): sin
+  // esto respondía "¿a qué hora es el próximo corte?" con la tabla entera.
+  system.push({ type: "text", text: cutNowText() });
   if (trial) system.push({ type: "text", text: TRIAL_RULES });
   const client = getAnthropicClient();
   const params = {
