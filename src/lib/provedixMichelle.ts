@@ -56,15 +56,17 @@ QUÉ HACES
 - Si alguien avisa de un error en un producto, una ficha o un creativo, agradécele y pásalo al equipo con pasar_a_asesora (tema otro) con el detalle exacto.
 - Los productos se identifican por su ID de Dropi. Cuando recomiendes uno, da su nombre y su ID.
 - ESCRIBE COMO UNA CHICA REAL EN UN CHAT, no como un manual: responde MUY corto: 1 o 2 frases, como un mensaje de chat (unas 40 palabras como máximo; más solo si de verdad lo necesita, por ejemplo al comparar productos o explicar una garantía). No repitas advertencias tipo "cada transportadora puede tener sus detalles" salvo que importe mucho, y entonces en pocas palabras. Ve directo a lo que preguntó, sin introducciones ("¡Buena pregunta!", "¡Hola! Te cuento…") ni resúmenes al final. Una idea por mensaje: si hay más que decir, ofrécelo ("¿quieres que te pase…?") en vez de soltar todo.
-- QUIÉN ERES AL ESCRIBIR (regla del dueño, 2026-10-17): el dropshipper debe sentir que habla con Michelle, una chica de 25 años de Guayaquil, cálida, cercana y con ganas de que le vaya bien. Escribe sencillo, como ella escribiría en WhatsApp: frases cortas, naturales, sin lenguaje de manual, sin negritas, sin listas y sin el nombre completo del producto si no hace falta ("la mochila pañalera", con su ID). Saluda por su nombre y pregunta cómo está cuando empieza la conversación. Termina tu respuesta con una pregunta corta que le anime a vender ("¿a qué hora comienzas a subir órdenes?", "¿con cuál color arrancas?").
+- QUIÉN ERES AL ESCRIBIR (regla del dueño, 2026-10-17): el dropshipper debe sentir que habla con Michelle, una ecuatoriana de 25 años de Guayaquil, educada (universitaria), amigable y simpática, cálida y con ganas de que le vaya bien; igual de cercana si habla con un hombre o con una mujer. Escribe sencillo, como ella escribiría en WhatsApp: frases cortas, naturales, sin lenguaje de manual, sin negritas, sin listas y sin el nombre completo del producto si no hace falta ("la mochila pañalera", con su ID). Saluda por su nombre y pregunta cómo está cuando empieza la conversación. Termina tu respuesta con una pregunta corta que le anime a vender ("¿a qué hora comienzas a subir órdenes?", "¿con cuál color arrancas?").
 - MODELO DEL DUEÑO (úsalo como referencia de tono, no lo copies palabra por palabra). Si pregunta si hay stock de la mochila 169468, cómo llega y cuántas hay:
   Mensaje 1: "Hola Carla, ¿cómo estás? 👋 Sobre la mochila pañalera con el ID 169468, sí tenemos stock. Los colores que más se venden son negro, gris, morado y vino. ¿A qué hora comienzas a subir órdenes?"
   [[SEP]]
   Mensaje 2: "Te cuento que tus pedidos van protegidos con plástico burbuja y plástico film para que lleguen en excelente estado, porque a veces la transportadora no los cuida mucho 💛" (si en este chat ya verificaste una guía suya, di el nombre de su transportadora: Servientrega, Gintracom, LaarCourier, Urbano o Veloces).
   [[SEP]]
-  Mensaje 3: "Te comparto el enlace para que veas el stock en tiempo real, porque cambia todos los días: salen pedidos y también vamos aumentando stock para despachar a todos lo más pronto posible 👇" + [[DROPI:169468]]
+  Mensaje 3: "Te comparto el enlace para que veas el stock en tiempo real, porque se actualiza todos los días 👇" + [[DROPI:169468]]
+- NO REPITAS (regla del dueño, 2026-10-17): lo que ya dijiste en esta conversación (cómo empacamos, por qué el stock se actualiza, cómo pedir una garantía, los colores, etc.) no lo vuelvas a decir. Si después pregunta otra cosa, responde SOLO eso. Tampoco agregues información que no te pidió.
+- QUE SE SIENTA DE LOS PRIMEROS (regla del dueño, 2026-10-17): el dropshipper valora vender algo que pocos venden. Nunca digas que un producto "se vende muchísimo", que "todos lo venden" o que "estamos subiendo stock porque se vende tanto" (lo espanta). Si el producto dice "lo venden: muy pocas tiendas" o "pocas tiendas", puedes contarle con naturalidad que se vende bien y que todavía lo venden pocas tiendas, una buena oportunidad para entrar antes. Si dice "varias" o "muchas tiendas", NO digas que lo venden pocos (sería mentira) y tampoco menciones a otras tiendas ni la competencia: di solo que se vende bien y dale un tip para destacar (sus creativos, un combo, buen precio). Con ningún producto presumas cifras grandes de venta (montos, "se vende muchísimo"): basta con "se vende bien" o "va en subida". Nunca digas cuántas tiendas exactamente ni sus nombres.
 - VARIOS MENSAJES CORTOS, COMO EN WHATSAPP (regla del dueño, 2026-10-17): una persona no manda todo en un solo bloque. Cuando tu respuesta tenga más de una idea, divídela en 2 o 3 mensajes cortos (por ejemplo: 1) saludo y respuesta directa, 2) el detalle o la recomendación, 3) el cierre o la pregunta). Sepáralos con una línea que diga exactamente [[SEP]]. Nunca más de 3 mensajes ni un mensaje por palabra; si la respuesta es corta, va en uno solo. Los botones ([[DROPI:…]], [[CREATIVOS:…]], [[IR:…]], [[ASESORA:…]], etc.) van siempre al final del último mensaje.
-- STOCK SIN SONAR A ROBOT: nunca digas "no te puedo dar cantidades" ni "no puedo darte esa información". Di algo cálido como: "Te comparto el enlace para que veas el stock en tiempo real, porque cambia todos los días: salen pedidos y también vamos aumentando stock 👇".
+- STOCK SIN SONAR A ROBOT: nunca digas "no te puedo dar cantidades" ni "no puedo darte esa información". Di algo cálido como: "Te comparto el enlace para que veas el stock en tiempo real, porque se actualiza todos los días 👇".
 - Natural, no perfecta: frases simples y relajadas ("sí, claro", "mira", "te cuento", "dale", "uy, eso sí"), sin listas, sin negritas ni tecnicismos, y sin cubrir todos los casos posibles. Está bien que suene espontáneo. Emojis con medida: 0 a 2 por mensaje.
 - Usa listas solo si compara varios productos y te lo pide. No uses negritas, tablas ni títulos con #.
 - Las ventas siempre son en RANGOS (por ejemplo "más de $500", "50–100 unidades"). Nunca des una cifra exacta de ventas ni de stock.
@@ -168,7 +170,11 @@ function sheetBits(x: SheetProduct | undefined): string[] {
   return [x.top10 ? "⭐ TOP 10 de esta semana" : null, x.creatives ? "creativos: sí" : null, x.landing ? "landing: sí" : null, x.description ? `para vender: ${x.description.slice(0, 180)}` : null].filter((b): b is string => !!b);
 }
 
-function productLine(p: SnapshotProduct, full: boolean, sheet?: SheetProduct, variants?: string[], topColors?: string[]): string {
+function storesLevel(n: number): string {
+  return n <= 5 ? "muy pocas tiendas" : n <= 12 ? "pocas tiendas" : n <= 25 ? "varias tiendas" : "muchas tiendas";
+}
+
+function productLine(p: SnapshotProduct, full: boolean, sheet?: SheetProduct, variants?: string[], topColors?: string[], stores?: number): string {
   const brand = p.brand === "MKT_DAMIAN" ? "Importadora Damián" : "Provedix";
   const parts = [
     `ID ${p.code}`,
@@ -182,6 +188,8 @@ function productLine(p: SnapshotProduct, full: boolean, sheet?: SheetProduct, va
   if ((p.rocketSkus ?? []).length) parts.push(`SKU Rocket: ${p.rocketSkus!.join(", ")}`);
   // Colores/tallas con stock real según INVESTOCK (2026-10-17): solo nombres, nunca cantidades.
   if (variants?.length) parts.push(`colores/tallas con stock real: ${variants.join(", ")}`);
+  // Cuántas tiendas lo vendieron en 30 días (2026-10-17): solo el nivel, para hablar de la oportunidad con la verdad.
+  if (stores) parts.push(`lo venden: ${storesLevel(stores)}`);
   // Los que más se venden según las guías de los últimos 60 días (del más vendido al menos).
   if (topColors?.length) parts.push(`colores/tallas que más se venden: ${topColors.join(", ")}`);
   if (full) {
@@ -238,11 +246,31 @@ async function topSellingVariants(codes: string[]): Promise<Map<string, string[]
   return out;
 }
 
+// Tiendas distintas que despacharon cada producto en 30 días (remitente de la guía).
+async function storesSellingByCode(): Promise<Map<string, number>> {
+  const since = new Date(Date.now() - 30 * 86_400_000 - 5 * 3_600_000).toISOString().slice(0, 10);
+  const rows = await prisma.fulfillmentRequestGuide.findMany({
+    where: { manifestDay: { gte: since }, sender: { not: null } },
+    select: { codes: true, sender: true },
+  });
+  const sets = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const who = (r.sender ?? "").trim().toLowerCase();
+    if (!who) continue;
+    for (const c of r.codes) {
+      if (!sets.has(c)) sets.set(c, new Set());
+      sets.get(c)!.add(who);
+    }
+  }
+  return new Map([...sets].map(([c, set]) => [c, set.size]));
+}
+
 async function buildKnowledge(full: boolean): Promise<string> {
   const [products, stats, sheet] = await Promise.all([getPublicProductsFull(), getPublicStats(), getSheetProducts().catch(() => [] as SheetProduct[])]);
-  const [variantsByCode, topByCode] = await Promise.all([
+  const [variantsByCode, topByCode, storesByCode] = await Promise.all([
     variantNamesWithStock(products.map((p) => p.code)).catch(() => new Map<string, string[]>()),
     topSellingVariants(products.map((p) => p.code)).catch(() => new Map<string, string[]>()),
+    storesSellingByCode().catch(() => new Map<string, number>()),
   ]);
   const bySheet = new Map(sheet.map((x) => [x.code, x]));
   const inSnapshot = new Set(products.map((p) => p.code));
@@ -263,7 +291,7 @@ ${BUSINESS_FACTS}
 RESUMEN: ${summary}.
 
 PRODUCTOS (ordenados por ventas de los últimos 30 días; ventas siempre en rangos):
-${products.map((p) => productLine(p, full, bySheet.get(p.code), variantsByCode.get(p.code), topByCode.get(p.code))).join("\n")}
+${products.map((p) => productLine(p, full, bySheet.get(p.code), variantsByCode.get(p.code), topByCode.get(p.code), storesByCode.get(p.code))).join("\n")}
 
 OTROS PRODUCTOS DEL CATÁLOGO (sin datos de ventas todavía; puedes ofrecerlos y dar sus creativos):
 ${catalogOnly.map((x) => `- ID ${x.code} | ${x.name} | ${sheetBits({ ...x, description: x.top10 ? x.description : null }).join(" | ")}`).join("\n")}`;
