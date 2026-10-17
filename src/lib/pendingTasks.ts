@@ -33,6 +33,7 @@ import { formerLeaderIdsFor, isSummaryComplete } from "@/lib/formerLeaders";
 import { getUnlinkedShanghaiCount } from "@/lib/storeTracking";
 import { getCountedUnconfirmedLots, overdueCountedLots } from "@/lib/fulfillmentPicking";
 import { getDropiPriceChanges } from "@/lib/dropiPriceChanges";
+import { getCachedDropiCatalogChecks } from "@/lib/dropiCatalogCheck";
 import { getMissingDropiPrices, PROVISIONAL_DROPI_PRICE_HELPERS } from "@/lib/dropiPriceMissing";
 import { getUnmatchedGuideVariants } from "@/lib/variantSales";
 import { COMBO_BRAND_HREF } from "@/lib/comboAlias";
@@ -592,6 +593,8 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   analisis_mercado_compra_en_camino: "Ya se está comprando — publícalo en Dropi",
   precio_dropi_cambio: "Cambió el precio mínimo de un producto publicado en Dropi",
   precio_dropi_faltante: "Productos de provedix.com sin Precio Dropi — escribir el precio publicado en Dropi",
+  dropi_precio_bajo: "Precio en Dropi por debajo del mínimo de INVESTOCK",
+  dropi_subir_stock: "Mercadería en bodega que Dropi muestra con poco o nada de stock",
   combos_semana: "Combos sugeridos de la semana por revisar",
   combos_sin_marca: "Combos vendidos en Dropi sin marca — elegir su marca",
   marcas_no_coinciden: "Marcas que no coinciden con el manifiesto",
@@ -2001,6 +2004,36 @@ async function getDropiPriceChangesPendingItem(href: string): Promise<PendingIte
     overdue: up > 0,
     href,
   };
+}
+
+// Pedido del usuario 2026-10-17 — ver dropiCatalogCheck.ts: lo que el catálogo
+// de Dropi muestra distinto a INVESTOCK. Precio bajo y stock sin subir son
+// urgentes (se pierde margen / se queda mercadería sin vender). priceOnly: Yair.
+async function getDropiCatalogPendingItems(href: string, priceOnly: boolean): Promise<PendingItem[]> {
+  const data = await getCachedDropiCatalogChecks().catch(() => null);
+  if (!data) return [];
+  const low = data.checks.filter((c) => c.kind === "precio_bajo");
+  const raise = priceOnly ? [] : data.checks.filter((c) => c.kind === "subir_stock");
+  const items: PendingItem[] = [];
+  if (low.length)
+    items.push({
+      type: "dropi_precio_bajo",
+      icon: "🔴",
+      label: `Sube el precio en Dropi de ${low.length} producto${low.length === 1 ? "" : "s"}`,
+      meta: low.length === 1 ? `${low[0].name}: ${low[0].dropiPrice?.toFixed(2)} → mínimo ${low[0].minPrice?.toFixed(2)}` : "Están por debajo del mínimo de INVESTOCK: se pierde margen",
+      overdue: true,
+      href,
+    });
+  if (raise.length)
+    items.push({
+      type: "dropi_subir_stock",
+      icon: "📦",
+      label: `Sube el stock en Dropi de ${raise.length} producto${raise.length === 1 ? "" : "s"}`,
+      meta: raise.length === 1 ? `${raise[0].name}: bodega ${raise[0].realStock}, Dropi ${raise[0].dropiStock}` : "Hay mercadería en bodega que Dropi muestra con poco o nada",
+      overdue: true,
+      href,
+    });
+  return items;
 }
 
 // Pedido del usuario 2026-10-12 — ver dropiPriceMissing.ts: productos de
@@ -4339,9 +4372,12 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
       if (missingPriceItem) teamItems.push(missingPriceItem);
       const makePublicItem = await getMakePublicPendingItem("/area/workspace?tab=analisis-mercado&ptab=publicar");
       if (makePublicItem) teamItems.unshift(makePublicItem);
+      teamItems.unshift(...(await getDropiCatalogPendingItems("/area/workspace?tab=analisis-mercado&ptab=dropicheck", false)));
     } else if (PROVISIONAL_DROPI_PRICE_HELPERS.has(actor.userId)) {
       // PROVISIONAL (2026-10-12): Yair ayuda solo con el Precio Dropi faltante;
       // el aviso se va solo cuando no quedan productos.
+      // Pedido del usuario 2026-10-17: Yair ayuda a corregir los precios por debajo del mínimo.
+      teamItems.unshift(...(await getDropiCatalogPendingItems("/area/workspace?tab=analisis-mercado&ptab=dropicheck", true)));
       const missingPriceItem = await getMissingDropiPricesPendingItem("/area/workspace?tab=analisis-mercado&ptab=preciodropi");
       if (missingPriceItem) teamItems.push(missingPriceItem);
     }

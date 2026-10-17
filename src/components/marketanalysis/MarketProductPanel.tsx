@@ -17,6 +17,7 @@ import { MaxPurchasePrice } from "@/components/marketanalysis/MaxPurchasePrice";
 import { CopyDropiPrice } from "@/components/shared/CopyDropiPrice";
 import { DropiPriceChangesQueue } from "./DropiPriceChangesQueue";
 import { DropiPriceMissingQueue } from "./DropiPriceMissingQueue";
+import { DropiCatalogCheckPanel } from "./DropiCatalogCheckPanel";
 import { computePreviewPrice, computeCompetitorComparison } from "./PriceCalculator";
 import { AdvisorComboRegister } from "./AdvisorComboRegister";
 import { useSharedHandoffLock, setPublishTabOpen, requestHandoffLockRefresh } from "./handoffLockSignal";
@@ -95,7 +96,7 @@ function money(n: number) {
   return `$${n.toFixed(2)}`;
 }
 
-type Tab = "proponer" | "ganadores" | "sinstock" | "despiertan" | "variantes" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "rocket" | "registrarcombo" | "trazabilidad" | "preciodropi";
+type Tab = "proponer" | "ganadores" | "sinstock" | "despiertan" | "variantes" | "mispropuestas" | "listoparacomprar" | "consulta" | "aprobacion" | "publicar" | "mispublicados" | "rocket" | "registrarcombo" | "trazabilidad" | "preciodropi" | "dropicheck";
 
 export function MarketProductPanel({
   canPropose,
@@ -128,6 +129,9 @@ export function MarketProductPanel({
   // Precio Dropi faltante (ver lib/dropiPriceMissing.ts). La pestaña solo sale
   // mientras queden productos sin precio y él no tenga "Publicar en Dropi".
   const [priceHelper, setPriceHelper] = useState(false);
+  // Stock y precio en Dropi vs INVESTOCK (2026-10-17): la pestaña sale si la API
+  // deja verla (asesora B2B y admin todo; Yair solo precios).
+  const [dropiCheck, setDropiCheck] = useState(false);
   const tabs: { key: Tab; label: string }[] = [
     ...(canPropose ? [{ key: "proponer" as Tab, label: "Proponer" }] : []),
     // Confirmado 2026-09-22, pedido de Jariel: su lista de productos que ve
@@ -170,6 +174,7 @@ export function MarketProductPanel({
     ...(canPublish || canUploadRocketSku ? [{ key: "registrarcombo" as Tab, label: "Registrar combo" }] : []),
     ...(canReview ? [{ key: "trazabilidad" as Tab, label: "Trazabilidad" }] : []),
     ...(priceHelper && !canPublish ? [{ key: "preciodropi" as Tab, label: "Precio Dropi (provisional)" }] : []),
+    ...(dropiCheck ? [{ key: "dropicheck" as Tab, label: "Stock y precio en Dropi" }] : []),
   ];
   const [tab, setTab] = useRememberedState<Tab>("tab", tabs[0]?.key ?? "proponer");
   // Pedido de Jariel 2026-10-15 (aprobado por el usuario): con el ID madre
@@ -192,6 +197,17 @@ export function MarketProductPanel({
         if (rows.length === 0) return;
         setPriceHelper(true);
         if (new URLSearchParams(window.location.search).get("ptab") === "preciodropi") setTab("preciodropi");
+      })
+      .catch(() => null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/market-products/dropi-catalog-check")
+      .then((r) => {
+        if (!r.ok) return;
+        setDropiCheck(true);
+        if (new URLSearchParams(window.location.search).get("ptab") === "dropicheck") setTab("dropicheck");
       })
       .catch(() => null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -270,6 +286,7 @@ export function MarketProductPanel({
       {shownTab === "mispublicados" && <PublishedHistoryView />}
       {shownTab === "rocket" && <RocketUploadView />}
       {shownTab === "preciodropi" && <DropiPriceMissingQueue />}
+      {shownTab === "dropicheck" && <DropiCatalogCheckPanel />}
       {shownTab === "registrarcombo" && <AdvisorComboRegister />}
       {shownTab === "trazabilidad" && <TraceabilityView canDecidePurchase={canDecidePurchase} canCancel={canReview} canRequestPublic={canActOnReview} />}
     </div>
