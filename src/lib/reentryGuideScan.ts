@@ -4,6 +4,7 @@ import { cacheGuideLabelsForBatch, lookupGuide } from "@/lib/localWarranty";
 import { detectReturnVariants } from "@/lib/variantStock";
 import { costOfKardexOutEntries } from "@/lib/sellingCost";
 import { formatMerchandiseReentryCode } from "@/lib/merchandiseReentry";
+import { notifyOwner } from "@/lib/notifications";
 
 // Pedido del usuario 2026-10-02: el Reingreso de Mercadería se hace
 // escaneando la guía de cada devolución (la que vuelve trae el mismo número
@@ -40,6 +41,21 @@ function looksLikeGuide(candidates: string[]): boolean {
   return candidates.some((c) => CARRIER_GUIDE_FORMATS.some((f) => c.startsWith(f.prefix) && c.length === f.length));
 }
 
+// Aviso a Daniel (líder de Inventario), una sola vez por guía, con la
+// explicación completa para que lo entienda sin tener que preguntar.
+async function notifyNoCorteReturn(guide: string) {
+  const lead = await prisma.user.findFirst({ where: { isLeader: true, isActive: true, leadsDept: { code: "INV" } }, select: { id: true } });
+  if (!lead) return;
+  const title = "Volvió una guía que salió sin corte";
+  const sent = await prisma.notification.findFirst({ where: { ownerId: lead.id, title, body: { startsWith: `Guía ${guide}` } }, select: { id: true } });
+  if (sent) return;
+  await notifyOwner(lead.id, {
+    title,
+    body: `Guía ${guide}: Dropi dice que salió de bodega, pero no vino en ningún PDF de corte, así que su producto nunca se descontó del stock. Ahora volvió como devolución: NO se registra en Reingresos, el producto vuelve a su percha tal cual y el stock queda bien solo. Si dudas, pregúntale a Mary o al administrador.`,
+    url: "/area/nick",
+  });
+}
+
 export async function scanGuideIntoBatch(params: { batchId: string; raw: string; typedByHand: boolean }): Promise<ScanSuccess | ScanFailure> {
   const candidates = guideCandidates(params.raw);
   const shown = params.raw.trim().slice(0, 40);
@@ -68,6 +84,22 @@ export async function scanGuideIntoBatch(params: { batchId: string; raw: string;
     select: { guideNumber: true, carrier: true, batch: { select: { lot: { select: { day: true, status: true, despachoOutflowBatchId: true, garantiaOutflowBatchId: true } } } } },
   });
   if (found.length === 0) {
+    // Pedido del usuario 2026-10-17 (caso 189959968): la guía salió de bodega
+    // según Dropi (NICK la ve) pero no vino en ningún PDF de corte, así que
+    // DAFLOW nunca descontó ese producto. Si se registrara aquí, el stock
+    // quedaría con una unidad de más: no se deja, se explica y se avisa a Daniel.
+    const noCorte = await prisma.nickGuideStatus.findFirst({
+      where: { guideNumber: { in: candidates }, orderCreatedAt: { gte: new Date("2026-09-21T05:00:00Z") } },
+      select: { guideNumber: true },
+    });
+    if (noCorte) {
+      await notifyNoCorteReturn(noCorte.guideNumber).catch(() => null);
+      return {
+        ok: false,
+        reason: `La guía ${noCorte.guideNumber} salió de bodega sin venir en ningún PDF de corte, así que DAFLOW nunca descontó ese producto del stock. NO la registres aquí (ni a mano): devuelve el producto a su percha tal cual, sin sumar nada. Ya se le avisó a Daniel. Si tienes dudas, pregúntale a Mary «¿qué hago con una guía que salió sin corte?».`,
+        allowManual: false,
+      };
+    }
     if (!looksLikeGuide(candidates)) {
       return { ok: false, reason: `Lo que se leyó (${shown}) no es un número de guía de ninguna transportadora. Vuelve a escanear el código de barras de la guía, no otro código del paquete.`, allowManual: false };
     }
