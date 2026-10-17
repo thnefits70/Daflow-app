@@ -8,6 +8,8 @@ import { getVariantStock } from "@/lib/variantStock";
 // Stock y precio en Dropi vs INVESTOCK (pedido del usuario 2026-10-17, con las
 // cuentas de proveedor ya conectadas en NICK). Meta del equipo: 1000 pedidos
 // diarios, así que todo lo que tenemos debe estar publicado y vendiéndose.
+// Los productos PRIVADOS en Dropi no salen en su catálogo (confirmado 2026-10-17
+// con el 200579 y el 177633), así que no se pueden revisar aquí.
 // - "precio_bajo" (urgente): el precio en Dropi está por debajo del Precio Dropi
 //   de INVESTOCK (el de Stock Actual, que sube o baja solo con compras y
 //   devoluciones) → se pierde margen. Lo ven la asesora B2B y Yair.
@@ -22,17 +24,15 @@ import { getVariantStock } from "@/lib/variantStock";
 
 export const DROPI_CATALOG_TAG = "dropi-catalog";
 
+// Importadora Shanghai NO se revisa (confirmado por el dueño 2026-10-17): son
+// importados que se venden de forma privada, con precio fijo y un solo ingreso
+// de stock por ID hasta agotarse. Además Dropi no deja leer productos privados.
 const ACCOUNTS = [
   { id: "nick_acc_provedix", bodega: "MKT_PROVEDIX", brand: "Provedix" },
   {
     id: "nick_acc_importadora_damian",
     bodega: "MKT_DAMIAN",
     brand: "Importadora Damián",
-  },
-  {
-    id: "nick_acc_importadora_shanghai",
-    bodega: "MKT_SHANGHAI",
-    brand: "Importadora Shanghai",
   },
 ] as const;
 
