@@ -173,10 +173,16 @@ async function tickAccount(accountId: string, force: boolean, deadline: number):
         day = null;
         break;
       }
-      await prisma.nickDropiAccount.update({ where: { id: accountId }, data: { syncDay: day, syncStart: start, syncLockUntil: new Date(Date.now() + LOCK_MS) } });
+      // Si alguien reconectó la cuenta mientras se leía, esta vuelta se deja:
+      // la conexión nueva empieza su propia lectura (45 días).
+      const kept = await prisma.nickDropiAccount.updateMany({
+        where: { id: accountId, connectedAt: acc.connectedAt },
+        data: { syncDay: day, syncStart: start, syncLockUntil: new Date(Date.now() + LOCK_MS) },
+      });
+      if (!kept.count) return { account: acc.name, day: null, state: "en_curso", message: null };
     }
-    await prisma.nickDropiAccount.update({
-      where: { id: accountId },
+    await prisma.nickDropiAccount.updateMany({
+      where: { id: accountId, connectedAt: acc.connectedAt },
       data: {
         syncDay: day,
         syncStart: day ? start : 0,
@@ -190,7 +196,7 @@ async function tickAccount(accountId: string, force: boolean, deadline: number):
   } catch (e) {
     await prisma.nickDropiAccount
       // Queda bloqueada 10 min: así nadie (ni la campanita ni el botón) le insiste a Dropi.
-      .update({ where: { id: accountId }, data: { syncLockUntil: new Date(Date.now() + ERROR_WAIT_MS), syncDay: day, syncStart: start, lastError: e instanceof Error ? e.message.slice(0, 300) : "Error" } })
+      .updateMany({ where: { id: accountId, connectedAt: acc.connectedAt }, data: { syncLockUntil: new Date(Date.now() + ERROR_WAIT_MS), syncDay: day, syncStart: start, lastError: e instanceof Error ? e.message.slice(0, 300) : "Error" } })
       .catch(() => null);
     if (e instanceof NickReconnectError) return { account: acc.name, day, state: "desconectada", message: e.message };
     return { account: acc.name, day, state: "error", message: e instanceof Error ? e.message : "Error leyendo Dropi" };
