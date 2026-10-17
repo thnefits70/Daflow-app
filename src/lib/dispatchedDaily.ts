@@ -1,9 +1,9 @@
 import { prisma } from "@/lib/prisma";
-import { getCompiledLot, ecuadorDay, NO_BRAND } from "@/lib/fulfillmentGuides";
+import { ecuadorDay, NO_BRAND } from "@/lib/fulfillmentGuides";
 import { guideBrandsOf } from "@/lib/guideBrands";
 import { brandLabel, sortBrands } from "@/lib/brandLabels";
 import { NICK_FILL_RATE_FROM_WEEK, nickPreparedGenerated } from "@/lib/nick/fillRate";
-import { daysOfIsoWeek, isAutoFillRateWeek, FILL_RATE_DEPT_CODE, retainedGuideNumbers, guideDispatchDay, guideHoldDays, lotDaysFeeding, outOfStockSubtracted, isWarrantyGuide, warrantyGuidesOf } from "@/lib/autoFillRate";
+import { daysOfIsoWeek, isAutoFillRateWeek, FILL_RATE_DEPT_CODE, retainedGuideNumbers, guideDispatchDay, guideHoldDays, lotDaysFeeding, outOfStockSubtracted, isWarrantyGuide, warrantyGuidesOf, lotOutOfStockUnits } from "@/lib/autoFillRate";
 
 // Pedido de Daniel 2026-10-13: al hacer clic en una semana de "Pedidos
 // despachados", el mismo número desglosado por día — guías de los cortes por
@@ -113,13 +113,10 @@ export async function getDispatchedDailyBreakdown(week: string): Promise<Dispatc
     }
   }
 
+  const oosByLot = await lotOutOfStockUnits(lots.map((l) => l.id));
   for (const { id, day } of lots) {
-    const lot = await getCompiledLot(id);
     const entry = byDay.get(day);
-    if (!lot || !entry) continue;
-    for (const p of lot.picking) {
-      if (p.confirmedAt && p.confirmedQty !== null && p.confirmedQty < p.needed) entry.day.outOfStock += p.needed - p.confirmedQty;
-    }
+    if (entry) entry.day.outOfStock += oosByLot.get(id) ?? 0;
   }
 
   for (const s of sales) {

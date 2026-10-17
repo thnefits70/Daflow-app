@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getCompiledLot, ecuadorDay } from "@/lib/fulfillmentGuides";
+import { ecuadorDay } from "@/lib/fulfillmentGuides";
 import { nextWorkingDay } from "@/lib/ecuadorHolidays";
 import { NICK_FILL_RATE_FROM_WEEK, nickPreparedGenerated } from "@/lib/nick/fillRate";
 
@@ -48,6 +48,37 @@ export function daysOfIsoWeek(week: string): string[] {
 
 export function isAutoFillRateWeek(week: string): boolean {
   return week >= AUTO_FILL_RATE_FROM_WEEK;
+}
+
+// Unidades que faltaron por corte: lo pedido de cada producto (normal +
+// garantías que no son pieza) menos lo que se confirmó en la percha. Mismo
+// cálculo que lot.picking de getCompiledLot, pero en 2 consultas para todos
+// los cortes — getCompiledLot tarda ~3 s por corte y el desglose por día de
+// Pedidos despachados se quedaba "Cargando…" más de 2 minutos (2026-10-17).
+export async function lotOutOfStockUnits(lotIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!lotIds.length) return out;
+  const [items, picks] = await Promise.all([
+    prisma.fulfillmentRequestItem.findMany({
+      where: { batch: { lotId: { in: lotIds } } },
+      select: { catalogItemId: true, quantity: true, warrantyGuide: true, warrantyMode: true, batch: { select: { lotId: true } } },
+    }),
+    prisma.fulfillmentLotPick.findMany({
+      where: { lotId: { in: lotIds }, confirmedAt: { not: null }, confirmedQty: { not: null } },
+      select: { lotId: true, catalogItemId: true, confirmedQty: true },
+    }),
+  ]);
+  const needed = new Map<string, number>();
+  for (const it of items) {
+    if (it.warrantyGuide && (it.warrantyMode ?? "COMPLETE") === "PIECE") continue;
+    const key = `${it.batch.lotId}|${it.catalogItemId}`;
+    needed.set(key, (needed.get(key) ?? 0) + it.quantity);
+  }
+  for (const p of picks) {
+    const n = needed.get(`${p.lotId}|${p.catalogItemId}`);
+    if (n !== undefined && p.confirmedQty! < n) out.set(p.lotId, (out.get(p.lotId) ?? 0) + n - p.confirmedQty!);
+  }
+  return out;
 }
 
 // Pedido de Daniel 2026-10-14: guías canceladas que Daniel o Allan
@@ -212,13 +243,7 @@ export async function computeAutoCounts(week: string): Promise<{
     select: { id: true },
   });
   let outOfStock = 0;
-  for (const { id } of lots) {
-    const lot = await getCompiledLot(id);
-    if (!lot) continue;
-    for (const p of lot.picking) {
-      if (p.confirmedAt && p.confirmedQty !== null && p.confirmedQty < p.needed) outOfStock += p.needed - p.confirmedQty;
-    }
-  }
+  for (const units of (await lotOutOfStockUnits(lots.map((l) => l.id))).values()) outOfStock += units;
   return {
     guides,
     outOfStock: Math.min(outOfStock, guides),
