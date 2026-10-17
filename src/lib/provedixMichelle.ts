@@ -314,7 +314,7 @@ async function buildKnowledge(full: boolean): Promise<string> {
   ]
     .filter(Boolean)
     .join("; ");
-  return `DATOS DE PROVEDIX (${full ? "persona REGISTRADA: puedes dar precio al público, ciudades, compradores y combos" : "persona NO registrada: solo datos públicos"})
+  return `DATOS DE PROVEDIX (${full ? "datos para vender: puedes dar precio al público, ciudades, compradores y combos" : "persona NO registrada: solo datos públicos"})
 
 ${BUSINESS_FACTS}
 

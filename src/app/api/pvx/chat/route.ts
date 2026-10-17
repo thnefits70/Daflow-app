@@ -253,7 +253,7 @@ const BLOCKED_24H_TEXT =
 // eso escribe [[REGISTRO]] y el chat abre el registro conversado. Los topes
 // contra abuso son los mismos de siempre (por día, por conexión y en total).
 const GUEST_RULES = `PERSONA QUE TODAVÍA NO TE DIO SUS DATOS
-- Ayúdale igual con todo lo que sirve para vender: productos, colores, características, stock, cortes, transportadoras, creativos, garantías y cancelaciones en general. Si hace falta, pásale la pregunta al equipo como siempre.
+- Ayúdale igual con TODO lo que sirve para vender rápido: productos, ventas, precio al público, ciudades, compradores, combos, colores, características, stock, cortes, transportadoras, creativos, garantías y cancelaciones en general. Si hace falta, pásale la pregunta al equipo como siempre.
 - Solo necesitas sus datos para: (1) ver, cancelar o retener SUS guías o pedidos, o (2) pedir que se le privatice un producto. En esos dos casos dile con naturalidad que para eso necesitas conocerlo un poquito ("Para revisar tu guía necesito conocerte un poquito 😊") y pon [[REGISTRO]] al final del mensaje: el chat le pide sus datos ahí mismo y luego le respondes.
 - En ningún otro caso hables de registro, de datos, de límites ni de "gratis".
 - Todas las reglas de seguridad de arriba siguen igual.`;
@@ -434,7 +434,10 @@ export async function POST(req: NextRequest) {
     else messages.push({ role, content });
   }
 
-  const system = await michelleSystem(!trial);
+  // Toda la información para vender, con o sin registro (pedido del dueño 2026-10-17):
+  // lo confidencial (datos de dropshippers, clientes finales y guías ajenas) lo cuidan
+  // las reglas y las herramientas, que exigen registro y verificar la guía.
+  const system = await michelleSystem(true);
   // Con quién habla (2026-10-17): nombre, tienda y plataforma del registro, para
   // llamarle por su nombre y no volver a preguntar dónde vende. Son sus propios datos.
   if (leadId) {
