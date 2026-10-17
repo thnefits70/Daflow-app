@@ -33,7 +33,10 @@ export const EXPLAIN_TOPICS = {
 - "Nueva hoy": compra caliente que ayer todavía alcanzaba para más de ${HOT_DAYS} días.
 - Franja verde a la izquierda: ya recontado, el stock es real. Amarilla: contado pero falta aplicarlo o está en recuento. Sin franja: todavía no se cuenta.
 - "Falta contar": el sistema dice que hay ese stock, pero nadie lo ha contado; no se compra (salvo emergencia) hasta que lo cuenten.
-- "Reparto por color/talla": cómo repartir la cantidad sugerida según lo que más se vende de cada variante.
+- "Reparto por color/talla": cómo repartir la cantidad sugerida según lo que más se vende de cada variante (solo en productos sin stock por color).
+- Venta real: "sale ~N" ya descuenta lo que regresa en buen estado (vuelve al stock, no hay que reponerlo). "Regresa X%" = de lo que sale, cuánto vuelve; con pocas salidas se usa la tasa de su marca o la general. Lo dañado no se descuenta.
+- "Por color/talla": si el producto tiene stock por color que cuadra con el total, cada color se calcula solo: lo que vende ese color × (días del proveedor + 1 mes) − lo que hay de ese color. Un color que se vende mucho se pide aunque haya stock si no alcanza; uno que no se vende no se pide. "El color X se acaba…" = ese color hace urgente al producto aunque del total haya. "Sin ventas en 30 días" = stock parado para promocionar, no para comprar.
+- Objetivo: comprar para que el inventario se mueva, no para llenar la bodega.
 Botones:
 - "Analizar recompra": abre la calculadora de recompra con el producto ya elegido; ahí se arma la recompra (RC) que aprueba Bryan.
 - "No hace falta comprarlo" (solo compras frías): lo saca de la lista con un motivo; vuelve solo a los ${DISCARD_VALID_DAYS} días, o antes si estaba en "pronto" y se pone urgente.

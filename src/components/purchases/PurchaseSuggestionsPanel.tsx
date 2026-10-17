@@ -28,6 +28,13 @@ type Row = {
   discard: DiscardInfo | null;
   discardReturned: (DiscardInfo & { why: "urgente" | "vencido" }) | null;
   variants?: { label: string; units: number }[] | null;
+  grossPerDay?: number;
+  returnPct?: number;
+  returnGoodPct?: number;
+  returnSource?: "producto" | "marca" | "general" | "sin_datos";
+  colors?: { colors: ColorPlan[]; unidentified: number } | null;
+  colorGap?: "no_cuadra" | "sin_ventas_por_color" | null;
+  colorShort?: { name: string; daysLeft: number } | null;
   counted?: boolean | null;
   countedUrgent?: boolean;
   newToday?: boolean;
@@ -88,6 +95,49 @@ function fmtPerDay(n: number) {
   if (n === 0) return "no salió nada";
   if (n < 1) return `sale ~${Math.round(n * 7)} por semana`;
   return `sale ~${n < 10 ? n.toFixed(1).replace(".0", "") : Math.round(n)} por día`;
+}
+
+type ColorPlan = { name: string; stock: number; perDay: number; share: number; returnPct: number | null; daysLeft: number | null; buy: number; main: boolean };
+
+const pct = (n: number) => `${Math.round(n * 100)}%`;
+const RETURN_SOURCE_LABEL = { producto: "", marca: " (tasa de su marca: este producto aún tiene pocas salidas)", general: " (tasa general: aún hay pocas salidas)", sin_datos: "" } as const;
+
+// Venta real (2026-10-16): lo que sale menos lo que regresa en buen estado.
+function ReturnsLine({ r }: { r: Row }) {
+  if (!r.returnPct || !r.grossPerDay) return null;
+  return (
+    <div className="text-[11.5px] text-steel">
+      Regresa {pct(r.returnPct)} de lo que sale ({pct(r.returnGoodPct ?? 0)} vuelve al stock en buen estado){RETURN_SOURCE_LABEL[r.returnSource ?? "sin_datos"]} · sin eso, la venta real es {fmtPerDay(r.perDay).replace("sale ", "")}
+    </div>
+  );
+}
+
+// Compra por color (2026-10-16): cada color con lo que hay, lo que vende y cuánto pedir.
+function ColorsBlock({ r }: { r: Row }) {
+  if (!r.colors) return null;
+  const idle = r.colors.colors.filter((c) => c.perDay === 0 && c.stock > 0);
+  return (
+    <div className="mt-1 rounded border border-rule bg-cloud/40 px-2 py-1.5 text-[11.5px] text-steel">
+      <div className="font-semibold text-ink mb-0.5">Por color/talla (venta real de 30 días):</div>
+      {r.colors.colors
+        .filter((c) => c.perDay > 0 || c.buy > 0)
+        .map((c) => (
+          <div key={c.name}>
+            <b className="text-ink">{c.name}</b>: hay {c.stock} · {fmtPerDay(c.perDay)}
+            {c.returnPct !== null ? ` · regresa ${pct(c.returnPct)}` : ""}
+            {c.daysLeft !== null ? <> · <span className={c.main && c.daysLeft <= 5 ? "text-red font-semibold" : ""}>{fmtDaysLeft(c.daysLeft)}</span></> : null}
+            {" · "}
+            {c.buy > 0 ? <b className="text-teal">comprar ~{c.buy}</b> : <span>no hace falta</span>}
+          </div>
+        ))}
+      {idle.length > 0 && (
+        <div className="mt-0.5 text-amber">
+          Sin ventas en 30 días (para promocionar, no para comprar): {idle.map((c) => `${c.name} ${c.stock}`).join(" · ")}
+        </div>
+      )}
+      {r.colors.unidentified !== 0 && <div className="mt-0.5">Sin identificar: {r.colors.unidentified}</div>}
+    </div>
+  );
 }
 
 function fmtDaysLeft(d: number | null) {
@@ -317,8 +367,18 @@ function RowLine({ r, canReportStockout, canDiscard, isCold, onChanged, canRepur
             {r.supplierName ? `Última compra: ${r.supplierName}` : ""}
           </div>
         )}
+        <ReturnsLine r={r} />
+        {r.colorShort && (
+          <div className="text-[11.5px] text-red font-semibold">
+            El color {r.colorShort.name} {fmtDaysLeft(r.colorShort.daysLeft)}, aunque del total todavía haya
+          </div>
+        )}
+        <ColorsBlock r={r} />
+        {r.colorGap === "no_cuadra" && (
+          <div className="text-[11.5px] text-amber">Los colores no cuadran con el total: hay que recontarlo por colores. Mientras tanto el reparto sale de lo que más se vende.</div>
+        )}
         {/* Ventas por variante (2026-10-05): cómo repartir lo que se compra por color/talla. */}
-        {r.variants && (
+        {r.variants && !r.colors && (
           <div className="text-[12px] text-steel">
             {r.suggestedQty ? "Reparto por color/talla: " : "Lo que más sale (de cada 100): "}
             <b className="text-ink">

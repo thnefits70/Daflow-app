@@ -5,7 +5,7 @@ import { getMarketingLeadId } from "@/lib/guards";
 import { findOpenPurchasesByOthers, formatPurchaseRequestCode, getCatalogItemSupplierComparison, otherOpenPurchaseMessage } from "@/lib/purchases";
 import { currentDropiPrices } from "@/lib/dropiPriceChanges";
 import { resolveDropiParamsForCatalogItems } from "@/lib/marketProduct";
-import { COLD_MAX, COVER_DAYS_AFTER_ARRIVAL, getSalesWindow, getSoldUnitsByItem, HOT_MAX, isStockCoverBlockActive, stockCoverMessage, stockStillCovers, suggestedQuantity, urgentDaysForSupplier } from "@/lib/purchaseSuggestions";
+import { COLD_MAX, COVER_DAYS_AFTER_ARRIVAL, getDemandPlans, getSalesWindow, HOT_MAX, isStockCoverBlockActive, planQuantity, stockCoverMessage, stockStillCovers, urgentDaysForSupplier } from "@/lib/purchaseSuggestions";
 import { countedBalance, findUncountedItems, getCountGate, isUncounted } from "@/lib/countGate";
 import { computeRepurchase, formatRepurchaseCode, hotSelfConfirmBlock, REPURCHASE_VERDICT_LABELS, type RepurchasePriceParams, type RepurchaseVerdict } from "@/lib/repurchasePricing";
 
@@ -116,13 +116,12 @@ export async function getRepurchaseAnalysis(catalogItemId: string, userId: strin
   if (!item) return null;
 
   const { windowStart, windowDays } = await getSalesWindow();
-  const [comparison, paramsById, dropiNow, soldMap, stock, proposal, lastRcWithCompetitor, lastPurchase, blocker, history] = await Promise.all([
+  const [comparison, paramsById, dropiNow, stock, proposal, lastRcWithCompetitor, lastPurchase, blocker, history] = await Promise.all([
     getCatalogItemSupplierComparison(catalogItemId),
     resolveDropiParamsForCatalogItems([catalogItemId]),
     // Recalcular el precio de Dropi es lo más lento (~2 s): solo si la
     // asesora B2B todavía no confirmó uno.
     item.dropiPriceRef != null ? Promise.resolve(new Map<string, number>()) : currentDropiPrices([catalogItemId]),
-    getSoldUnitsByItem(windowStart, [catalogItemId]),
     latestStock(catalogItemId),
     prisma.marketProductProposal.findFirst({
       where: { catalogItemId, competitorPrice: { not: null } },
@@ -142,10 +141,12 @@ export async function getRepurchaseAnalysis(catalogItemId: string, userId: strin
     listRepurchaseReviews({ catalogItemId, take: 5 }),
   ]);
 
-  const sold = soldMap.get(catalogItemId) ?? 0;
-  const perDay = sold / windowDays;
-  const daysLeft = perDay > 0 ? Math.max(0, stock) / perDay : null;
   const urgentDays = urgentDaysForSupplier(lastPurchase?.supplier.paymentMode);
+  // Venta real (2026-10-16): sin lo que regresa en buen estado; con stock por color, compra por color.
+  const plan = (await getDemandPlans([catalogItemId], windowStart, windowDays, () => urgentDays)).get(catalogItemId)!;
+  const sold = plan.demand?.gross ?? 0;
+  const perDay = plan.perDay;
+  const daysLeft = perDay > 0 ? Math.max(0, stock) / perDay : null;
 
   // La competencia más reciente que se anotó: la de la última RC, o la de la propuesta original.
   const competitor = lastRcWithCompetitor
@@ -176,10 +177,10 @@ export async function getRepurchaseAnalysis(catalogItemId: string, userId: strin
     windowDays,
     perDay,
     daysLeft,
-    suggestedQty: suggestedQuantity(perDay, urgentDays, stock),
+    suggestedQty: planQuantity(plan, urgentDays, stock),
     audience: stock <= HOT_MAX ? "HOT" : "COLD",
     blocker,
-    stockCover: stockStillCovers(stock, perDay, urgentDays)
+    stockCover: stockStillCovers(stock, perDay, urgentDays, plan.colors)
       ? { message: stockCoverMessage(item.name, stock, daysLeft), needsReason: isStockCoverBlockActive() }
       : null,
     history,
