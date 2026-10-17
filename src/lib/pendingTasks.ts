@@ -544,6 +544,7 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   garantias_despachar_corte: "Garantías anotadas — falta subir su corte",
   garantias_despachar_revisar: "Garantías por despachar — por revisar",
   nick_sin_corte: "Guías que salieron en Dropi sin PDF de corte",
+  nick_retomar_plan: "NICK ya tiene 2 semanas de datos — retomar el plan",
   garantia_local_resultado: "Tus garantías locales — confirmar si se entregaron",
   manifiestos_tras_feriado: "Manifiestos pendientes después de domingo o feriado",
   catalogo_posibles_duplicados: "Posibles productos duplicados por revisar",
@@ -4287,6 +4288,19 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     items.unshift(...(await getPurchaseSuggestionAdminPendingItems()));
     // Supervisión (2026-10-17): el admin ve cuánto falta corregir en Dropi y de quién.
     items.unshift(...(await getDropiFixPendingItems(null, mktDept ? `/admin/dept/${mktDept.id}?tab=analisis-mercado&ptab=dropicheck` : "/admin").catch(() => [])));
+    // Pedido del usuario 2026-10-17: cuando NICK tenga 2 semanas de datos
+    // reales (desde el 31/10, hasta el 14/11) le recuerda retomar el plan.
+    const todayEc = ecuadorDay(new Date());
+    if (todayEc >= "2026-10-31" && todayEc <= "2026-11-14") {
+      items.unshift({
+        type: "nick_retomar_plan",
+        icon: "📊",
+        label: "NICK ya tiene 2 semanas de datos — retomar el plan",
+        meta: "Revisa el Resumen y define: qué ven Daniel y Nairoby, avisos al equipo, recordatorio de cartera y Etapa 5 (PDF o Dropi)",
+        overdue: false,
+        href: "/admin/nick",
+      });
+    }
     if (items.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: "Como administrador", items };
   }
@@ -4817,7 +4831,7 @@ export async function getPossiblePendingTypesForActor(
   const types: string[] = [];
 
   if (actor.isAdmin) {
-    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion", "ajuste_stock_conteo", "catalogo_compras_borrado", "cuenta_proveedor_verificar", "caja_chica_excepcion_flete", "sueldo_nairoby_transferencia", "plan_mejora_admin", "correccion_precio_compra", "perdida_compra_aprobar", "marcas_no_coinciden", "arreglo_verificar_flete", "arreglo_pagar_cliente");
+    types.push("feedback", "caja_chica_saldo", "caja_chica_confirmacion", "cumpleanos", "compras_creditos_pendientes", "anticipos_aprobacion", "descuentos_sin_aceptar", "compras_personales_precio", "compras_personales_transferencia", "compras_personales_cierre", "nomina_transferencia", "iess_transferencia", "combo_sugerencias_nicho_backfill", "plan_mejora_cierre_aprobacion", "deterioro_compras_excepcion", "ajuste_stock_conteo", "catalogo_compras_borrado", "cuenta_proveedor_verificar", "caja_chica_excepcion_flete", "sueldo_nairoby_transferencia", "plan_mejora_admin", "correccion_precio_compra", "perdida_compra_aprobar", "marcas_no_coinciden", "arreglo_verificar_flete", "arreglo_pagar_cliente", "nick_retomar_plan");
   } else {
     const me = await prisma.user.findUnique({
       where: { id: actor.userId },
