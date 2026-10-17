@@ -69,7 +69,7 @@ ${FILL_RATE_RULES}`,
 - Número en rojo / negativo: salió más de lo que entró en el sistema. Casi siempre es un error de conteo o algo que salió sin registrarse su entrada; hay que revisarlo y contarlo.
 - Franja verde a la izquierda: ya recontado en el conteo físico, el stock es real. Amarilla: contado pero falta que Daniel lo aplique, o tuvo una diferencia grande y otra persona lo vuelve a contar. Sin franja: todavía no se cuenta.
 - "Aún no comprado": producto aprobado en Análisis de Mercado que nunca se compró (no es que se acabó). "ID … por liberar (Bryan)": tiene ID de Dropi esperando que Bryan lo libere. "Sin ID": falta ponerle el ID de Dropi.
-- Variantes (color/talla): cuántas hay de cada una; "Sin identificar" = unidades que no se sabe de qué variante son.
+- Variantes (color/talla): cuántas hay de cada una; "Sin identificar" = unidades que no se sabe de qué variante son. "N VAR." junto al nombre = tiene N variantes contadas en el conteo físico (se ven pulsando el nombre). Si el texto trae las variantes, nómbralas una por una con su cantidad.
 - Combos: no tienen stock propio. El "≈" es cuántos combos se pueden armar con el stock real de sus productos.
 - Columnas de COSTO: Proveedor (lo que cobra el proveedor, sin flete), Puesto en bodega (proveedor + flete; de aquí salen todos los precios), Benistock. Columnas de PRECIOS DE VENTA: B2B, Dropi, B2C 1 unidad, B2C 2 a 11 unidades. Cada columna tiene su botón ⓘ con la fórmula exacta (vienen en el texto si la persona los abrió).
 - Botón de la flecha: unidades despachadas por día en los últimos 30 días.`,

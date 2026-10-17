@@ -644,15 +644,30 @@ function countedText(r: { countPending?: "pending" | "recount" | null; lastCount
   return days <= 0 ? "Contado hoy" : days === 1 ? "Contado ayer" : `Contado hace ${days} días`;
 }
 
+// Variantes de la fila para Mary (2026-10-16): las del recuento están
+// escondidas hasta pulsar el nombre, así que antes no las veía.
+function variantExplainText(r: { variantStock?: { variants: { name: string; stock: number }[]; unidentified: number } | null; countedVariants?: { name: string; qty: number }[] | null }): string {
+  const lines: string[] = [];
+  if (r.variantStock) {
+    lines.push(`Stock por variante (color/talla): ${r.variantStock.variants.map((v) => `${v.name} ${v.stock}`).join(" · ")}${r.variantStock.unidentified !== 0 ? ` · Sin identificar ${r.variantStock.unidentified}` : ""}`);
+  }
+  if (r.countedVariants && r.countedVariants.length > 0) {
+    lines.push(`Variantes contadas en el conteo físico (${r.countedVariants.length}): ${r.countedVariants.map((v) => `${v.name} ${v.qty}`).join(" · ")}`);
+  }
+  return lines.length > 0 ? `\n${lines.join("\n")}` : "\nVariantes: no tiene variantes registradas.";
+}
+
 // Lo que Mary necesita para explicar una fila de Stock Actual (2026-10-14):
 // cada número con el nombre de su columna, más las fórmulas de arriba.
-function stockRowExplainText(r: { name: string; justCode: string | null; bodega: string | null; warehouseArea: string | null; balance: number; providerPrice?: number | null; bodegaPrice?: number | null; benistockPrice?: number | null; b2bPriceDefault?: number | null; dropiPrice?: number | null; b2cPrice1Unit?: number | null; b2cPrice2to11?: number | null }) {
+function stockRowExplainText(r: { name: string; justCode: string | null; bodega: string | null; warehouseArea: string | null; balance: number; providerPrice?: number | null; bodegaPrice?: number | null; benistockPrice?: number | null; b2bPriceDefault?: number | null; dropiPrice?: number | null; b2cPrice1Unit?: number | null; b2cPrice2to11?: number | null } & Parameters<typeof countedText>[0] & Parameters<typeof variantExplainText>[0]) {
   const money = (v?: number | null) => (v == null ? "sin dato" : `$${v.toFixed(2)}`);
   return [
     `Producto: ${r.name}${r.justCode ? ` (ID ${r.justCode})` : ""} · Marca: ${r.bodega ?? "sin marca"} · Área: ${r.warehouseArea ?? "sin área"}`,
     `Stock INVESTOCK: ${r.balance} unidades`,
     `Costo — Proveedor (sin flete): ${money(r.providerPrice)} · Puesto en bodega: ${money(r.bodegaPrice)} · Benistock: ${money(r.benistockPrice)}`,
     `Precios de venta — B2B: ${money(r.b2bPriceDefault)} · Dropi: ${money(r.dropiPrice)} · B2C 1 un.: ${money(r.b2cPrice1Unit)} · B2C 2-11 un.: ${money(r.b2cPrice2to11)}`,
+    // Antes de las fórmulas: el texto se corta en 4000 caracteres.
+    `Conteo físico: ${countedText(r)}${variantExplainText(r)}`,
     "Fórmulas de cada columna:",
     ...Object.values(FORMULA_EXPLANATIONS).map((f) => `- ${f.title}: ${f.text}`),
   ].join("\n");
@@ -1488,7 +1503,7 @@ export function StockLevelsPanel({
                     )}
                     <ProductNameToggle name={r.name} countedVariants={r.countedVariants ?? null} hasVariantStock={!!r.variantStock} />
                     {/* Pedido del usuario 2026-10-14: Mary explica la fila. */}
-                    <ExplainButton compact topic="stock-actual" extra={`${stockRowExplainText(r)}\nConteo físico: ${countedText(r)}`} />
+                    <ExplainButton compact topic="stock-actual" extra={stockRowExplainText(r)} />
                     {r.countedVariants && !r.variantStock && (
                       <span className="shrink-0 text-[9.5px] font-bold uppercase text-teal" title="Tiene variantes contadas: pulsa el nombre para verlas">
                         {r.countedVariants.length} var.
