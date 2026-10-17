@@ -73,9 +73,11 @@ export async function getProvedixTraffic(): Promise<ProvedixTraffic> {
       SELECT to_char("createdAt" - interval '5 hours', 'YYYY-MM-DD') AS day, COUNT(*) AS n
       FROM "ProvedixLead" WHERE "createdAt" >= ${chartFrom} GROUP BY 1`,
     // Mismo texto con distinta mayúscula o espacios cuenta como una búsqueda.
+    // "test"/"prueba" son de las pruebas del sistema, no de dropshippers.
     prisma.$queryRaw<{ label: string; n: bigint }[]>`
       SELECT lower(trim(query)) AS label, COUNT(*) AS n FROM "ProvedixEvent"
       WHERE type = 'search' AND query IS NOT NULL AND trim(query) <> '' AND "createdAt" >= ${d30}
+        AND lower(trim(query)) NOT IN ('test', 'prueba')
       GROUP BY 1 ORDER BY 2 DESC LIMIT 10`,
     prisma.provedixEvent.groupBy({
       by: ["productCode"],
