@@ -44,7 +44,10 @@ type DropiProduct = {
   stock: number;
   variations: DropiVariation[];
 };
+// Precio cobrado en los pedidos ("la factura"), por ID: el más bajo visto.
+type OrderPrices = Record<string, number>;
 type DropiCatalog = {
+  orderPrices: OrderPrices;
   readAt: string;
   accounts: { id: string; products: DropiProduct[]; error: string | null }[];
 };
@@ -117,6 +120,53 @@ async function readAccountCatalog(accountId: string): Promise<DropiProduct[]> {
   return [...all.values()];
 }
 
+// Precio real de venta desde los pedidos (pedido del usuario 2026-10-17): los
+// productos PRIVADOS no salen en el catálogo, pero cada pedido dice a cuánto se
+// vendió cada producto. Se leen los 2 pedidos más recientes de cada ID vendido
+// en los últimos 2 días (unas pocas decenas de consultas por lectura).
+const ORDER_DAYS = 2;
+const ORDERS_PER_CODE = 2;
+export async function readOrderPrices(): Promise<OrderPrices> {
+  const since = new Date(Date.now() - ORDER_DAYS * 86_400_000 - 5 * 3_600_000).toISOString().slice(0, 10);
+  const accounts = ACCOUNTS.map((a) => a.id as string);
+  const rows = await prisma.$queryRaw<{ oid: string; acc: string }[]>`
+    SELECT DISTINCT oid, acc FROM (
+      SELECT s."dropiOrderId" AS oid, s."accountId" AS acc,
+        row_number() OVER (PARTITION BY c ORDER BY f."manifestDay" DESC, f."createdAt" DESC) AS rn
+      FROM "FulfillmentRequestGuide" f
+      CROSS JOIN unnest(f.codes) AS c
+      JOIN "NickGuideStatus" s ON s."guideNumber" = f."guideNumber"
+      WHERE f."manifestDay" >= ${since} AND s."accountId" = ANY(${accounts})
+    ) t WHERE rn <= ${ORDERS_PER_CODE}`;
+  const sessions = new Map<string, McpSession>();
+  const out: OrderPrices = {};
+  const queue = [...rows];
+  const worker = async () => {
+    for (let r = queue.shift(); r; r = queue.shift()) {
+      try {
+        let mcp = sessions.get(r.acc);
+        if (!mcp) {
+          mcp = new McpSession(r.acc, await getValidAccessToken(r.acc));
+          await mcp.init();
+          sessions.set(r.acc, mcp);
+        }
+        const text = toolText(await mcp.callTool("get_order", { id: String(r.oid) }));
+        // Líneas "ID,nombre,cantidad,precio unitario,subtotal".
+        for (const line of text.split("\n")) {
+          const m = line.match(/^\s*(\d{3,8}),.*,(\d+),(\d+(?:\.\d+)?),(\d+(?:\.\d+)?)\s*$/);
+          if (!m) continue;
+          const price = Number(m[3]);
+          if (price > 0 && (out[m[1]] == null || price < out[m[1]])) out[m[1]] = price;
+        }
+      } catch {
+        // Un pedido que no se pudo leer no frena el resto.
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, worker));
+  return out;
+}
+
 export async function readDropiCatalogs(): Promise<DropiCatalog> {
   const accounts = await Promise.all(
     ACCOUNTS.map(async (a) => {
@@ -135,10 +185,11 @@ export async function readDropiCatalogs(): Promise<DropiCatalog> {
       }
     }),
   );
-  return { readAt: new Date().toISOString(), accounts };
+  const orderPrices = await readOrderPrices().catch(() => ({}));
+  return { readAt: new Date().toISOString(), accounts, orderPrices };
 }
 
-const cachedCatalog = unstable_cache(readDropiCatalogs, ["dropi-catalog-v1"], {
+const cachedCatalog = unstable_cache(readDropiCatalogs, ["dropi-catalog-v2"], {
   revalidate: 2 * 3600,
   tags: [DROPI_CATALOG_TAG],
 });
@@ -155,6 +206,10 @@ export type DropiCheck = {
   sold30: number;
   dropiPrice: number | null;
   minPrice: number | null;
+  // Precio más bajo cobrado en los pedidos recientes (null si no hubo pedidos leídos).
+  orderPrice: number | null;
+  // Privado en Dropi: no sale en el catálogo, solo en los pedidos.
+  isPrivate: boolean;
 };
 export type DropiChecks = {
   readAt: string;
@@ -178,7 +233,7 @@ async function ordersByCode(codes: string[]): Promise<Map<string, number>> {
 
 export const getCachedDropiCatalogChecks = unstable_cache(
   () => getDropiCatalogChecks(),
-  ["dropi-catalog-checks-v1"],
+  ["dropi-catalog-checks-v2"],
   { revalidate: 30 * 60, tags: [DROPI_CATALOG_TAG] },
 );
 
@@ -197,11 +252,13 @@ export async function getDropiCatalogChecks(
   for (const acc of ACCOUNTS) {
     const products =
       catalog.accounts.find((a) => a.id === acc.id)?.products ?? [];
-    if (!products.length) continue;
+    const orderPrices = catalog.orderPrices ?? {};
+    const codes = [...new Set([...products.map((p) => p.id), ...Object.keys(orderPrices)])];
+    if (!codes.length) continue;
     const items = await prisma.purchaseCatalogItem.findMany({
       where: {
         bodega: acc.bodega,
-        justCode: { in: products.map((p) => p.id) },
+        justCode: { in: codes },
       },
       select: { id: true, justCode: true, name: true },
     });
@@ -228,7 +285,8 @@ export async function getDropiCatalogChecks(
     const byCode = new Map(products.map((p) => [p.id, p]));
     for (const item of items) {
       const p = byCode.get(item.justCode!);
-      if (!p) continue;
+      const orderPrice = orderPrices[item.justCode!] ?? null;
+      if (!p && orderPrice == null) continue;
       const real = realBy.get(item.id) ?? 0;
       const sold30 = sales.get(item.justCode!) ?? 0;
       const min = minPrices.get(item.id) ?? null;
@@ -238,21 +296,23 @@ export async function getDropiCatalogChecks(
         name: item.name,
         brand: acc.brand,
         sold30,
-        dropiPrice: p.salePrice,
+        dropiPrice: p?.salePrice ?? null,
         minPrice,
+        orderPrice,
+        isPrivate: !p,
       };
-      if (
-        p.salePrice != null &&
-        minPrice != null &&
-        p.salePrice < minPrice - 0.005
-      )
+      const below = (x: number | null | undefined) => x != null && minPrice != null && x < minPrice - 0.005;
+      // Bajo el mínimo en la vitrina (catálogo) o en un pedido real.
+      if (below(p?.salePrice) || below(orderPrice))
         checks.push({
           ...base,
           kind: "precio_bajo",
           variant: null,
           realStock: real,
-          dropiStock: p.stock,
+          dropiStock: p?.stock ?? 0,
         });
+      // El stock solo se puede comparar con lo que Dropi muestra (públicos).
+      if (!p) continue;
       // Por color/talla, solo donde Daniel ya puso el ID de variación de Dropi.
       const mapped = (variants.get(item.id)?.variants ?? []).filter(
         (v) => v.dropiVariantId,

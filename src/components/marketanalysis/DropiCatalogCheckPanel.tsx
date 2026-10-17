@@ -22,7 +22,7 @@ const GROUPS: { kind: DropiCheck["kind"]; title: string; help: string; tone: str
   {
     kind: "precio_bajo",
     title: "🔴 Precio en Dropi por debajo del mínimo",
-    help: "El precio publicado en Dropi está por debajo del Precio Dropi de INVESTOCK (el de Stock Actual): estamos perdiendo margen. Súbelo en Dropi al mínimo o más. Ese mínimo se actualiza solo con las compras y las devoluciones.",
+    help: "El precio publicado en Dropi (o el que se cobró en un pedido real) está por debajo del Precio Dropi de INVESTOCK (el de Stock Actual): estamos perdiendo margen. Súbelo en Dropi al mínimo o más, también en los privados y en los precios especiales por tienda. Ese mínimo se actualiza solo con las compras y las devoluciones.",
     tone: "border-red/50 bg-red/5",
   },
   {
@@ -56,8 +56,20 @@ function CheckRow({ r, mine }: { r: Row; mine: boolean }) {
         </div>
       </div>
       {r.kind === "precio_bajo" ? (
-        <div className="text-[12.5px] tabular-nums">
-          En Dropi <b className="text-red">{money(r.dropiPrice)}</b> · mínimo INVESTOCK <b>{money(r.minPrice)}</b>
+        <div className="text-[12.5px] tabular-nums text-right">
+          {r.isPrivate ? (
+            <span className="mr-1 rounded bg-steel/15 px-1.5 py-0.5 text-[11px] font-semibold text-steel">Privado</span>
+          ) : (
+            <>
+              En Dropi <b className={r.dropiPrice != null && r.minPrice != null && r.dropiPrice < r.minPrice ? "text-red" : ""}>{money(r.dropiPrice)}</b> ·{" "}
+            </>
+          )}
+          {r.orderPrice != null && r.minPrice != null && r.orderPrice < r.minPrice && (
+            <>
+              vendido a <b className="text-red">{money(r.orderPrice)}</b> en un pedido ·{" "}
+            </>
+          )}
+          mínimo INVESTOCK <b>{money(r.minPrice)}</b>
         </div>
       ) : (
         <div className="text-[12.5px] tabular-nums">

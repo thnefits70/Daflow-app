@@ -2049,7 +2049,7 @@ async function getDropiFixPendingItems(userId: string | null, adminHref?: string
         icon: "🔴",
         label: `Corrige en Dropi ${mine.length} producto${mine.length === 1 ? "" : "s"} (te tocan a ti)`,
         meta: mine.length === 1 && mine[0].kind === "precio_bajo"
-          ? `${mine[0].name}: $${mine[0].dropiPrice?.toFixed(2)} → mínimo $${mine[0].minPrice?.toFixed(2)}`
+          ? `${mine[0].name}: ${(mine[0].dropiPrice ?? mine[0].orderPrice)?.toFixed(2)} → mínimo ${mine[0].minPrice?.toFixed(2)}`
           : `${count(mine)} — se está perdiendo dinero`,
         overdue: true,
         href: DROPI_CHECK_HREF,
