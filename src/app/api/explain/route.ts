@@ -28,7 +28,12 @@ export async function POST(req: NextRequest) {
     return new Response("Mary todavía no está conectada — falta configurar la clave de Anthropic en el servidor.", { status: 503 });
   }
 
-  const me = await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, isActive: true, deptId: true } });
+  // El admin no está en la tabla de usuarios (su sesión tiene id "admin"):
+  // antes eso daba "No autorizado." al tocar "¿Qué significa?" (2026-10-16).
+  const isAdmin = session.user.role === "admin";
+  const me = isAdmin
+    ? { name: "Administrador", isActive: true, deptId: null as string | null }
+    : await prisma.user.findUnique({ where: { id: session.user.id }, select: { name: true, isActive: true, deptId: true } });
   if (!me?.isActive) return new Response("No autorizado.", { status: 403 });
 
   const topic = EXPLAIN_TOPICS[parsed.data.topic];
