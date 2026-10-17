@@ -106,6 +106,17 @@ export function identityFromToken(accessToken: string): string | null {
 // byId=null cuando conecta el admin (no tiene fila en User).
 export async function saveTokens(accountId: string, t: TokenResponse, connect?: { byId: string | null }) {
   if (!t.access_token) throw new Error("Dropi no entregó el permiso");
+  // Pedido del usuario 2026-10-17: si se conecta una cuenta de Dropi distinta
+  // a la anterior (otro "sub", o venía desconectada), NICK vuelve a leer los
+  // últimos 45 días y las guías que vea pasan a esta cuenta.
+  let resetSync = {};
+  if (connect) {
+    const prev = await prisma.nickDropiAccount.findUnique({ where: { id: accountId }, select: { dropiIdentity: true } });
+    const sub = (s: string | null | undefined) => s?.match(/sub:\s*(\S+)/)?.[1] ?? null;
+    if (sub(prev?.dropiIdentity) !== sub(identityFromToken(t.access_token))) {
+      resetSync = { lastSyncAt: null, syncDay: null, syncStart: 0, lastReadAt: null, syncLockUntil: null };
+    }
+  }
   await prisma.nickDropiAccount.update({
     where: { id: accountId },
     data: {
@@ -115,6 +126,7 @@ export async function saveTokens(accountId: string, t: TokenResponse, connect?: 
       ...(connect
         ? { connectedById: connect.byId, connectedAt: new Date(), dropiIdentity: identityFromToken(t.access_token) }
         : {}),
+      ...resetSync,
       needsReconnect: false,
       lastError: null,
     },
