@@ -148,7 +148,7 @@ const PACKING = [
   { src: "/pvx/work/impresion-guias.webp", title: "Guías impresas en cada corte", alt: "Impresora sacando guías de envío" },
   { src: "/pvx/work/empaque-1-producto.webp", title: "Revisamos el producto", alt: "Producto en su caja antes de empacar" },
   { src: "/pvx/work/empaque-2-burbuja.webp", title: "Lo protegemos con burbuja", alt: "Producto envuelto en plástico burbuja" },
-  { src: "/pvx/work/empaque-3-film.webp", title: "Film y guía, listo para salir", alt: "Paquete cerrado con film negro y la guía pegada" },
+  { src: "/pvx/work/empaque-3-film.webp", title: "Sellado con plástico film y su guía", alt: "Paquete sellado con plástico film negro y la guía pegada" },
 ];
 
 export function PvxOperation() {

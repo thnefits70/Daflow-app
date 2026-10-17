@@ -28,7 +28,8 @@ type Chip = { text: string; tone: "button" | "case" | "warn" };
 function parse(raw: string) {
   const chips: Chip[] = [];
   const attachments: { id: string; kind: string }[] = [];
-  let text = raw.replace(/^\[\[EQUIPO:[^\]]+\]\]\s*/, "");
+  // Varios mensajes cortos (2026-10-17): [[SEP]] separa las partes; aquí van como párrafos.
+  let text = raw.replace(/^\[\[EQUIPO:[^\]]+\]\]\s*/, "").replace(/\s*\[\[SEP\]\]\s*/g, "\n\n");
   text = text.replace(/\[\[ADJUNTO:([a-z0-9]{10,40}):(image|video)\]\]/gi, (_m, id: string, kind: string) => {
     attachments.push({ id, kind });
     return "";

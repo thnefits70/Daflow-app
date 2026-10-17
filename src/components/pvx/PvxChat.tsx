@@ -106,8 +106,16 @@ function saveSeen(n: number) {
     // sin almacenamiento: no se marca "respuesta nueva"
   }
 }
+// Varios mensajes cortos, como en WhatsApp (2026-10-17): la IA separa las
+// partes con [[SEP]] y aquí cada una sale en su propia burbuja.
+const SEP_RE = /\s*\[\[SEP\]\]\s*/;
+export const partsOf = (t: string): string[] => {
+  const p = t.split(SEP_RE).filter((x, i, a) => x.trim() || i === a.length - 1);
+  return p.length ? p : [""];
+};
 export const cleanReply = (t: string) =>
   t
+    .replace(/\[\[SEP\]\]/g, "")
     .replace(TEAM_RE, "")
     .replace(ATTACH_RE, "")
     .replace(/\[\[(ASESORA(:[A-Z0-9-]*)?|BLOQUEAR|SOSPECHA)\]\]/g, "")
@@ -182,7 +190,8 @@ const MAX_IMAGE_MB = 15;
 // JPEG): así nunca pasan el límite y suben rápido. Si el navegador no puede
 // leerla (p. ej. HEIC en algunos), se envía tal cual.
 async function shrinkImage(file: File): Promise<File> {
-  if (!file.type.startsWith("image/") || file.size < 1.5 * 1024 * 1024) return file;
+  if (!file.type.startsWith("image/") || file.size < 1.5 * 1024 * 1024)
+    return file;
   try {
     const bmp = await createImageBitmap(file);
     const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
@@ -190,8 +199,12 @@ async function shrinkImage(file: File): Promise<File> {
     canvas.width = Math.round(bmp.width * scale);
     canvas.height = Math.round(bmp.height * scale);
     canvas.getContext("2d")?.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/jpeg", 0.85));
-    return blob && blob.size < file.size ? new File([blob], "foto.jpg", { type: "image/jpeg" }) : file;
+    const blob = await new Promise<Blob | null>((r) =>
+      canvas.toBlob(r, "image/jpeg", 0.85),
+    );
+    return blob && blob.size < file.size
+      ? new File([blob], "foto.jpg", { type: "image/jpeg" })
+      : file;
   } catch {
     return file;
   }
@@ -199,7 +212,16 @@ async function shrinkImage(file: File): Promise<File> {
 
 function IconClip({ className = "w-5 h-5" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
       <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
     </svg>
   );
@@ -209,11 +231,26 @@ function IconClip({ className = "w-5 h-5" }: { className?: string }) {
 function Attachment({ id, kind }: { id: string; kind: string }) {
   const src = `/api/pvx/chat/file/${id}`;
   return kind === "video" ? (
-    <video src={src} controls preload="metadata" className="mt-1 max-h-72 w-full rounded-xl bg-black" />
+    <video
+      src={src}
+      controls
+      preload="metadata"
+      className="mt-1 max-h-72 w-full rounded-xl bg-black"
+    />
   ) : (
-    <a href={src} target="_blank" rel="noopener noreferrer" className="mt-1 block overflow-hidden rounded-xl">
+    <a
+      href={src}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-1 block overflow-hidden rounded-xl"
+    >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={src} alt="Foto que adjuntaste" className="max-h-72 w-full object-cover" loading="lazy" />
+      <img
+        src={src}
+        alt="Foto que adjuntaste"
+        className="max-h-72 w-full object-cover"
+        loading="lazy"
+      />
     </a>
   );
 }
@@ -281,6 +318,27 @@ export function PvxChat({
   const [uploading, setUploading] = useState<number | null>(null);
   // Respuesta nueva del equipo mientras el chat estaba cerrado (2026-10-16).
   const [unread, setUnread] = useState(false);
+  // Respuesta en vivo: sus partes salen una por una con "escribiendo…" entre ellas.
+  const [live, setLive] = useState<{ idx: number; shown: number } | null>(null);
+  const msgCountRef = useRef(0);
+  useEffect(() => {
+    msgCountRef.current = messages.length;
+  }, [messages.length]);
+  useEffect(() => {
+    if (!live) return;
+    const m = messages[live.idx];
+    if (!m) return;
+    const parts = partsOf(m.content);
+    // La siguiente burbuja aparece cuando ya llegó (hay una después) o terminó de escribir.
+    if (live.shown >= parts.length || (live.shown === parts.length - 1 && busy))
+      return;
+    const prev = parts[live.shown - 1] ?? "";
+    const t = setTimeout(
+      () => setLive((l) => (l ? { ...l, shown: l.shown + 1 } : l)),
+      Math.min(1800, 600 + prev.length * 12),
+    );
+    return () => clearTimeout(t);
+  }, [live, messages, busy]);
   // Sin registro (2026-10-17): 2 preguntas gratis y luego el registro aquí mismo.
   const [trialLeft, setTrialLeft] = useState<number | null>(null);
   const [regFlow, setRegFlow] = useState(false);
@@ -295,7 +353,12 @@ export function PvxChat({
       .then((d) => {
         const list: Msg[] = Array.isArray(d?.messages) ? d.messages : [];
         const last = list[list.length - 1];
-        if (list.length > readSeen() && last?.role === "assistant" && teamOf(last.content)) setUnread(true);
+        if (
+          list.length > readSeen() &&
+          last?.role === "assistant" &&
+          teamOf(last.content)
+        )
+          setUnread(true);
       })
       .catch(() => null);
   }, [registered]);
@@ -306,10 +369,15 @@ export function PvxChat({
   // "Preguntar a Michelle IA" desde otra parte de la página: abre el chat con la pregunta lista.
   useEffect(() => {
     const onAsk = (e: Event) => {
-      const d = (e as CustomEvent<string | { text: string; source: OpenSource }>).detail;
+      const d = (
+        e as CustomEvent<string | { text: string; source: OpenSource }>
+      ).detail;
       const text = typeof d === "string" ? d : d?.text;
       setOpen(true);
-      trackChat("chat_open", typeof d === "object" && d?.source ? d.source : "pagina");
+      trackChat(
+        "chat_open",
+        typeof d === "object" && d?.source ? d.source : "pagina",
+      );
       setUnread(false);
       if (text) setInput(text);
       setTimeout(() => inputRef.current?.focus(), 300);
@@ -363,6 +431,7 @@ export function PvxChat({
       setError("");
       setInput("");
       setBusy(true);
+      setLive({ idx: msgCountRef.current + 1, shown: 1 });
       setMessages((m) => [
         ...m,
         { role: "user", content: text },
@@ -454,7 +523,9 @@ export function PvxChat({
       setUploading(0);
       const file = isVideo ? picked : await shrinkImage(picked);
       if (!isVideo && file.size > MAX_IMAGE_MB * 1024 * 1024) {
-        setError(`Esa foto pesa más de ${MAX_IMAGE_MB} MB. Prueba con una captura de pantalla de la foto.`);
+        setError(
+          `Esa foto pesa más de ${MAX_IMAGE_MB} MB. Prueba con una captura de pantalla de la foto.`,
+        );
         setUploading(null);
         if (fileRef.current) fileRef.current.value = "";
         return;
@@ -463,7 +534,11 @@ export function PvxChat({
         const res = await fetch("/api/pvx/chat/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chatId: chatId ?? undefined, type: file.type || "application/octet-stream", size: file.size }),
+          body: JSON.stringify({
+            chatId: chatId ?? undefined,
+            type: file.type || "application/octet-stream",
+            size: file.size,
+          }),
         });
         const d = await res.json().catch(() => null);
         if (!res.ok || !d?.uploadUrl) {
@@ -479,13 +554,17 @@ export function PvxChat({
           xhr.open("PUT", d.uploadUrl);
           xhr.setRequestHeader("Content-Type", file.type);
           xhr.setRequestHeader("x-upsert", "false");
-          xhr.upload.onprogress = (ev) => ev.lengthComputable && setUploading(Math.round((ev.loaded / ev.total) * 100));
+          xhr.upload.onprogress = (ev) =>
+            ev.lengthComputable &&
+            setUploading(Math.round((ev.loaded / ev.total) * 100));
           xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300);
           xhr.onerror = () => resolve(false);
           xhr.send(file);
         });
         if (!ok) {
-          setError("Se cortó la subida. Revisa tu internet e intenta de nuevo.");
+          setError(
+            "Se cortó la subida. Revisa tu internet e intenta de nuevo.",
+          );
           return;
         }
         const done = await fetch(`/api/pvx/chat/upload/${d.id}`, {
@@ -533,15 +612,24 @@ export function PvxChat({
         <span className="relative">
           <Avatar size={34} />
           {unread && !open && (
-            <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-[#3ddc84] ring-2 ring-[var(--pvx-ink)]" aria-hidden />
+            <span
+              className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-[#3ddc84] ring-2 ring-[var(--pvx-ink)]"
+              aria-hidden
+            />
           )}
         </span>
         <span className="leading-tight">
           <span className="block text-[14px] font-bold">
-            {open ? "Cerrar chat" : unread ? "Tienes una respuesta" : "Pregúntale a Michelle"}
+            {open
+              ? "Cerrar chat"
+              : unread
+                ? "Tienes una respuesta"
+                : "Pregúntale a Michelle"}
           </span>
           <span className="block text-[12px] font-semibold text-white/60">
-            {unread && !open ? "Del equipo de Provedix" : "Asistente virtual · IA"}
+            {unread && !open
+              ? "Del equipo de Provedix"
+              : "Asistente virtual · IA"}
           </span>
         </span>
       </button>
@@ -580,10 +668,11 @@ export function PvxChat({
               <div className="max-w-[85%] rounded-2xl rounded-tl-md bg-white px-3.5 py-2.5 text-[14.5px] leading-relaxed">
                 {registered ? (
                   <>
-                    ¡Hola{name ? `, ${name.trim().split(/s+/)[0]}` : ""}! 👋 Soy <b>Michelle</b>, tu asistente virtual de
-                    Provedix 😊 Estoy aquí para ayudarte a encontrar productos
-                    ganadores, ver cuánto se venden y resolver tus dudas.
-                    Cuéntame, ¿en qué te ayudo hoy? 💛
+                    ¡Hola{name ? `, ${name.trim().split(/s+/)[0]}` : ""}! 👋 Soy{" "}
+                    <b>Michelle</b>, tu asistente virtual de Provedix 😊 Estoy
+                    aquí para ayudarte a encontrar productos ganadores, ver
+                    cuánto se venden y resolver tus dudas. Cuéntame, ¿en qué te
+                    ayudo hoy? 💛
                   </>
                 ) : (
                   // Sin registro: 2 preguntas generales gratis y luego registro aquí mismo (2026-10-17).
@@ -641,144 +730,224 @@ export function PvxChat({
                   )}
                 </div>
               ) : (
-                <div key={i} className="mt-3 flex gap-2">
-                  {teamOf(m.content) ? (
-                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--pvx-ink)] text-[12px] font-black text-white" aria-hidden>
-                      {teamOf(m.content)!.slice(0, 1)}
-                    </span>
-                  ) : (
-                    <Avatar size={28} />
-                  )}
-                  <div className={`max-w-[85%] rounded-2xl rounded-tl-md px-3.5 py-2.5 text-[14.5px] leading-relaxed ${teamOf(m.content) ? "bg-[#fff1e8] ring-1 ring-[var(--pvx-orange)]/30" : "bg-white"}`}>
-                    {m.content ? (
-                      <>
-                        {teamOf(m.content) && (
-                          <span className="mb-0.5 block text-[12px] font-bold text-[var(--pvx-orange-text)]">
-                            {teamOf(m.content)} · equipo de Provedix
-                          </span>
-                        )}
-                        <Rich text={cleanReply(m.content)} />
-                        {/* La asistente pone la marca solo cuando ya no puede resolver el caso (pedido 2026-10-14):
-                            recién ahí aparece el botón a Michelle, la asesora, con la consulta ya escrita. */}
-                        {/* Caso para el equipo (2026-10-16: sin WhatsApp, responden aquí mismo). */}
-                        {m.content.includes(HANDOFF_MARK) && (
-                          <div className="mt-2.5 rounded-xl bg-[var(--pvx-paper-2)] px-3 py-2.5 text-[13px] leading-snug">
-                            <b>
-                              {caseCodeOf(m.content) ? `Caso ${caseCodeOf(m.content)} · ` : ""}
-                              El equipo te responde aquí
-                            </b>
-                            <span className="block text-[var(--pvx-ink-2)]">
-                              En {ADVISOR_RESPONSE_PROMISE}, de {WORK_HOURS_TEXT}. Vuelve a abrir este chat para ver la respuesta. Si hace falta, adjunta fotos o video con 📎.
+                (() => {
+                  const parts = partsOf(m.content);
+                  const visible =
+                    live && live.idx === i
+                      ? Math.min(live.shown, parts.length)
+                      : parts.length;
+                  const done = visible >= parts.length;
+                  const head = done
+                    ? parts.slice(0, -1)
+                    : parts.slice(0, visible);
+                  const tail = parts[parts.length - 1] ?? "";
+                  return (
+                    <Fragment key={i}>
+                      {head.map((p, k) => (
+                        <div
+                          key={k}
+                          className={`${k === 0 ? "mt-3" : "mt-1.5"} flex gap-2`}
+                        >
+                          {k === 0 ? (
+                            teamOf(m.content) ? (
+                              <span
+                                className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--pvx-ink)] text-[12px] font-black text-white"
+                                aria-hidden
+                              >
+                                {teamOf(m.content)!.slice(0, 1)}
+                              </span>
+                            ) : (
+                              <Avatar size={28} />
+                            )
+                          ) : (
+                            <span className="w-7 shrink-0" aria-hidden />
+                          )}
+                          <div
+                            className={`max-w-[85%] rounded-2xl ${k === 0 ? "rounded-tl-md" : ""} px-3.5 py-2.5 text-[14.5px] leading-relaxed ${teamOf(m.content) ? "bg-[#fff1e8] ring-1 ring-[var(--pvx-orange)]/30" : "bg-white"}`}
+                          >
+                            {k === 0 && teamOf(m.content) && (
+                              <span className="mb-0.5 block text-[12px] font-bold text-[var(--pvx-orange-text)]">
+                                {teamOf(m.content)} · equipo de Provedix
+                              </span>
+                            )}
+                            <Rich text={cleanReply(p)} />
+                          </div>
+                        </div>
+                      ))}
+                      {!done ? (
+                        <div className="mt-1.5 flex gap-2">
+                          <span className="w-7 shrink-0" aria-hidden />
+                          <div className="rounded-2xl bg-white px-3.5 py-2.5">
+                            <span
+                              className="inline-flex gap-1 py-1"
+                              aria-label="Michelle está escribiendo"
+                            >
+                              <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)] [animation-delay:-0.3s]" />
+                              <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)] [animation-delay:-0.15s]" />
+                              <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)]" />
                             </span>
                           </div>
-                        )}
-                        {photoIdsOf(m.content).map((pid) => (
-                          <a
-                            key={pid}
-                            href={`/api/pvx/chat/photo/${pid}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-2.5 block overflow-hidden rounded-xl border border-[var(--pvx-paper-3)]"
+                        </div>
+                      ) : (
+                        <div
+                          className={`${head.length ? "mt-1.5" : "mt-3"} flex gap-2`}
+                        >
+                          {head.length ? (
+                            <span className="w-7 shrink-0" aria-hidden />
+                          ) : teamOf(m.content) ? (
+                            <span
+                              className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-[var(--pvx-ink)] text-[12px] font-black text-white"
+                              aria-hidden
+                            >
+                              {teamOf(m.content)!.slice(0, 1)}
+                            </span>
+                          ) : (
+                            <Avatar size={28} />
+                          )}
+                          <div
+                            className={`max-w-[85%] rounded-2xl ${head.length ? "" : "rounded-tl-md"} px-3.5 py-2.5 text-[14.5px] leading-relaxed ${teamOf(m.content) ? "bg-[#fff1e8] ring-1 ring-[var(--pvx-orange)]/30" : "bg-white"}`}
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={`/api/pvx/chat/photo/${pid}`}
-                              alt="Foto de evidencia de tu guía retenida"
-                              className="max-h-72 w-full object-cover"
-                              loading="lazy"
-                            />
-                          </a>
-                        ))}
-                        {sectionsOf(m.content).length > 0 && (
-                          <div className="mt-2.5 flex flex-wrap gap-1.5">
-                            {sectionsOf(m.content).map((id) => (
-                              <button
-                                key={id}
-                                type="button"
-                                onClick={() => {
-                                  setOpen(false);
-                                  window.location.hash = id;
-                                  document
-                                    .getElementById(id)
-                                    ?.scrollIntoView({
-                                      behavior: "smooth",
-                                      block: "start",
-                                    });
-                                }}
-                                className="pvx-press inline-flex items-center gap-1.5 rounded-full border border-[var(--pvx-paper-3)] bg-white px-3.5 py-2 text-[13px] font-bold hover:border-[var(--pvx-orange)] cursor-pointer"
+                            {m.content ? (
+                              <>
+                                {teamOf(m.content) && !head.length && (
+                                  <span className="mb-0.5 block text-[12px] font-bold text-[var(--pvx-orange-text)]">
+                                    {teamOf(m.content)} · equipo de Provedix
+                                  </span>
+                                )}
+                                <Rich text={cleanReply(tail)} />
+                                {/* La asistente pone la marca solo cuando ya no puede resolver el caso (pedido 2026-10-14):
+                            recién ahí aparece el botón a Michelle, la asesora, con la consulta ya escrita. */}
+                                {/* Caso para el equipo (2026-10-16: sin WhatsApp, responden aquí mismo). */}
+                                {m.content.includes(HANDOFF_MARK) && (
+                                  <div className="mt-2.5 rounded-xl bg-[var(--pvx-paper-2)] px-3 py-2.5 text-[13px] leading-snug">
+                                    <b>
+                                      {caseCodeOf(m.content)
+                                        ? `Caso ${caseCodeOf(m.content)} · `
+                                        : ""}
+                                      El equipo te responde aquí
+                                    </b>
+                                    <span className="block text-[var(--pvx-ink-2)]">
+                                      En {ADVISOR_RESPONSE_PROMISE}, de{" "}
+                                      {WORK_HOURS_TEXT}. Vuelve a abrir este
+                                      chat para ver la respuesta. Si hace falta,
+                                      adjunta fotos o video con 📎.
+                                    </span>
+                                  </div>
+                                )}
+                                {photoIdsOf(m.content).map((pid) => (
+                                  <a
+                                    key={pid}
+                                    href={`/api/pvx/chat/photo/${pid}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-2.5 block overflow-hidden rounded-xl border border-[var(--pvx-paper-3)]"
+                                  >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={`/api/pvx/chat/photo/${pid}`}
+                                      alt="Foto de evidencia de tu guía retenida"
+                                      className="max-h-72 w-full object-cover"
+                                      loading="lazy"
+                                    />
+                                  </a>
+                                ))}
+                                {sectionsOf(m.content).length > 0 && (
+                                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                    {sectionsOf(m.content).map((id) => (
+                                      <button
+                                        key={id}
+                                        type="button"
+                                        onClick={() => {
+                                          setOpen(false);
+                                          window.location.hash = id;
+                                          document
+                                            .getElementById(id)
+                                            ?.scrollIntoView({
+                                              behavior: "smooth",
+                                              block: "start",
+                                            });
+                                        }}
+                                        className="pvx-press inline-flex items-center gap-1.5 rounded-full border border-[var(--pvx-paper-3)] bg-white px-3.5 py-2 text-[13px] font-bold hover:border-[var(--pvx-orange)] cursor-pointer"
+                                      >
+                                        {SECTION_LABEL[id]}{" "}
+                                        <IconArrow className="w-3.5 h-3.5" />
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {actionsOf(m.content).length > 0 && (
+                                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                    {actionsOf(m.content).map((a) =>
+                                      a.kind === "FICHA" ? (
+                                        // Abre la ficha completa del producto (2026-10-15).
+                                        <button
+                                          key={a.kind + a.code}
+                                          type="button"
+                                          onClick={() => {
+                                            setOpen(false);
+                                            window.dispatchEvent(
+                                              new CustomEvent(
+                                                PVX_PRODUCT_EVENT,
+                                                {
+                                                  detail: a.code,
+                                                },
+                                              ),
+                                            );
+                                          }}
+                                          className="pvx-press inline-flex items-center gap-1.5 rounded-full border border-[var(--pvx-paper-3)] bg-white px-3.5 py-2 text-[13px] font-bold hover:border-[var(--pvx-orange)] cursor-pointer"
+                                        >
+                                          Ver ficha · {a.code}
+                                        </button>
+                                      ) : a.kind === "CALC" ? (
+                                        // Abre la calculadora de la página con este producto (2026-10-15).
+                                        <button
+                                          key={a.kind + a.code}
+                                          type="button"
+                                          onClick={() => {
+                                            setOpen(false);
+                                            window.dispatchEvent(
+                                              new CustomEvent(PVX_CALC_EVENT, {
+                                                detail: a.code,
+                                              }),
+                                            );
+                                          }}
+                                          className="pvx-press inline-flex items-center gap-1.5 rounded-full bg-[var(--pvx-ink)] px-3.5 py-2 text-[13px] font-bold text-white hover:bg-[#25282f] cursor-pointer"
+                                        >
+                                          <IconCalc className="w-4 h-4" />{" "}
+                                          Calcular mi ganancia · {a.code}
+                                        </button>
+                                      ) : (
+                                        <a
+                                          key={a.kind + a.code}
+                                          href={`/api/pvx/go/${a.kind.toLowerCase()}/${a.code}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className={`pvx-press inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold ${a.kind === "DROPI" ? "bg-[var(--pvx-orange)] text-white hover:bg-[var(--pvx-orange-press)]" : "border border-[var(--pvx-paper-3)] bg-white hover:border-[var(--pvx-orange)]"}`}
+                                        >
+                                          {ACTION_LABEL[a.kind]} · {a.code}
+                                          <IconExternal className="w-3.5 h-3.5" />
+                                        </a>
+                                      ),
+                                    )}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <span
+                                className="inline-flex gap-1 py-1"
+                                aria-label="Michelle está escribiendo"
                               >
-                                {SECTION_LABEL[id]}{" "}
-                                <IconArrow className="w-3.5 h-3.5" />
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                        {actionsOf(m.content).length > 0 && (
-                          <div className="mt-2.5 flex flex-wrap gap-1.5">
-                            {actionsOf(m.content).map((a) =>
-                              a.kind === "FICHA" ? (
-                                // Abre la ficha completa del producto (2026-10-15).
-                                <button
-                                  key={a.kind + a.code}
-                                  type="button"
-                                  onClick={() => {
-                                    setOpen(false);
-                                    window.dispatchEvent(
-                                      new CustomEvent(PVX_PRODUCT_EVENT, {
-                                        detail: a.code,
-                                      }),
-                                    );
-                                  }}
-                                  className="pvx-press inline-flex items-center gap-1.5 rounded-full border border-[var(--pvx-paper-3)] bg-white px-3.5 py-2 text-[13px] font-bold hover:border-[var(--pvx-orange)] cursor-pointer"
-                                >
-                                  Ver ficha · {a.code}
-                                </button>
-                              ) : a.kind === "CALC" ? (
-                                // Abre la calculadora de la página con este producto (2026-10-15).
-                                <button
-                                  key={a.kind + a.code}
-                                  type="button"
-                                  onClick={() => {
-                                    setOpen(false);
-                                    window.dispatchEvent(
-                                      new CustomEvent(PVX_CALC_EVENT, {
-                                        detail: a.code,
-                                      }),
-                                    );
-                                  }}
-                                  className="pvx-press inline-flex items-center gap-1.5 rounded-full bg-[var(--pvx-ink)] px-3.5 py-2 text-[13px] font-bold text-white hover:bg-[#25282f] cursor-pointer"
-                                >
-                                  <IconCalc className="w-4 h-4" /> Calcular mi
-                                  ganancia · {a.code}
-                                </button>
-                              ) : (
-                                <a
-                                  key={a.kind + a.code}
-                                  href={`/api/pvx/go/${a.kind.toLowerCase()}/${a.code}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={`pvx-press inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[13px] font-bold ${a.kind === "DROPI" ? "bg-[var(--pvx-orange)] text-white hover:bg-[var(--pvx-orange-press)]" : "border border-[var(--pvx-paper-3)] bg-white hover:border-[var(--pvx-orange)]"}`}
-                                >
-                                  {ACTION_LABEL[a.kind]} · {a.code}
-                                  <IconExternal className="w-3.5 h-3.5" />
-                                </a>
-                              ),
+                                <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)] [animation-delay:-0.3s]" />
+                                <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)] [animation-delay:-0.15s]" />
+                                <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)]" />
+                              </span>
                             )}
                           </div>
-                        )}
-                      </>
-                    ) : (
-                      <span
-                        className="inline-flex gap-1 py-1"
-                        aria-label="Michelle está escribiendo"
-                      >
-                        <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)] [animation-delay:-0.3s]" />
-                        <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)] [animation-delay:-0.15s]" />
-                        <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--pvx-ink-3)]" />
-                      </span>
-                    )}
-                  </div>
-                </div>
+                        </div>
+                      )}
+                    </Fragment>
+                  );
+                })()
               ),
             )}
             {showRegister && !blocked && (
@@ -790,7 +959,10 @@ export function PvxChat({
                   onRegistered?.(name);
                   setMessages((m) => [
                     ...m,
-                    { role: "assistant", content: `¡Listo, ${name.split(" ")[0]}! 🎉 Ya estás registrado. Ahora sí, pregúntame todo lo que necesites 💛` },
+                    {
+                      role: "assistant",
+                      content: `¡Listo, ${name.split(" ")[0]}! 🎉 Ya estás registrado. Ahora sí, pregúntame todo lo que necesites 💛`,
+                    },
                   ]);
                   setTimeout(() => inputRef.current?.focus(), 200);
                 }}
@@ -809,7 +981,8 @@ export function PvxChat({
           <div className="border-t border-[var(--pvx-paper-3)] px-3 pb-3 pt-2">
             {showRegister && !blocked ? (
               <p className="mt-1 flex items-center justify-center gap-1.5 text-center text-[12.5px] font-semibold text-[var(--pvx-ink-2)]">
-                <IconLock className="w-3.5 h-3.5" /> Tus datos están protegidos. Completa el registro arriba 👆
+                <IconLock className="w-3.5 h-3.5" /> Tus datos están protegidos.
+                Completa el registro arriba 👆
               </p>
             ) : blocked ? (
               // Intento de sacar información confidencial: chat cerrado (pedido 2026-10-14).
@@ -821,7 +994,10 @@ export function PvxChat({
                 {uploading != null ? (
                   <div className="mb-1.5 flex items-center gap-2 text-[12.5px] font-semibold text-[var(--pvx-ink-2)]">
                     <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--pvx-paper-2)]">
-                      <span className="block h-full rounded-full bg-[var(--pvx-orange)] transition-all" style={{ width: `${uploading}%` }} />
+                      <span
+                        className="block h-full rounded-full bg-[var(--pvx-orange)] transition-all"
+                        style={{ width: `${uploading}%` }}
+                      />
                     </span>
                     Enviando archivo… {uploading}%
                   </div>
@@ -829,17 +1005,28 @@ export function PvxChat({
                   // Prueba sin registro: cuántas preguntas gratis quedan y registro a un toque.
                   <div className="mb-1.5 flex items-center justify-between gap-2 text-[12.5px] text-[var(--pvx-ink-3)]">
                     <span>
-                      {trialLeft != null ? `${trialLeft} pregunta${trialLeft === 1 ? "" : "s"} gratis` : "Preguntas gratis"} sin registrarte
+                      {trialLeft != null
+                        ? `${trialLeft} pregunta${trialLeft === 1 ? "" : "s"} gratis`
+                        : "Preguntas gratis"}{" "}
+                      sin registrarte
                     </span>
-                    <button type="button" onClick={() => setRegFlow(true)} className="shrink-0 font-bold text-[var(--pvx-orange-text)] underline underline-offset-2 cursor-pointer">
+                    <button
+                      type="button"
+                      onClick={() => setRegFlow(true)}
+                      className="shrink-0 font-bold text-[var(--pvx-orange-text)] underline underline-offset-2 cursor-pointer"
+                    >
                       Registrarme gratis
                     </button>
                   </div>
                 ) : (
                   <div className="mb-1.5 flex items-center justify-between gap-2 text-[12.5px] text-[var(--pvx-ink-3)]">
                     {/* El límite se ve antes de adjuntar (2026-10-16). */}
-                    <span>📎 Fotos o videos de hasta {MAX_VIDEO_MB} MB (unos 30 s)</span>
-                    {remaining != null && <span className="shrink-0">{remaining} mensajes hoy</span>}
+                    <span>
+                      📎 Fotos o videos de hasta {MAX_VIDEO_MB} MB (unos 30 s)
+                    </span>
+                    {remaining != null && (
+                      <span className="shrink-0">{remaining} mensajes hoy</span>
+                    )}
                   </div>
                 )}
                 <form
