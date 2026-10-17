@@ -43,7 +43,7 @@ export const PVX_FAQ: { q: string; a: string }[] = [
   },
   {
     q: "¿Dónde encuentro fotos y videos para mis anuncios?",
-    a: "En Creativos ganadores, gratis: hay una hoja de Provedix y otra de Importadora Damián. Busca el producto por nombre o ID con Ctrl + F y abre el enlace de la columna \"Link de creativos\". Puedes publicarlos y editarlos libremente.",
+    a: "Pídeselos a Michelle IA con el nombre o el ID del producto: te da el botón \"Ver creativos\" que abre directo su carpeta. Si quieres ver todos, abre la hoja \"Creativos Provedix\" o \"Creativos Importadora Damián\" y busca el producto por nombre o ID. Puedes publicarlos y editarlos libremente.",
   },
   {
     q: "¿Viste un error en un producto o en un creativo?",

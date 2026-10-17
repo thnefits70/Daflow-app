@@ -345,8 +345,8 @@ export function PvxResources() {
               </span>
               <h3 className="pvx-heading mt-8 text-[30px] sm:text-[40px]">Creativos ganadores, gratis</h3>
               <p className="mt-3 max-w-[480px] text-[16px] leading-relaxed text-white sm:text-[17px]">
-                Fotos y videos exclusivos de nuestros productos, listos para publicar y editar libremente. Busca por nombre o ID con Ctrl + F y abre el enlace de la columna
-                &ldquo;Link de creativos&rdquo;.
+                Fotos y videos exclusivos de nuestros productos, listos para publicar y editar libremente. Abre la hoja de tu marca y busca el producto por nombre o ID, o
+                pídeselo a Michelle IA y te abre directo su carpeta.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
