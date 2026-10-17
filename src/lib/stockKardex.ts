@@ -561,7 +561,7 @@ export type AdjustmentVariantCount = { name: string; qty: number };
 
 function cleanAdjustmentVariants(raw: AdjustmentVariantCount[] | null | undefined, total: number): AdjustmentVariantCount[] | null {
   if (!raw || raw.length === 0) return null;
-  const list = raw.map((v) => ({ name: v.name.replace(/s+/g, " ").trim(), qty: v.qty }));
+  const list = raw.map((v) => ({ name: v.name.replace(/\s+/g, " ").trim(), qty: v.qty }));
   if (list.some((v) => !v.name || v.name.length > 60)) throw new Error("Escribe el nombre de cada talla o color.");
   if (list.some((v) => !Number.isInteger(v.qty) || v.qty < 0)) throw new Error("Cada talla debe tener un número entero, 0 o mayor.");
   if (new Set(list.map((v) => v.name.toLowerCase())).size !== list.length) throw new Error("Hay una talla o color repetido.");

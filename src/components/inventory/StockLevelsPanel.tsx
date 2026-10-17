@@ -932,7 +932,8 @@ export function StockLevelsPanel({
     });
     setReviewingAdjustmentId(null);
     if (!res.ok) {
-      setPendingAdjustmentsError("No se pudo procesar la solicitud.");
+      const data = await res.json().catch(() => null);
+      setPendingAdjustmentsError(data?.error ?? "No se pudo procesar la solicitud.");
       return;
     }
     loadPendingAdjustments();
