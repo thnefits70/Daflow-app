@@ -83,6 +83,7 @@ PRECIO EN DROPI Y BOTONES
   [[CALC:ID]] → abre la calculadora de ganancia de la página con ese producto. Úsalo cuando pregunten a cuánto venderlo, cuánto ganarían, si es rentable o cuánto pueden pagar de publicidad (CPA). Explica en 1–2 líneas que ahí ponen el precio en Dropi, su flete (promedio $7) y su CPA (promedio $4–5) y les dice el precio recomendado y el CPA máximo. Puedes mencionar a qué precio se vende al público, pero no calcules tú el precio en Dropi ni la ganancia.
   [[FICHA:ID]] → abre la ficha completa del producto en la página (ventas por día, ciudades, compradores, combos; si no está registrado le pide registrarse). Úsalo cuando quiera ver más de un producto.
   [[IR:cortes]] → la sección de cortes en vivo (próximo corte y cuenta regresiva). [[IR:recursos]] → creativos gratis, rastreo de guías por transportadora, garantías y buenas prácticas. [[IR:calculadora]] → la calculadora sin producto. [[IR:productos]] → el catálogo con buscador y filtros. [[IR:como-funciona]] → cómo funciona Provedix en pasos. [[IR:transportadoras]] → qué transportadora entrega mejor en cada ciudad (con buscador). [[IR:preguntas]] → las preguntas frecuentes (costos, stock mínimo, cortes, cancelar guías, garantías, tiempos de respuesta).
+- CARACTERÍSTICAS DEL PRODUCTO (2026-10-17): si pregunta cómo funciona (recargable o con cable, batería, medidas, material, voltaje, qué incluye), búscalo primero en su "descripción" y respóndele con eso, sencillo. Solo si de verdad no está, díselo con sinceridad, dale [[DROPI:ID]] para que vea la ficha y fotos, y pasa la pregunta al equipo.
 - ANTES DE DECIR "NO LO TENEMOS" (regla del dueño, 2026-10-17): el dropshipper a veces se expresa mal o lo llama con otro nombre. Primero entiéndelo y ayúdalo:
   1) Busca en PRODUCTOS por sinónimos o productos parecidos (por ejemplo "planta eléctrica" = generador, "cargador portátil" = power bank). Si encuentras uno que puede ser, ofrécelo con su ID y botón: "¿Es este? 👇".
   2) Si no lo encuentras, NO cierres con "no tenemos". Pregúntale con cariño en cuál de nuestras marcas lo vio (Provedix o Importadora Damián) y pídele el ID de Dropi o una foto o captura del producto (con el clip 📎 de abajo; si todavía no te dio sus datos, que te diga el nombre tal como aparece en Dropi). Con la foto ya sabes a qué se refiere y lo guías.
@@ -174,9 +175,12 @@ function stockText(s: SnapshotProduct["stock"]): string {
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
-function sheetBits(x: SheetProduct | undefined): string[] {
+// Descripción completa para registrados (2026-10-17): cortada a 180 caracteres se
+// perdían los detalles (USB, batería, recargable…) en 654 de 712 productos.
+function sheetBits(x: SheetProduct | undefined, full = false): string[] {
   if (!x) return [];
-  return [x.top10 ? "⭐ TOP 10 de esta semana" : null, x.creatives ? "creativos: sí" : null, x.landing ? "landing: sí" : null, x.description ? `para vender: ${x.description.slice(0, 180)}` : null].filter((b): b is string => !!b);
+  const desc = x.description ? (full ? x.description.slice(0, 700) : x.description.slice(0, 180)) : null;
+  return [x.top10 ? "⭐ TOP 10 de esta semana" : null, x.creatives ? "creativos: sí" : null, x.landing ? "landing: sí" : null, desc ? `descripción: ${desc}` : null].filter((b): b is string => !!b);
 }
 
 function storesLevel(n: number): string {
@@ -218,7 +222,7 @@ function productLine(p: SnapshotProduct, full: boolean, sheet?: SheetProduct, va
     }
   }
   // El precio en Dropi y la ganancia NO van (pedido 2026-10-14): se ven en Dropi, botón [[DROPI:ID]].
-  parts.push(...sheetBits(sheet));
+  parts.push(...sheetBits(sheet, full));
   return `- ${parts.join(" | ")}`;
 }
 
