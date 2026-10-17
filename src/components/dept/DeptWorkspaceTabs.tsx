@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers, UserCog, Sparkles, Store, ListChecks } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers, UserCog, Sparkles, Store, ListChecks, ShieldCheck } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -36,6 +36,9 @@ import { MerchandiseReentryPanel } from "@/components/merchandise-reentry/Mercha
 import { StockLevelsPanel } from "@/components/inventory/StockLevelsPanel";
 import { MerchandiseOutflowPanel } from "@/components/merchandise-outflow/MerchandiseOutflowPanel";
 import { ExternalSalesPanel } from "@/components/external-sales/ExternalSalesPanel";
+import { TabGuide } from "@/components/shared/TabGuide";
+import { WarrantyArrangementsPanel } from "@/components/warranty-arrangements/WarrantyArrangementsPanel";
+import { RocketWarrantiesPanel } from "@/components/warranty-arrangements/RocketWarrantiesPanel";
 import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/SuppliersPanel";
 import { ComboSuggestionsPanel } from "@/components/marketanalysis/ComboSuggestionsPanel";
 import { StoreTrackingPanel } from "@/components/marketanalysis/StoreTrackingPanel";
@@ -71,6 +74,7 @@ const ALL_TABS = [
   { key: "stock-actual", label: "Stock actual", icon: Layers },
   { key: "reingreso", label: "Reingreso de Mercadería", icon: PackageOpen },
   { key: "egresos", label: "Registro de Egresos", icon: PackageMinus },
+  { key: "arreglos-garantia", label: "Arreglos de garantía", icon: ShieldCheck },
   { key: "ventas-externas", label: "Ventas Externas", icon: HandCoins },
   { key: "inventoriokpis", label: "KPIs de Inventario", icon: BarChart3 },
   { key: "cajachica", label: "Caja Chica", icon: Wallet },
@@ -201,6 +205,7 @@ export function DeptWorkspaceTabs({
   canSubmitFulfillmentRequest = false,
   canViewFulfillmentRequests = false,
   canSeeWarrantyDispatch = false,
+  canSeeWarrantyArrangements = false,
   canDeclareExternalSales = false,
   canManageLocalWarranties = false,
   canReviewExternalSales = false,
@@ -418,6 +423,8 @@ export function DeptWorkspaceTabs({
   canViewFulfillmentRequests?: boolean;
   // Garantías por despachar (2026-10-14) — también vive dentro de "egresos".
   canSeeWarrantyDispatch?: boolean;
+  // Arreglos de garantía (2026-10-17) — pestaña propia.
+  canSeeWarrantyArrangements?: boolean;
   // Ventas Externas (Fase 3) — declarar/revisión/pagos/cierre viven en la
   // misma pestaña sin dept.code (Bryan revisa, admin confirma pago, Nairoby
   // cierra); despacho/entregas reusan las guards de Registro de Egresos.
@@ -510,6 +517,7 @@ export function DeptWorkspaceTabs({
       canSubmitFulfillmentRequest,
       canViewFulfillmentRequests,
       canSeeWarrantyDispatch,
+      canSeeWarrantyArrangements,
       supplierExchangeMineCount,
       financeWriteOffPendingCount,
       canConfirmFinanceWriteOff,
@@ -765,6 +773,18 @@ export function DeptWorkspaceTabs({
           isAdmin={isAdmin}
           viewerDeptCode={viewerDeptCode}
         />
+      )}
+      {tab === "arreglos-garantia" && canSeeWarrantyArrangements && (
+        <div>
+          <TabGuide storageKey="arreglos-garantia">
+            Dos casos: (1) reenvío cuando el dropshipper gestionó mal — él paga el flete exacto antes (wallet de Dropi o transferencia), el admin verifica el pago y recién ahí Daniel genera la guía; (2) arreglo en dinero cuando el cliente acepta un monto en vez de la garantía y se queda con el producto — Bryan aprueba y el admin paga. El arreglo nunca puede costar más que 2 fletes + el producto.
+          </TabGuide>
+          <WarrantyArrangementsPanel />
+          {/* Garantías de Rocket por orden de Dropi (2026-10-16). */}
+          <div className="mt-8">
+            <RocketWarrantiesPanel />
+          </div>
+        </div>
       )}
       {tab === "ventas-externas" && canViewExternalSales && (
         <ExternalSalesPanel

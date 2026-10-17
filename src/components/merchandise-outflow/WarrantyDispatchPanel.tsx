@@ -75,7 +75,7 @@ export function WarrantyDispatchPanel() {
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
       {role?.canUpload && (
-        <a href="/area/arreglos-garantia" className="self-start text-[12px] font-semibold text-blue">
+        <a href="/area/workspace?tab=arreglos-garantia"className="self-start text-[12px] font-semibold text-blue">
           Reenvío pagado por el dropshipper o arreglo en dinero → Arreglos de garantía
         </a>
       )}

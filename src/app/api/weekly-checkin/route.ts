@@ -159,18 +159,31 @@ export async function POST(req: NextRequest) {
 
   const encoder = new TextEncoder();
   let acc = "";
+  // Si la persona cierra la app o se le va la señal mientras Mary escribe,
+  // enqueue/close lanzan error y antes eso cortaba todo antes de guardar la
+  // respuesta (caso Bryan 2026-10-16: su pregunta quedó sin respuesta). Ahora
+  // Mary termina igual y la respuesta queda guardada para cuando vuelva.
+  let clientGone = false;
   const readable = new ReadableStream<Uint8Array>({
     async start(controller) {
+      const send = (text: string) => {
+        if (clientGone) return;
+        try {
+          controller.enqueue(encoder.encode(text));
+        } catch {
+          clientGone = true;
+        }
+      };
       try {
         for await (const event of stream) {
           if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
             acc += event.delta.text;
-            controller.enqueue(encoder.encode(event.delta.text));
+            send(event.delta.text);
           }
         }
       } catch {
         acc += "\n\n[Se perdió la conexión — intenta de nuevo.]";
-        controller.enqueue(encoder.encode("\n\n[Se perdió la conexión — intenta de nuevo.]"));
+        send("\n\n[Se perdió la conexión — intenta de nuevo.]");
       }
 
       // finalMessage() ya trae el input de cada tool call completamente
@@ -251,21 +264,27 @@ export async function POST(req: NextRequest) {
       if (anyToolSucceeded && !acc.trim()) {
         const closing = "Gracias, quedó registrado. ¡Que tengas buena semana!";
         acc += closing;
-        controller.enqueue(encoder.encode(closing));
+        send(closing);
       } else if (anyToolFailed && !anyToolSucceeded && !acc.trim()) {
         const closing = "No pude registrar eso completo — ¿puedes contarme de nuevo qué pasó?";
         acc += closing;
-        controller.enqueue(encoder.encode(closing));
+        send(closing);
       } else if (!acc.trim()) {
         // El modelo terminó sin texto ni herramientas — nunca dejar la
         // burbuja en blanco.
         console.warn("weekly-checkin: respuesta vacía, stop_reason =", finalMessage?.stop_reason);
         const closing = "Perdón, no alcancé a responder. ¿Me lo puedes enviar de nuevo?";
         acc += closing;
-        controller.enqueue(encoder.encode(closing));
+        send(closing);
       }
 
-      controller.close();
+      if (!clientGone) {
+        try {
+          controller.close();
+        } catch {
+          clientGone = true;
+        }
+      }
 
       if (acc.trim()) {
         await prisma.checkinMessage.create({ data: { conversationId, role: "assistant", content: acc } });

@@ -46,6 +46,7 @@ import {
 import { getSupplierExchangeGestorCount } from "@/lib/pendingTasks";
 import { getEmployeeSidebarFlags, type EmployeeSidebarFlags } from "@/lib/employeeSidebarFlags";
 import { canViewSuddenDemand } from "@/lib/suddenDemand";
+import { getArrangementRole } from "@/lib/warrantyArrangements";
 import { WORKSPACE_TAB_DEFS, isWorkspaceTabVisible, type WorkspaceTabKey } from "@/lib/workspaceTabVisibility";
 
 // Mary como guía de DAFLOW — pedido del usuario 2026-10-01 (Nairoby no
@@ -112,6 +113,7 @@ async function getVisibleWorkspaceTabKeys(userId: string): Promise<WorkspaceTabK
     registerLunch,
     manageImprovementPlan,
     supplierExchangeMineCount,
+    arrangementRole,
   ] = await Promise.all([
     canManageStoreFeedback(),
     canViewStoreFeedback(),
@@ -155,6 +157,7 @@ async function getVisibleWorkspaceTabKeys(userId: string): Promise<WorkspaceTabK
     canRegisterLunchPayments(),
     canManageImprovementPlan(dept.id),
     getSupplierExchangeGestorCount(userId),
+    getArrangementRole(),
   ]);
   const canReviewSuppliers = supplierAccess.isLeader && !!supplierAccess.leadsDeptId;
   const canAccessSuppliers = supplierAccess.canView || submitPurchases || addSupplierBankAccounts || supplierAccess.canAdd || canReviewSuppliers;
@@ -208,6 +211,7 @@ async function getVisibleWorkspaceTabKeys(userId: string): Promise<WorkspaceTabK
     canManageAdminPayments: manageAdminPayments,
     canRegisterLunchPayments: registerLunch,
     canManageImprovementPlan: manageImprovementPlan,
+    canSeeWarrantyArrangements: !!arrangementRole,
   };
   return WORKSPACE_TAB_DEFS.filter((t) => isWorkspaceTabVisible(t.key, flags)).map((t) => t.key);
 }
@@ -239,6 +243,8 @@ const WORKSPACE_TAB_HELP: Record<WorkspaceTabKey, string> = {
     "Reingreso de Mercadería: lo que vuelve a bodega de pedidos no entregados. Sub-pestañas: Capturar (solo el responsable de reingreso: escanea la guía de cada devolución con la cámara o la pistola, DAFLOW agrega solo los productos de esa guía, al final se marca solo lo que vino dañado y se envía; lo bueno entra solo a INVESTOCK. Si una guía no se puede usar, DAFLOW dice por qué y recién ahí deja registrarla a mano), Revisión (el líder de Inventario revisa solo lo dañado o lo que no se pudo identificar), Control de Daños (cierre semanal del sábado y disposición final), Base de datos de productos (catálogo maestro: corregir códigos y nombres, juntar repetidos, armar combos, lotes de caducidad, etiquetas de percha) e Historial. Los avisos de Reingreso a veces abren esta misma pantalla en una página aparte: es lo mismo.",
   egresos:
     "Registro de Egresos: todo lo que sale de bodega. Sub-pestañas posibles: Solicitud Fulfillment (subir los PDF de guías de Dropi y el Excel de Rocket de cada corte y 'Enviar a Inventario'), Deterioro (reportar productos dañados en bodega con foto), Seguimiento de deterioro, Mercadería devuelta al proveedor (Inventario arma el paquete de devolución; quien pidió la compra original resuelve ahí cada producto: cambio, crédito o rechazo — esta parte aparece aunque no tengas otro permiso del módulo, si te toca resolver algo), Guías canceladas (Reportar, Gestionar lotes, Salida de Fulfillment, Cargar productos, Historial) e Historial.",
+  "arreglos-garantia":
+    "Arreglos de garantía: Michelle y Yair registran aquí los reenvíos en que el dropshipper paga el flete (el admin verifica el pago y luego Daniel pone la guía) y los arreglos en dinero con el cliente (Bryan los aprueba o rechaza). Abajo están las garantías de Rocket por orden de Dropi (Yair registra, Bryan aprueba). Cuando hay algo por hacer también llega un aviso en Inicio.",
   "ventas-externas":
     "Ventas Externas: ventas hechas fuera de Dropi/Rocket. Sub-pestañas según tu rol: Declarar (producto, cantidad, precio y a quién se entrega; si te la rechazan, corriges y reenvías desde la misma lista), Revisión, Pagos (confirmar que llegó el dinero), Facturación, Agrupar, Preparar, Embalaje, Mis entregas, Devoluciones, Cierre, Auditoría e Historial.",
   inventoriokpis: "KPIs de Inventario (DIO, GMROI, etc.): se calculan solos con lo que hay en Control de Inventario. El ícono de información de cada tarjeta explica cómo se calcula y qué significa el color.",

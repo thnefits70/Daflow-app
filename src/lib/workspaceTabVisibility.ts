@@ -19,6 +19,7 @@ export const WORKSPACE_TAB_DEFS = [
   { key: "stock-actual", label: "Stock actual" },
   { key: "reingreso", label: "Reingreso de Mercadería" },
   { key: "egresos", label: "Registro de Egresos" },
+  { key: "arreglos-garantia", label: "Arreglos de garantía" },
   { key: "ventas-externas", label: "Ventas Externas" },
   { key: "inventoriokpis", label: "KPIs de Inventario" },
   { key: "cajachica", label: "Caja Chica" },
@@ -66,6 +67,9 @@ export type WorkspaceTabFlags = {
   canSubmitFulfillmentRequest: boolean;
   canViewFulfillmentRequests: boolean;
   canSeeWarrantyDispatch?: boolean;
+  // Arreglos de garantía (2026-10-17): pestaña propia para Michelle/Yair,
+  // Bryan y Daniel (getArrangementRole); antes solo había un enlace escondido.
+  canSeeWarrantyArrangements?: boolean;
   supplierExchangeMineCount: number;
   financeWriteOffPendingCount: number;
   canConfirmFinanceWriteOff: boolean;
@@ -115,6 +119,7 @@ export function isWorkspaceTabVisible(key: WorkspaceTabKey, f: WorkspaceTabFlags
       f.financeWriteOffPendingCount > 0 ||
       f.canConfirmFinanceWriteOff
     );
+  if (key === "arreglos-garantia") return !!f.canSeeWarrantyArrangements;
   if (key === "ventas-externas") return f.canViewExternalSales;
   if (key === "inventoriokpis") return f.canViewInventoryKpisPanel;
   if (key === "cajachica") return f.hasPettyCash;

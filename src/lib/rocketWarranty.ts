@@ -25,7 +25,7 @@ export const ROCKET_WARRANTY_MAX_DAYS = 10;
 // (la lista del KPI también trae frases escritas a mano en cortes viejos, que
 // se quedan ahí por la historia pero no se ofrecen aquí).
 export const ROCKET_WARRANTY_REASONS = ["Mal funcionamiento", "Producto roto", "Pedido incompleto", "Pedido diferente"];
-export const ROCKET_WARRANTIES_URL = "/area/arreglos-garantia";
+export const ROCKET_WARRANTIES_URL = "/area/workspace?tab=arreglos-garantia";
 const ADMIN_URL = "/admin/arreglos-garantia";
 // Cada cuánto NICK vuelve a preguntar a Dropi por la guía de una orden.
 const NICK_RECHECK_MS = 10 * 60 * 1000;

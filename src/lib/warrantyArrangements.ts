@@ -16,7 +16,8 @@ import type { PendingItem } from "@/lib/pendingTasks";
 //   Caja Chica) y sube el comprobante. Nunca más que 2 fletes + producto.
 const CREATOR_USERNAMES = new Set(["mramirez", "yairurgilez"]);
 
-export const ARRANGEMENTS_AREA_URL = "/area/arreglos-garantia";
+// Desde 2026-10-17 es una pestaña de "Mi área de trabajo".
+export const ARRANGEMENTS_AREA_URL = "/area/workspace?tab=arreglos-garantia";
 export const ARRANGEMENTS_ADMIN_URL = "/admin/arreglos-garantia";
 
 export function arrangementCode(n: number): string {
