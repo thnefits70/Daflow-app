@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { PublicStats } from "@/lib/provedixPublic";
-import type { CarrierStats } from "@/lib/provedixCarriers";
+import type { CarrierStats, CityCarriers } from "@/lib/provedixCarriers";
 import { isWorkingDay, nextWorkingDay } from "@/lib/ecuadorHolidays";
 import { ADVISOR_RESPONSE_PROMISE, PVX_FAQ, WORK_HOURS_TEXT } from "@/lib/pvxFaq";
 import type { PublicTestimonials } from "@/lib/provedixRatings";
@@ -317,86 +317,147 @@ export function PvxCities({ stats }: { stats: PublicStats }) {
 // entregados de todos nuestros envíos, solo de las transportadoras con buena
 // parte del volumen. Los días aparecen solos cuando hay entregas medidas.
 
-const CARRIER_CITIES_SHOWN = 10;
+// Ciudades en tarjetas que pasan solas (pedido del usuario 2026-10-17: la lista
+// de 25 se veía muy apilada): 3 a la vez en computadora, 1 en el celular.
+const CARRIER_SLIDE_MS = 5000;
+const WIDE_QUERY = "(min-width: 640px)";
+
+function subscribeWide(cb: () => void) {
+  const m = window.matchMedia(WIDE_QUERY);
+  m.addEventListener("change", cb);
+  return () => m.removeEventListener("change", cb);
+}
 
 function daysLabel(d: number | null): string | null {
   if (d == null) return null;
   return d <= 0 ? "llega el mismo día" : d === 1 ? "suele llegar en 1 día" : `suele llegar en ${d} días`;
 }
 
+const plain = (t: string) => t.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+
+function CityCard({ data }: { data: CityCarriers }) {
+  const [best, second] = data.carriers;
+  return (
+    <li className="pvx-city-card flex flex-col rounded-[22px] bg-[var(--pvx-paper-2)] p-6">
+      <p className="text-[20px] font-extrabold">{titleCase(data.city)}</p>
+      <p className="mt-1 text-[13px] font-semibold text-[var(--pvx-ink-3)]">{data.similar ? "Las dos entregan parecido" : "La que mejor entrega"}</p>
+      <div className="mt-5 flex items-baseline justify-between gap-3">
+        <span className="text-[17px] font-bold">{best.carrier}</span>
+        <span className="pvx-display text-[40px] leading-none text-[var(--pvx-orange)]">{best.pct}%</span>
+      </div>
+      {daysLabel(best.days) && <p className="mt-1 text-[13px] text-[var(--pvx-ink-2)]">{daysLabel(best.days)}</p>}
+      {second && (
+        <div className="mt-auto pt-5">
+          <div className={`flex items-baseline justify-between gap-3 border-t border-[var(--pvx-paper-3)] pt-4 ${data.similar ? "" : "text-[var(--pvx-ink-3)]"}`}>
+            <span className={data.similar ? "text-[17px] font-bold" : "text-[15px]"}>{second.carrier}</span>
+            <span className={data.similar ? "pvx-display text-[40px] leading-none text-[var(--pvx-orange)]" : "text-[17px] font-bold"}>{second.pct}%</span>
+          </div>
+          {daysLabel(second.days) && <p className="mt-1 text-[13px] text-[var(--pvx-ink-2)]">{daysLabel(second.days)}</p>}
+        </div>
+      )}
+    </li>
+  );
+}
+
 export function PvxCarriers({ data }: { data: CarrierStats | null }) {
   const [query, setQuery] = useState("");
-  const [all, setAll] = useState(false);
-  if (!data || !data.general.length || data.cities.length < 3) return null;
-  const q = query.trim().toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
-  const found = q ? data.cities.filter((c) => c.city.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").includes(q)) : data.cities;
-  const shown = q || all ? found : found.slice(0, CARRIER_CITIES_SHOWN);
+  const [page, setPage] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const wide = useSyncExternalStore(subscribeWide, () => window.matchMedia(WIDE_QUERY).matches, () => true);
+  const perPage = wide ? 3 : 1;
+  const cities = data?.cities ?? [];
+  const pages = Math.max(1, Math.ceil(cities.length / perPage));
+  const q = plain(query.trim());
+  useEffect(() => {
+    if (paused || q || pages < 2) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const t = setInterval(() => setPage((p) => (p + 1) % pages), CARRIER_SLIDE_MS);
+    return () => clearInterval(t);
+  }, [paused, q, pages]);
+  if (!data || !data.general.length || cities.length < 3) return null;
+  const current = page % pages;
+  const shown = q ? cities.filter((c) => plain(c.city).includes(q)).slice(0, 3) : cities.slice(current * perPage, current * perPage + perPage);
+  const go = (d: number) => setPage((current + d + pages) % pages);
   return (
     <section id="transportadoras" className="scroll-mt-4 bg-[var(--pvx-paper)] py-24 sm:py-32" aria-labelledby="pvx-carriers">
-      <div className="mx-auto grid max-w-[1240px] gap-12 px-4 sm:px-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-20">
-        <div data-r>
-          <h2 id="pvx-carriers" className="pvx-display text-[38px] sm:text-[clamp(40px,4.4vw,60px)]">
-            Qué transportadora <span className="text-[var(--pvx-orange)]">entrega mejor</span>
-          </h2>
-          <p className="mt-6 max-w-[460px] text-[17px] leading-relaxed text-[var(--pvx-ink-2)]">
-            Porcentaje de pedidos que llegaron a su cliente (y no se devolvieron) en nuestros envíos de los últimos 60 días. Busca la ciudad de tu cliente y elige esa transportadora al crear el pedido en Dropi.
-          </p>
-          <dl className="mt-10 grid max-w-[460px] grid-cols-2 gap-6">
+      <div className="mx-auto max-w-[1240px] px-4 sm:px-8">
+        <div className="grid gap-10 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:items-end lg:gap-16">
+          <div data-r>
+            <h2 id="pvx-carriers" className="pvx-display text-[36px] sm:text-[clamp(40px,4.4vw,60px)]">
+              Qué transportadora <span className="text-[var(--pvx-orange)]">entrega mejor</span>
+            </h2>
+            <p className="mt-6 max-w-[560px] text-[17px] leading-relaxed text-[var(--pvx-ink-2)]">
+              Porcentaje de pedidos que llegaron a su cliente (y no se devolvieron) en nuestros envíos de los últimos 60 días. Elige la transportadora según la ciudad de tu cliente al crear el pedido en Dropi.
+            </p>
+          </div>
+          <dl data-r style={{ ["--d" as string]: 1 }} className="grid grid-cols-2 gap-6">
             {data.general.map((g) => (
               <div key={g.carrier}>
                 <dt className="text-[15px] font-semibold text-[var(--pvx-ink-2)]">{g.carrier}</dt>
                 <dd>
                   <span className="pvx-display block text-[48px] text-[var(--pvx-orange)] sm:text-[60px]">{g.pct}%</span>
-                  <span className="block text-[14px] text-[var(--pvx-ink-3)]">{daysLabel(g.days) ?? "entregados"}</span>
+                  <span className="block text-[14px] text-[var(--pvx-ink-3)]">{daysLabel(g.days) ?? "entregados en todo el país"}</span>
                 </dd>
               </div>
             ))}
           </dl>
-          <p className="mt-8 max-w-[460px] text-[14px] leading-relaxed text-[var(--pvx-ink-3)]">
+        </div>
+
+        <div
+          data-r
+          style={{ ["--d" as string]: 2 }}
+          className="mt-14"
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+          onFocus={() => setPaused(true)}
+          onBlur={() => setPaused(false)}
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <label className="block w-full sm:max-w-[360px]">
+              <span className="sr-only">Buscar ciudad</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Busca la ciudad de tu cliente"
+                className="w-full rounded-full border border-[var(--pvx-paper-3)] bg-[var(--pvx-paper-2)] px-5 py-3.5 text-[16px] outline-none focus:border-[var(--pvx-orange)]"
+              />
+            </label>
+            {!q && pages > 1 && (
+              <div className="flex items-center gap-3 self-end sm:self-auto">
+                <span className="pvx-num text-[14px] text-[var(--pvx-ink-3)]" aria-live="polite">
+                  {current + 1} de {pages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => go(-1)}
+                  aria-label="Ciudades anteriores"
+                  className="grid h-11 w-11 cursor-pointer place-items-center rounded-full border border-[var(--pvx-paper-3)] hover:border-[var(--pvx-ink)]"
+                >
+                  <IconArrow className="h-4 w-4 rotate-180" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => go(1)}
+                  aria-label="Siguientes ciudades"
+                  className="grid h-11 w-11 cursor-pointer place-items-center rounded-full bg-[var(--pvx-ink)] text-white hover:bg-[var(--pvx-orange)]"
+                >
+                  <IconArrow className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
+          <ul key={q ? `q-${q}` : `p-${current}-${perPage}`} className="mt-6 grid gap-4 sm:grid-cols-3">
+            {shown.map((c) => (
+              <CityCard key={c.city} data={c} />
+            ))}
+            {!shown.length && (
+              <li className="py-4 text-[15px] text-[var(--pvx-ink-3)] sm:col-span-3">No tenemos suficientes envíos a esa ciudad para comparar. Pregúntale a Michelle IA.</li>
+            )}
+          </ul>
+          <p className="mt-6 text-[14px] leading-relaxed text-[var(--pvx-ink-3)]">
             Solo comparamos las transportadoras que llevan una buena parte de nuestros envíos: con pocos pedidos el porcentaje no es confiable.
           </p>
-        </div>
-        <div data-r style={{ ["--d" as string]: 1 }}>
-          <label className="block">
-            <span className="sr-only">Buscar ciudad</span>
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Busca la ciudad de tu cliente"
-              className="w-full rounded-full border border-[var(--pvx-paper-3)] bg-[var(--pvx-paper-2)] px-5 py-3.5 text-[16px] outline-none focus:border-[var(--pvx-orange)]"
-            />
-          </label>
-          <ul className="mt-5 flex flex-col divide-y divide-[var(--pvx-paper-3)]">
-            {shown.map(({ city, carriers: [best, second], similar }) => (
-              <li key={city} className="flex flex-col gap-2 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
-                <span className="text-[17px] font-bold">{titleCase(city)}</span>
-                <span className="flex flex-wrap items-center gap-2 text-[14px]">
-                  <span className="rounded-full bg-[var(--pvx-orange-soft)] px-3 py-1.5 font-bold text-[var(--pvx-orange-text)]">
-                    {similar
-                      ? `${best.carrier} ${best.pct}% o ${second.carrier} ${second.pct}%`
-                      : `${best.carrier} · ${best.pct}%${daysLabel(best.days) ? ` · ${daysLabel(best.days)}` : ""}`}
-                  </span>
-                  {similar ? (
-                    <span className="text-[var(--pvx-ink-3)]">
-                      entregan parecido
-                      {best.days != null && second.days != null ? ` · ${best.carrier} ${daysLabel(best.days)}, ${second.carrier} ${daysLabel(second.days)}` : ""}
-                    </span>
-                  ) : second ? (
-                    <span className="text-[var(--pvx-ink-3)]">
-                      {second.carrier} {second.pct}%
-                    </span>
-                  ) : null}
-                </span>
-              </li>
-            ))}
-            {!shown.length && <li className="py-4 text-[15px] text-[var(--pvx-ink-3)]">No tenemos suficientes envíos a esa ciudad para comparar. Pregúntale a Michelle IA.</li>}
-          </ul>
-          {!q && !all && found.length > CARRIER_CITIES_SHOWN && (
-            <button type="button" onClick={() => setAll(true)} className="mt-4 text-[15px] font-bold text-[var(--pvx-orange-text)] underline-offset-4 hover:underline">
-              Ver las {found.length} ciudades
-            </button>
-          )}
         </div>
       </div>
     </section>
