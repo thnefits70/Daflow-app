@@ -44,9 +44,9 @@ function trackChat(type: "chat_open" | "chat_register", source?: OpenSource) {
 type Msg = { role: "user" | "assistant"; content: string };
 const CHAT_KEY = "pvx-chat-id";
 // Marca que pone la IA al final cuando ya no puede resolver el caso (ver provedixMichelle.ts).
-const HANDOFF_MARK = "[[ASESORA";
+export const HANDOFF_MARK = "[[ASESORA";
 // [[ASESORA:MC-0007]] → caso con resumen para la asesora (2026-10-15).
-const caseCodeOf = (t: string) =>
+export const caseCodeOf = (t: string) =>
   t.match(/\[\[ASESORA:(MC-\d{4,})\]\]/)?.[1] ?? null;
 // Quita la marca (también a medio llegar mientras se escribe la respuesta).
 // [[BLOQUEAR]]: la IA cerró el chat por un intento de sacar información confidencial.
@@ -56,7 +56,7 @@ const ACTION_RE = /\[\[(DROPI|CREATIVOS|LANDING|CALC|FICHA):(\d{3,8})\]\]/g;
 // [[IR:cortes]] → botón que cierra el chat y lleva a esa parte de la página (2026-10-15).
 const SECTION_RE =
   /\[\[IR:(cortes|recursos|calculadora|productos|como-funciona|preguntas)\]\]/g;
-const SECTION_LABEL: Record<string, string> = {
+export const SECTION_LABEL: Record<string, string> = {
   cortes: "Ver los cortes de hoy",
   recursos: "Rastreo, creativos y garantías",
   calculadora: "Abrir la calculadora",
@@ -64,14 +64,14 @@ const SECTION_LABEL: Record<string, string> = {
   "como-funciona": "Cómo funciona Provedix",
   preguntas: "Ver preguntas frecuentes",
 };
-const sectionsOf = (t: string) =>
+export const sectionsOf = (t: string) =>
   [...new Set([...t.matchAll(SECTION_RE)].map((m) => m[1]))].slice(0, 3);
-const ACTION_LABEL: Record<string, string> = {
+export const ACTION_LABEL: Record<string, string> = {
   DROPI: "Ver precio en Dropi",
   CREATIVOS: "Ver creativos",
   LANDING: "Ver landing",
 };
-function actionsOf(t: string): { kind: string; code: string }[] {
+export function actionsOf(t: string): { kind: string; code: string }[] {
   const seen = new Set<string>();
   const out: { kind: string; code: string }[] = [];
   for (const m of t.matchAll(ACTION_RE)) {
@@ -83,14 +83,14 @@ function actionsOf(t: string): { kind: string; code: string }[] {
 }
 // Foto de evidencia de una guía retenida (la escribe el equipo, 2026-10-15).
 const PHOTO_RE = /\[\[FOTO:([a-z0-9]{10,40})\]\]/gi;
-const photoIdsOf = (t: string) =>
+export const photoIdsOf = (t: string) =>
   [...t.matchAll(PHOTO_RE)].map((m) => m[1]).slice(0, 2);
 // Respuesta escrita por la persona del equipo desde DAFLOW: [[EQUIPO:Michelle]] texto.
 const TEAM_RE = /^\[\[EQUIPO:([^\]]{1,40})\]\]\s*/;
-const teamOf = (t: string) => t.match(TEAM_RE)?.[1] ?? null;
+export const teamOf = (t: string) => t.match(TEAM_RE)?.[1] ?? null;
 // Foto o video que adjuntó el dropshipper: [[ADJUNTO:id:image]].
 const ATTACH_RE = /\[\[ADJUNTO:([a-z0-9]{10,40}):(image|video)\]\]/gi;
-const attachmentsOf = (t: string) =>
+export const attachmentsOf = (t: string) =>
   [...t.matchAll(ATTACH_RE)].map((m) => ({ id: m[1], kind: m[2] }));
 function readSeen(): number {
   try {
@@ -106,7 +106,7 @@ function saveSeen(n: number) {
     // sin almacenamiento: no se marca "respuesta nueva"
   }
 }
-const cleanReply = (t: string) =>
+export const cleanReply = (t: string) =>
   t
     .replace(TEAM_RE, "")
     .replace(ATTACH_RE, "")
@@ -140,7 +140,7 @@ function saveChatId(id: string) {
 }
 
 // Negritas (**texto**) y saltos de línea; nada de HTML.
-function Rich({ text }: { text: string }) {
+export function Rich({ text }: { text: string }) {
   return (
     <>
       {text.split("\n").map((line, i) => (
@@ -161,7 +161,7 @@ function Rich({ text }: { text: string }) {
   );
 }
 
-function Avatar({ size = 36 }: { size?: number }) {
+export function Avatar({ size = 36 }: { size?: number }) {
   return (
     <span
       className="grid shrink-0 place-items-center rounded-full bg-[var(--pvx-orange)] font-black italic text-white"

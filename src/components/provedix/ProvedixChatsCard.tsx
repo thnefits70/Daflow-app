@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ProvedixChatRow } from "@/lib/provedixTraffic";
 import { ChatMessageView } from "@/components/provedix/ChatMessageView";
+import { PvxChatReplay } from "@/components/pvx/PvxChatReplay";
 
 // Conversaciones con Michelle, la asistente virtual de provedix.com
 // (2026-10-15) — SOLO el admin. Sirve para ver qué preguntan los
@@ -21,7 +22,6 @@ function when(iso: string) {
   });
 }
 
-
 const SYSTEM_ICON: Record<string, string> = {
   blocked: "🔒",
   unblocked: "🔓",
@@ -31,7 +31,9 @@ const SYSTEM_ICON: Record<string, string> = {
   reviewed: "✓",
 };
 
-function Conversation({ chatId }: { chatId: string }) {
+function Conversation({ chatId, who }: { chatId: string; who: string }) {
+  // "Ver como el dropshipper" (2026-10-17): la misma ventana de Michelle IA, solo lectura.
+  const [replay, setReplay] = useState(false);
   const [data, setData] = useState<
     { role: string; content: string; at: string }[] | null | "error"
   >(null);
@@ -54,31 +56,53 @@ function Conversation({ chatId }: { chatId: string }) {
       </div>
     );
   return (
-    <div className="flex flex-col gap-2 max-h-[420px] overflow-y-auto pr-1">
-      {data.map((m, i) =>
-        m.role !== "user" && m.role !== "assistant" ? (
-          <div
-            key={i}
-            className={`self-center text-[11.5px] font-semibold ${m.role === "reviewed" || m.role === "unblocked" ? "text-steel" : "text-red"}`}
-          >
-            {SYSTEM_ICON[m.role] ?? "•"} {m.content} · {when(m.at)}
-          </div>
-        ) : (
-          <div
-            key={i}
-            className={`max-w-[85%] rounded-lg px-3 py-2 text-[12.5px] whitespace-pre-wrap ${m.role === "user" ? "self-end bg-ink text-bg" : "self-start bg-surface border border-rule"}`}
-          >
-            <div
-              className={`text-[10.5px] mb-0.5 ${m.role === "user" ? "text-bg opacity-70" : "text-steel"}`}
-            >
-              {m.role === "user" ? "Dropshipper" : m.content.startsWith("[[EQUIPO:") ? "Equipo" : "Michelle (IA)"} ·{" "}
-              {when(m.at)}
-            </div>
-            <ChatMessageView content={m.content} dark={m.role === "user"} />
-          </div>
-        ),
+    <>
+      <div className="mb-2 flex justify-end">
+        <button
+          type="button"
+          onClick={() => setReplay(true)}
+          className="rounded-md border border-rule bg-surface px-3 py-1.5 text-[12px] font-semibold hover:bg-cloud cursor-pointer"
+        >
+          👁 Ver como el dropshipper
+        </button>
+      </div>
+      {replay && (
+        <PvxChatReplay
+          messages={data}
+          name={who}
+          onClose={() => setReplay(false)}
+        />
       )}
-    </div>
+      <div className="flex flex-col gap-2 max-h-[420px] overflow-y-auto pr-1">
+        {data.map((m, i) =>
+          m.role !== "user" && m.role !== "assistant" ? (
+            <div
+              key={i}
+              className={`self-center text-[11.5px] font-semibold ${m.role === "reviewed" || m.role === "unblocked" ? "text-steel" : "text-red"}`}
+            >
+              {SYSTEM_ICON[m.role] ?? "•"} {m.content} · {when(m.at)}
+            </div>
+          ) : (
+            <div
+              key={i}
+              className={`max-w-[85%] rounded-lg px-3 py-2 text-[12.5px] whitespace-pre-wrap ${m.role === "user" ? "self-end bg-ink text-bg" : "self-start bg-surface border border-rule"}`}
+            >
+              <div
+                className={`text-[10.5px] mb-0.5 ${m.role === "user" ? "text-bg opacity-70" : "text-steel"}`}
+              >
+                {m.role === "user"
+                  ? "Dropshipper"
+                  : m.content.startsWith("[[EQUIPO:")
+                    ? "Equipo"
+                    : "Michelle (IA)"}{" "}
+                · {when(m.at)}
+              </div>
+              <ChatMessageView content={m.content} dark={m.role === "user"} />
+            </div>
+          ),
+        )}
+      </div>
+    </>
   );
 }
 
@@ -250,7 +274,7 @@ export function ProvedixChatsCard({ chats }: { chats: ProvedixChatRow[] }) {
                       )}
                     </div>
                   )}
-                  <Conversation chatId={c.id} />
+                  <Conversation chatId={c.id} who={c.who} />
                 </div>
               )}
             </div>
