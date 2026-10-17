@@ -5,6 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import type { PublicStats } from "@/lib/provedixPublic";
 import type { CarrierStats, CityCarriers } from "@/lib/provedixCarriers";
 import { CUTS, cutState, SATURDAY_CARRIERS, type CutState } from "@/lib/pvxCuts";
+import { PVX_LINKS } from "@/lib/pvxLinks";
 import { ADVISOR_RESPONSE_PROMISE, PVX_FAQ, WORK_HOURS_TEXT } from "@/lib/pvxFaq";
 import type { PublicTestimonials } from "@/lib/provedixRatings";
 import type { TeamPhoto } from "@/lib/pvxTeamPhotos";
@@ -416,11 +417,11 @@ const CREATIVES = [
   { name: "Importadora Damián", url: "https://docs.google.com/spreadsheets/d/1_B7-4XDGabH8UkL1dE5lo_oPFREmzDKAffgfJRnLRPw/edit?gid=0#gid=0" },
 ];
 const TRACKING = [
-  { name: "Servientrega", url: "https://www.servientrega.com.ec/" },
-  { name: "Gintracom", url: "https://ec.gintracom.site/web/site/tracking" },
-  { name: "LaarCourier", url: "https://fenixoper.laarcourier.com/Tracking/Guiacompleta.aspx" },
-  { name: "Urbano", url: "https://www.urbano.com.ec/" },
-  { name: "Veloces", url: "https://tracking.veloces.app/" },
+  { name: "Servientrega", url: PVX_LINKS["rastreo-servientrega"].url },
+  { name: "Gintracom", url: PVX_LINKS["rastreo-gintracom"].url },
+  { name: "LaarCourier", url: PVX_LINKS["rastreo-laarcourier"].url },
+  { name: "Urbano", url: PVX_LINKS["rastreo-urbano"].url },
+  { name: "Veloces", url: PVX_LINKS["rastreo-veloces"].url },
 ];
 // Línea de atención al cliente del manual (garantías), elegida por el usuario
 // 2026-10-13 — sin el correo.

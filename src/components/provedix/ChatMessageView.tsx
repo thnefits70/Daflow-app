@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+import { PVX_LINKS, type PvxLinkKey } from "@/lib/pvxLinks";
 
 // Cómo se ve un mensaje del chat de Michelle IA DENTRO de DAFLOW (pedido del
 // usuario 2026-10-17: "solo veo palabras, números y asteriscos"). Las
@@ -41,6 +42,10 @@ function parse(raw: string) {
   });
   text = text.replace(/\[\[IR:([a-z-]+)\]\]/g, (_m, id: string) => {
     chips.push({ text: SECTION_LABEL[id] ?? `Ir a ${id}`, tone: "button" });
+    return "";
+  });
+  text = text.replace(/\[\[ENLACE:([a-z-]+)\]\]/g, (_m, k: string) => {
+    chips.push({ text: k in PVX_LINKS ? PVX_LINKS[k as PvxLinkKey].label : `Enlace ${k}`, tone: "button" });
     return "";
   });
   text = text.replace(/\[\[ASESORA(?::([A-Z0-9-]+))?\]\]/g, (_m, code?: string) => {

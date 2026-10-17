@@ -8,6 +8,7 @@ import type { PublicTestimonials } from "@/lib/provedixRatings";
 import type { TeamPhoto } from "@/lib/pvxTeamPhotos";
 import type { CarrierStats } from "@/lib/provedixCarriers";
 import { ADVISOR_RESPONSE_PROMISE, PRIVACY_URL } from "@/lib/pvxFaq";
+import { PVX_LINKS } from "@/lib/pvxLinks";
 import { productAlt, PvxPhoto } from "@/components/pvx/PvxPhoto";
 import { PvxRegister } from "@/components/pvx/PvxRegister";
 import { DropiLink, PvxProductDetail } from "@/components/pvx/PvxProductDetail";
@@ -970,28 +971,28 @@ function ProductCard({
 export const SOCIAL = [
   {
     name: "Instagram",
-    url: "https://www.instagram.com/provedix.ec/",
+    url: PVX_LINKS.instagram.url,
     icon: <IconInstagram className="w-5 h-5" />,
   },
   {
     name: "TikTok",
-    url: "https://www.tiktok.com/@provedix.ec",
+    url: PVX_LINKS.tiktok.url,
     icon: <IconTikTok className="w-5 h-5" />,
   },
   {
     name: "Facebook",
-    url: "https://www.facebook.com/share/1FHzeG3XBR/",
+    url: PVX_LINKS.facebook.url,
     icon: <IconFacebook className="w-5 h-5" />,
   },
 ];
 const WHATSAPP_CHANNELS = [
   {
     name: "Canal de Provedix",
-    url: "https://whatsapp.com/channel/0029VbCKi9o2P59fQXV5Hf30",
+    url: PVX_LINKS["canal-provedix"].url,
   },
   {
     name: "Canal de Importadora Damián",
-    url: "https://whatsapp.com/channel/0029Vb7M5b0FnSzGabyN9016",
+    url: PVX_LINKS["canal-damian"].url,
   },
 ];
 

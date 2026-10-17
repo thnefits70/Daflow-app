@@ -15,6 +15,7 @@ import {
   IconLock,
 } from "@/components/pvx/PvxIcons";
 import { ADVISOR_RESPONSE_PROMISE, WORK_HOURS_TEXT } from "@/lib/pvxFaq";
+import { linksOf, PVX_LINKS } from "@/lib/pvxLinks";
 import { PvxChatRegister } from "@/components/pvx/PvxChatRegister";
 
 // Chat con Michelle, la asistente virtual de provedix.com (2026-10-15).
@@ -121,9 +122,10 @@ export const cleanReply = (t: string) =>
     .replace(/\[\[(ASESORA(:[A-Z0-9-]*)?|BLOQUEAR|SOSPECHA)\]\]/g, "")
     .replace(ACTION_RE, "")
     .replace(SECTION_RE, "")
+    .replace(/\[\[ENLACE:[a-z-]+\]\]/g, "")
     .replace(PHOTO_RE, "")
     // marca a medio llegar mientras se escribe la respuesta
-    .replace(/\[(\[[A-Z]*(:\d*)?\]?)?$/, "")
+    .replace(/\[(\[[A-Z]*(:[a-z0-9-]*)?\]?)?$/, "")
     .trim();
 // Pocas y cortas (pedido del usuario 2026-10-17: el chat se veía sobrecargado).
 const SUGGESTIONS = [
@@ -834,6 +836,21 @@ export function PvxChat({
                                     />
                                   </a>
                                 ))}
+                                {linksOf(m.content).length > 0 && (
+                                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                                    {linksOf(m.content).map((k) => (
+                                      <a
+                                        key={k}
+                                        href={PVX_LINKS[k].url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="pvx-press inline-flex items-center gap-1.5 rounded-full border border-[var(--pvx-paper-3)] bg-white px-3.5 py-2 text-[13px] font-bold hover:border-[var(--pvx-orange)]"
+                                      >
+                                        {PVX_LINKS[k].label} <IconExternal className="w-3.5 h-3.5" />
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
                                 {sectionsOf(m.content).length > 0 && (
                                   <div className="mt-2.5 flex flex-wrap gap-1.5">
                                     {sectionsOf(m.content).map((id) => (
