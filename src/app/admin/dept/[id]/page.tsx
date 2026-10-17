@@ -255,6 +255,8 @@ export default async function DeptWorkspacePage({ params }: { params: Promise<{ 
         // Seguimiento de tiendas (2026-10-01): admin lo ve en modo lectura
         // navegando Análisis de Mercado.
         canViewStoreTracking={dept.code === "MKT"}
+        // KPIs de productos privatizados (2026-10-17): el admin los ve en Análisis de Mercado, solo lectura.
+        canSeePrivatizations={dept.code === "MKT"}
         // Confirmado 2026-09-23: mismo criterio que canActOnMarketProductReview
         // arriba — reportar/resolver "Sin stock de proveedor" son delegados y
         // exclusivos (hoy Jariel/Heidy/Bryan), el admin viendo desde acá solo

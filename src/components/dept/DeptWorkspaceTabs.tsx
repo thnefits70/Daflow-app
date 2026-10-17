@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers, UserCog, Sparkles, Store, ListChecks, ShieldCheck } from "lucide-react";
+import { GitBranch, FileText, GraduationCap, LineChart, TrendingUp, MessageSquare, CalendarClock, BellRing, Heart, ShoppingCart, Package, Pin, Wallet, BarChart3, Landmark, PackageCheck, PackageOpen, PackageMinus, Truck, HandCoins, Combine, UtensilsCrossed, Layers, UserCog, Sparkles, Store, ListChecks, ShieldCheck, Lock } from "lucide-react";
 import { ProcessEmbeddedPanel } from "@/components/process/ProcessEmbeddedPanel";
 import type { ProcessDTO } from "@/components/process/ProcessEditor";
 import type { ProcessUpdateDTO } from "@/components/process/ProcessHistoryPanel";
@@ -39,6 +39,7 @@ import { ExternalSalesPanel } from "@/components/external-sales/ExternalSalesPan
 import { TabGuide } from "@/components/shared/TabGuide";
 import { WarrantyArrangementsPanel } from "@/components/warranty-arrangements/WarrantyArrangementsPanel";
 import { RocketWarrantiesPanel } from "@/components/warranty-arrangements/RocketWarrantiesPanel";
+import { PrivatizationsPanel } from "@/components/privatizations/PrivatizationsPanel";
 import { SuppliersPanel, type SupplierDTO } from "@/components/suppliers/SuppliersPanel";
 import { ComboSuggestionsPanel } from "@/components/marketanalysis/ComboSuggestionsPanel";
 import { StoreTrackingPanel } from "@/components/marketanalysis/StoreTrackingPanel";
@@ -84,6 +85,7 @@ const ALL_TABS = [
   { key: "combos", label: "Sugerencias de Combos", icon: Combine },
   { key: "analisis-mercado", label: "Análisis de Mercado", icon: TrendingUp },
   { key: "seguimiento-tiendas", label: "Seguimiento de tiendas", icon: Store },
+  { key: "privatizados", label: "Productos privatizados", icon: Lock },
   { key: "plan-mejora", label: "Plan de Mejora", icon: UserCog },
   { key: "documentos", label: "Documentos", icon: FileText },
   { key: "examenes", label: "Exámenes", icon: GraduationCap },
@@ -206,6 +208,7 @@ export function DeptWorkspaceTabs({
   canViewFulfillmentRequests = false,
   canSeeWarrantyDispatch = false,
   canSeeWarrantyArrangements = false,
+  canSeePrivatizations = false,
   canDeclareExternalSales = false,
   canManageLocalWarranties = false,
   canReviewExternalSales = false,
@@ -425,6 +428,7 @@ export function DeptWorkspaceTabs({
   canSeeWarrantyDispatch?: boolean;
   // Arreglos de garantía (2026-10-17) — pestaña propia.
   canSeeWarrantyArrangements?: boolean;
+  canSeePrivatizations?: boolean;
   // Ventas Externas (Fase 3) — declarar/revisión/pagos/cierre viven en la
   // misma pestaña sin dept.code (Bryan revisa, admin confirma pago, Nairoby
   // cierra); despacho/entregas reusan las guards de Registro de Egresos.
@@ -518,6 +522,7 @@ export function DeptWorkspaceTabs({
       canViewFulfillmentRequests,
       canSeeWarrantyDispatch,
       canSeeWarrantyArrangements,
+      canSeePrivatizations,
       supplierExchangeMineCount,
       financeWriteOffPendingCount,
       canConfirmFinanceWriteOff,
@@ -774,6 +779,7 @@ export function DeptWorkspaceTabs({
           viewerDeptCode={viewerDeptCode}
         />
       )}
+      {tab === "privatizados" && canSeePrivatizations && <PrivatizationsPanel />}
       {tab === "arreglos-garantia" && canSeeWarrantyArrangements && (
         <div>
           <TabGuide storageKey="arreglos-garantia">

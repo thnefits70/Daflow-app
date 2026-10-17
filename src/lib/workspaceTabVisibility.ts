@@ -29,6 +29,7 @@ export const WORKSPACE_TAB_DEFS = [
   { key: "combos", label: "Sugerencias de Combos" },
   { key: "analisis-mercado", label: "Análisis de Mercado" },
   { key: "seguimiento-tiendas", label: "Seguimiento de tiendas" },
+  { key: "privatizados", label: "Productos privatizados" },
   { key: "plan-mejora", label: "Plan de Mejora" },
   { key: "documentos", label: "Documentos" },
   { key: "examenes", label: "Exámenes" },
@@ -70,6 +71,8 @@ export type WorkspaceTabFlags = {
   // Arreglos de garantía (2026-10-17): pestaña propia para Michelle/Yair,
   // Bryan y Daniel (getArrangementRole); antes solo había un enlace escondido.
   canSeeWarrantyArrangements?: boolean;
+  // Productos privatizados en Dropi (2026-10-17): Michelle, Yair, Bryan y el admin (en Análisis de Mercado).
+  canSeePrivatizations?: boolean;
   supplierExchangeMineCount: number;
   financeWriteOffPendingCount: number;
   canConfirmFinanceWriteOff: boolean;
@@ -130,6 +133,7 @@ export function isWorkspaceTabVisible(key: WorkspaceTabKey, f: WorkspaceTabFlags
   if (key === "analisis-mercado")
     return f.canProposeMarketProduct || f.canReviewMarketProduct || f.canPublishMarketProduct || !!f.canUploadRocketSku || f.canViewB2BPricing || f.canViewB2CPricing;
   if (key === "seguimiento-tiendas") return f.canViewStoreTracking;
+  if (key === "privatizados") return !!f.canSeePrivatizations;
   if (key === "pagosadmin") return f.canManageAdminPayments;
   if (key === "almuerzos") return f.canRegisterLunchPayments;
   if (key === "plan-mejora") return f.canManageImprovementPlan;

@@ -1,5 +1,6 @@
 import { getWarrantyDispatchRole } from "@/lib/warrantyDispatch";
 import { getArrangementRole } from "@/lib/warrantyArrangements";
+import { getPrivatizationRole } from "@/lib/privatizations";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -163,7 +164,7 @@ export default async function WorkspacePage() {
   ]);
   // Solicitud de Fulfillment (Yair) — vive dentro de "Registro de Egresos",
   // mismo patrón sin dept.code que el resto de este bloque.
-  const [canSubmitFulfillmentReq, canViewFulfillmentReq, warrantyDispatchRole, arrangementRole] = await Promise.all([canSubmitFulfillmentRequest(), canViewFulfillmentRequests(), getWarrantyDispatchRole(), getArrangementRole()]);
+  const [canSubmitFulfillmentReq, canViewFulfillmentReq, warrantyDispatchRole, arrangementRole, privatizationRole] = await Promise.all([canSubmitFulfillmentRequest(), canViewFulfillmentRequests(), getWarrantyDispatchRole(), getArrangementRole(), getPrivatizationRole()]);
   // Confirmado 2026-08-27, pedido explícito del usuario: "Cambio con
   // proveedor" (dentro de Registro de Egresos) debe verse desde "Mi área de
   // trabajo" para quien tiene gestiones propias pendientes, aunque no tenga
@@ -385,6 +386,7 @@ export default async function WorkspacePage() {
         canViewFulfillmentRequests={canViewFulfillmentReq}
         canSeeWarrantyDispatch={!!warrantyDispatchRole}
         canSeeWarrantyArrangements={!!arrangementRole}
+        canSeePrivatizations={!!privatizationRole}
         supplierExchangeMineCount={supplierExchangeMineCount}
         canConfirmFinanceWriteOff={canConfirmFinanceWriteOffFlag}
         financeWriteOffPendingCount={financeWriteOffPendingCount}

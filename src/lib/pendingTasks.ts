@@ -44,6 +44,7 @@ import { getMichelleCancelPendingItems } from "@/lib/michelleCancellations";
 import { getCasesPendingItem } from "@/lib/provedixCases";
 import { getArrangementAdminPendingItems, getArrangementPendingItems } from "@/lib/warrantyArrangements";
 import { getRocketWarrantyPendingItems } from "@/lib/rocketWarranty";
+import { getPrivatizationPendingItems } from "@/lib/privatizations";
 import { getWarrantyDispatchPendingItems } from "@/lib/warrantyDispatch";
 import { getDropiOutagePendingItem, getIdDeadlinePendingItem, getPendingIdExtensions, getReleaseDeadlineItems, timeLeftText } from "@/lib/handoffLocks";
 import { formatPurchaseRequestCode } from "@/lib/purchaseCode";
@@ -502,6 +503,9 @@ export const PENDING_TYPE_CATALOG: Record<string, string> = {
   arreglo_pagar_cliente: "Arreglos — pagar arreglo en dinero al cliente",
   arreglo_aprobar: "Arreglos en dinero por aprobar",
   garantia_rocket_aprobar: "Garantías de Rocket por aprobar",
+  privatizacion_aprobar: "Privatizaciones por aprobar",
+  privatizacion_hacer: "Privatizar en Dropi (ya aprobado)",
+  privatizacion_revisar: "Privatizados sin vender o vencidos",
   arreglo_generar_guia: "Reenvío pagado por el dropshipper: generar guía",
   arreglo_comprobante_rechazado: "Arreglos — comprobante de flete no verificado",
   pagos_mercaderia: "Pagos de mercadería pendientes",
@@ -4440,6 +4444,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
     teamItems.unshift(...(await getArrangementPendingItems(actor.userId).catch(() => [])));
     // Garantías de Rocket por orden de Dropi (2026-10-16): Bryan las aprueba.
     teamItems.unshift(...(await getRocketWarrantyPendingItems(actor.userId).catch(() => [])));
+    // Productos privatizados en Dropi (2026-10-17): Michelle y Yair.
+    teamItems.unshift(...(await getPrivatizationPendingItems(actor.userId).catch(() => [])));
     if (teamItems.length === 0) return null;
     return { title: "Pendientes de esta semana", sub: me.department?.code === "INV" ? "En Inventario" : "Para ti", items: teamItems };
   }
@@ -4454,6 +4460,8 @@ export async function getPendingTasksForActor(actor: PendingTasksActor): Promise
   items.unshift(...(await getMyLocalWarrantyPendingItems(actor.userId, "/area/workspace?tab=ventas-externas&etab=garantias")));
   items.unshift(...(await getArrangementPendingItems(actor.userId).catch(() => [])));
   items.unshift(...(await getRocketWarrantyPendingItems(actor.userId).catch(() => [])));
+  // Productos privatizados en Dropi (2026-10-17): Bryan aprueba.
+  items.unshift(...(await getPrivatizationPendingItems(actor.userId).catch(() => [])));
   let monthly = false;
 
   if (me.leadsDept.code === "FIN") {
@@ -4797,7 +4805,7 @@ export async function getPossiblePendingTypesForActor(
     }
     if (me.canManagePurchases) types.push("deterioro_compras_gestion", "compras_excedente_gestion");
     if (me.canApprovePurchaseRequests) types.push("compras_pendientes_aprobacion", "compras_excedente_confirmar");
-    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion", "analisis_mercado_sin_compra", "ventas_externas_revisar", "recompras_por_aprobar", "analisis_mercado_rocket_atrasado", "arreglo_aprobar", "garantia_rocket_aprobar");
+    if (me.leadsDept.code === "MKT") types.push("analisis_mercado_aprobacion", "analisis_mercado_sin_compra", "ventas_externas_revisar", "recompras_por_aprobar", "analisis_mercado_rocket_atrasado", "arreglo_aprobar", "garantia_rocket_aprobar", "privatizacion_aprobar");
     if (me.canManagePurchases || ["COM", "FIN"].includes(me.leadsDept.code)) types.push("recompras_sin_respuesta", "recompras_listas");
   }
 

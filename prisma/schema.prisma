@@ -8748,3 +8748,47 @@ model NickWalletMovement {
   @@index([accountId, at])
   @@index([kind])
 }
+
+// Productos privatizados en Dropi (2026-10-17, aprobado por el usuario). En
+// Dropi un producto se privatiza por CORREO del dropshipper con una cantidad
+// (el resto sigue público). El asesor registra todo desde el inicio (correo,
+// nombre de la tienda como sale en la etiqueta, teléfono, meta y fecha
+// límite), Bryan aprueba ANTES de privatizar en Dropi y el asesor
+// desprivatiza directo. DAFLOW mide solo las ventas con los cortes (tienda +
+// producto) y NICK, y calcula el resultado. Michelle (asesora humana):
+// PROVEDIX e IMPORTADORA DAMIAN; Yair: IMPORTADORA SHANGHAI y ROCKET.
+model DropiPrivatization {
+  id            String    @id @default(cuid())
+  number        Int       @unique @default(autoincrement()) // PV-0001
+  account       String // PROVEDIX | IMPORTADORA DAMIAN | IMPORTADORA SHANGHAI | ROCKET
+  productId     String // ID del producto en Dropi (o Rocket)
+  productName   String
+  catalogItemId String?
+  units         Int // unidades privatizadas (el resto sigue público)
+  email         String // correo del dropshipper en Dropi (en minúsculas)
+  storeName     String // nombre de la tienda como sale en la etiqueta
+  phone         String
+  goalUnits     Int // meta de venta acordada
+  deadline      DateTime // fecha límite del acuerdo (fin del día, hora Ecuador)
+  note          String?
+  // APPROVAL → APPROVED (Bryan aprobó) → ACTIVE (ya privatizado en Dropi) → ENDED;
+  // REJECTED si Bryan no aprueba; CANCELLED si el asesor la retira antes.
+  status        String    @default("APPROVAL")
+  createdById   String
+  createdAt     DateTime  @default(now())
+  reviewedById  String?
+  reviewedAt    DateTime?
+  reviewNote    String?
+  privatizedAt  DateTime?
+  endedAt       DateTime?
+  endedById     String?
+  endNote       String?
+  // Al terminar, lo que vendió y el resultado que calcula DAFLOW:
+  // CUMPLIO (≥ meta) | A_MEDIAS (≥ 50%) | NO_CUMPLIO.
+  soldUnits     Int?
+  outcome       String?
+
+  @@index([email])
+  @@index([status])
+  @@index([productId])
+}
